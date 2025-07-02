@@ -6,7 +6,7 @@
 
 """Example of using forge.monarch APIs.
 
-Run this with python -m examples.monarch_stack
+Run this with python -m examples.stacked_envs
 
 """
 
