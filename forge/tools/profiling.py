@@ -125,7 +125,7 @@ def maybe_enable_memory_snapshot(config: JobConfig, *, global_step: int = 0):
         profiler = MemoryProfiler(global_step, config.profiling.profile_freq)
         try:
             yield profiler
-        except torch.OutOfMemoryError as e:
+        except torch.OutOfMemoryError:
             profiler.step(exit_ctx=True)
     else:
         yield None

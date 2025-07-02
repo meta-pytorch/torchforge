@@ -765,8 +765,8 @@ class ConfigManager:
         if not module_path:
             return self.config_cls
 
-        JobConfigExtended = importlib.import_module(module_path).JobConfig
-        return self._merge_configs(self.config_cls, JobConfigExtended)
+        job_config_extended = importlib.import_module(module_path).JobConfig
+        return self._merge_configs(self.config_cls, job_config_extended)
 
     @staticmethod
     def _merge_configs(base, custom) -> Type:

@@ -32,7 +32,7 @@ class TestJobConfig(unittest.TestCase):
     def test_job_file_does_not_exist(self):
         with pytest.raises(FileNotFoundError):
             config_manager = ConfigManager()
-            config = config_manager.parse_args(["--job.config_file", "ohno.toml"])
+            config_manager.parse_args(["--job.config_file", "ohno.toml"])
 
     def test_empty_config_file(self):
         with tempfile.NamedTemporaryFile() as fp:
@@ -213,14 +213,14 @@ class TestJobConfig(unittest.TestCase):
         class CustomJobConfig:
             checkpoint: CustomCheckpoint
 
-        MergedJobConfig = ConfigManager._merge_configs(JobConfig, CustomJobConfig)
+        merged_job_config = ConfigManager._merge_configs(JobConfig, CustomJobConfig)
 
         cli_args = [
             "--checkpoint.convert_path=/override/path",
             "--checkpoint.fake_model",
         ]
 
-        config_manager = ConfigManager(config_cls=MergedJobConfig)
+        config_manager = ConfigManager(config_cls=merged_job_config)
         config = config_manager.parse_args(cli_args)
 
         assert config.checkpoint.convert_path == "/override/path"

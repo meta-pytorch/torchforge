@@ -142,14 +142,14 @@ class FTParallelDims(ParallelDims):
 
 
 def ft_dist_reduce(
-    x: torch.Tensor, reduceOp: str, mesh: DeviceMesh
+    x: torch.Tensor, reduce_op: str, mesh: DeviceMesh
 ) -> tuple[torch.Tensor, str, DeviceMesh]:
     if has_torchft and isinstance(mesh, ft.device_mesh._FlattenDeviceMesh):
         x = funcol.all_reduce(
-            x, reduceOp=reduceOp, group=mesh.managed_mesh.replicate_pg
+            x, reduceOp=reduce_op, group=mesh.managed_mesh.replicate_pg
         )
-        return x, reduceOp, mesh.managed_mesh.mesh
-    return x, reduceOp, mesh
+        return x, reduce_op, mesh.managed_mesh.mesh
+    return x, reduce_op, mesh
 
 
 def ft_clip_grad_norm_util(total_norm: DTensor) -> torch.Tensor:

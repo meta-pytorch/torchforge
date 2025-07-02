@@ -27,7 +27,7 @@ from torchtitan.tools.utils import device_module, device_type
 
 def _dist_reduce(
     x: torch.Tensor,
-    reduceOp: str,
+    reduce_op: str,
     mesh: DeviceMesh,
     extra_pg: dist.ProcessGroup | None = None,
 ) -> float:
@@ -35,7 +35,7 @@ def _dist_reduce(
 
     Args:
         x (torch.Tensor): Input tensor.
-        reduceOp (str): Reduce operation to perform.
+        reduce_op (str): Reduce operation to perform.
         mesh (DeviceMesh): Device mesh to use for reduction.
         extra_pg (dist.ProcessGroup, optional): Extra process group to use for reduction.
             Defaults to None. If provided, this all_reduce will be called for the extra
@@ -46,10 +46,10 @@ def _dist_reduce(
         x = x.full_tensor()
 
     if extra_pg is not None:
-        x = funcol.all_reduce(x, reduceOp=reduceOp, group=extra_pg)
+        x = funcol.all_reduce(x, reduceOp=reduce_op, group=extra_pg)
 
     assert x.numel() == 1  # required by `.item()`
-    return funcol.all_reduce(x, reduceOp=reduceOp, group=mesh).item()
+    return funcol.all_reduce(x, reduceOp=reduce_op, group=mesh).item()
 
 
 def dist_max(
@@ -245,26 +245,26 @@ def init_distributed(job_config):
             backend = f"{device_type}:{backend},cpu:gloo"
         return backend
 
-    TRACE_BUFFER_SIZE = "TORCH_FR_BUFFER_SIZE"
-    TRACE_FILE = "TORCH_NCCL_DEBUG_INFO_TEMP_FILE"
-    DUMP_ON_TIMEOUT = "TORCH_NCCL_DUMP_ON_TIMEOUT"
-    ASYNC_ERROR_HANDLING = "TORCH_NCCL_ASYNC_ERROR_HANDLING"
-    SKIP_CLEANUP = "3"
+    trace_buffer_size = "TORCH_FR_BUFFER_SIZE"
+    trace_file = "TORCH_NCCL_DEBUG_INFO_TEMP_FILE"
+    dump_on_timeout = "TORCH_NCCL_DUMP_ON_TIMEOUT"
+    async_error_handling = "TORCH_NCCL_ASYNC_ERROR_HANDLING"
+    skip_cleanup = "3"
 
     # FlightRecorder is incompatible with =1 mode where watchdog aborts work, must use =3 (skipcleanup)
     # to get flight recorder dumps. See https://github.com/pytorch/pytorch/issues/121055
     # This could be done only when flight recorder is enabled, but its nice to be consistent to avoid subtle
     # behavior differences
-    _warn_overwrite_env(ASYNC_ERROR_HANDLING, SKIP_CLEANUP)
+    _warn_overwrite_env(async_error_handling, skip_cleanup)
 
     # enable torch nccl flight recorder in the mode that would dump files if timeout is detected
-    _warn_overwrite_env(TRACE_BUFFER_SIZE, str(job_config.comm.trace_buf_size))
+    _warn_overwrite_env(trace_buffer_size, str(job_config.comm.trace_buf_size))
     if job_config.comm.trace_buf_size > 0:
         # dump on timeout by default if trace buffer is enabled
-        _warn_overwrite_env(DUMP_ON_TIMEOUT, "1")
+        _warn_overwrite_env(dump_on_timeout, "1")
         dump_dir = f"{job_config.job.dump_folder}/comm_trace"
         os.makedirs(dump_dir, exist_ok=True)
-        _warn_overwrite_env(TRACE_FILE, f"{dump_dir}/rank_")
+        _warn_overwrite_env(trace_file, f"{dump_dir}/rank_")
 
     torch.distributed.init_process_group(
         backend=_get_distributed_backend(job_config),
