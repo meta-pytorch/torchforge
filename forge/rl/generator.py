@@ -26,7 +26,7 @@ class Generator(Actor):
         self,
         config: GeneratorConfig,
         policy: ActorMeshRef[Policy],
-        replay_buffer: ReplayBuffer,
+        replay_buffer: ActorMeshRef[ReplayBuffer],
         environment_creator: Callable[[], ForgeEnvironment],
     ):
         self.config = config
@@ -34,9 +34,6 @@ class Generator(Actor):
         self.environment_creator = environment_creator
         # maybe this is just the policy endpoint with a router?
         self.policy = policy
-
-    def initialize(self):
-        """Initializes the generator."""
         self.environment = self.environment_creator()
 
     @endpoint
@@ -44,19 +41,49 @@ class Generator(Actor):
         """Runs a single episode and writes it to the Replay buffer."""
         state, info = self.environment.reset()
 
+        # Initialize trajectory storage
+        trajectory = ForgeTrajectory()
+
         step = 0
         max_steps: int | None = self.config.max_generator_steps
         should_run = lambda: True if max_steps is None else step < max_steps
 
         while should_run():
-            action = self.policy.generate.choose(state)
-            observation, reward, terminated, truncated, info = self.environment.step(
-                action
-            )
+            # Get action from policy
+            action = await self.policy.generate.choose(state)
+
+            # Store current state and action
+            if trajectory.states is not None:
+                trajectory.states.append(state)
+            if trajectory.actions is not None:
+                trajectory.actions.append(action)
+
+            # Take step in environment
+            (
+                next_state,
+                reward,
+                terminated,
+                truncated,
+                next_info,
+            ) = self.environment.step(action)
+
+            # Store reward and done flag
+            if trajectory.rewards is not None:
+                trajectory.rewards.append(reward)
+            if trajectory.dones is not None:
+                trajectory.dones.append(terminated or truncated)
+            if trajectory.infos is not None:
+                trajectory.infos.append(next_info.__dict__ if next_info else {})
+
+            # Update state for next iteration
+            state = next_state
+
             if terminated or truncated:
                 break
 
             step += 1
-        # trajectory creation
-        trajectory = ForgeTrajectory()
-        self.replay_buffer.extend.call_one(trajectory)
+
+        # Write trajectory to replay buffer
+        await self.replay_buffer.extend.call_one(trajectory)
+
+        return trajectory
