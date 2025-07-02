@@ -26,4 +26,3 @@ exclude =
     .pre-commit-config.yaml
     *.md
     .flake8
-    tests/torchtune/models/llama2/scripts/*.py

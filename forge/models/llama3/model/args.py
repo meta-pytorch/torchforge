@@ -62,7 +62,7 @@ class TransformerModelArgs(BaseModelArgs):
             if isinstance(m, nn.Embedding)
         )
 
-        n_layers, n_heads, head_dim, seq_len_val = (
+        l, h, q, t = (
             self.n_layers,
             self.n_heads,
             self.dim // self.n_heads,
@@ -74,9 +74,6 @@ class TransformerModelArgs(BaseModelArgs):
         #    but recomputation should not be counted in calculating MFU           (+0)
         # 3. each matmul performs 1 multiplication and 1 addition                 (*2)
         # 4. we follow the convention and do not account for sparsity in causal attention
-        num_flops_per_token = (
-            6 * (nparams - nparams_embedding)
-            + 12 * n_layers * n_heads * head_dim * seq_len_val
-        )
+        num_flops_per_token = 6 * (nparams - nparams_embedding) + 12 * l * h * q * t
 
         return nparams, num_flops_per_token
