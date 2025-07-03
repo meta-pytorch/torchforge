@@ -11,7 +11,6 @@ Run this with:
 """
 
 import asyncio
-from dataclasses import dataclass
 from functools import partial
 
 from forge.monarch_utils.stack import stack
@@ -24,10 +23,8 @@ from forge.rl.rewards import ToyRewarder
 
 from monarch.proc_mesh import proc_mesh
 
-
-@dataclass
-class Config:
-    pass
+# Configuration constants
+SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
 
 
 async def main():
@@ -38,7 +35,7 @@ async def main():
     policy_procs = await proc_mesh(gpus=2)
     replay_procs = await proc_mesh(gpus=1)
 
-    # note - assuming we'd end up doing like
+    # Note - here is where we implement our "mixture" logic.
     browser_procs = await proc_mesh(gpus=2)
     deep_research_procs = await proc_mesh(gpus=4)
     coder_procs = await proc_mesh(gpus=8)
@@ -47,11 +44,16 @@ async def main():
 
     # Actor instantiation
     replay_buffer = await replay_procs.spawn("replay_buffer", ReplayBuffer)
+
+    # TODO - add in an example of a "vLLM executor" and "vLLM controller"
+    # This policy just generates something between -2. and 2.
     policy = await policy_procs.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
+
     # Practically, we should create a single rewarder that's shared across the actors
     # in its associated environment mesh. This provides cleaner decoupling and
     # lets us customize our routing. But ultimately we will want to package this
     # with our environment definition somehow.
+    # This toy rewarder just adds 1 to the next state value.
     rewarder = await rewarder_procs.spawn("rewarder", ToyRewarder)
 
     generator_config = GeneratorConfig(
@@ -64,6 +66,10 @@ async def main():
         config=generator_config,
         policy=policy,
         replay_buffer=replay_buffer,
+        # here, we use a partial so that the generator itself
+        # can create its own environment.
+        # We could create the environment and pass it in, but it's slightly more efficient
+        # to do it this way.
         environment_creator=partial(
             ToyEnvironment, name="browser", max_steps=5, rewarder=rewarder
         ),
@@ -89,6 +95,7 @@ async def main():
         ),
     )
 
+    # Here's our stack API in action!
     generators = stack(
         browser_generators,
         deep_research_generators,
@@ -103,9 +110,18 @@ async def main():
         while True:
             try:
                 print(f"🎮 Running episode {episode_count + 1}...")
-                await generators.run_episode.call()
+
+                # call() is essentially our "map" - every generator runs their own
+                # episode loop.
+                # What's pretty elegant here is if we wanted to control off policiness, we could
+                # easily counter on steps and call policy.update_weights.call() at our desired
+                # frequency.
+                results = await generators.run_episode.call()
+                num_trajectories = sum([len(r._values) for r in results])
                 episode_count += 1
-                print(f"✅ Episode {episode_count} completed!")
+                print(
+                    f"✅ Episode {episode_count} completed! Generated {num_trajectories} trajectories."
+                )
 
                 # Wait a bit before next episode
                 await asyncio.sleep(2)
@@ -121,42 +137,77 @@ async def main():
             try:
                 await asyncio.sleep(3)  # Wait a bit before sampling
 
-                # Check if buffer has data
+                # Check if buffer has enough data
                 buffer_length = await replay_buffer.len.choose()
-                if buffer_length == 0:
-                    print("📦 Replay buffer is empty, waiting for episodes...")
+                if buffer_length < SAMPLES_PER_BATCH:
+                    print(
+                        f"📦 Replay buffer has {buffer_length} trajectories, waiting for at least {SAMPLES_PER_BATCH}..."
+                    )
                     continue
 
-                # Sample a trajectory
-                trajectory = await replay_buffer.sample.choose()
-                if trajectory is None:
+                # Sample multiple trajectories at once
+                trajectories = []
+                for _ in range(SAMPLES_PER_BATCH):
+                    trajectory = await replay_buffer.sample.choose()
+                    if trajectory is not None:
+                        trajectories.append(trajectory)
+
+                # Most of the rest of this is just boilerplate for pretty printing.
+                if not trajectories:
                     continue
 
                 sample_count += 1
                 print(
                     f"\n🔍 Sample #{sample_count} from replay buffer (buffer size: {buffer_length}):"
                 )
-                print("=" * 60)
+                print("=" * 80)
 
-                if trajectory.states and trajectory.actions and trajectory.rewards:
-                    for i, (state, action, reward) in enumerate(
-                        zip(trajectory.states, trajectory.actions, trajectory.rewards)
+                for idx, trajectory in enumerate(trajectories, 1):
+                    # Extract environment name from the first state text
+                    env_name = "unknown"
+                    if (
+                        trajectory.states
+                        and len(trajectory.states) > 0
+                        and trajectory.states[0].text
                     ):
-                        # Extract values for pretty printing
-                        state_value = (
-                            float(state.data[0]) if state.data is not None else 0.0
-                        )
-                        action_value = (
-                            float(action.data[0]) if action.data is not None else 0.0
-                        )
+                        state_text = trajectory.states[0].text
+                        if state_text.startswith("[") and "]" in state_text:
+                            env_name = state_text.split("]")[0][
+                                1:
+                            ]  # Extract name between [ and ]
 
-                        print(
-                            f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f} → Reward={reward:6.2f}"
-                        )
+                    print(f"🏷️  Trajectory {idx} - Environment: {env_name}")
+                    print("-" * 40)
 
-                total_reward = sum(trajectory.rewards) if trajectory.rewards else 0
-                print(f"  📊 Total Reward: {total_reward:.2f}")
-                print("=" * 60)
+                    if trajectory.states and trajectory.actions and trajectory.rewards:
+                        for i, (state, action, reward) in enumerate(
+                            zip(
+                                trajectory.states,
+                                trajectory.actions,
+                                trajectory.rewards,
+                            )
+                        ):
+                            # Extract values for pretty printing
+                            state_value = (
+                                float(state.data[0]) if state.data is not None else 0.0
+                            )
+                            action_value = (
+                                float(action.data[0])
+                                if action.data is not None
+                                else 0.0
+                            )
+
+                            print(
+                                f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f} → Reward={reward:6.2f}"
+                            )
+
+                    total_reward = sum(trajectory.rewards) if trajectory.rewards else 0
+                    print(f"  📊 Total Reward: {total_reward:.2f}")
+
+                    if idx < len(trajectories):  # Add spacing between trajectories
+                        print()
+
+                print("=" * 80)
 
             except Exception as e:
                 print(f"❌ Error sampling from replay buffer: {e}")

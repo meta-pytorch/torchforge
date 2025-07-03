@@ -63,6 +63,7 @@ class Generator(Actor):
                 trajectory.actions.append(action)
 
             # Take step in environment
+            # Note that this is the exact API that gym uses.
             (
                 next_state,
                 reward,

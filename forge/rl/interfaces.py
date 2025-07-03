@@ -10,6 +10,10 @@ Abstract interfaces for RL components.
 TODO: Revisit the organization later - we may want to restructure how we organize
 concrete implementations vs interfaces, and consider whether we want separate files
 for each component type or group related interfaces together.
+
+These abstract interfaces are useful to define the API for each component. This
+plays nicely with the `stack` APIs, and also makes it so that we can write
+a generic orchestrator that can work with any component that implements these.
 """
 
 from abc import ABC, abstractmethod
@@ -20,6 +24,7 @@ from monarch.actor_mesh import Actor, endpoint
 
 
 # ==== Data Structures ====
+# Of course, these data structures can be replaced by almost anything.
 
 
 @dataclass

@@ -13,6 +13,9 @@ from monarch.actor_mesh import endpoint
 from forge.rl.interfaces import ForgeTrajectory, ReplayBufferInterface
 
 
+# Silly replay buffer implementation for testing.
+# One nice thing if we implement our own Replay buffer is that
+# we can wrap RDMA calls / torchstore calls here.
 class ReplayBuffer(ReplayBufferInterface):
     """Simple in-memory replay buffer implementation."""
 
