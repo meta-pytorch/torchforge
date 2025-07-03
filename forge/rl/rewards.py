@@ -4,12 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from monarch.actor_mesh import Actor, endpoint
+from monarch.actor_mesh import endpoint
 
-from forge.rl.entities import ForgeRequest
+from forge.rl.interfaces import ForgeRequest, RewarderInterface
 
 
-class Rewarder(Actor):
+class Rewarder(RewarderInterface):
     """Base class for reward computation."""
 
     @endpoint

@@ -15,8 +15,12 @@ from typing import Callable
 from monarch.actor_mesh import Actor, ActorMeshRef, endpoint
 
 from forge.rl.config import GeneratorConfig
-from forge.rl.entities import ForgeTrajectory, Policy, ReplayBuffer
-from forge.rl.environments import ForgeEnvironment
+from forge.rl.interfaces import (
+    EnvironmentInterface,
+    ForgeTrajectory,
+    PolicyInterface,
+    ReplayBufferInterface,
+)
 
 
 class Generator(Actor):
@@ -25,9 +29,9 @@ class Generator(Actor):
     def __init__(
         self,
         config: GeneratorConfig,
-        policy: ActorMeshRef[Policy],
-        replay_buffer: ActorMeshRef[ReplayBuffer],
-        environment_creator: Callable[[], ForgeEnvironment],
+        policy: ActorMeshRef[PolicyInterface],
+        replay_buffer: ActorMeshRef[ReplayBufferInterface],
+        environment_creator: Callable[[], EnvironmentInterface],
     ):
         self.config = config
         self.replay_buffer = replay_buffer

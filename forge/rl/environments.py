@@ -8,27 +8,17 @@ import torch
 
 from monarch.actor_mesh import ActorMeshRef
 
-from forge.rl.entities import ForgeEnvInfo, ForgeRequest
+from forge.rl.interfaces import EnvironmentInterface, ForgeEnvInfo, ForgeRequest
 from forge.rl.rewards import ToyRewarder
 
 
-# Stand-in contract for environments
-class ForgeEnvironment:
-    # obs, info
-    def reset(self) -> tuple[ForgeRequest, ForgeEnvInfo]:
-        raise NotImplementedError("Subclasses must implement reset method")
-
-    # obs, rew, term, truncated, info
-    def step(
-        self, action: ForgeRequest
-    ) -> tuple[ForgeRequest, float, bool, bool, ForgeEnvInfo]:
-        raise NotImplementedError("Subclasses must implement step method")
-
-
-class ToyEnvironment(ForgeEnvironment):
+class ToyEnvironment(EnvironmentInterface):
     """A simple toy environment for testing the RL pipeline."""
 
-    def __init__(self, rewarder: ActorMeshRef[ToyRewarder], max_steps: int = 10):
+    def __init__(
+        self, name: str, rewarder: ActorMeshRef[ToyRewarder], max_steps: int = 10
+    ):
+        self.name = name
         self.rewarder = rewarder
         self.max_steps = max_steps
         self.current_step = 0
@@ -41,7 +31,7 @@ class ToyEnvironment(ForgeEnvironment):
 
         state = ForgeRequest(
             data=torch.tensor([self.state_value]),
-            text=f"Step {self.current_step}, Value: {self.state_value}",
+            text=f"[{self.name}] Step {self.current_step}, Value: {self.state_value}",
             metadata={"step": self.current_step, "value": self.state_value},
         )
 
