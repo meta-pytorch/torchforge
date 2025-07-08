@@ -55,9 +55,7 @@ class TuneIterableDataset(IterableDataset, ABC):
 
     Each dataset implementation must:
     - Track hierarchical metadata via the ``info`` property
-    - Ensure unique dataset names across the entire tree
     - Handle checkpointing: parents resume children's state
-    - Provide proper state management for exact resumption
     """
 
     @property

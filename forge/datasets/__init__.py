@@ -1,12 +1,12 @@
-from forge.datasets._hf import HfIterableDataset
-from forge.datasets._interleaved import InterleavedDataset
-from forge.datasets._iterable_base import (
+from forge.datasets.hf import HfIterableDataset
+from forge.datasets.interleaved import InterleavedDataset
+from forge.datasets.iterable_base import (
     DatasetInfo,
     InfiniteTuneIterableDataset,
     TuneIterableDataset,
 )
-from forge.datasets._packed import DPOPacker, PackedDataset, Packer, TextPacker
-from forge.datasets._sft import sft_iterable_dataset
+from forge.datasets.packed import DPOPacker, PackedDataset, Packer, TextPacker
+from forge.datasets.sft import sft_iterable_dataset
 
 __all__ = [
     "InterleavedDataset",

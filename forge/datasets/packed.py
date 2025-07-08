@@ -10,10 +10,10 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, Optional, TypeVar
 
 import torch
-from forge.data._common import CROSS_ENTROPY_IGNORE_IDX
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.metrics import AggregationType, Metric
 
-from forge.datasets._iterable_base import DatasetInfo, InfiniteTuneIterableDataset
+from forge.datasets.iterable_base import DatasetInfo, InfiniteTuneIterableDataset
 from forge.tools._import_guard import _SUPPORTS_FLEX_ATTENTION
 from torch.nn.attention.flex_attention import (
     create_block_mask as create_block_mask_flex,
@@ -29,9 +29,9 @@ PackType = dict[str, torch.Tensor | list[Metric]]
 
 class Packer(ABC, Generic[SampleType]):
     """
-    An abstract base class that defines the logic for packing samples into a
+    An abstract base class that defines the **format** for packing samples into a
     fixed-size sequence. It is used by `PackedDataset` to handle
-    different data formats (e.g., standard text, DPO pairs).
+    different cases, e.g., standard text, DPO pairs.
 
     A `Packer` is responsible for:
     1. Defining how to extract the token count from a raw sample.
@@ -40,13 +40,17 @@ class Packer(ABC, Generic[SampleType]):
     3. Finalizing a pack by padding it to the target sequence length.
     4. Generating the appropriate attention mask for the packed format.
 
+    It is NOT responsible for:
+    1. Defining the packing strategy (e.g., best-fit, greedy, etc.). This is
+       handled by `PackedDataset`.
+
     This modular design allows `PackedDataset` to remain agnostic to
-    the data format and packing strategy.
+    the data format.
 
     Args:
-            padding_idx (int): The index of the padding token.
-            ignore_idx (int): The index to use for labels that should be
-                ignored in the loss calculation (e.g., padding tokens).
+        padding_idx (int): The index of the padding token.
+        ignore_idx (int): The index to use for labels that should be
+            ignored in the loss calculation (e.g., padding tokens).
 
     Example:
         >>> packer = TextPacker(padding_idx=0, ignore_idx=-100)
@@ -97,7 +101,8 @@ class Packer(ABC, Generic[SampleType]):
     @abstractmethod
     def get_sample_size(self, sample: SampleType) -> int:
         """
-        Returns the size of a sample.
+        Returns the size of a sample. This can be complex for some cases,
+        e.g. for DPO you may want to return len(prompt) + len(chosen) + len(rejected).
 
         Args:
             sample (SampleType): The sample to get the size of.
@@ -117,7 +122,7 @@ class Packer(ABC, Generic[SampleType]):
         self, pack: dict[str, list[Any]], sample: SampleType, next_doc_id: int
     ) -> int:
         """
-        Adds a sample to the pack dictionary in-place by appending tensors to lists.
+        Adds a sample to the pack dictionary in-place.
 
         Args:
             pack (dict[str, list[Any]]): The dictionary representing the pack, to be modified in-place.
@@ -125,7 +130,10 @@ class Packer(ABC, Generic[SampleType]):
             next_doc_id (int): The starting document ID to use for this sample.
 
         Returns:
-            int: The number of new documents that were added to the pack.
+            int: The number of new documents that were added to the pack. This is used to update the
+                document ID for the next sample, i.e. next_doc_id += added_docs.
+                For example, in DPO, you may add 3 documents (prompt, chosen, rejected).
+                For regular text, you may add 1 document.
 
         Example:
             >>> packer = TextPacker(padding_idx=0, ignore_idx=-100)
@@ -245,13 +253,14 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
     padding and ensures consistent batch shapes.
 
     The packing process works as follows:
-    1. It fetches samples from the underlying `dataset` and stores them in
+    1. PackedDataset fetches samples from the underlying `dataset` and stores them in
        an internal `buffer`.
-    2. It uses a "best-fit" approach to select samples from the buffer that
-       can fill a pack up to `target_tokens_per_pack`.
-    3. The `packer` handles the logic for deconstructing samples, creating
-       metadata (like document IDs and attention masks), and padding the
-       final pack.
+    2. It traverses the buffer until it finds the first sample that fits in the remaining space
+        in the pack, defined by `target_tokens_per_pack`.
+    3. It calls the `Packer`, which handles the logic for adding samples to the pack, creating
+       metadata (like document IDs and attention masks), and padding the final pack.
+
+    NOTE: The Packer is **NOT** responsible for the buffer sampling strategy. The PackedDataset is.
 
     This dataset is stateful and supports checkpointing (relies on child dataset to be stateful),
     allowing training to be resumed seamlessly.
@@ -262,8 +271,8 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
 
     Args:
         dataset (InfiniteTuneIterableDataset): The `InfiniteTuneIterableDataset` to pack.
-        packer (Packer[SampleType]): The `Packer` that defines the packing
-            strategy for the dataset format (e.g. `TextPacker`).
+        packer (Packer[SampleType]): The `Packer` that defines the **format** for packing
+             samples into a fixed-size sequence.
         target_tokens_per_pack (int): The target number of tokens for each pack.
         buffer_size (int): The number of samples to buffer for finding the
             best fit. A larger buffer may improve packing efficiency at the
@@ -512,12 +521,12 @@ class TextPacker(Packer[dict[str, torch.Tensor]]):
 
     def set_dataset_name(self, dataset_name: str) -> None:
         """
-        Sets the dataset name on the packer. This is used for logging metrics.
+        Sets the dataset name, used for logging and disambiguation.
         """
         self.dataset_name = dataset_name
 
     def create_empty_pack(self) -> dict[str, list]:
-        """Creates an empty pack with lists that will hold tensors."""
+        """Creates an empty pack with lists that will hold tensors and metrics."""
         return {
             "tokens": [],
             "labels": [],
@@ -586,7 +595,7 @@ class TextPacker(Packer[dict[str, torch.Tensor]]):
             )
             pack["metrics"].append(padding_metric)
 
-        # Concatenate all tensor lists efficiently
+        # Concatenate all tensor lists
         result = {
             "tokens": (
                 torch.cat(pack["tokens"])
@@ -624,6 +633,24 @@ class TextPacker(Packer[dict[str, torch.Tensor]]):
         """
         Standard block-causal mask logic. Tokens can only attend to other
         tokens within the same document, respecting causality.
+
+        Example:
+            doc_ids = torch.tensor([0, 0, 1, 1, 1, 2, 2])
+
+            Would generate the following mask:
+
+            mask1 = torch.tensor(
+                [
+                    # k_idx ->   A  A  B  B  B  C  C
+                                [1, 0, 0, 0, 0, 0, 0],  # q=0 (A)
+                                [1, 1, 0, 0, 0, 0, 0],  # q=1 (A)
+                                [0, 0, 1, 0, 0, 0, 0],  # q=2 (B)
+                                [0, 0, 1, 1, 0, 0, 0],  # q=3 (B)
+                                [0, 0, 1, 1, 1, 0, 0],  # q=4 (B)
+                                [0, 0, 0, 0, 0, 1, 0],  # q=5 (C)
+                                [0, 0, 0, 0, 0, 1, 1],  # q=6 (C)
+                ],
+            )
         """
         causal_mask = q_idx >= kv_idx
         document_mask = doc_ids[b, q_idx] == doc_ids[b, kv_idx]
@@ -659,7 +686,7 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
         self.dataset_name = dataset_name
 
     def create_empty_pack(self) -> dict[str, list]:
-        """Creates an empty pack with lists that will hold tensors."""
+        """Creates an empty pack with lists that will hold tensors and metrics."""
         return {
             "tokens": [],
             "labels": [],
@@ -788,7 +815,7 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
         if target_tokens_per_pack > 0:
             padding_pct = round(num_padding * 100 / target_tokens_per_pack, 2)
             padding_metric = Metric(
-                dataset_name=self.dataset_name,
+                source=self.dataset_name,
                 metric_name="pct_of_tokens_padded",
                 value=padding_pct,
                 agg_type=AggregationType.MEAN,
@@ -844,6 +871,25 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
         Mask logic for DPO.
         - Causal self-attention within each document (prompt, chosen, rejected)
         - Cross-attention: response tokens can attend to their prompt (shared for both responses)
+        - Final mask == Causal & Cross-attention
+
+        Example:
+            doc_ids = torch.tensor([0, 1, 1, 2, 3, 4, 5])
+
+            Would generate the following mask:
+
+            mask = torch.tensor(
+                [
+            # k_idx ->   P  C  C  R  P  C  R
+                        [1, 0, 0, 0, 0, 0, 0],  # q=0 (Prompt_A) can see self
+                        [1, 1, 0, 0, 0, 0, 0],  # q=1 (Chosen_A) can see P_A and self (causal)
+                        [1, 1, 1, 0, 0, 0, 0],  # q=2 (Chosen_A) can see P_A and C_A (causal)
+                        [1, 0, 0, 1, 0, 0, 0],  # q=3 (Rejected_A) can see P_A and self
+                        [0, 0, 0, 0, 1, 0, 0],  # q=4 (Prompt_B) can see self
+                        [0, 0, 0, 0, 1, 1, 0],  # q=5 (Chosen_B) can see P_B and self
+                        [0, 0, 0, 0, 1, 0, 1],  # q=6 (Rejected_B) can see P_B and self
+                ],
+            )
         """
         # (batch_size, seq_len)
         q_doc = doc_ids[b, q_idx]

@@ -20,16 +20,13 @@ from forge.data.metrics import (
 )
 
 from forge.data.transforms import Transform
-from forge.datasets._iterable_base import DatasetInfo, InfiniteTuneIterableDataset
+from forge.datasets.iterable_base import DatasetInfo, InfiniteTuneIterableDataset
 
 logger = logging.getLogger(__name__)
 
 
 class HfIterableDataset(InfiniteTuneIterableDataset):
     """HuggingFace dataset with infinite iteration and composable transforms.
-
-    This is an infinite dataset that wraps a HuggingFace dataset. After exhausting
-    the dataset, it will restart from the beginning.
 
     Transform pipeline: raw_data -> message_transform -> model_transform -> output_transform -> metric_transform
 
@@ -91,7 +88,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         # Create default transform if not provided
         self._metric_transform = metric_transform or DefaultTrainingMetricTransform()
 
-        # Auto-generate dataset name if not provided, ensuring it's always a string
+        # Auto-generate dataset name if not provided
         if dataset_name is None:
             path = load_dataset_kwargs.get("path", None)
             source = load_dataset_kwargs.get("source", None)
@@ -102,7 +99,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     name_parts.append(str(item).replace("/", "_"))
             dataset_name = "_".join(name_parts)
 
-        # Build the hierarchical info object for this dataset
+        # Build info object for this dataset
         self._info = DatasetInfo(name=dataset_name, weight=self._weight)
 
         # Set dataset name on the transform if it supports it
@@ -143,9 +140,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
     ):
         """
         One-time setup of HuggingFace dataset that handles Handles distributed sharding,
-        shuffle configuration, and filtering.
-
-        Called once during __init__ to avoid expensive re-computation.
+        shuffle configuration, and filtering. Called once during __init__.
         """
 
         # Distributed setup
@@ -164,14 +159,14 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                 f"Streaming datasets were not yet tested for distributed training. "
                 f"split_dataset_by_node is applied, but no resharding was done manually. "
                 f"Dataset '{self.info.name}' has "
-                f"{getattr(ds, 'num_shards', 'unknown')}, and your training has {world_size} ranks."
+                f"{getattr(ds, 'num_shards', 'unknown')} shards, and your training has {world_size} ranks."
                 f"See: https://huggingface.co/docs/datasets/en/package_reference/main_classes?#datasets.IterableDataset.shard"
                 f"Consider setting streaming=False, which should also be faster."
             )
         if not is_streaming:
             # Define number of shards based on (world_size, num of shards per GPU, dataloader workers)
             # E.g. world_size=2, num_shards_per_rank=16, dataloader_workers=3
-            # we will try 2*16 = 32 shards. Since 32 is not a multiple of 6, we will do 36 shards.
+            # we will try 2*16 = 32 shards. Since 32 is not a multiple of 2*3=6, we will do 36 shards.
             # Each rank gets 18 shards, each dataloader worker in that rank gets 6 shards.
             worker_info = torch.utils.data.get_worker_info()
             num_dataloader_workers = worker_info.num_workers if worker_info else 1
@@ -190,8 +185,8 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     (desired_shards + total_workers - 1) // total_workers
                 )
 
-            # If the dataset is not streaming and has a defined length,
-            # we cannot have num_shards > dataset_size.
+            # If the dataset has a defined length,
+            # assert num_shards < dataset_size.
             if hasattr(ds, "__len__"):
                 dataset_size = len(ds)
                 if num_shards > dataset_size:
@@ -203,6 +198,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
             ds = ds.to_iterable_dataset(num_shards=num_shards)
 
         # Shuffle the dataset
+        # We shuffle after sharding and before splitting so shards can be shuffled well
         if self._shuffle_buffer_size and self._shuffle_buffer_size > 0:
             ds = ds.shuffle(seed=self._seed, buffer_size=self._shuffle_buffer_size)
 
@@ -238,7 +234,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     # NOTE: We apply transforms here instead of using .map() to work around
                     # HuggingFace datasets bug where .map() causes incorrect checkpoint resumption.
                     # See: https://github.com/huggingface/datasets/issues/7630
-                    # This ensures transforms are applied fresh on each sample during iteration.
+                    # .map is applied lazily and the advantage would be to leverage caching.
                     sample = self._apply_transforms(sample)
 
                     # Track the number of epochs completed for each dataset. This is
@@ -276,7 +272,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
             self._num_epochs += 1
 
     def state_dict(self) -> dict[str, Any]:
-        """Returns dataset checkpoint state."""
         hf_state = self._ds.state_dict()
         state = {
             "num_epochs": self._num_epochs,
@@ -285,10 +280,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         return state
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        """
-        Load state from checkpoint, including restoring the state of the
-        Hugging Face IterableDataset.
-        """
         self._num_epochs = state_dict["num_epochs"]
         hf_state = state_dict["hf_dataset_state"]
 

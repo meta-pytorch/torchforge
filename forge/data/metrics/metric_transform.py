@@ -4,9 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from forge.data.transforms import Transform
 
@@ -28,13 +29,13 @@ class AggregationType(Enum):
 
     SUM = "sum"
     MEAN = "mean"
-    DISTRIBUTION = "distribution"
+    STATS = "distribution"
     CATEGORICAL_COUNT = "categorical_count"
     MAX = "max"
     MIN = "min"
 
 
-class MetricTransform(Transform):
+class MetricTransform(Transform, ABC):
     """Applied to each dataset sample to generate per-sample metrics for training tracking.
 
     Creates Metric objects that are later aggregated by MetricsAggregator. This separation
@@ -52,23 +53,20 @@ class MetricTransform(Transform):
         >>> # result["metrics"] contains list of Metric objects
     """
 
-    def __init__(self):
-        # source is set by the dataset using set_source
-        self.source: Optional[str] = None
-
     def set_source(self, source: str) -> None:
         """Called by the dataset to set the namespace for metrics.
 
         This is used to differentiate metrics from multiple datasets, for example,
-        "train_alpaca/tokens_seen" vs. "train_slim_orca/tokens_seen".
+        "alpaca/tokens_seen" vs. "slim_orca/tokens_seen".
 
         Args:
-            source (str): Name of the dataset, used for metric namespacing.
+            source (str): Name of the dataset, used for logging and disambiguation.
         """
         self.source = source
 
+    @abstractmethod
     def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
-        """Generate metrics for a single sample. Must be implemented by subclasses.
+        """Generate metrics for a single sample.
 
         Args:
             sample (dict[str, Any]): The sample dictionary to generate metrics from
@@ -82,20 +80,9 @@ class MetricTransform(Transform):
         raise NotImplementedError("Subclasses must implement _generate_metrics method")
 
     def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
-        """Apply transform to sample, adding generated metrics to the sample.
-
-        Args:
-            sample (dict[str, Any]): Input sample dictionary
-
-        Returns:
-            dict[str, Any]: Sample with metrics added to "metrics" key (list[Metric])
-
-        Raises:
-            RuntimeError: If set_source() was not called before transform usage
-        """
-        if self.source is None:
+        if not hasattr(self, "source"):
             raise RuntimeError(
-                "set_source() must be called before using the transform."
+                "'transform.set_source' must be called before using the transform."
             )
 
         # Generate metrics for this sample
@@ -119,7 +106,7 @@ class DefaultTrainingMetricTransform(MetricTransform):
     Tracked metrics:
       - samples_seen: Cumulative count of samples processed (SUM aggregation)
       - tokens_seen: Cumulative sum of all tokens processed (SUM aggregation)
-      - seq_len: Distribution of sequence lengths (DISTRIBUTION aggregation)
+      - seq_len: Distribution stats of sequence lengths (STATS aggregation)
 
     Example:
         >>> transform = DefaultTrainingMetricTransform()
@@ -131,16 +118,11 @@ class DefaultTrainingMetricTransform(MetricTransform):
         >>> # [
         >>> #   Metric(source="alpaca", metric_name="samples_seen", value=1, agg_type=AggregationType.SUM),
         >>> #   Metric(source="alpaca", metric_name="tokens_seen", value=5, agg_type=AggregationType.SUM),
-        >>> #   Metric(source="alpaca", metric_name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
+        >>> #   Metric(source="alpaca", metric_name="seq_len", value=5, agg_type=AggregationType.STATS)
         >>> # ]
     """
 
     def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
-        if self.source is None:
-            raise RuntimeError(
-                "set_source() must be called before using the transform."
-            )
-
         # Determine token key
         token_key = "tokens" if "tokens" in sample else "input_ids"
         token_len = len(sample.get(token_key, []))
@@ -163,6 +145,6 @@ class DefaultTrainingMetricTransform(MetricTransform):
                 source=self.source,
                 metric_name="seq_len",
                 value=token_len,
-                agg_type=AggregationType.DISTRIBUTION,
+                agg_type=AggregationType.STATS,
             ),
         ]

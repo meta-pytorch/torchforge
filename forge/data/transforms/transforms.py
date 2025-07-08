@@ -1,7 +1,8 @@
 from typing import Any, Protocol
 
 import torch
-from forge.data._common import CROSS_ENTROPY_IGNORE_IDX
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
+
 
 class Transform(Protocol):
     """

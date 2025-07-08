@@ -1,4 +1,4 @@
-from ._transforms import SFTOutputTransform, Transform
+from .transforms import SFTOutputTransform, Transform
 
 __all__ = [
     "Transform",

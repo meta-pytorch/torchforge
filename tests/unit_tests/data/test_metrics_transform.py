@@ -62,4 +62,4 @@ class TestDefaultTrainingMetricTransform:
             elif metric.metric_name == "seq_len":
                 assert metric.source == "test_dataset"
                 assert metric.value == 5
-                assert metric.agg_type == AggregationType.DISTRIBUTION
+                assert metric.agg_type == AggregationType.STATS

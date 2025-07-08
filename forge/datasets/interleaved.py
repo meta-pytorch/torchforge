@@ -11,7 +11,7 @@ from typing import Any, Iterator
 
 import torch
 
-from forge.datasets._iterable_base import DatasetInfo, InfiniteTuneIterableDataset
+from forge.datasets.iterable_base import DatasetInfo, InfiniteTuneIterableDataset
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,8 @@ class InterleavedDataset(InfiniteTuneIterableDataset):
         seed (int): The seed for sampling.
         weight (float): The weight for this dataset. Defaults to 1.0.
         dataset_name (str): The name of the dataset. Defaults to "interleaved_dataset".
-        sampling_log_maxlen (int): The maximum length of the sampling log.
+        sampling_log_maxlen (int): The maximum length of the sampling log. This gets dumped to the
+            checkpoint and can be used for debugging and analysis. Defaults to 10000.
     """
 
     def __init__(
@@ -101,7 +102,7 @@ class InterleavedDataset(InfiniteTuneIterableDataset):
             yield next(child_iters[ds_name])
 
     def state_dict(self) -> dict[str, Any]:
-        """Save interleaver state and all child dataset states."""
+        """Save interleaver state and all children dataset states."""
         # The parent is responsible for namespacing the child states
         child_states = {ds.info.name: ds.state_dict() for ds in self._datasets}
         return {

@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from forge.data.metrics import DefaultTrainingMetricTransform
 
 from forge.data.transforms import SFTOutputTransform, Transform
-from forge.datasets._hf import HfIterableDataset
+from forge.datasets.hf import HfIterableDataset
 
 
 def sft_iterable_dataset(

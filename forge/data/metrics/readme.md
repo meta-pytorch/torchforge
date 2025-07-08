@@ -34,9 +34,9 @@ The metrics module provides a robust system for tracking and aggregating trainin
 
 ## File Structure
 
-- **`_metric_transform.py`**: Defines `Metric`, `AggregationType`, and transform classes
-- **`_metric_agg_handlers.py`**: Aggregation strategy implementations
-- **`_metric_aggregator.py`**: Main aggregator orchestrating the handlers
+- **`metric_transform.py`**: Defines `Metric`, `AggregationType`, and transform classes
+- **`metric_agg_handlers.py`**: Aggregation strategy implementations
+- **`metric_aggregator.py`**: Main aggregator orchestrating the handlers
 
 ## Customizing metrics
 
@@ -72,7 +72,7 @@ sample = transform(sample)
 # [
 #   Metric(source="alpaca", name="samples_seen", value=1, agg_type=AggregationType.SUM),
 #   Metric(source="alpaca", name="tokens_seen", value=5, agg_type=AggregationType.SUM),
-#   Metric(source="alpaca", name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
+#   Metric(source="alpaca", name="seq_len", value=5, agg_type=AggregationType.STATS)
 # ]
 ```
 
@@ -89,7 +89,7 @@ Efficiently aggregates metrics across samples and distributed ranks.
 - `SUM`: Cumulative totals (e.g., total tokens processed)
 - `MEAN`: Running averages (e.g., average loss)
 - `MAX/MIN`: Extrema tracking (e.g., max sequence length seen)
-- `DISTRIBUTION`: Statistical summaries (mean, min, max, percentiles)
+- `STATS`: Statistical summaries (mean, min, max, percentiles)
 - `CATEGORICAL_COUNT`: Category cumulative counts (e.g. num of samples from a given category)
 
 **Example Usage:**
@@ -128,7 +128,7 @@ AggregationHandler (ABC)
 ├── MeanAggHandler         # tracks sum and count
 ├── MaxAggHandler          # value = max(value, metric.value)
 ├── MinAggHandler          # value = min(value, metric.value)
-├── DistributionAggHandler # maintains value window + stats
+├── StatsAggHandler # maintains value window + stats
 └── CategoricalCountAggHandler # Counter for categories
 ```
 

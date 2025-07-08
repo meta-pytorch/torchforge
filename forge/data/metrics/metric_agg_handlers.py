@@ -12,7 +12,7 @@ from typing import Any
 
 import torch
 
-from forge.data.metrics._metric_transform import AggregationType, Metric
+from forge.data.metrics.metric_transform import AggregationType, Metric
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class MetricState:
     """Mutable state object representing the state of a (source, metric_name) on a single rank.
 
     Attributes:
-        source (str): Name of the dataset.
+        source (str): Name of the source, e.g. the dataset name. Used for logging and disambiguation.
         metric_name (str): Name of the metric.
         value (float): Current aggregated value, whose meaning depends on the aggregation type
             (e.g., running sum, current max).
@@ -38,9 +38,9 @@ class MetricState:
 
 
 class AggregationHandler(ABC):
-    """Base class for handling metric aggregation using the Strategy pattern.
+    """Base class for handling metric aggregation.
 
-    Each handler implements a specific aggregation strategy (SUM, MEAN, DISTRIBUTION, etc.)
+    Each handler implements a specific aggregation strategy (SUM, MEAN, STATS, etc.)
     and manages the complete lifecycle: initialization, updates, local finalization,
     and distributed reduction. Handlers also handle serialization for checkpointing.
 
@@ -55,7 +55,7 @@ class AggregationHandler(ABC):
         """Create a new MetricState for a (source, metric_name) pair.
 
         Args:
-            source (str): Name of the dataset. Especially useful when tracking multiple datasets.
+            source (str): Name of the source, e.g. the dataset name. Used for logging and disambiguation.
             metric_name (str): Name of the metric.
             agg_type (AggregationType): Aggregation type.
 
@@ -69,7 +69,7 @@ class AggregationHandler(ABC):
         """Update cumulative MetricState with new metric info.
 
         Args:
-            local_agg_metric (MetricState): Cumulative state of the aggregation for this metric in the local rank.
+            local_agg_metric (MetricState): State of the aggregation for this metric in the local rank.
             metric (Metric): Input metric info.
         """
         pass
@@ -77,10 +77,11 @@ class AggregationHandler(ABC):
     @abstractmethod
     def finalize_local_agg(self, local_agg_metric: MetricState) -> list[MetricState]:
         """
-        Computes the final value from the locally aggregated state.
+        Computes the final value from the locally aggregated state. For example, for mean
+        it would mean to divide the tracked sum by the tracked count.
 
         This method may expand a single metric into multiple, for instance,
-        a distribution into mean, min, max, and percentiles.
+        a list of numbers into mean, min, max, and percentiles.
 
         Args:
             local_agg_metric (MetricState): The locally aggregated metric state to finalize.
@@ -93,10 +94,12 @@ class AggregationHandler(ABC):
     @abstractmethod
     def finalize_dist_agg(self, local_agg_metrics: list[MetricState]) -> MetricState:
         """
-        Merge MetricStates from all ranks into final result.
+        Merge MetricStates from all ranks into final result. For example, for 'sum', it would mean to
+        sum the values from all ranks.
 
         Args:
-            local_agg_metrics (list[MetricState]): list of MetricStates for this (source, metric_name) pair.
+            local_agg_metrics (list[MetricState]): list of MetricStates from all ranks for a specific
+            (source, metric_name) tuple after computing finalize_local_agg.
 
         Returns:
             MetricState: Final result for this (source, metric_name) pair.
@@ -104,30 +107,26 @@ class AggregationHandler(ABC):
         pass
 
     def serialize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        """Convert handler-specific metadata to serializable format.
+        """Convert handler-specific metadata to serializable format. Override this when using
+         non-serializable types like deque or Counter. For example, convert deque to list, Counter to dict.
 
         Args:
             metadata (dict[str, Any]): AggHandler-specific metadata.
 
         Returns:
             dict[str, Any]: Serializable metadata.
-
-        Override this when using non-serializable types like deque or Counter.
-        For example, convert deque to list, Counter to dict.
         """
         return metadata.copy()
 
     def deserialize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
-        """Restore handler-specific metadata from serialized format.
+        """Restore handler-specific metadata from serialized format. Override this to reverse the
+        serialize_metadata transformation. For example, convert list back to deque, dict back to Counter.
 
         Args:
             metadata (dict[str, Any]): AggHandler-specific metadata.
 
         Returns:
             dict[str, Any]: Deserialized metadata.
-
-        Override this to reverse the serialize_metadata transformation.
-        For example, convert list back to deque, dict back to Counter.
         """
         return metadata.copy()
 
@@ -275,8 +274,8 @@ class MeanAggHandler(AggregationHandler):
         )
 
 
-class DistributionAggHandler(AggregationHandler):
-    """AggHandler for DISTRIBUTION aggregation. Maintains a sliding window of values
+class StatsAggHandler(AggregationHandler):
+    """AggHandler for STATS aggregation. Maintains a sliding window of values
     and expands into multiple statistical metrics (mean, min, max, percentiles, std).
 
     Note: Percentiles and standard deviation are approximated in distributed settings by averaging local
@@ -314,26 +313,16 @@ class DistributionAggHandler(AggregationHandler):
         if not values:
             return []
 
-        return self._compute_distribution_stats(local_agg_metric, values)
-
-    def _compute_distribution_stats(
-        self, local_agg_metric: MetricState, values: list[float]
-    ) -> list[MetricState]:
-        """Compute statistical metrics from distribution values using torch for efficiency."""
-        if not values:
-            return []
-
-        # Use float64 for precision matching python's float
         values_tensor = torch.tensor(values, dtype=torch.float64)
         n = len(values_tensor)
 
-        # Compute all stats from the tensor
+        # Compute stats from the tensor
         sum_val = torch.sum(values_tensor).item()
         mean_val = sum_val / n
         min_val = torch.min(values_tensor).item()
         max_val = torch.max(values_tensor).item()
 
-        # Compute all percentiles in one go
+        # Compute percentiles
         percentile_definitions = torch.tensor([0.05, 0.5, 0.95], dtype=torch.float64)
         p05_val, p50_val, p95_val = torch.quantile(
             values_tensor, percentile_definitions
@@ -386,6 +375,7 @@ class DistributionAggHandler(AggregationHandler):
                 metadata={"sum": p95_val, "count": 1},
             ),
         ]
+
         # Standard deviation is only well-defined for n > 1
         if n > 1:
             std_val = torch.std(values_tensor).item()
@@ -402,7 +392,7 @@ class DistributionAggHandler(AggregationHandler):
 
     def finalize_dist_agg(self, local_agg_metrics: list[MetricState]) -> MetricState:
         raise NotImplementedError(
-            "Metrics with AggregationType.DISTRIBUTION are converted to other "
+            "Metrics with AggregationType.STATS were converted to other "
             "AggregationTypes for distributed reduction. finalize_dist_agg should not be called."
         )
 
@@ -457,8 +447,8 @@ class CategoricalCountAggHandler(AggregationHandler):
 
     def finalize_dist_agg(self, local_agg_metrics: list[MetricState]) -> MetricState:
         raise NotImplementedError(
-            "Metrics with AggregationType.CATEGORICAL_COUNT are converted to other "
-            "AggregationTypes for distributed reduction. finalize_dist_agg should not be called."
+            "Metrics with AggregationType.CATEGORICAL_COUNT were converted to other "
+            "AggregationType.SUM for distributed reduction. finalize_dist_agg should not be called."
         )
 
     def serialize_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:

@@ -8,7 +8,7 @@
 Tests for MetricsAggregator functionality.
 
 This module tests the metrics collection and aggregation system including:
-- All aggregation types (SUM, MEAN, MAX, MIN, DISTRIBUTION, CATEGORICAL_COUNT)
+- All aggregation types (SUM, MEAN, MAX, MIN, STATS, CATEGORICAL_COUNT)
 - State management and checkpointing
 - Multi-dataset metric namespacing
 - Distributed metrics aggregation
@@ -69,20 +69,18 @@ class TestMetricsAggregator:
         else:
             assert result["train_test/metric"] == expected
 
-    def test_distribution_metrics(self):
-        """Tests that DISTRIBUTION aggregation computes statistics (mean, min, max, percentiles)."""
+    def test_stats_metrics(self):
+        """Tests that STATS aggregation computes statistics (mean, min, max, percentiles)."""
         aggregator = MetricsAggregator()
         values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
         metrics = [
-            Metric("test", "dist_metric", val, AggregationType.DISTRIBUTION)
-            for val in values
+            Metric("test", "dist_metric", val, AggregationType.STATS) for val in values
         ]
         aggregator.update(metrics)
 
         result = aggregator.get_metrics_for_logging(prefix="train")
 
-        # Verify distribution statistics
         assert result["train_test/dist_metric_stat_mean"] == 5.5
         assert result["train_test/dist_metric_stat_min"] == 1
         assert result["train_test/dist_metric_stat_max"] == 10
@@ -212,14 +210,14 @@ class TestMetricsAggregator:
         """Test that handler-generated metrics are validated for consistency."""
         aggregator = MetricsAggregator()
 
-        # Create a user-defined metric that will conflict with distribution stats
+        # Create a user-defined metric that will conflict with stats
         user_metrics = [
             Metric("test", "dist_metric_stat_mean", 42, AggregationType.SUM)
         ]
         aggregator.update(user_metrics)
 
-        # Now try to add a distribution metric that will generate conflicting stat names
-        dist_metrics = [Metric("test", "dist_metric", 10, AggregationType.DISTRIBUTION)]
+        # Now try to add a stats metric that will generate conflicting stat names
+        dist_metrics = [Metric("test", "dist_metric", 10, AggregationType.STATS)]
         aggregator.update(dist_metrics)
 
         # This should fail when trying to get metrics for logging because the handler
@@ -238,7 +236,7 @@ class TestMetricsAggregator:
         aggregator.update(metrics)
 
         # Replace the SUM handler - should generate warning
-        from forge.data.metrics._metric_agg_handlers import SumAggHandler
+        from forge.data.metrics.metric_agg_handlers import SumAggHandler
 
         with caplog.at_level(logging.WARNING):
             aggregator.register_handler(AggregationType.SUM, SumAggHandler())
@@ -274,13 +272,11 @@ class TestDistributedMetricsAggregator(FSDPTest):
             Metric("test", "min_metric", base_value // 2, AggregationType.MIN),
         ]
 
-        # DISTRIBUTION: Each rank adds 5 values for distribution statistics
+        # STATS: Each rank adds 5 values for statistics
         # rank 0: [0, 1, 2, 3, 4], rank 1: [10, 11, 12, 13, 14]
         for i in range(5):
             metrics.append(
-                Metric(
-                    "test", "dist_metric", rank * 10 + i, AggregationType.DISTRIBUTION
-                )
+                Metric("test", "dist_metric", rank * 10 + i, AggregationType.STATS)
             )
 
         # CATEGORICAL_COUNT: Different categories per rank to test counting
@@ -341,7 +337,7 @@ class TestDistributedMetricsAggregator(FSDPTest):
         assert result["train_test/max_metric"] == 200
         assert result["train_test/min_metric"] == 5
 
-        # DISTRIBUTION: Combined values [0,1,2,3,4,10,11,12,13,14]
+        # STATS: Combined values [0,1,2,3,4,10,11,12,13,14]
         # Mean should be average of local means: (2 + 12) / 2 = 7
         assert result["train_test/dist_metric_stat_mean"] == 7
         assert result["train_test/dist_metric_stat_min"] == 0
@@ -377,12 +373,10 @@ class TestDistributedMetricsAggregator(FSDPTest):
             Metric("test", "max_metric", base_value * 2, AggregationType.MAX),
         ]
 
-        # Add some DISTRIBUTION values - each rank adds 3 values
+        # Add some STATS values - each rank adds 3 values
         for i in range(3):
             initial_metrics.append(
-                Metric(
-                    "test", "dist_metric", rank * 100 + i, AggregationType.DISTRIBUTION
-                )
+                Metric("test", "dist_metric", rank * 100 + i, AggregationType.STATS)
             )
 
         # Add CATEGORICAL_COUNT values

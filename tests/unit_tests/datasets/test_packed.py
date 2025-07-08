@@ -13,10 +13,10 @@ from typing import Any
 import pytest
 import torch
 
-from forge.data._collate import collate_packed
+from forge.data.collate import collate_packed
 from forge.data.metrics import MetricsAggregator
-from forge.datasets._packed import DPOPacker, PackedDataset, Packer, TextPacker
-from forge.datasets._sft import HfIterableDataset
+from forge.datasets.hf import HfIterableDataset
+from forge.datasets.packed import DPOPacker, PackedDataset, Packer, TextPacker
 from forge.tools._import_guard import _SUPPORTS_FLEX_ATTENTION
 from torchdata.stateful_dataloader import StatefulDataLoader
 

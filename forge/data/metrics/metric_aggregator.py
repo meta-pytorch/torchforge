@@ -11,17 +11,17 @@ from typing import Any, Union
 
 import torch.distributed as dist
 
-from forge.data.metrics._metric_agg_handlers import (
+from forge.data.metrics.metric_agg_handlers import (
     AggregationHandler,
     CategoricalCountAggHandler,
-    DistributionAggHandler,
     MaxAggHandler,
     MeanAggHandler,
     MetricState,
     MinAggHandler,
+    StatsAggHandler,
     SumAggHandler,
 )
-from forge.data.metrics._metric_transform import AggregationType, Metric
+from forge.data.metrics.metric_transform import AggregationType, Metric
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class MetricsAggregator:
     {
         ("alpaca", "tokens_seen"): MetricState(value=200.0, agg_type=SUM, ...),
         ("alpaca", "avg_loss"):    MetricState(value=0.01, agg_type=MEAN, metadata={'sum': ..., 'count': ...}),
-        ("slim_orca", "seq_len"):  MetricState(agg_type=DISTRIBUTION, metadata={'values': deque([...])}),
+        ("slim_orca", "seq_len"):  MetricState(agg_type=STATS, metadata={'values': deque([...])}),
     }
 
     When preparing metrics for logging, the aggregator follows a two-phase process:
@@ -47,7 +47,7 @@ class MetricsAggregator:
     The aggregator's state is checkpointable, allowing training resumption.
 
     Args:
-        dist_window_size (int): Window size for DistributionAggHandler tracking.
+        dist_window_size (int): Window size for StatsAggHandler tracking.
 
     Example:
         >>> from forge.data.metrics import MetricsAggregator, Metric, AggregationType
@@ -96,7 +96,7 @@ class MetricsAggregator:
             AggregationType.MAX: MaxAggHandler(),
             AggregationType.MIN: MinAggHandler(),
             AggregationType.MEAN: MeanAggHandler(),
-            AggregationType.DISTRIBUTION: DistributionAggHandler(dist_window_size),
+            AggregationType.STATS: StatsAggHandler(dist_window_size),
             AggregationType.CATEGORICAL_COUNT: CategoricalCountAggHandler(),
         }
 
@@ -193,7 +193,7 @@ class MetricsAggregator:
         Returns:
             list[MetricState]: Final results ready for logging
         """
-        # Step 1: Get local results from all handlers (may expand distributions/categoricals)
+        # Step 1: Get local results from all handlers (may expand stats/categoricals)
         prepared_results = []
         for local_agg_metric in self._metric_states.values():
             handler = self._handlers[local_agg_metric.agg_type]
