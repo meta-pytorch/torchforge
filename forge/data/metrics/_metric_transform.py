@@ -13,7 +13,7 @@ from forge.data.transforms import Transform
 
 @dataclass(frozen=True)
 class Metric:
-    dataset_name: str
+    source: str
     metric_name: str
     value: Union[int, float, str]
     agg_type: "AggregationType"
@@ -41,31 +41,31 @@ class MetricTransform(Transform):
     of concerns ensures metrics are correctly aggregated even with multiple dataloader
     workers and in distributed settings.
 
-    The transform must be configured with a dataset name via set_dataset_name() before use.
+    The transform must be configured with a source via set_source() before use.
     Each call to __call__ adds metrics to the sample's "metrics" key.
 
     Example:
         >>> transform = DefaultTrainingMetricTransform()
-        >>> transform.set_dataset_name("alpaca")
+        >>> transform.set_source("alpaca")
         >>> sample = {"tokens": [1, 2, 3]}
         >>> result = transform(sample)
         >>> # result["metrics"] contains list of Metric objects
     """
 
     def __init__(self):
-        # dataset_name is set by the dataset using set_dataset_name
-        self.dataset_name: Optional[str] = None
+        # source is set by the dataset using set_source
+        self.source: Optional[str] = None
 
-    def set_dataset_name(self, dataset_name: str) -> None:
+    def set_source(self, source: str) -> None:
         """Called by the dataset to set the namespace for metrics.
 
         This is used to differentiate metrics from multiple datasets, for example,
         "train_alpaca/tokens_seen" vs. "train_slim_orca/tokens_seen".
 
         Args:
-            dataset_name (str): Name of the dataset, used for metric namespacing.
+            source (str): Name of the dataset, used for metric namespacing.
         """
-        self.dataset_name = dataset_name
+        self.source = source
 
     def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
         """Generate metrics for a single sample. Must be implemented by subclasses.
@@ -91,11 +91,11 @@ class MetricTransform(Transform):
             dict[str, Any]: Sample with metrics added to "metrics" key (list[Metric])
 
         Raises:
-            RuntimeError: If set_dataset_name() was not called before transform usage
+            RuntimeError: If set_source() was not called before transform usage
         """
-        if self.dataset_name is None:
+        if self.source is None:
             raise RuntimeError(
-                "set_dataset_name() must be called before using the transform."
+                "set_source() must be called before using the transform."
             )
 
         # Generate metrics for this sample
@@ -123,22 +123,22 @@ class DefaultTrainingMetricTransform(MetricTransform):
 
     Example:
         >>> transform = DefaultTrainingMetricTransform()
-        >>> transform.set_dataset_name("alpaca")
+        >>> transform.set_source("alpaca")
         >>>
         >>> sample = {"tokens": [1, 2, 3, 4, 5]}  # 5 tokens
         >>> metrics = transform._generate_metrics(sample)
         >>> # This generates the following Metric objects:
         >>> # [
-        >>> #   Metric(dataset_name="alpaca", metric_name="samples_seen", value=1, agg_type=AggregationType.SUM),
-        >>> #   Metric(dataset_name="alpaca", metric_name="tokens_seen", value=5, agg_type=AggregationType.SUM),
-        >>> #   Metric(dataset_name="alpaca", metric_name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
+        >>> #   Metric(source="alpaca", metric_name="samples_seen", value=1, agg_type=AggregationType.SUM),
+        >>> #   Metric(source="alpaca", metric_name="tokens_seen", value=5, agg_type=AggregationType.SUM),
+        >>> #   Metric(source="alpaca", metric_name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
         >>> # ]
     """
 
     def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
-        if self.dataset_name is None:
+        if self.source is None:
             raise RuntimeError(
-                "set_dataset_name() must be called before using the transform."
+                "set_source() must be called before using the transform."
             )
 
         # Determine token key
@@ -148,19 +148,19 @@ class DefaultTrainingMetricTransform(MetricTransform):
         # Create metrics for this sample
         return [
             Metric(
-                dataset_name=self.dataset_name,
+                source=self.source,
                 metric_name="samples_seen",
                 value=1,
                 agg_type=AggregationType.SUM,
             ),
             Metric(
-                dataset_name=self.dataset_name,
+                source=self.source,
                 metric_name="tokens_seen",
                 value=token_len,
                 agg_type=AggregationType.SUM,
             ),
             Metric(
-                dataset_name=self.dataset_name,
+                source=self.source,
                 metric_name="seq_len",
                 value=token_len,
                 agg_type=AggregationType.DISTRIBUTION,

@@ -31,7 +31,7 @@ class MetricsAggregator:
 
     This class uses a handler-based strategy, where each aggregation type (SUM, MEAN, etc.)
     has a corresponding AggregationHandler. It maintains a single state object for each
-    (dataset, metric) pair.
+    (source, metric_name) pair.
 
     Internal State Visualization:
     {
@@ -83,7 +83,7 @@ class MetricsAggregator:
                 f"dist_window_size must be positive, got {dist_window_size}"
             )
 
-        # Storage: {(dataset, metric): MetricState} - O(unique metrics) not O(samples)
+        # Storage: {(source, metric_name): MetricState} - O(unique metrics) not O(samples)
         self._metric_states: dict[tuple[str, str], MetricState] = {}
         self._dist_window_size = dist_window_size
 
@@ -102,14 +102,14 @@ class MetricsAggregator:
 
     def _validate_metric_consistency(self, metric: Union[Metric, MetricState]) -> None:
         """Validate that metric name uses consistent aggregation type."""
-        metric_key = (metric.dataset_name, metric.metric_name)
+        metric_key = (metric.source, metric.metric_name)
         metric_name = metric.metric_name
 
         if metric_key in self._metric_agg_types:
             existing_agg_type = self._metric_agg_types[metric_key]
             if existing_agg_type != metric.agg_type:
                 raise ValueError(
-                    f"Metric '{metric_name}' in dataset '{metric.dataset_name}' "
+                    f"Metric '{metric_name}' in dataset '{metric.source}' "
                     f"is already registered with aggregation type {existing_agg_type.value}, "
                     f"but a handler or user code tried to use it with type {metric.agg_type.value}. "
                     f"Use different metric names for different aggregation types."
@@ -139,7 +139,7 @@ class MetricsAggregator:
         self._handlers[agg_type] = handler
 
     def update(self, metrics: list[Metric]) -> None:
-        """Update (dataset_name, metric_name) metric state with new values.
+        """Update (source, metric_name) metric state with new values.
 
         Args:
             metrics (list[Metric]): List of metrics to update the state with
@@ -152,7 +152,7 @@ class MetricsAggregator:
             # Same metric name must use same aggregation type
             self._validate_metric_consistency(metric)
 
-            metric_key = (metric.dataset_name, metric.metric_name)
+            metric_key = (metric.source, metric.metric_name)
             handler = self._handlers.get(metric.agg_type)
 
             if handler is None:
@@ -162,7 +162,7 @@ class MetricsAggregator:
 
             if metric_key not in self._metric_states:
                 self._metric_states[metric_key] = handler.initialize_metric_state(
-                    metric.dataset_name, metric.metric_name, metric.agg_type
+                    metric.source, metric.metric_name, metric.agg_type
                 )
 
             local_agg_metric = self._metric_states[metric_key]
@@ -175,14 +175,14 @@ class MetricsAggregator:
             prefix (str): Prefix for metric names in the returned dictionary
 
         Returns:
-            dict[str, float]: Dictionary with keys like "{prefix}_{dataset_name}/{metric_name}"
-                and float values. For example, with `prefix="train"`, `dataset_name="alpaca"`,
+            dict[str, float]: Dictionary with keys like "{prefix}_{source}/{metric_name}"
+                and float values. For example, with `prefix="train"`, `source="alpaca"`,
                 `metric_name="loss"`, the key would be `train_alpaca/loss`.
         """
         final_results = self._compute_unified_metrics()
 
         return {
-            f"{prefix}_{result.dataset_name}/{result.metric_name}": result.value
+            f"{prefix}_{result.source}/{result.metric_name}": result.value
             for result in final_results
         }
 
@@ -217,7 +217,7 @@ class MetricsAggregator:
         """Apply distributed reduction to local results.
 
         Args:
-            local_agg_metrics (list[MetricState]): (dataset_name, metric_name) metric pairs from this rank
+            local_agg_metrics (list[MetricState]): (source, metric_name) metric pairs from this rank
 
         Returns:
             list[MetricState]: Reduced results combining all ranks
@@ -228,12 +228,12 @@ class MetricsAggregator:
         all_results = [None] * world_size
         dist.all_gather_object(all_results, local_agg_metrics)
 
-        # Group by (dataset_name, metric_name) for reduction
+        # Group by (source, metric_name) for reduction
         grouped = defaultdict(list)
         for rank_results in all_results:
             if rank_results:  # Handle ranks with no metrics
                 for result in rank_results:
-                    result_key = (result.dataset_name, result.metric_name)
+                    result_key = (result.source, result.metric_name)
                     grouped[result_key].append(result)
 
         # Apply handler-specific distributed reduction
@@ -266,7 +266,7 @@ class MetricsAggregator:
 
             # Convert MetricState to serializable dict
             result_dict = {
-                "dataset_name": local_agg_metric.dataset_name,
+                "source": local_agg_metric.source,
                 "metric_name": local_agg_metric.metric_name,
                 "value": local_agg_metric.value,
                 "agg_type": local_agg_metric.agg_type,
@@ -326,7 +326,7 @@ class MetricsAggregator:
 
             # Create MetricState from dict
             local_agg_metric = MetricState(
-                dataset_name=result_dict["dataset_name"],
+                source=result_dict["source"],
                 metric_name=result_dict["metric_name"],
                 value=result_dict["value"],
                 agg_type=result_dict["agg_type"],

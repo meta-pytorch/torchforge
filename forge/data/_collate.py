@@ -14,11 +14,11 @@ def collate_packed(
     """
     Generic collate function for packed samples from an IterablePackedDataset.
 
-    - Stacks tensors from all samples in the batch, while keeping non-tensor values
-    as lists.
-    - Handles metrics by extending them into a single list.
-    - Delegates attention mask creation to a provided `mask_fn` callable that expects
-    `document_ids` and `device` parameters to generate masks on-the-fly for
+    - Stacks tensors from all samples in the batch. Tensors are expected to be packed,
+    i.e. have the same shape.
+    - Non tensors are appended to a list., e.g. [a,b] + [c] = [[a,b],[c]]
+    - Metrics are extended to a single list, e.g. [a,b] + [c] = [a,b,c].
+    - Delegates attention mask creation to a provided `mask_fn`to generate masks on-the-fly for
     packed sequences. For an example, check 'create_block_mask' in 'forge.datasets._packed.py'.
 
     Args:
@@ -56,10 +56,9 @@ def collate_packed(
         else:
             collated[key] = [sample[key] for sample in batch]
 
-    # Delegate mask creation to the provided specialized function
     # TODO: investigate the need for device here. Device is needed
-    # because mask is created on-the-fly, but we cant pass it
-    # to the model forward.
+    # because mask is created on-the-fly, during forward, given how flex_attention
+    # works.
     collated["mask"] = mask_fn(collated["document_ids"], device=device)
 
     return collated

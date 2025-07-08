@@ -579,7 +579,7 @@ class TextPacker(Packer[dict[str, torch.Tensor]]):
         if target_tokens_per_pack > 0:
             padding_pct = round(num_padding * 100 / target_tokens_per_pack, 2)
             padding_metric = Metric(
-                dataset_name=self.dataset_name,
+                source=self.dataset_name,
                 metric_name="pct_of_tokens_padded",
                 value=padding_pct,
                 agg_type=AggregationType.MEAN,

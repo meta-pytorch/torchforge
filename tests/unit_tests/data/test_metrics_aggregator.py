@@ -56,9 +56,7 @@ class TestMetricsAggregator:
         aggregator = MetricsAggregator()
 
         metrics = [
-            Metric(
-                dataset_name="test", metric_name="metric", value=val, agg_type=agg_type
-            )
+            Metric(source="test", metric_name="metric", value=val, agg_type=agg_type)
             for val in test_values
         ]
         aggregator.update(metrics)

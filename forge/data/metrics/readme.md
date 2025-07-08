@@ -24,7 +24,7 @@ The metrics module provides a robust system for tracking and aggregating trainin
 │  • Uses pluggable AggregationHandlers              │
 │  • Handles distributed reduction                   │
 └─────────────────────┬──────────────────────────────┘
-                      │ {prefix}_{dataset_name}/{metric_name} # prefix is "train", "val", etc.
+                      │ {prefix}_{source}/{metric_name} # prefix is "train", "val", etc.
 ┌─────────────────────▼──────────────────────────────┐
 │                 Logging System                     │
 │  • W&B, TensorBoard, etc.                          │
@@ -63,16 +63,16 @@ Generates per-sample metrics during data processing.
 from forge.data.metrics import DefaultTrainingMetricTransform, AggregationType
 
 transform = DefaultTrainingMetricTransform()
-transform.set_dataset_name("alpaca")
+transform.set_source("alpaca")
 
 # Applied to each sample
 sample = {"tokens": [1, 2, 3, 4, 5]}
 sample = transform(sample)
 # sample["metrics"] now contains:
 # [
-#   Metric(dataset_name="alpaca", name="samples_seen", value=1, agg_type=AggregationType.SUM),
-#   Metric(dataset_name="alpaca", name="tokens_seen", value=5, agg_type=AggregationType.SUM),
-#   Metric(dataset_name="alpaca", name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
+#   Metric(source="alpaca", name="samples_seen", value=1, agg_type=AggregationType.SUM),
+#   Metric(source="alpaca", name="tokens_seen", value=5, agg_type=AggregationType.SUM),
+#   Metric(source="alpaca", name="seq_len", value=5, agg_type=AggregationType.DISTRIBUTION)
 # ]
 ```
 
@@ -135,9 +135,9 @@ AggregationHandler (ABC)
 **Custom Handler Example:**
 ```python
 class CustomAggHandler(AggregationHandler):
-    def initialize_metric_state(self, dataset_name, metric_name, agg_type):
+    def initialize_metric_state(self, source, metric_name, agg_type):
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=<initial_value>, # should change
             agg_type=agg_type,

@@ -106,8 +106,8 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._info = DatasetInfo(name=dataset_name, weight=self._weight)
 
         # Set dataset name on the transform if it supports it
-        if hasattr(self._metric_transform, "set_dataset_name"):
-            self._metric_transform.set_dataset_name(dataset_name)
+        if hasattr(self._metric_transform, "set_source"):
+            self._metric_transform.set_source(dataset_name)
 
         # Internal state for resumption
         self._num_epochs = 0
@@ -245,7 +245,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     # especially useful when interleaving multiple datasets, but
                     # also necessary to track dataset-level metrics.
                     metric_num_epochs = Metric(
-                        dataset_name=self.info.name,
+                        source=self.info.name,
                         metric_name="num_epochs",
                         value=self._num_epochs,
                         agg_type=AggregationType.MAX,

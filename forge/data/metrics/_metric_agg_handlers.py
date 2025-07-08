@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MetricState:
-    """Mutable state object representing aggregated metric for (dataset, metric) on a single rank.
+    """Mutable state object representing the state of a (source, metric_name) on a single rank.
 
     Attributes:
-        dataset_name (str): Name of the dataset.
+        source (str): Name of the dataset.
         metric_name (str): Name of the metric.
         value (float): Current aggregated value, whose meaning depends on the aggregation type
             (e.g., running sum, current max).
@@ -30,7 +30,7 @@ class MetricState:
         metadata (dict[str, Any]): Additional state like count, list of values, etc.
     """
 
-    dataset_name: str
+    source: str
     metric_name: str
     value: float
     agg_type: AggregationType
@@ -50,17 +50,17 @@ class AggregationHandler(ABC):
 
     @abstractmethod
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
-        """Create a new MetricState for a (dataset_name, metric_name) pair.
+        """Create a new MetricState for a (source, metric_name) pair.
 
         Args:
-            dataset_name (str): Name of the dataset. Especially useful when tracking multiple datasets.
+            source (str): Name of the dataset. Especially useful when tracking multiple datasets.
             metric_name (str): Name of the metric.
             agg_type (AggregationType): Aggregation type.
 
         Returns:
-            MetricState: New MetricState for this (dataset_name, metric_name) pair.
+            MetricState: New MetricState for this (source, metric_name) pair.
         """
         pass
 
@@ -96,10 +96,10 @@ class AggregationHandler(ABC):
         Merge MetricStates from all ranks into final result.
 
         Args:
-            local_agg_metrics (list[MetricState]): list of MetricStates for this (dataset_name, metric_name) pair.
+            local_agg_metrics (list[MetricState]): list of MetricStates for this (source, metric_name) pair.
 
         Returns:
-            MetricState: Final result for this (dataset_name, metric_name) pair.
+            MetricState: Final result for this (source, metric_name) pair.
         """
         pass
 
@@ -136,10 +136,10 @@ class SumAggHandler(AggregationHandler):
     """AggHandler for SUM aggregation. Initializes with 0.0 and accumulates metric values."""
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=0.0,
             agg_type=agg_type,
@@ -161,7 +161,7 @@ class SumAggHandler(AggregationHandler):
 
         total = sum(metric.value for metric in local_agg_metrics)
         return MetricState(
-            dataset_name=local_agg_metrics[0].dataset_name,
+            source=local_agg_metrics[0].source,
             metric_name=local_agg_metrics[0].metric_name,
             value=total,
             agg_type=local_agg_metrics[0].agg_type,
@@ -173,10 +173,10 @@ class MaxAggHandler(AggregationHandler):
     """AggHandler for MAX aggregation. Tracks maximum value across all updates."""
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=float("-inf"),
             agg_type=agg_type,
@@ -195,7 +195,7 @@ class MaxAggHandler(AggregationHandler):
     def finalize_dist_agg(self, local_agg_metrics: list[MetricState]) -> MetricState:
         max_value = max(r.value for r in local_agg_metrics)
         return MetricState(
-            dataset_name=local_agg_metrics[0].dataset_name,
+            source=local_agg_metrics[0].source,
             metric_name=local_agg_metrics[0].metric_name,
             value=max_value,
             agg_type=local_agg_metrics[0].agg_type,
@@ -207,10 +207,10 @@ class MinAggHandler(AggregationHandler):
     """AggHandler for MIN aggregation. Tracks minimum value across all updates."""
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=float("inf"),
             agg_type=agg_type,
@@ -229,7 +229,7 @@ class MinAggHandler(AggregationHandler):
     def finalize_dist_agg(self, local_agg_metrics: list[MetricState]) -> MetricState:
         min_value = min(r.value for r in local_agg_metrics)
         return MetricState(
-            dataset_name=local_agg_metrics[0].dataset_name,
+            source=local_agg_metrics[0].source,
             metric_name=local_agg_metrics[0].metric_name,
             value=min_value,
             agg_type=local_agg_metrics[0].agg_type,
@@ -241,10 +241,10 @@ class MeanAggHandler(AggregationHandler):
     """AggHandler for MEAN aggregation. Maintains running sum and count to compute average."""
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=0.0,
             agg_type=agg_type,
@@ -267,7 +267,7 @@ class MeanAggHandler(AggregationHandler):
         total_count = sum(metric.metadata["count"] for metric in local_agg_metrics)
 
         return MetricState(
-            dataset_name=local_agg_metrics[0].dataset_name,
+            source=local_agg_metrics[0].source,
             metric_name=local_agg_metrics[0].metric_name,
             value=total_sum / total_count if total_count > 0 else 0.0,
             agg_type=local_agg_metrics[0].agg_type,
@@ -296,10 +296,10 @@ class DistributionAggHandler(AggregationHandler):
         self.window_size = window_size
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=0.0,
             agg_type=agg_type,
@@ -344,42 +344,42 @@ class DistributionAggHandler(AggregationHandler):
         # by averaging local percentiles.
         metrics = [
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_mean",
                 value=mean_val,
                 agg_type=AggregationType.MEAN,
                 metadata={"sum": sum_val, "count": n},
             ),
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_min",
                 value=min_val,
                 agg_type=AggregationType.MIN,
                 metadata={},
             ),
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_max",
                 value=max_val,
                 agg_type=AggregationType.MAX,
                 metadata={},
             ),
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_p05",
                 value=p05_val,
                 agg_type=AggregationType.MEAN,
                 metadata={"sum": p05_val, "count": 1},
             ),
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_p50",
                 value=p50_val,
                 agg_type=AggregationType.MEAN,
                 metadata={"sum": p50_val, "count": 1},
             ),
             MetricState(
-                dataset_name=local_agg_metric.dataset_name,
+                source=local_agg_metric.source,
                 metric_name=f"{local_agg_metric.metric_name}_stat_p95",
                 value=p95_val,
                 agg_type=AggregationType.MEAN,
@@ -391,7 +391,7 @@ class DistributionAggHandler(AggregationHandler):
             std_val = torch.std(values_tensor).item()
             metrics.append(
                 MetricState(
-                    dataset_name=local_agg_metric.dataset_name,
+                    source=local_agg_metric.source,
                     metric_name=f"{local_agg_metric.metric_name}_stat_std",
                     value=std_val,
                     agg_type=AggregationType.MEAN,
@@ -428,10 +428,10 @@ class CategoricalCountAggHandler(AggregationHandler):
     and expands into individual count metrics for each category."""
 
     def initialize_metric_state(
-        self, dataset_name: str, metric_name: str, agg_type: AggregationType
+        self, source: str, metric_name: str, agg_type: AggregationType
     ) -> MetricState:
         return MetricState(
-            dataset_name=dataset_name,
+            source=source,
             metric_name=metric_name,
             value=0.0,
             agg_type=agg_type,
@@ -447,7 +447,7 @@ class CategoricalCountAggHandler(AggregationHandler):
         for category, count in local_agg_metric.metadata["counts"].items():
             results.append(
                 MetricState(
-                    dataset_name=local_agg_metric.dataset_name,
+                    source=local_agg_metric.source,
                     metric_name=f"{local_agg_metric.metric_name}_count_{category}",
                     value=count,
                     agg_type=AggregationType.SUM,
