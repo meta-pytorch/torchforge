@@ -781,7 +781,7 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
     def finalize_pack(
         self, pack: dict[str, list], target_tokens_per_pack: int, next_doc_id: int
     ) -> PackType:
-        """Finalizes pack by padding and concatenating tensor lists efficiently."""
+        """Finalizes pack by padding and concatenating tensor lists"""
         # Calculate current size from tensor list
         current_size = sum(t.numel() for t in pack["tokens"]) if pack["tokens"] else 0
         num_padding = target_tokens_per_pack - current_size
@@ -870,11 +870,12 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
         """
         Mask logic for DPO.
         - Causal self-attention within each document (prompt, chosen, rejected)
-        - Cross-attention: response tokens can attend to their prompt (shared for both responses)
-        - Final mask == Causal & Cross-attention
+        - Prompt attention: response tokens can attend to their prompt (shared for both responses)
+        - Final mask == Causal & Prompt attention
 
         Example:
-            doc_ids = torch.tensor([0, 1, 1, 2, 3, 4, 5])
+            # two samples in a pack: (P, C, C, R, P, C, R)
+            doc_ids =   torch.tensor([0, 1, 1, 2, 3, 4, 5])
 
             Would generate the following mask:
 
@@ -895,17 +896,17 @@ class DPOPacker(Packer[dict[str, torch.Tensor]]):
         q_doc = doc_ids[b, q_idx]
         kv_doc = doc_ids[b, kv_idx]
 
-        # 1. Document-level Causal self-attention
+        # 1. Document-level causal self-attention
         is_same_doc = q_doc == kv_doc
         is_causal = is_same_doc & (q_idx >= kv_idx)
 
-        # 2. Cross-attention from response to prompt
+        # 2. Prompt attention
         # For a given query token, find the document ID of its corresponding prompt.
         # Since each DPO sample consists of 3 documents (prompt, chosen, rejected),
         # this maps q_doc to the base ID of its group (e.g., 4 -> 3, 5 -> 3).
         q_prompt_doc_id = (q_doc // 3) * 3
         kv_is_part_of_q_prompt = kv_doc == q_prompt_doc_id
         q_is_response = (q_doc % 3) > 0
-        is_cross_attention = q_is_response & kv_is_part_of_q_prompt
+        is_prompt_attention = q_is_response & kv_is_part_of_q_prompt
 
-        return is_causal | is_cross_attention
+        return is_causal | is_prompt_attention
