@@ -154,9 +154,9 @@ class TestTextPacker:
         pack = text_packer.create_empty_pack()
 
         samples = [
-            {"tokens": torch.tensor([1, 2]), "labels": torch.tensor([3, 4])},
-            {"tokens": torch.tensor([5, 6, 7]), "labels": torch.tensor([8, 9, 10])},
-            {"tokens": torch.tensor([11]), "labels": torch.tensor([12])},
+            {"tokens": torch.tensor([1, 2]), "labels": torch.tensor([3, 4]), "custom_data": 1},
+            {"tokens": torch.tensor([5, 6, 7]), "labels": torch.tensor([8, 9, 10]), "custom_data": "B"},
+            {"tokens": torch.tensor([11]), "labels": torch.tensor([12]), "custom_data": (3,)},
         ]
 
         # Add all samples
@@ -172,6 +172,9 @@ class TestTextPacker:
         torch.testing.assert_close(pack["document_ids"][0], torch.tensor([0, 0]))
         torch.testing.assert_close(pack["document_ids"][1], torch.tensor([1, 1, 1]))
         torch.testing.assert_close(pack["document_ids"][2], torch.tensor([2]))
+        
+        # Verify arbitrary keys are appended as lists
+        assert pack["custom_data"] == [1, "B", (3,)]
 
     def test_finalize_pack_multiple_samples(self, text_packer):
         """Test pack finalization with multiple samples and padding"""
@@ -181,6 +184,7 @@ class TestTextPacker:
             "document_ids": [torch.tensor([0, 0]), torch.tensor([1, 1, 1])],
             "input_pos": [torch.tensor([0, 1]), torch.tensor([0, 1, 2])],
             "metrics": [],
+            "custom_data": [1, "B"],
         }
 
         result = text_packer.finalize_pack(
@@ -196,6 +200,9 @@ class TestTextPacker:
         torch.testing.assert_close(result["labels"], expected_labels)
         torch.testing.assert_close(result["document_ids"], expected_doc_ids)
         torch.testing.assert_close(result["input_pos"], expected_input_pos)
+        
+        # Verify arbitrary keys are preserved as lists
+        assert result["custom_data"] == [1, "B"]
 
     def test_text_causal_mask(self, device):
         """
@@ -348,6 +355,7 @@ class TestDPOPacker:
                 "chosen_response_only_labels": torch.tensor([3, 4]),
                 "rejected_response_only_ids": torch.tensor([5, 6]),
                 "rejected_response_only_labels": torch.tensor([5, 6]),
+                "custom_data": 1,
             },
             {
                 "prompt_ids": torch.tensor([7, 8]),
@@ -355,6 +363,7 @@ class TestDPOPacker:
                 "chosen_response_only_labels": torch.tensor([9]),
                 "rejected_response_only_ids": torch.tensor([10, 11]),
                 "rejected_response_only_labels": torch.tensor([10, 11]),
+                "custom_data": "B",
             },
         ]
 
@@ -400,6 +409,9 @@ class TestDPOPacker:
             pack["rejected_response_mask"][1],
             torch.tensor([False, False, False, True, True]),
         )
+        
+        # Verify arbitrary keys are appended as lists
+        assert pack["custom_data"] == [1, "B"]
 
     def test_finalize_pack_multiple_dpo_samples(self, dpo_packer):
         """Test DPO pack finalization with multiple samples and padding."""
@@ -473,6 +485,16 @@ class TestDPOPacker:
         torch.testing.assert_close(
             result["rejected_response_mask"], expected_rejected_mask
         )
+        
+        # Add arbitrary keys to pack and verify they're preserved
+        pack["custom_data"] = [1, "B"]
+        
+        result_with_extras = dpo_packer.finalize_pack(
+            pack, target_tokens_per_pack=12, next_doc_id=6
+        )
+        
+        # Verify arbitrary keys are preserved as lists
+        assert result_with_extras["custom_data"] == [1, "B"]
 
     def test_dpo_specialized_mask(self, device):
         """
