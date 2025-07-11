@@ -14,9 +14,9 @@ import asyncio
 from functools import partial
 
 from forge.monarch_utils.stack import stack
-from forge.rl.config import GeneratorConfig
+from forge.rl.collector import Collector
+from forge.rl.config import CollectorConfig
 from forge.rl.environments import ToyEnvironment
-from forge.rl.generator import Generator
 from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
 from forge.rl.rewards import ToyRewarder
@@ -56,17 +56,17 @@ async def main():
     # This toy rewarder just adds 1 to the next state value.
     rewarder = await rewarder_procs.spawn("rewarder", ToyRewarder)
 
-    generator_config = GeneratorConfig(
-        max_generator_steps=5,
+    collector_config = CollectorConfig(
+        max_collector_steps=5,
     )
 
-    browser_generators = await browser_procs.spawn(
+    browser_collectors = await browser_procs.spawn(
         "browser",
-        Generator,
-        config=generator_config,
+        Collector,
+        config=collector_config,
         policy=policy,
         replay_buffer=replay_buffer,
-        # here, we use a partial so that the generator itself
+        # here, we use a partial so that the collector itself
         # can create its own environment.
         # We could create the environment and pass it in, but it's slightly more efficient
         # to do it this way.
@@ -74,20 +74,20 @@ async def main():
             ToyEnvironment, name="browser", max_steps=5, rewarder=rewarder
         ),
     )
-    deep_research_generators = await deep_research_procs.spawn(
+    deep_research_collectors = await deep_research_procs.spawn(
         "deep_research",
-        Generator,
-        config=generator_config,
+        Collector,
+        config=collector_config,
         policy=policy,
         replay_buffer=replay_buffer,
         environment_creator=partial(
             ToyEnvironment, name="deep_research", max_steps=5, rewarder=rewarder
         ),
     )
-    coding_generators = await coder_procs.spawn(
+    coding_collectors = await coder_procs.spawn(
         "coding",
-        Generator,
-        config=generator_config,
+        Collector,
+        config=collector_config,
         policy=policy,
         replay_buffer=replay_buffer,
         environment_creator=partial(
@@ -96,27 +96,27 @@ async def main():
     )
 
     # Here's our stack API in action!
-    generators = stack(
-        browser_generators,
-        deep_research_generators,
-        coding_generators,
-        interface=Generator,
+    collectors = stack(
+        browser_collectors,
+        deep_research_collectors,
+        coding_collectors,
+        interface=Collector,
     )
 
     # Create two async tasks
-    async def episode_generator_task():
+    async def episode_collector_task():
         """Task that continuously runs episodes to fill the replay buffer."""
         episode_count = 0
         while True:
             try:
                 print(f"🎮 Running episode {episode_count + 1}...")
 
-                # call() is essentially our "map" - every generator runs their own
+                # call() is essentially our "map" - every collector runs their own
                 # episode loop.
                 # What's pretty elegant here is if we wanted to control off policiness, we could
                 # easily counter on steps and call policy.update_weights.call() at our desired
                 # frequency.
-                results = await generators.run_episode.call()
+                results = await collectors.run_episode.call()
                 num_trajectories = sum([len(r._values) for r in results])
                 episode_count += 1
                 print(
@@ -218,7 +218,7 @@ async def main():
 
     # Run both tasks concurrently
     try:
-        await asyncio.gather(episode_generator_task(), replay_buffer_sampler_task())
+        await asyncio.gather(episode_collector_task(), replay_buffer_sampler_task())
     except KeyboardInterrupt:
         print("\n🛑 Stopping tasks...")
 

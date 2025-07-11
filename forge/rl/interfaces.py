@@ -19,8 +19,9 @@ a generic orchestrator that can work with any component that implements these.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-import torch
 from monarch.actor_mesh import Actor, endpoint
+
+from forge.rl.environments.base import Action, Observation, State
 
 
 # ==== Data Structures ====
@@ -28,20 +29,11 @@ from monarch.actor_mesh import Actor, endpoint
 
 
 @dataclass
-class ForgeRequest:
-    """A request containing state/observation data."""
-
-    data: torch.Tensor | None = None
-    text: str | None = None
-    metadata: dict | None = None
-
-
-@dataclass
-class ForgeTrajectory:
+class Trajectory:
     """A trajectory containing a sequence of states, actions, rewards, etc."""
 
-    states: list[ForgeRequest] | None = None
-    actions: list[ForgeRequest] | None = None
+    states: list[Observation] | None = None
+    actions: list[Action] | None = None
     rewards: list[float] | None = None
     dones: list[bool] | None = None
     infos: list[dict] | None = None
@@ -76,7 +68,7 @@ class PolicyInterface(Actor, ABC):
 
     @endpoint
     @abstractmethod
-    async def generate(self, request: ForgeRequest) -> ForgeRequest:
+    async def generate(self, request: Observation) -> Action:
         """Generate an action given a state/request."""
         pass
 
@@ -92,13 +84,13 @@ class ReplayBufferInterface(Actor, ABC):
 
     @endpoint
     @abstractmethod
-    async def extend(self, sample: ForgeTrajectory):
+    async def extend(self, sample: Trajectory):
         """Add a trajectory to the replay buffer."""
         pass
 
     @endpoint
     @abstractmethod
-    async def sample(self) -> ForgeTrajectory | None:
+    async def sample(self) -> Trajectory | None:
         """Sample from the replay buffer."""
         pass
 
@@ -121,25 +113,9 @@ class RewarderInterface(Actor, ABC):
     @endpoint
     @abstractmethod
     async def compute_reward(
-        self, state: ForgeRequest, action: ForgeRequest, next_state: ForgeRequest
+        self, state: State, action: Action, next_state: State
     ) -> float:
         """Compute reward for a state-action-next_state transition."""
-        pass
-
-
-class EnvironmentInterface(ABC):
-    """Abstract interface for environments."""
-
-    @abstractmethod
-    def reset(self) -> tuple[ForgeRequest, ForgeEnvInfo]:
-        """Reset the environment and return initial state and info."""
-        pass
-
-    @abstractmethod
-    def step(
-        self, action: ForgeRequest
-    ) -> tuple[ForgeRequest, float, bool, bool, ForgeEnvInfo]:
-        """Take a step in the environment and return (obs, reward, terminated, truncated, info)."""
         pass
 
 

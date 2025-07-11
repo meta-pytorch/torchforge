@@ -9,5 +9,5 @@ from dataclasses import dataclass
 
 # This is basically empty, but I figure we'll want a lot of configuration classes.
 @dataclass
-class GeneratorConfig:
-    max_generator_steps: int | None = None
+class CollectorConfig:
+    max_collector_steps: int | None = None

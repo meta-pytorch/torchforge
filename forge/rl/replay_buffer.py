@@ -10,7 +10,7 @@ import random
 
 from monarch.actor_mesh import endpoint
 
-from forge.rl.interfaces import ForgeTrajectory, ReplayBufferInterface
+from forge.rl.interfaces import ReplayBufferInterface, Trajectory
 
 
 # Silly replay buffer implementation for testing.
@@ -20,10 +20,10 @@ class ReplayBuffer(ReplayBufferInterface):
     """Simple in-memory replay buffer implementation."""
 
     def __init__(self):
-        self.buffer: list[ForgeTrajectory] = []
+        self.buffer: list[Trajectory] = []
 
     @endpoint
-    async def extend(self, sample: ForgeTrajectory):
+    async def extend(self, sample: Trajectory):
         """Add a trajectory to the replay buffer."""
         self.buffer.append(sample)
 

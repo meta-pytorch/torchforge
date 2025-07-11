@@ -6,12 +6,12 @@
 
 """Concrete policy implementations."""
 
-import random
-
 import torch
 from monarch.actor_mesh import endpoint
 
-from forge.rl.interfaces import ForgeRequest, PolicyInterface
+from forge.rl.environments import Action, Observation
+from forge.rl.environments.toy import ToyAction
+from forge.rl.interfaces import PolicyInterface
 
 
 class ToyPolicy(PolicyInterface):
@@ -22,17 +22,16 @@ class ToyPolicy(PolicyInterface):
         self.action_range = action_range
 
     @endpoint
-    async def generate(self, request: ForgeRequest) -> ForgeRequest:
+    async def generate(self, request: Observation) -> Action:
         """Generate a simple random action."""
         # Generate a random action within the specified range
-        action_value = random.uniform(self.action_range[0], self.action_range[1])
-
-        action = ForgeRequest(
-            data=torch.tensor([action_value]),
-            text=f"Action: {action_value:.2f}",
-            metadata={"action_value": action_value, "policy_type": "toy"},
+        action_value = (
+            torch.rand(1).item() * (self.action_range[1] - self.action_range[0])
+            + self.action_range[0]
         )
-
+        action = ToyAction(
+            data=torch.tensor([action_value]),
+        )
         return action
 
     @endpoint
