@@ -12,7 +12,7 @@ A "collector" in this context refers to the orchestrator that coordinates
 
 from typing import Callable
 
-from monarch.actor_mesh import Actor, ActorMeshRef, endpoint
+from monarch.actor import Actor, endpoint
 
 from forge.rl.config import CollectorConfig
 from forge.rl.interfaces import PolicyInterface, ReplayBufferInterface, Trajectory
@@ -24,8 +24,8 @@ class Collector(Actor):
     def __init__(
         self,
         config: CollectorConfig,
-        policy: ActorMeshRef[PolicyInterface],
-        replay_buffer: ActorMeshRef[ReplayBufferInterface],
+        policy: PolicyInterface,
+        replay_buffer: ReplayBufferInterface,
         environment_creator: Callable,
     ):
         self.config = config

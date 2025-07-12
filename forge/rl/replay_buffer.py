@@ -8,7 +8,7 @@
 
 import random
 
-from monarch.actor_mesh import endpoint
+from monarch.actor import endpoint
 
 from forge.rl.interfaces import ReplayBufferInterface, Trajectory
 

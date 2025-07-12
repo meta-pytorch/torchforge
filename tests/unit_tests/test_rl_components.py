@@ -24,12 +24,10 @@ from forge.rl.interfaces import Trajectory
 from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
 
-from monarch.actor_mesh import Actor, endpoint
-
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
-from monarch.proc_mesh import local_proc_mesh
+from monarch.actor import Actor, endpoint, local_proc_mesh
 
 
 class TestToyEnvironment:

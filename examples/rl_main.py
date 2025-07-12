@@ -21,7 +21,7 @@ from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
 from forge.rl.rewards import ToyRewarder
 
-from monarch.proc_mesh import proc_mesh
+from monarch.actor import proc_mesh
 
 # Configuration constants
 SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once

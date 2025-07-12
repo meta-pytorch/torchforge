@@ -9,7 +9,7 @@
 from dataclasses import dataclass
 
 import torch
-from monarch.actor_mesh import Actor, ActorMeshRef, endpoint
+from monarch.actor import Actor, endpoint
 
 from forge.rl.environments.base import Action, Environment, Observation, State
 
@@ -72,9 +72,7 @@ class ToyEnvironment(Environment):
     It follows the base Environment abstraction with only reset, step, and state methods.
     """
 
-    def __init__(
-        self, name: str, rewarder: ActorMeshRef[ToyRewarder], max_steps: int = 10
-    ):
+    def __init__(self, name: str, rewarder: ToyRewarder, max_steps: int = 10):
         self.name = name
         self.max_steps = max_steps
         self.reset()

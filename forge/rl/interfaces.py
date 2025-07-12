@@ -19,7 +19,7 @@ a generic orchestrator that can work with any component that implements these.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from monarch.actor_mesh import Actor, endpoint
+from monarch.actor import Actor, endpoint
 
 from forge.rl.environments.base import Action, Observation, State
 

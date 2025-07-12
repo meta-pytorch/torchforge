@@ -7,7 +7,7 @@
 """Concrete policy implementations."""
 
 import torch
-from monarch.actor_mesh import endpoint
+from monarch.actor import endpoint
 
 from forge.rl.environments import Action, Observation
 from forge.rl.environments.toy import ToyAction
