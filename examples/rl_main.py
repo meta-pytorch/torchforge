@@ -54,6 +54,8 @@ async def main():
     # lets us customize our routing. But ultimately we will want to package this
     # with our environment definition somehow.
     # This toy rewarder just adds 1 to the next state value.
+    # We may not go with this abstraction longer term, but for now showcases
+    # the ability to decouple the rewarder from the environment.
     rewarder = await rewarder_procs.spawn("rewarder", ToyRewarder)
 
     collector_config = CollectorConfig(
