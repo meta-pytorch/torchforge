@@ -10,4 +10,4 @@ from dataclasses import dataclass
 # This is basically empty, but I figure we'll want a lot of configuration classes.
 @dataclass
 class CollectorConfig:
-    max_collector_steps: int | None = None
+    max_collector_steps: int
