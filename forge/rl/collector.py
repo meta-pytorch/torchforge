@@ -36,7 +36,7 @@ class Collector(Actor):
         self.environment = self.environment_creator()
 
     @endpoint
-    async def run_episode(self):
+    async def run_episode(self) -> Trajectory:
         """Runs a single episode and writes it to the Replay buffer."""
         state = self.environment.reset()
 

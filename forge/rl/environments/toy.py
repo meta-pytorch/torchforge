@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""A simple toy environment intended only for testing the RL pipeline."""
+
 from dataclasses import dataclass
 
 import torch
@@ -102,6 +104,8 @@ class ToyEnvironment(Environment):
         reward = self.rewarder.compute_reward.choose(
             self._state, action, next_state
         ).get()
+
+        self._state = next_state
 
         return (
             ToyObservation(
