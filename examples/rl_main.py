@@ -15,7 +15,6 @@ from functools import partial
 
 from forge.monarch_utils.stack import stack
 from forge.rl.collector import Collector
-from forge.rl.config import CollectorConfig
 from forge.rl.environments import ToyEnvironment
 from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
@@ -58,14 +57,10 @@ async def main():
     # the ability to decouple the rewarder from the environment.
     rewarder = await rewarder_procs.spawn("rewarder", ToyRewarder)
 
-    collector_config = CollectorConfig(
-        max_collector_steps=5,
-    )
-
     browser_collectors = await browser_procs.spawn(
         "browser",
         Collector,
-        config=collector_config,
+        max_collector_steps=5,
         policy=policy,
         replay_buffer=replay_buffer,
         # here, we use a partial so that the collector itself
@@ -79,7 +74,7 @@ async def main():
     deep_research_collectors = await deep_research_procs.spawn(
         "deep_research",
         Collector,
-        config=collector_config,
+        max_collector_steps=5,
         policy=policy,
         replay_buffer=replay_buffer,
         environment_creator=partial(
@@ -89,7 +84,7 @@ async def main():
     coding_collectors = await coder_procs.spawn(
         "coding",
         Collector,
-        config=collector_config,
+        max_collector_steps=5,
         policy=policy,
         replay_buffer=replay_buffer,
         environment_creator=partial(

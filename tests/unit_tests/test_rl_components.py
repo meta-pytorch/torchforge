@@ -12,7 +12,6 @@ from functools import partial
 import pytest
 import torch
 from forge.rl.collector import Collector
-from forge.rl.config import CollectorConfig
 from forge.rl.environments import (
     ToyAction,
     ToyEnvironment,
@@ -259,7 +258,6 @@ class TestCollector:
     @pytest.mark.asyncio
     async def test_collector_initialization(self):
         """Test that Collector initializes with proper components."""
-        config = CollectorConfig(max_collector_steps=3)
 
         class MockPolicy(Actor):
             @endpoint
@@ -279,6 +277,7 @@ class TestCollector:
             async def compute_reward(self, state, action, next_state):
                 return 1.0
 
+        max_collector_steps = 5
         proc = await local_proc_mesh(gpus=1)
         mock_policy = await proc.spawn("policy", MockPolicy)
         mock_replay_buffer = await proc.spawn("replay_buffer", MockReplayBuffer)
@@ -288,20 +287,17 @@ class TestCollector:
             # pyre-ignore[6]: MockRewarder<>ToyRewarder discrepancy
             return ToyEnvironment(name="test", max_steps=5, rewarder=mock_rewarder)
 
-        # Test that we can create a collector with the right config
-        assert config.max_collector_steps == 3
         assert callable(environment_creator)
 
         # Test environment creation
         env = environment_creator()
         assert isinstance(env, ToyEnvironment)
         assert env.name == "test"
-        assert env.max_steps == 5
 
         collector = await proc.spawn(
             "collector",
             Collector,
-            config=config,
+            max_collector_steps=max_collector_steps,
             policy=mock_policy,
             replay_buffer=mock_replay_buffer,
             environment_creator=environment_creator,
@@ -330,9 +326,7 @@ class TestCollector:
         assert all(isinstance(reward, float) for reward in trajectory.rewards)
 
         # Test that collector respects max_collector_steps config
-        assert (
-            len(trajectory.states) <= config.max_collector_steps + 1
-        )  # +1 for initial state
+        assert len(trajectory.states) <= max_collector_steps + 1  # +1 for initial state
 
 
 class TestIntegration:
@@ -375,15 +369,15 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_rl_pipeline_simulation(self):
         """Test that simulates the full RL pipeline with concurrent tasks."""
+        max_collector_steps = 5
         proc = await local_proc_mesh(gpus=1)
         policy = await proc.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
         replay_buffer = await proc.spawn("replay_buffer", ReplayBuffer)
         rewarder = await proc.spawn("rewarder", ToyRewarder)
-        config = CollectorConfig(max_collector_steps=3)
         collector = await proc.spawn(
             "collector",
             Collector,
-            config=config,
+            max_collector_steps=max_collector_steps,
             policy=policy,
             replay_buffer=replay_buffer,
             environment_creator=partial(
@@ -443,7 +437,7 @@ class TestIntegration:
             assert all(isinstance(reward, float) for reward in trajectory.rewards)
 
             # Verify trajectory respects max_collector_steps
-            assert len(trajectory.states) <= config.max_collector_steps + 1
+            assert len(trajectory.states) <= max_collector_steps + 1
 
         # Verify sampled trajectories match expected structure
         for i, trajectory in enumerate(sampled_trajectories):

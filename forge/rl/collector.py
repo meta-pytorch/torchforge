@@ -14,7 +14,6 @@ from typing import Callable
 
 from monarch.actor import Actor, endpoint
 
-from forge.rl.config import CollectorConfig
 from forge.rl.interfaces import PolicyInterface, ReplayBufferInterface, Trajectory
 
 
@@ -23,12 +22,12 @@ class Collector(Actor):
 
     def __init__(
         self,
-        config: CollectorConfig,
+        max_collector_steps: int,
         policy: PolicyInterface,
         replay_buffer: ReplayBufferInterface,
         environment_creator: Callable,
     ):
-        self.config = config
+        self.max_collector_steps = max_collector_steps
         self.replay_buffer = replay_buffer
         self.environment_creator = environment_creator
         # maybe this is just the policy endpoint with a router?
@@ -44,7 +43,7 @@ class Collector(Actor):
         trajectory = Trajectory()
 
         step = 0
-        max_steps: int | None = self.config.max_collector_steps
+        max_steps = self.max_collector_steps
         should_run = lambda: True if max_steps is None else step < max_steps
 
         while should_run():
