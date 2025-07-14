@@ -11,16 +11,16 @@ from functools import partial
 
 import pytest
 import torch
-from forge.rl.collector import Collector
-from forge.rl.environments import (
+from forge.data.environments import (
     ToyAction,
     ToyEnvironment,
     ToyObservation,
     ToyRewarder,
     ToyState,
 )
+from forge.data.policies import ToyPolicy
+from forge.rl.collector import Collector
 from forge.rl.interfaces import Trajectory
-from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
 
 # local_proc_mesh is an implementation of proc_mesh for

@@ -13,12 +13,11 @@ Run this with:
 import asyncio
 from functools import partial
 
+from forge.data.environments import ToyEnvironment, ToyRewarder
+from forge.data.policies import ToyPolicy
 from forge.monarch_utils.stack import stack
 from forge.rl.collector import Collector
-from forge.rl.environments import ToyEnvironment
-from forge.rl.policy import ToyPolicy
 from forge.rl.replay_buffer import ReplayBuffer
-from forge.rl.rewards import ToyRewarder
 
 from monarch.actor import proc_mesh
 

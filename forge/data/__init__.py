@@ -3,8 +3,3 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-
-# Re-export ToyRewarder from environments for backward compatibility
-from forge.rl.environments import ToyRewarder
-
-__all__ = ["ToyRewarder"]

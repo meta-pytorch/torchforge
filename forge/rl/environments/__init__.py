@@ -5,21 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from forge.rl.environments.base import Action, Observation, State
-from forge.rl.environments.toy import (
-    ToyAction,
-    ToyEnvironment,
-    ToyObservation,
-    ToyRewarder,
-    ToyState,
-)
 
 __all__ = [
     "Action",
     "Observation",
     "State",
-    "ToyEnvironment",
-    "ToyAction",
-    "ToyObservation",
-    "ToyRewarder",
-    "ToyState",
 ]
