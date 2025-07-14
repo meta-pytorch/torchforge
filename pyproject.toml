@@ -15,6 +15,7 @@ dependencies = [
 
     # Hugging Face integrations
     "datasets>=2.21.0",
+    "tokenizers",
 
     # Tokenization
     "blobfile",
@@ -22,6 +23,7 @@ dependencies = [
 
     # Miscellaneous
     "tomli>=1.1.0",
+    "omegaconf",
     "fsspec"
 ]
 dynamic = ["version"]
@@ -38,6 +40,9 @@ dev = [
     "pytest-cov",
     "tensorboard",
 ]
+
+[project.scripts]
+forge = "forge._cli.forge:main"
 
 [tool.setuptools.dynamic]
 version = {file = "assets/version.txt"}
