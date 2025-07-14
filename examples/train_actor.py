@@ -34,7 +34,10 @@ class TrainerActor(Actor):
     def _init_dist(self):
         """Initialize torch distributed.
 
-        This is enough reason to create a separate actor.
+        torchrun would normally do this. We'll need to do something
+        similar for all Torch-based actors - probably enough
+        reason to introduce a `TorchActor` abstraction, or something
+        similar.
 
         """
         env = {
