@@ -185,5 +185,7 @@ cover/
 # VSCode
 .vscode/
 
+PREFERENCES.md
+
 # wandb
 wandb/
