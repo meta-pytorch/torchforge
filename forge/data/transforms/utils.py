@@ -1,4 +1,11 @@
-from typing import Any, Optional, Union
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+from enum import Enum
+from typing import Any, Literal, Optional, Union
 
 Role = Literal[
     "system",  # Origin is system prompt
@@ -7,6 +14,12 @@ Role = Literal[
     "ipython",  # Origin is return from a tool call
     "tool",  # Origin is return from a tool call
 ]
+
+
+class MaskingStrategy(Enum):
+    TRAIN_ON_ALL = "train_on_all"
+    TRAIN_ON_ASSISTANT = "train_on_assistant"
+    TRAIN_ON_LAST = "train_on_last"
 
 
 class Message:
@@ -135,3 +148,33 @@ def truncate(
         tokens_truncated[-1] = eos_id
 
     return tokens_truncated
+
+
+def mask_messages(messages: list[Message], masking_strategy: MaskingStrategy) -> None:
+    """
+    Set the masked attribute for each message in the list based on the specified masking strategy.
+
+    Args:
+        messages (list[Message]): a list of messages to mask.
+        masking_strategy (MaskingStrategy): masking strategy to use.
+            Must be one of `train_on_all`, `train_on_assistant`, `train_on_last`.
+
+            - ``train_on_all``: both user and assistant messages are unmasked
+            - ``train_on_assistant``: user messages are masked, only assistant messages are unmasked
+            - ``train_on_last``: only the last assistant message is unmasked
+    """
+    masking_strategy = MaskingStrategy(masking_strategy)
+    marked_last_assistant_message = False
+    for message in reversed(messages):
+        # System messages are always masked
+        if message.role == "system":
+            message.masked = True
+            continue
+        if masking_strategy == MaskingStrategy.TRAIN_ON_LAST:
+            if message.role == "assistant" and not marked_last_assistant_message:
+                message.masked = False
+                marked_last_assistant_message = True
+            else:
+                message.masked = True
+        elif masking_strategy == MaskingStrategy.TRAIN_ON_ASSISTANT:
+            message.masked = message.role != "assistant"

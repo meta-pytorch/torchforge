@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 import jinja2
-from forge.data.utils import Message, truncate
 from jinja2 import StrictUndefined
 
 from tokenizers import Tokenizer
+
+from forge.data.transforms.utils import Message, truncate
 
 
 class BaseTokenizer(Protocol):
@@ -383,3 +383,24 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         )
 
         return tokenized_messages, mask
+
+    def __call__(
+        self, sample: dict[str, Any], inference: bool = False
+    ) -> dict[str, Any]:
+        """
+        Apply ``tokenize_messages`` to the "messages" field in the sample.
+
+        Args:
+            sample (Mapping[str, Any]): A sample with a "messages" field containing
+                a list[Message] to tokenize
+            inference (bool): Whether the template is being used for inference or not.
+
+        Returns:
+            Mapping[str, Any]: The sample with added "tokens" and "mask" fields
+                and the "messages" field removed.
+        """
+        messages = sample.pop("messages")
+        tokens, mask = self.tokenize_messages(messages)  # TODO: add_end_tokens
+        sample["tokens"] = tokens
+        sample["mask"] = mask
+        return sample

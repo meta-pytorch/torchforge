@@ -1,16 +1,16 @@
 
-profiling:
-  enable_profiling: false
+# profiling:
+#   enable_profiling: false
 
-metrics:
-  log_freq: 10
-  enable_tensorboard: true
-  save_tb_folder: "tb"
+# metrics:
+#   log_freq: 10
+#   enable_tensorboard: true
+#   save_tb_folder: "tb"
 
 model:
   name: llama3
   flavor: 8B
-  tokenizer_path: ./assets/tokenizer/Llama-3.1-8B
+  tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
 
 optimizer:
   name: AdamW
