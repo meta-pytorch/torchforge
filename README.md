@@ -11,13 +11,13 @@
 torchforge depends on torchtitan, which should first be installed from source.
 
 ```bash
+pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
+[For AMD GPU] pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3 --force-reinstall
 git clone https://github.com/pytorch/torchtitan
 pip install -e ./torchtitan
 git clone https://github.com/pytorch-labs/forge
 cd forge
 pip install -r requirements.txt
-pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
-[For AMD GPU] pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3 --force-reinstall
 ```
 
 ## Quick Start
@@ -25,7 +25,7 @@ pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu
 To run SFT for Llama3 8B, run
 
 ```bash
-
+forge run --nproc_per_node 2 apps/sft/sft.py --config apps/sft/configs/llama3_8b.yaml
 ```
 
 ### Citation
