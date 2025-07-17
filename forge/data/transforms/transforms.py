@@ -1,6 +1,13 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Any, Protocol
 
 import torch
+
 from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 
 
@@ -10,7 +17,8 @@ class Transform(Protocol):
     sample level and perform operations on a sample dict, returning the updated dict.
     """
 
-    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]: ...
+    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
+        ...
 
 
 class SFTOutputTransform(Transform):

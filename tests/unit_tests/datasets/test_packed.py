@@ -154,9 +154,21 @@ class TestTextPacker:
         pack = text_packer.create_empty_pack()
 
         samples = [
-            {"tokens": torch.tensor([1, 2]), "labels": torch.tensor([3, 4]), "custom_data": 1},
-            {"tokens": torch.tensor([5, 6, 7]), "labels": torch.tensor([8, 9, 10]), "custom_data": "B"},
-            {"tokens": torch.tensor([11]), "labels": torch.tensor([12]), "custom_data": (3,)},
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+                "custom_data": 1,
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7]),
+                "labels": torch.tensor([8, 9, 10]),
+                "custom_data": "B",
+            },
+            {
+                "tokens": torch.tensor([11]),
+                "labels": torch.tensor([12]),
+                "custom_data": (3,),
+            },
         ]
 
         # Add all samples
@@ -172,7 +184,7 @@ class TestTextPacker:
         torch.testing.assert_close(pack["document_ids"][0], torch.tensor([0, 0]))
         torch.testing.assert_close(pack["document_ids"][1], torch.tensor([1, 1, 1]))
         torch.testing.assert_close(pack["document_ids"][2], torch.tensor([2]))
-        
+
         # Verify arbitrary keys are appended as lists
         assert pack["custom_data"] == [1, "B", (3,)]
 
@@ -200,7 +212,7 @@ class TestTextPacker:
         torch.testing.assert_close(result["labels"], expected_labels)
         torch.testing.assert_close(result["document_ids"], expected_doc_ids)
         torch.testing.assert_close(result["input_pos"], expected_input_pos)
-        
+
         # Verify arbitrary keys are preserved as lists
         assert result["custom_data"] == [1, "B"]
 
@@ -409,7 +421,7 @@ class TestDPOPacker:
             pack["rejected_response_mask"][1],
             torch.tensor([False, False, False, True, True]),
         )
-        
+
         # Verify arbitrary keys are appended as lists
         assert pack["custom_data"] == [1, "B"]
 
@@ -485,14 +497,14 @@ class TestDPOPacker:
         torch.testing.assert_close(
             result["rejected_response_mask"], expected_rejected_mask
         )
-        
+
         # Add arbitrary keys to pack and verify they're preserved
         pack["custom_data"] = [1, "B"]
-        
+
         result_with_extras = dpo_packer.finalize_pack(
             pack, target_tokens_per_pack=12, next_doc_id=6
         )
-        
+
         # Verify arbitrary keys are preserved as lists
         assert result_with_extras["custom_data"] == [1, "B"]
 
