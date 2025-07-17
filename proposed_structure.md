@@ -12,6 +12,9 @@ forge/
         ...
     src/
         cli/
+            config.py
+            entrypoint.py
+            ...
         envs/
             chat.py
             browser.py
@@ -32,3 +35,9 @@ forge/
     tests/
     README.md
     ...
+
+Assumptions:
+* Users will work with a fork of the repo
+    `pip install -e .`
+* Launcher is Python w/ Monarch
+   * Can use CLI args or config w/ overrides
