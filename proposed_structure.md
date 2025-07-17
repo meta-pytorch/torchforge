@@ -24,8 +24,11 @@ forge/
             iterable.py
             dataset_metrics.py
             ...
-        logging.py
-        profiling.py
+        training/
+            monarch_utils.py
+            logging.py
+            profiling.py
+            ...
     tests/
     README.md
     ...
