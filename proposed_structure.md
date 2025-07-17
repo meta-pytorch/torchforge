@@ -1,13 +1,13 @@
 forge/
     apps/
         sft/
-            sft.py
+            main.py
             example.yaml
         grpo/
-            grpo.py
+            main.py
             example.yaml
         dpo/
-            dpo.py
+            main.py
             example.yaml
         ...
     src/
@@ -39,7 +39,7 @@ forge/
 Assumptions:
 * `uv` for package management (Eli and Ed believe it's ready for primetime)
 * Users will work with a fork of the repo
-    `pip install -e .`
+    `uv run python apps/sft/main.py --config=apps/sft/example.yaml`
 * Launcher is Python w/ Monarch
    * Can use CLI args or config w/ overrides
 * Don't over utilize submodules right now, can always go back and add them later
