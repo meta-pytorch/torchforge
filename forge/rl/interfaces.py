@@ -30,11 +30,10 @@ from forge.rl.environments.base import Action, Observation, State
 
 @dataclass
 class Trajectory:
-    """A trajectory containing a sequence of states, actions, rewards, etc."""
+    """A trajectory containing a sequence of states, actions, etc."""
 
     states: list[Observation] | None = None
     actions: list[Action] | None = None
-    rewards: list[float] | None = None
     dones: list[bool] | None = None
     infos: list[dict] | None = None
 
@@ -43,8 +42,6 @@ class Trajectory:
             self.states = []
         if self.actions is None:
             self.actions = []
-        if self.rewards is None:
-            self.rewards = []
         if self.dones is None:
             self.dones = []
         if self.infos is None:
@@ -90,7 +87,7 @@ class ReplayBufferInterface(Actor, ABC):
 
     @endpoint
     @abstractmethod
-    async def sample(self) -> Trajectory | None:
+    async def sample(self, batch_size: int) -> list[Trajectory] | None:
         """Sample from the replay buffer."""
         pass
 

@@ -28,11 +28,22 @@ class ReplayBuffer(ReplayBufferInterface):
         self.buffer.append(sample)
 
     @endpoint
-    async def sample(self):
-        """Sample from the replay buffer."""
-        if not self.buffer:
+    async def sample(self, batch_size=1) -> list[Trajectory] | None:
+        """Sample from the replay buffer.
+
+        Args:
+            batch_size: Number of trajectories to sample.
+
+        Returns:
+            A list of sampled trajectories or None if buffer is empty.
+        """
+        if batch_size > len(self.buffer):
             return None
-        return random.choice(self.buffer)
+
+        if batch_size == 1:
+            return [random.choice(self.buffer)]
+        else:
+            return random.choices(self.buffer, k=batch_size)
 
     @endpoint
     async def len(self) -> int:

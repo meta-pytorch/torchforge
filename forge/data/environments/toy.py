@@ -9,7 +9,6 @@
 from dataclasses import dataclass
 
 import torch
-from monarch.actor import Actor, endpoint
 
 from forge.rl.environments.base import Action, Environment, Observation, State
 
@@ -44,27 +43,6 @@ class ToyAction(Action):
     data: torch.Tensor
 
 
-class ToyRewarder(Actor):
-    """A very simple toy rewarder for testing data flow."""
-
-    @endpoint
-    async def compute_reward(
-        self,
-        state: ToyState,
-        action: ToyAction,
-        next_state: ToyState,
-    ) -> float:
-        """Simple reward: next_state_value + 1."""
-
-        # Extract the state value from next_state
-        if next_state.data is not None and len(next_state.data) > 0:
-            state_value = float(next_state.data[0])
-            return state_value + 1.0
-
-        # Default reward if no data
-        return 1.0
-
-
 class ToyEnvironment(Environment):
     """A simple toy environment for testing the RL pipeline.
 
@@ -72,11 +50,10 @@ class ToyEnvironment(Environment):
     It follows the base Environment abstraction with only reset, step, and state methods.
     """
 
-    def __init__(self, name: str, rewarder: ToyRewarder, max_steps: int = 10):
+    def __init__(self, name: str, max_steps: int = 10):
         self.name = name
         self.max_steps = max_steps
         self.reset()
-        self.rewarder = rewarder
 
     def reset(self) -> ToyObservation:
         """Reset the environment to initial state."""
@@ -87,31 +64,22 @@ class ToyEnvironment(Environment):
         return ToyObservation(
             step=self._state.step,
             data=self._state.data,
-            text=f"Step {self._state.step}, Value: {self._state.data}",
+            text=f"[{self.name}] Step {self._state.step}, Value: {self._state.data}",
         )
 
-    def step(self, action: ToyAction) -> tuple[ToyObservation, float]:
+    def step(self, action: ToyAction) -> ToyObservation:
         """Take a step in the environment."""
         next_state = ToyState(
             step=self._state.step + 1,
             data=self._state.data + action.data,
         )
 
-        # Simple reward: positive if state_value is positive, negative otherwise
-        # Note: For now using simple reward since async rewarder calls need special handling
-        reward = self.rewarder.compute_reward.choose(
-            self._state, action, next_state
-        ).get()
-
         self._state = next_state
 
-        return (
-            ToyObservation(
-                step=next_state.step,
-                data=next_state.data,
-                text=f"Step {next_state.step}, Value: {next_state.data}",
-            ),
-            reward,
+        return ToyObservation(
+            step=next_state.step,
+            data=next_state.data,
+            text=f"[{self.name}] Step {next_state.step}, Value: {next_state.data}",
         )
 
     @property

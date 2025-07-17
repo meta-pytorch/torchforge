@@ -13,7 +13,7 @@ Run this with:
 import asyncio
 from functools import partial
 
-from forge.data.environments import ToyEnvironment, ToyRewarder
+from forge.data.environments import ToyEnvironment
 from forge.data.policies import ToyPolicy
 from forge.monarch_utils.stack import stack
 from forge.rl.collector import Collector
@@ -26,8 +26,7 @@ SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
 
 
 async def main():
-    print("Starting RL example with toy environment and rewarder...")
-    print("ToyRewarder: reward = next_state_value + 1")
+    print("Starting RL example with toy environment...")
 
     # Process allocation
     policy_procs = await proc_mesh(gpus=2)
@@ -38,23 +37,12 @@ async def main():
     deep_research_procs = await proc_mesh(gpus=4)
     coder_procs = await proc_mesh(gpus=8)
 
-    rewarder_procs = await proc_mesh(gpus=1)
-
     # Actor instantiation
     replay_buffer = await replay_procs.spawn("replay_buffer", ReplayBuffer)
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
     # This policy just generates something between -2. and 2.
     policy = await policy_procs.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
-
-    # Practically, we should create a single rewarder that's shared across the actors
-    # in its associated environment mesh. This provides cleaner decoupling and
-    # lets us customize our routing. But ultimately we will want to package this
-    # with our environment definition somehow.
-    # This toy rewarder just adds 1 to the next state value.
-    # We may not go with this abstraction longer term, but for now showcases
-    # the ability to decouple the rewarder from the environment.
-    rewarder = await rewarder_procs.spawn("rewarder", ToyRewarder)
 
     browser_collectors = await browser_procs.spawn(
         "browser",
@@ -66,9 +54,7 @@ async def main():
         # can create its own environment.
         # We could create the environment and pass it in, but it's slightly more efficient
         # to do it this way.
-        environment_creator=partial(
-            ToyEnvironment, name="browser", max_steps=5, rewarder=rewarder
-        ),
+        environment_creator=partial(ToyEnvironment, name="browser", max_steps=5),
     )
     deep_research_collectors = await deep_research_procs.spawn(
         "deep_research",
@@ -76,9 +62,7 @@ async def main():
         max_collector_steps=5,
         policy=policy,
         replay_buffer=replay_buffer,
-        environment_creator=partial(
-            ToyEnvironment, name="deep_research", max_steps=5, rewarder=rewarder
-        ),
+        environment_creator=partial(ToyEnvironment, name="deep_research", max_steps=5),
     )
     coding_collectors = await coder_procs.spawn(
         "coding",
@@ -86,9 +70,7 @@ async def main():
         max_collector_steps=5,
         policy=policy,
         replay_buffer=replay_buffer,
-        environment_creator=partial(
-            ToyEnvironment, name="coding", max_steps=5, rewarder=rewarder
-        ),
+        environment_creator=partial(ToyEnvironment, name="coding", max_steps=5),
     )
 
     # Here's our stack API in action!
@@ -146,7 +128,7 @@ async def main():
                 for _ in range(SAMPLES_PER_BATCH):
                     trajectory = await replay_buffer.sample.choose()
                     if trajectory is not None:
-                        trajectories.append(trajectory)
+                        trajectories += trajectory
 
                 # Most of the rest of this is just boilerplate for pretty printing.
                 if not trajectories:
@@ -175,12 +157,11 @@ async def main():
                     print(f"🏷️  Trajectory {idx} - Environment: {env_name}")
                     print("-" * 40)
 
-                    if trajectory.states and trajectory.actions and trajectory.rewards:
-                        for i, (state, action, reward) in enumerate(
+                    if trajectory.states and trajectory.actions:
+                        for i, (state, action) in enumerate(
                             zip(
                                 trajectory.states,
                                 trajectory.actions,
-                                trajectory.rewards,
                             )
                         ):
                             # Extract values for pretty printing
@@ -194,11 +175,8 @@ async def main():
                             )
 
                             print(
-                                f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f} → Reward={reward:6.2f}"
+                                f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f}"
                             )
-
-                    total_reward = sum(trajectory.rewards) if trajectory.rewards else 0
-                    print(f"  📊 Total Reward: {total_reward:.2f}")
 
                     if idx < len(trajectories):  # Add spacing between trajectories
                         print()

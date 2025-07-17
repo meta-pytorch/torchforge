@@ -11,11 +11,12 @@
 from __future__ import annotations
 
 import abc
+
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Union
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Observation:
     """Base class for environment observations.
 
@@ -35,7 +36,7 @@ class Observation:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Action:
     """Base class for environment actions.
 
@@ -51,7 +52,7 @@ class Action:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class State:
     """Base class for environment state.
 

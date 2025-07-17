@@ -56,18 +56,7 @@ class Collector(Actor):
             if trajectory.actions is not None:
                 trajectory.actions.append(action)
             # Take step in environment
-            # Note that this is the exact API that gym uses.
-            (
-                next_state,
-                reward,
-            ) = self.environment.step(action)
-
-            # Store reward and done flag
-            if trajectory.rewards is not None:
-                trajectory.rewards.append(reward)
-
-            # Update state for next iteration
-            state = next_state
+            state = self.environment.step(action)
             step += 1
 
         # Write trajectory to replay buffer

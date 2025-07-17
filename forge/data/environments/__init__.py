@@ -8,7 +8,6 @@ from forge.data.environments.toy import (
     ToyAction,
     ToyEnvironment,
     ToyObservation,
-    ToyRewarder,
     ToyState,
 )
 
@@ -16,6 +15,5 @@ __all__ = [
     "ToyEnvironment",
     "ToyAction",
     "ToyObservation",
-    "ToyRewarder",
     "ToyState",
 ]
