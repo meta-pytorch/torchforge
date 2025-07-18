@@ -31,9 +31,10 @@ import torch.distributed as dist
 
 from forge.data.metrics import DefaultTrainingMetricTransform, MetricsAggregator
 from forge.datasets import HfIterableDataset, InterleavedDataset
-from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader
+
+from tests.test_utils import gpu_test
 
 # Import test utilities
 from .test_iterable_utils import collate_with_metrics, generate_ckpt
