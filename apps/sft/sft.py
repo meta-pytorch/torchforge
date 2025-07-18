@@ -92,6 +92,7 @@ class ForgeSFTRecipe(ForgeEngine):
             path="yahma/alpaca-cleaned",
             split="train",
         )
+        torch.distributed.breakpoint()
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
             dataset=dataset,
@@ -195,6 +196,7 @@ class ForgeSFTRecipe(ForgeEngine):
 
         while self.current_step < self.num_training_steps:
             batch = next(dataloader)
+            torch.distributed.breakpoint()
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
