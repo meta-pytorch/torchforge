@@ -40,14 +40,15 @@ class SFTOutputTransform(Transform):
     """
 
     def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
-        tokens = sample["tokens"]
-        mask = sample["mask"]
 
         # Sanity checks
-        if not isinstance(tokens, torch.Tensor):
-            tokens = torch.tensor(tokens)
-        if not isinstance(mask, torch.Tensor):
-            mask = torch.tensor(mask)
+        if not isinstance(sample["tokens"], torch.Tensor):
+            sample["tokens"] = torch.tensor(sample["tokens"])
+        if not isinstance(sample["mask"], torch.Tensor):
+            sample["mask"] = torch.tensor(sample["mask"])
+
+        tokens = sample["tokens"]
+        mask = sample["mask"]
 
         if tokens.ndim != 1 or mask.ndim != 1:
             raise ValueError("Both 'tokens' and 'mask' must be 1-D tensors.")
@@ -62,7 +63,6 @@ class SFTOutputTransform(Transform):
         # apply mask in-place (single fused kernel on GPU/CPU)
         labels[:-1].masked_fill_(mask[1:].bool(), CROSS_ENTROPY_IGNORE_IDX)
 
-        # return a shallow-copied mapping so the original sample stays intact
         out = dict(sample)
         out["labels"] = labels
         return out

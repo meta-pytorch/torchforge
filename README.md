@@ -25,6 +25,7 @@ pip install -r requirements.txt
 To run SFT for Llama3 8B, run
 
 ```bash
+forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
 forge run --nproc_per_node 2 apps/sft/sft.py --config apps/sft/configs/llama3_8b.yaml
 ```
 

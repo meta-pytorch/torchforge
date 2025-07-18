@@ -12,9 +12,12 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.config.parse import parse
+from forge.data.collate import collate_packed
 from forge.data.transforms.tokenizers import HuggingFaceModelTokenizer
-from forge.data.utils import padded_collate_sft
-from forge.datasets.alpaca import alpaca_iterable_dataset
+from forge.data.transforms.transforms import AlpacaToMessages
+from forge.datasets.packed import PackedDataset, TextPacker
+from forge.datasets.sft import sft_iterable_dataset
+
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -51,13 +54,11 @@ class ForgeSFTRecipe(ForgeEngine):
     device: torch.device
     step: int
 
-    def __init__(self, train_config: ForgeJobConfig):
-        self.train_config = train_config
+    def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
         self.num_training_steps = 1000  # Example value, adjust as needed
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
-        print(train_config)
-        super().__init__(train_config)
+        super().__init__(job_config)
 
     def setup(self):
         self.train_dataloader = self.setup_data()
@@ -85,18 +86,24 @@ class ForgeSFTRecipe(ForgeEngine):
             tokenizer_config_json_path="/tmp/Meta-Llama-3.1-8B-Instruct/tokenizer_config.json",
             generation_config_path="/tmp/Meta-Llama-3.1-8B-Instruct/generation_config.json",
         )
-        dataset = alpaca_iterable_dataset(
+        dataset = sft_iterable_dataset(
             model_transform=tokenizer,
+            message_transform=AlpacaToMessages(),
             path="yahma/alpaca-cleaned",
+            split="train",
         )
-        min_seq_len_divisor = 2 * self.parallel_dims.tp * self.parallel_dims.cp
-        collate_fn = partial(padded_collate_sft, pad_to_multiple_of=min_seq_len_divisor)
-        # TODO: check this
-        dp_dim = self.parallel_dims.dp_replicate * self.parallel_dims.dp_shard
+        packer = TextPacker(padding_idx=0)
+        dataset = PackedDataset(
+            dataset=dataset,
+            packer=packer,
+            target_tokens_per_pack=1024,
+        )
         dataloader = StatefulDataLoader(
             dataset=dataset,
-            batch_size=1,
-            collate_fn=collate_fn,
+            batch_size=self.job_config.training.local_batch_size,
+            collate_fn=partial(
+                collate_packed, mask_fn=packer.create_block_mask, device=self.device
+            ),
         )
 
         # Ultimately we probably want something like this
@@ -104,10 +111,6 @@ class ForgeSFTRecipe(ForgeEngine):
         # dataset = build_dataset(dataset_config)
         # dataloader = build_dataloader(dataloader_config, dataset, packer)
         return dataloader
-
-    # def validate(self) -> None:
-    #     # Placeholder for now
-    #     pass
 
     def forward_backward(
         self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor

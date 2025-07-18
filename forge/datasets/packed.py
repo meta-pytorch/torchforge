@@ -10,15 +10,16 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, Optional, TypeVar
 
 import torch
+from torch.nn.attention.flex_attention import (
+    create_block_mask as create_block_mask_flex,
+)
+from torchdata.stateful_dataloader import Stateful
+
 from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.metrics import AggregationType, Metric
 
 from forge.datasets.iterable_base import DatasetInfo, InfiniteTuneIterableDataset
 from forge.tools._import_guard import _SUPPORTS_FLEX_ATTENTION
-from torch.nn.attention.flex_attention import (
-    create_block_mask as create_block_mask_flex,
-)
-from torchdata.stateful_dataloader import Stateful
 
 logger = logging.getLogger(__name__)
 
@@ -521,9 +522,15 @@ class TextPacker(Packer[SampleDict]):
 
     def __init__(self, padding_idx: int, ignore_idx: int = CROSS_ENTROPY_IGNORE_IDX):
         super().__init__(padding_idx, ignore_idx)
-        
+
         # Define which keys are handled specially vs. appended as arbitrary data
-        self.expected_keys = {"tokens", "labels", "document_ids", "input_pos", "metrics"}
+        self.expected_keys = {
+            "tokens",
+            "labels",
+            "document_ids",
+            "input_pos",
+            "metrics",
+        }
 
     def set_dataset_name(self, dataset_name: str) -> None:
         """
@@ -630,7 +637,7 @@ class TextPacker(Packer[SampleDict]):
                 if pack["input_pos"]
                 else torch.empty(0, dtype=torch.long)
             ),
-            "metrics": pack["metrics"],
+            # "metrics": pack["metrics"],
         }
 
         # Handle arbitrary keys that aren't tensors - keep as lists
@@ -696,12 +703,20 @@ class DPOPacker(Packer[SampleDict]):
 
     def __init__(self, padding_idx: int, ignore_idx: int = CROSS_ENTROPY_IGNORE_IDX):
         super().__init__(padding_idx, ignore_idx)
-        
+
         self.expected_keys = {
-            "prompt_ids", "chosen_response_only_ids", "chosen_response_only_labels",
-            "rejected_response_only_ids", "rejected_response_only_labels",
-            "tokens", "labels", "document_ids", "input_pos",
-            "chosen_response_mask", "rejected_response_mask", "metrics"
+            "prompt_ids",
+            "chosen_response_only_ids",
+            "chosen_response_only_labels",
+            "rejected_response_only_ids",
+            "rejected_response_only_labels",
+            "tokens",
+            "labels",
+            "document_ids",
+            "input_pos",
+            "chosen_response_mask",
+            "rejected_response_mask",
+            "metrics",
         }
 
     def set_dataset_name(self, dataset_name: str) -> None:
@@ -821,19 +836,15 @@ class DPOPacker(Packer[SampleDict]):
         # Add padding tensors if needed
         if num_padding > 0:
             pack["tokens"].append(
-                torch.full(
-                    (num_padding,), self.padding_idx, dtype=torch.long)
+                torch.full((num_padding,), self.padding_idx, dtype=torch.long)
             )
             pack["labels"].append(
-                torch.full(
-                    (num_padding,), self.ignore_idx, dtype=torch.long)
+                torch.full((num_padding,), self.ignore_idx, dtype=torch.long)
             )
             pack["document_ids"].append(
                 torch.full((num_padding,), next_doc_id, dtype=torch.long)
             )
-            pack["input_pos"].append(
-                torch.zeros(num_padding, dtype=torch.long)
-            )
+            pack["input_pos"].append(torch.zeros(num_padding, dtype=torch.long))
             pack["chosen_response_mask"].append(
                 torch.zeros(num_padding, dtype=torch.bool)
             )
