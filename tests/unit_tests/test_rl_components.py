@@ -134,8 +134,6 @@ class TestReplayBuffer:
             ToyObservation(step=0, data=torch.tensor([0.0]), text="Step 0, Value: 0.0")
         ]
         trajectory.actions = [ToyAction(data=torch.tensor([1.0]))]
-        trajectory.dones = [False]
-        trajectory.infos = [{"test": "info"}]
 
         # Add trajectory to buffer
         await buffer.extend.choose(trajectory)
@@ -174,8 +172,6 @@ class TestReplayBuffer:
                 )
             ]
             trajectory.actions = [ToyAction(data=torch.tensor([float(i + 1)]))]
-            trajectory.dones = [i == 4]
-            trajectory.infos = [{"trajectory_id": i}]
 
             await buffer.extend.choose(trajectory)
 
@@ -239,7 +235,6 @@ class TestCollector:
         # Check that trajectory has expected structure
         assert hasattr(trajectory, "states")
         assert hasattr(trajectory, "actions")
-        assert hasattr(trajectory, "dones")
 
         # Verify trajectory contains data (should have at least one step)
         assert trajectory.states and len(trajectory.states) > 0

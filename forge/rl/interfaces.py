@@ -17,7 +17,7 @@ a generic orchestrator that can work with any component that implements these.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from monarch.actor import Actor, endpoint
 
@@ -32,20 +32,8 @@ from forge.rl.environments.base import Action, Observation, State
 class Trajectory:
     """A trajectory containing a sequence of states, actions, etc."""
 
-    states: list[Observation] | None = None
-    actions: list[Action] | None = None
-    dones: list[bool] | None = None
-    infos: list[dict] | None = None
-
-    def __post_init__(self):
-        if self.states is None:
-            self.states = []
-        if self.actions is None:
-            self.actions = []
-        if self.dones is None:
-            self.dones = []
-        if self.infos is None:
-            self.infos = []
+    states: list[Observation] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)
 
 
 @dataclass
