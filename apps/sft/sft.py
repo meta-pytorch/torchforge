@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import sys
+from dataclasses import asdict
 from functools import partial
 from typing import Any
 
@@ -21,6 +22,7 @@ from forge.datasets.sft import sft_iterable_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torchdata.stateful_dataloader import StatefulDataLoader
+from torchtitan.components.checkpoint import ModelWrapper
 from torchtitan.components.loss import LossFunction
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.optimizer import OptimizersContainer
@@ -72,10 +74,14 @@ class ForgeSFTRecipe(ForgeEngine):
         #     self.train_config.val_dataloader_config,
         #     self.train_config.packing_config,
         # )
-        # TODO: checkpoint load
-        # self.checkpointer.load(
-        #     self.train_config.checkpoint
-        # )
+
+        # TODO: confirm that this is working properly
+        # Should also use load, not dcp_load
+        self.checkpointer.dcp_load(
+            state_dict=ModelWrapper(self.model_parts).state_dict(),
+            checkpoint_id="/tmp/Meta-Llama-3.1-8B-Instruct/",
+            from_hf=True,
+        )
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
@@ -96,7 +102,7 @@ class ForgeSFTRecipe(ForgeEngine):
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
-            target_tokens_per_pack=1024,
+            target_tokens_per_pack=1024,  # TODO: get this from model
         )
         dataloader = StatefulDataLoader(
             dataset=dataset,
@@ -224,6 +230,8 @@ class ForgeSFTRecipe(ForgeEngine):
 def recipe_main(cfg: DictConfig) -> None:
     # TODO: this is a hack to get the defaults from ForgeJobConfig
     default_cfg = ForgeJobConfig()
+    # Hack to deal with literal types from titan
+    default_cfg = asdict(default_cfg)
     cfg = OmegaConf.merge(default_cfg, cfg)
     recipe = ForgeSFTRecipe(cfg)
     recipe.setup()

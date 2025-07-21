@@ -16,6 +16,7 @@ dependencies = [
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
+    "safetensors",
 
     # Tokenization
     "blobfile",

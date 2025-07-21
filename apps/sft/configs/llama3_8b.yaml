@@ -38,8 +38,8 @@ parallelism:
   disable_loss_parallel: false
 
 checkpoint:
-  enable_checkpoint: false
-  folder: checkpoint
+  enable_checkpoint: true
+  folder: /tmp/Meta-Llama-3.1-8B-Instruct/
   interval: 500
   async_mode: "disabled"
 
