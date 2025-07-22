@@ -18,7 +18,6 @@ dependencies = [
 
     # Tokenization
     "blobfile",
-    "tiktoken",
 
     # Miscellaneous
     "tomli>=1.1.0",
@@ -28,7 +27,7 @@ dynamic = ["version"]
 
 [project.urls]
 GitHub = "https://github.com/pytorch-labs/forge"
-Documentation = "https://github.com/pytorch-labs/forge/tree/main/docs"
+Documentation = ""
 Issues = "https://github.com/pytorch-labs/forge/issues"
 
 [project.optional-dependencies]
@@ -50,7 +49,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = [""]
-include = ["forge*"]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 addopts = ["--showlocals"]  # show local variables in tracebacks
