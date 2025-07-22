@@ -10,11 +10,9 @@ Run this with python -m examples.stacked_envs
 
 """
 
-
 import asyncio
 
 from forge.monarch_utils.stack import stack
-
 from monarch.actor_mesh import Actor, endpoint
 from monarch.proc_mesh import proc_mesh
 

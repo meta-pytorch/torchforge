@@ -23,8 +23,9 @@ import pytest
 import torch.distributed as dist
 
 from forge.data.metrics import AggregationType, Metric, MetricsAggregator
-from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
+
+from tests.test_utils import gpu_test
 
 
 class TestMetricsAggregator:

@@ -8,11 +8,11 @@ import inspect
 import random
 from typing import Any, Generic, Optional, overload, ParamSpec, Tuple, Type, TypeVar
 
-from monarch import ActorFuture as Future
-
 from monarch._rust_bindings.monarch_hyperactor.shape import Shape
+
+from monarch._src.actor.future import Future
+from monarch._src.actor.shape import MeshTrait, NDSlice
 from monarch.actor_mesh import Actor, ActorMeshRef, AsyncGenerator, Endpoint, ValueMesh
-from monarch.common.shape import MeshTrait, NDSlice
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -67,8 +67,8 @@ class StackedEndpoint(Generic[P, R]):
             endpoint.broadcast(*args, **kwargs)
 
 
-class StackedActorMeshRef(MeshTrait, Generic[T]):
-    def __init__(self, *actors: ActorMeshRef[T], interface=None) -> None:
+class StackedActorMeshRef(MeshTrait):
+    def __init__(self, *actors: ActorMeshRef, interface=None) -> None:
         self._actors = actors
         self._interface = interface
 
@@ -118,7 +118,7 @@ class StackedActorMeshRef(MeshTrait, Generic[T]):
             "actor implementations are not meshes, but we can't convince the typechecker of it..."
         )
 
-    def _new_with_shape(self, shape: Shape) -> "StackedActorMeshRef[T]":
+    def _new_with_shape(self, shape: Shape) -> "StackedActorMeshRef":
         raise NotImplementedError(
             "actor implementations are not meshes, but we can't convince the typechecker of it..."
         )
@@ -158,12 +158,12 @@ def _common_ancestor(*actors: ActorMeshRef) -> Optional[Type]:
 
 
 @overload
-def stack(*actors: Any, interface: Type[T]) -> StackedActorMeshRef[T]:
+def stack(*actors: Any, interface: Type[T]) -> StackedActorMeshRef:
     pass
 
 
 @overload
-def stack(*actors: Any) -> StackedActorMeshRef[Any]:
+def stack(*actors: Any) -> StackedActorMeshRef:
     pass
 
 
