@@ -8,9 +8,37 @@
 
 import random
 
+from forge.rl.interfaces import ReplayBufferInterface, Trajectory
+
 from monarch.actor import endpoint
 
-from forge.rl.interfaces import ReplayBufferInterface, Trajectory
+
+class ReplayBufferInterface(Actor, ABC):
+    """Abstract interface for replay buffers."""
+
+    @endpoint
+    @abstractmethod
+    async def extend(self, sample: Trajectory):
+        """Add a trajectory to the replay buffer."""
+        pass
+
+    @endpoint
+    @abstractmethod
+    async def sample(self, batch_size: int) -> list[Trajectory] | None:
+        """Sample from the replay buffer."""
+        pass
+
+    @endpoint
+    @abstractmethod
+    async def len(self) -> int:
+        """Return the length of the replay buffer."""
+        pass
+
+    @endpoint
+    @abstractmethod
+    async def is_empty(self) -> bool:
+        """Check if the replay buffer is empty."""
+        pass
 
 
 # Silly replay buffer implementation for testing.

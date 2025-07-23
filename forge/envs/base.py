@@ -16,6 +16,23 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Union
 
 
+@dataclass
+class Trajectory:
+    """A trajectory containing a sequence of states, actions, etc."""
+
+    states: list[Observation] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)
+
+
+@dataclass
+class ForgeEnvInfo:
+    """Environment info returned with observations."""
+
+    episode_id: str | None = None
+    step_count: int = 0
+    metadata: dict | None = None
+
+
 @dataclass(kw_only=True)
 class Observation:
     """Base class for environment observations.
