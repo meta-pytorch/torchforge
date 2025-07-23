@@ -5,75 +5,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Any, Optional, Protocol
+from typing import Any, Optional
 
 import jinja2
+
+from forge.data.transforms.utils import truncate
+from forge.interfaces import BaseTokenizer, ModelTokenizer
+from forge.types import Message
 from jinja2 import StrictUndefined
 
 from tokenizers import Tokenizer
-
-from forge.data.transforms.utils import Message, truncate
-
-
-class BaseTokenizer(Protocol):
-    """
-    Abstract token encoding model that implements ``encode`` and ``decode`` methods.
-    See :class:`~torchtune.modules.transforms.tokenizers.SentencePieceBaseTokenizer` and
-    :class:`~torchtune.modules.transforms.tokenizers.TikTokenBaseTokenizer` for example implementations of this protocol.
-    """
-
-    def encode(self, text: str, **kwargs: dict[str, Any]) -> list[int]:
-        """
-        Given a string, return the encoded list of token ids.
-
-        Args:
-            text (str): The text to encode.
-            **kwargs (dict[str, Any]): kwargs.
-
-        Returns:
-            list[int]: The encoded list of token ids.
-        """
-        pass
-
-    def decode(self, token_ids: list[int], **kwargs: dict[str, Any]) -> str:
-        """
-        Given a list of token ids, return the decoded text, optionally including special tokens.
-
-        Args:
-            token_ids (list[int]): The list of token ids to decode.
-            **kwargs (dict[str, Any]): kwargs.
-
-        Returns:
-            str: The decoded text.
-        """
-        pass
-
-
-class ModelTokenizer(Protocol):
-    """
-    Abstract tokenizer that implements model-specific special token logic in
-    the ``tokenize_messages`` method. See :class:`~torchtune.models.llama3.Llama3Tokenizer`
-    for an example implementation of this protocol.
-    """
-
-    special_tokens: dict[str, int]
-    max_seq_len: Optional[int]
-
-    def tokenize_messages(
-        self, messages: list[Message], **kwargs: dict[str, Any]
-    ) -> tuple[list[int], list[bool]]:
-        """
-        Given a list of messages, return a list of tokens and list of masks for
-        the concatenated and formatted messages.
-
-        Args:
-            messages (list[Message]): The list of messages to tokenize.
-            **kwargs (dict[str, Any]): kwargs.
-
-        Returns:
-            tuple[list[int], list[bool]]: The list of token ids and the list of masks.
-        """
-        pass
 
 
 class HuggingFaceBaseTokenizer(BaseTokenizer):

@@ -16,6 +16,13 @@ from torch.utils.data import IterableDataset
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "TuneIterableDataset",
+    "InfiniteTuneIterableDataset",
+    "InterleavedDataset",
+    "DatasetInfo",
+]
+
 
 @dataclass(frozen=True)
 class DatasetInfo:

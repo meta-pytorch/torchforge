@@ -4,15 +4,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional
 
 import torch
-from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
 
-from forge.data.hf import HfIterableDataset
+from forge.data.hf_dataset import HfIterableDataset
 from forge.data.metrics import DefaultTrainingMetricTransform
 
-Transform = TypeVar("Transform")
+from forge.interfaces import Transform
 
 
 class SFTOutputTransform:

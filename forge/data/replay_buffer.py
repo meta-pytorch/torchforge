@@ -8,43 +8,17 @@
 
 import random
 
-from forge.rl.interfaces import ReplayBufferInterface, Trajectory
+from forge.interfaces import ReplayBuffer
+
+from forge.types import Trajectory
 
 from monarch.actor import endpoint
-
-
-class ReplayBufferInterface(Actor, ABC):
-    """Abstract interface for replay buffers."""
-
-    @endpoint
-    @abstractmethod
-    async def extend(self, sample: Trajectory):
-        """Add a trajectory to the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def sample(self, batch_size: int) -> list[Trajectory] | None:
-        """Sample from the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def len(self) -> int:
-        """Return the length of the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def is_empty(self) -> bool:
-        """Check if the replay buffer is empty."""
-        pass
 
 
 # Silly replay buffer implementation for testing.
 # One nice thing if we implement our own Replay buffer is that
 # we can wrap RDMA calls / torchstore calls here.
-class ReplayBuffer(ReplayBufferInterface):
+class ReplayBuffer(ReplayBuffer):
     """Simple in-memory replay buffer implementation."""
 
     def __init__(self):

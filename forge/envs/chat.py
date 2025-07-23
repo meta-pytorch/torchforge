@@ -8,15 +8,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, TypedDict
+from typing import TypedDict
 
 import torch
+from forge.interfaces import Environment, Transform
 
-from forge.protocols.tokenizer import TokenizerProtocol
-from forge.rl.environments.base import Action, Environment, Observation, State
+from forge.types import Action, Observation, State
 
 
 class Message(TypedDict):
@@ -44,8 +43,8 @@ class ChatAction(Action):
 class ChatState(State):
     """State of the ChatEnvironment containing message history."""
 
-    history_messages: List[Message] = field(default_factory=list)
-    history_tokens: List[torch.Tensor] = field(
+    history_messages: list[Message] = field(default_factory=list)
+    history_tokens: list[torch.Tensor] = field(
         default_factory=list
     )  # Same len as messages
 
@@ -67,7 +66,7 @@ class ChatObservation(Observation):
     tokens = tensor([1, 2, 3, 4, 5, ...])  # tokenized entire conversation
     """
 
-    messages: List[Message] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
     tokens: torch.Tensor = field(default_factory=lambda: torch.tensor([]))
     # Inherited fields from Observation ABC: reward, done, metadata
 
@@ -90,9 +89,9 @@ class ChatEnvironment(Environment):
     def __init__(
         self,
         tokenizer: TokenizerProtocol,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         system_role: str = "system",
-        transform: Optional[Callable[[Observation], Observation]] = None,
+        transform: Transform | None = None,
     ):
         super().__init__(transform=transform)
 

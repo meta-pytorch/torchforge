@@ -10,16 +10,15 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, Optional, TypeVar
 
 import torch
+
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
+
+from forge.data.dataset import DatasetInfo, InfiniteTuneIterableDataset
+from forge.data.metrics import AggregationType, Metric
 from torch.nn.attention.flex_attention import (
     create_block_mask as create_block_mask_flex,
 )
 from torchdata.stateful_dataloader import Stateful
-
-from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
-from forge.data.metrics import AggregationType, Metric
-
-from forge.datasets.iterable_base import DatasetInfo, InfiniteTuneIterableDataset
-from forge.tools._import_guard import _SUPPORTS_FLEX_ATTENTION
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +68,6 @@ class Packer(ABC, Generic[SampleType]):
     """
 
     def __init__(self, padding_idx: int, ignore_idx: int = CROSS_ENTROPY_IGNORE_IDX):
-        if not _SUPPORTS_FLEX_ATTENTION:
-            raise RuntimeError(
-                "The PackedDataset and its packers require Flex Attention support, "
-                "which is not available in the current environment."
-            )
         self.padding_idx = padding_idx
         self.ignore_idx = ignore_idx
 
