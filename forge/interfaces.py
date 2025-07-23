@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from forge.types import Action, Message, Observation, State, Trajectory
-from monarch.actor import Actor, endpoint
+from monarch.actor_mesh import Actor, endpoint
 
 
 class Transform(ABC):

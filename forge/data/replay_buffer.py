@@ -12,7 +12,7 @@ from forge.interfaces import ReplayBuffer
 
 from forge.types import Trajectory
 
-from monarch.actor import endpoint
+from monarch.actor_mesh import endpoint
 
 
 # Silly replay buffer implementation for testing.

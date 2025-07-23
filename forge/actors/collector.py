@@ -12,11 +12,11 @@ A "collector" in this context refers to the orchestrator that coordinates
 
 from typing import Callable
 
-from forge.actors.policy import PolicyInterface
-from forge.data.replay_buffer import ReplayBufferInterface
-from forge.envs.base import Trajectory
+from forge.interfaces import Policy, ReplayBuffer
 
-from monarch.actor import Actor, endpoint
+from forge.types import Trajectory
+
+from monarch.actor_mesh import Actor, endpoint
 
 
 class Collector(Actor):
@@ -25,8 +25,8 @@ class Collector(Actor):
     def __init__(
         self,
         max_collector_steps: int,
-        policy: PolicyInterface,
-        replay_buffer: ReplayBufferInterface,
+        policy: Policy,
+        replay_buffer: ReplayBuffer,
         environment_creator: Callable,
     ):
         self.max_collector_steps = max_collector_steps
