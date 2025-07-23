@@ -86,7 +86,6 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    # TODO: this needs to be hooked into config system and generalized
     def setup_data(self):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
