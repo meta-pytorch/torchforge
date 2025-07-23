@@ -11,7 +11,7 @@ from typing import Any
 
 import torch
 
-print("hi")
+print("hello")
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.config.parse import parse
 from forge.data.collate import collate_packed
