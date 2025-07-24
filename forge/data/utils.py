@@ -22,7 +22,7 @@ class MaskingStrategy(Enum):
     TRAIN_ON_LAST = "train_on_last"
 
 
-class Message:
+class TuneMessage:
     """
     This class represents individual messages in a fine-tuning dataset. It supports
     text-only content, text with interleaved images, and tool calls. The
@@ -55,7 +55,7 @@ class Message:
             - All ipython messages (tool call returns) should set ``eot=False``.
 
     Note:
-        Message class expects any image content to be a ``torch.Tensor``, as output
+        TuneMessage class expects any image content to be a ``torch.Tensor``, as output
         by e.g. :func:`~torchtune.data.load_image`
     """
 
@@ -86,15 +86,15 @@ class Message:
         return content
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Message":
+    def from_dict(cls, d: dict) -> "TuneMessage":
         """
-        Construct a Message from a dictionary.
+        Construct a TuneMessage from a dictionary.
 
         Args:
-            d (dict): dictionary containing the fields of the Message.
+            d (dict): dictionary containing the fields of the TuneMessage.
 
         Returns:
-            Message: constructed Message.
+            TuneMessage: constructed TuneMessage.
         """
         return cls(
             role=d["role"],
@@ -150,12 +150,14 @@ def truncate(
     return tokens_truncated
 
 
-def mask_messages(messages: list[Message], masking_strategy: MaskingStrategy) -> None:
+def mask_messages(
+    messages: list[TuneMessage], masking_strategy: MaskingStrategy
+) -> None:
     """
     Set the masked attribute for each message in the list based on the specified masking strategy.
 
     Args:
-        messages (list[Message]): a list of messages to mask.
+        messages (list[TuneMessage]): a list of messages to mask.
         masking_strategy (MaskingStrategy): masking strategy to use.
             Must be one of `train_on_all`, `train_on_assistant`, `train_on_last`.
 

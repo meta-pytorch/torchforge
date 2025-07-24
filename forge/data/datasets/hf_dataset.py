@@ -5,25 +5,24 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Any, Callable, Iterator, Optional, TypeVar
+from typing import Any, Callable, Iterator, Optional
 
 import torch
 import torch.distributed as dist
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
 
-from forge.data.dataset import DatasetInfo, InfiniteTuneIterableDataset
-
-from forge.data.metrics import (
+from forge.data.dataset_metrics import (
     AggregationType,
     DefaultTrainingMetricTransform,
     Metric,
     MetricTransform,
 )
+from forge.interfaces import Transform
+
+from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
 logger = logging.getLogger(__name__)
-
-Transform = TypeVar("Transform", bound=Callable[..., Any])
 
 
 class HfIterableDataset(InfiniteTuneIterableDataset):

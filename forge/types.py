@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
+
 class Message(TypedDict):
     role: str
     content: str | dict[str, Any]

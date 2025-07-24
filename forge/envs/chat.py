@@ -4,16 +4,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 from dataclasses import dataclass, field
 from typing import TypedDict
 
 import torch
-from forge.interfaces import Environment, Transform
+from forge.interfaces import Environment, ModelTokenizer, Transform
 
 from forge.types import Action, Observation, State
 
@@ -88,7 +83,7 @@ class ChatEnvironment(Environment):
 
     def __init__(
         self,
-        tokenizer: TokenizerProtocol,
+        tokenizer: ModelTokenizer,
         system_prompt: str | None = None,
         system_role: str = "system",
         transform: Transform | None = None,

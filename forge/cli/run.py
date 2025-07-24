@@ -6,12 +6,10 @@
 
 import argparse
 import os
-import runpy
 import sys
 import textwrap
 
 from pathlib import Path
-from typing import Optional
 
 import forge
 from forge._cli.subcommand import Subcommand

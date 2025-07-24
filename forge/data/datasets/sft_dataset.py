@@ -8,11 +8,102 @@ from typing import Any, Callable, Optional
 
 import torch
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
-
-from forge.data.hf_dataset import HfIterableDataset
-from forge.data.metrics import DefaultTrainingMetricTransform
-
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform
+from forge.data.utils import mask_messages, TuneMessage
 from forge.interfaces import Transform
+
+from .hf_dataset import HfIterableDataset
+
+
+class AlpacaToMessages(Transform):
+    """
+    Message transform class for Alpaca-style datasets with "instruction", "input", and "output"
+    (or equivalent fields specified in column_map) columns. User messages are formed from the
+    instruction + input columns and assistant messages are formed from the output column. Prompt
+    templating is conditional on the presence of the "input" column, and thus is handled directly
+    in this transform class instead of a dedicated :class:`~torchtune.data.PromptTemplate` class
+    due to this custom logic.
+
+    Args:
+        column_map (Optional[dict[str, str]]): a mapping to change the expected "instruction", "input",
+            and "output" column names to the actual column names in the dataset. Default is None,
+            keeping the default column names.
+        masking_strategy (str): masking strategy to use for model training.
+            Must be one of: `train_on_all`, `train_on_assistant`, `train_on_last`.
+            Default is "train_on_all".
+
+            - ``train_on_all``: both user and assistant messages are unmasked
+            - ``train_on_assistant``: user messages are masked, only assistant messages are unmasked
+            - ``train_on_last``: only the last assistant message is unmasked
+
+    Raises:
+        ValueError:
+            If ``column_map`` is provided and ``instruction`` not in ``column_map``, or
+                ``output`` not in ``column_map``
+    """
+
+    def __init__(
+        self,
+        column_map: Optional[dict[str, str]] = None,
+        masking_strategy: str = "train_on_all",
+    ):
+        self.masking_strategy = masking_strategy
+        if column_map:
+            if "instruction" not in column_map:
+                raise ValueError(
+                    f"Expected a key of 'instruction' in column_map but found {column_map.keys()}."
+                )
+            # input is optional
+            if "output" not in column_map:
+                raise ValueError(
+                    f"Expected a key of 'output' in column_map but found {column_map.keys()}."
+                )
+            self._column_map = column_map
+        else:
+            self._column_map = {
+                "instruction": "instruction",
+                "input": "input",
+                "output": "output",
+            }
+        self.template = {
+            "prompt_input": (
+                "Below is an instruction that describes a task, paired with an input that provides further context. "
+                "Write a response that appropriately completes the request.\n\n"
+                "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:\n"
+            ),
+            "prompt_no_input": (
+                "Below is an instruction that describes a task. "
+                "Write a response that appropriately completes the request.\n\n"
+                "### Instruction:\n{instruction}\n\n### Response:\n"
+            ),
+        }
+
+    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
+        key_input = self._column_map.get("input", "input")
+        if key_input in sample and sample[key_input]:
+            prompt = self.template["prompt_input"].format(
+                instruction=sample[self._column_map["instruction"]],
+                input=sample[key_input],
+            )
+        else:
+            prompt = self.template["prompt_no_input"].format(
+                instruction=sample[self._column_map["instruction"]]
+            )
+
+        messages = [
+            TuneMessage(
+                role="user",
+                content=prompt,
+                eot=True,
+            ),
+            TuneMessage(
+                role="assistant",
+                content=sample[self._column_map["output"]],
+                eot=True,
+            ),
+        ]
+        mask_messages(messages, self.masking_strategy)
+        return {"messages": messages}
 
 
 class SFTOutputTransform:

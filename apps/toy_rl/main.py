@@ -16,10 +16,10 @@ from functools import partial
 import torch
 
 from forge.actors.collector import Collector
+
+from forge.controller.stack import stack
 from forge.data.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
-
-from forge.train.monarch_utils.stack import stack
 
 from forge.types import Action, Observation, State
 

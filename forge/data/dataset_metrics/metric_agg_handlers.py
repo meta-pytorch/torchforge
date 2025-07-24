@@ -12,7 +12,7 @@ from typing import Any
 
 import torch
 
-from forge.data.metrics.metric_transform import AggregationType, Metric
+from .metric_transform import AggregationType, Metric
 
 logger = logging.getLogger(__name__)
 

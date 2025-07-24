@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Union
 
-from forge.data.transforms import Transform
+from forge.interfaces import Transform
 
 
 @dataclass(frozen=True)

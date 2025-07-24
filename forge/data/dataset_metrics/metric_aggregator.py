@@ -11,7 +11,7 @@ from typing import Any, Union
 
 import torch.distributed as dist
 
-from forge.data.metrics.metric_agg_handlers import (
+from .metric_agg_handlers import (
     AggregationHandler,
     CategoricalCountAggHandler,
     MaxAggHandler,
@@ -21,7 +21,7 @@ from forge.data.metrics.metric_agg_handlers import (
     StatsAggHandler,
     SumAggHandler,
 )
-from forge.data.metrics.metric_transform import AggregationType, Metric
+from .metric_transform import AggregationType, Metric
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-
 from typing import Any
 
 from forge.types import Action, Message, Observation, State, Trajectory
