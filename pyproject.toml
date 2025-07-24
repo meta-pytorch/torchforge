@@ -14,6 +14,7 @@ dependencies = [
     "torchdata>=0.8.0",
     "torchtitan",
     "torch",
+    "torchmonarch-nightly",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
