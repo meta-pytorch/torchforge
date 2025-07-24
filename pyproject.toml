@@ -43,7 +43,7 @@ dev = [
 ]
 
 [project.scripts]
-forge = "forge._cli.forge:main"
+forge = "forge.cli.forge:main"
 
 [tool.setuptools.dynamic]
 version = {file = "assets/version.txt"}

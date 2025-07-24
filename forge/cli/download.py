@@ -13,7 +13,7 @@ import traceback
 
 from pathlib import Path
 
-from forge._cli.subcommand import Subcommand
+from forge.cli.subcommand import Subcommand
 
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError

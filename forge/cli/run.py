@@ -12,7 +12,7 @@ import textwrap
 from pathlib import Path
 
 import forge
-from forge._cli.subcommand import Subcommand
+from forge.cli.subcommand import Subcommand
 
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.distributed.run import get_args_parser as get_torchrun_args_parser, run

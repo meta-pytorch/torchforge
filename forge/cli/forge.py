@@ -6,8 +6,8 @@
 
 import argparse
 
-from forge._cli.download import Download
-from forge._cli.run import Run
+from forge.cli.download import Download
+from forge.cli.run import Run
 
 
 class ForgeCLIParser:
