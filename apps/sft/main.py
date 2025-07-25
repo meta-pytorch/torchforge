@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import sys
 from dataclasses import asdict
 from functools import partial
@@ -12,12 +13,11 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
-from forge.config.parse import parse
+from forge.cli.config import parse
 from forge.data.collate import collate_packed
-from forge.data.transforms.tokenizers import HuggingFaceModelTokenizer
-from forge.data.transforms.transforms import AlpacaToMessages
-from forge.datasets.packed import PackedDataset, TextPacker
-from forge.datasets.sft import sft_iterable_dataset
+from forge.data.datasets.packed import PackedDataset, TextPacker
+from forge.data.datasets.sft_dataset import sft_iterable_dataset
+from forge.data.tokenizer import HuggingFaceModelTokenizer
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -79,19 +79,25 @@ class ForgeSFTRecipe(ForgeEngine):
         # Should also use load, not dcp_load
         self.checkpointer.dcp_load(
             state_dict=ModelWrapper(self.model_parts).state_dict(),
-            checkpoint_id="/tmp/Meta-Llama-3.1-8B-Instruct/",
+            checkpoint_id=self.job_config.checkpoint.folder,
             from_hf=True,
         )
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    # TODO: this needs to be hooked into config system and generalized
     def setup_data(self):
         tokenizer = HuggingFaceModelTokenizer(
-            tokenizer_json_path="/tmp/Meta-Llama-3.1-8B-Instruct/tokenizer.json",
-            tokenizer_config_json_path="/tmp/Meta-Llama-3.1-8B-Instruct/tokenizer_config.json",
-            generation_config_path="/tmp/Meta-Llama-3.1-8B-Instruct/generation_config.json",
+            tokenizer_json_path=os.path.join(
+                self.job_config.model.tokenizer_path, "tokenizer.json"
+            ),
+            tokenizer_config_json_path=os.path.join(
+                self.job_config.model.tokenizer_path, "tokenizer_config.json"
+            ),
+            generation_config_path=os.path.join(
+                self.job_config.model.tokenizer_path, "generation_config.json"
+            ),
         )
+
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
