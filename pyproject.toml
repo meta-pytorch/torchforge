@@ -15,6 +15,8 @@ dependencies = [
 
     # Hugging Face integrations
     "datasets>=2.21.0",
+    "tokenizers",
+    "safetensors",
 
     # Tokenization
     "blobfile",
@@ -22,6 +24,7 @@ dependencies = [
 
     # Miscellaneous
     "tomli>=1.1.0",
+    "omegaconf",
     "fsspec"
 ]
 dynamic = ["version"]
@@ -39,6 +42,9 @@ dev = [
     "tensorboard",
 ]
 
+[project.scripts]
+forge = "forge._cli.forge:main"
+
 [tool.setuptools.dynamic]
 version = {file = "assets/version.txt"}
 
@@ -50,7 +56,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = [""]
-include = ["torchtitan*"]
+include = ["forge*"]
 
 [tool.pytest.ini_options]
 addopts = ["--showlocals"]  # show local variables in tracebacks
