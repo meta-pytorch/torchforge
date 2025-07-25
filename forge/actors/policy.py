@@ -8,8 +8,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from monarch.proc_mesh import proc_mesh
-from monarch.actor_mesh import Actor, endpoint, current_rank
+from monarch.actor import Actor, endpoint, current_rank, proc_mesh
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.usage.usage_lib import UsageContext
@@ -17,16 +16,17 @@ from vllm.worker.worker_base import WorkerWrapperBase
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
-from vllm.prompt_adapter.request import PromptAdapterRequest
 from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.v1.engine.processor import Processor
 from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.v1.request import Request
 from vllm.v1.core.sched.output import SchedulerOutput
+from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
+from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 
 
-import pdb
+import pdb # philip
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,6 @@ class PolicyRouter(Actor):
     policy: Actor
     sampling_params: SamplingParams = None
     lora_request: LoRARequest = None
-    prompt_adapter_request: PromptAdapterRequest = None
     tokenization_kwargs: dict = None
 
     @endpoint
@@ -85,11 +84,17 @@ class PolicyRouter(Actor):
         _validate_truncation_size(self.vllm_args.model_config.max_model_len, truncate_prompt_tokens, tokenization_kwargs)
 
         # process and tokenize prompt 
-        arrival_time, trace_headers = None, None
         prompt_str, request = self.processor.process_inputs(
-            request_id, prompt, self.sampling_params, arrival_time, self.lora_request,
-            tokenization_kwargs, trace_headers, self.prompt_adapter_request,
-            priority)
+            request_id=request_id, 
+            prompt=prompt, 
+            params=self.sampling_params,
+            arrival_time=None, 
+            lora_request=self.lora_request,
+            tokenization_kwargs=tokenization_kwargs, 
+            trace_headers=None,
+            priority=priority,
+            data_parallel_rank=None,
+        )
 
         if self.sampling_params.n == 1:
             self.output_processor.add_request(request, prompt_str, None, 0)
@@ -125,6 +130,7 @@ class PolicyRouter(Actor):
             worker_output = await self.policy.execute_model(scheduler_output)
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs
+            await asyncio.sleep(0) # philip
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
@@ -179,13 +185,14 @@ class Policy(Actor):
                 if getattr(self.vllm_args, key) != value:
                     logger.warning(f"{key} args don't match value in EngineArgs, overriding with {value}")
                     setattr(self.vllm_args, key, value)
-        assert self.vllm_args.parallel_size.world_size == self.resources
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
+        assert self.vllm_args.parallel_config.world_size == self.resources
 
     @endpoint
     async def setup(self):
-        self.rank = current_rank()
+        # TODO: remove ["gpus"] when monarch implements a flat rank
+        self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
 
     @endpoint
@@ -228,13 +235,23 @@ class Policy(Actor):
 
     def setup_worker(self):
         """ Build and Instantiate vLLM worker """
+        parallel_config = self.vllm_args.parallel_config
+        set_multiprocessing_worker_envs(parallel_config)
+        distributed_init_method = get_distributed_init_method(get_loopback_ip(), get_open_port())
+        all_kwargs = [{}] * parallel_config.world_size
+        is_driver_worker = (self.rank % parallel_config.tensor_parallel_size == 0)
+        all_kwargs[self.rank] = {
+            "vllm_config": self.vllm_args,
+            "local_rank": self.rank,
+            "rank": self.rank,
+            "distributed_init_method": distributed_init_method,
+            "is_driver_worker": is_driver_worker,
+        }
         worker = WorkerWrapperBase(self.vllm_args, self.rank)     
-        worker.init_worker(self.vllm_args)
+        worker.init_worker(all_kwargs)
         worker.init_device()
         worker.load_model()
         return worker
-
-
 
 
 def convert_input(prompt=None, prompt_token_ids=None):
@@ -263,7 +280,7 @@ def get_default_sampling_params(vllm_config, overrides=None):
 async def main(config):
     router_mesh = await proc_mesh(gpus=1)
     policy_mesh = await proc_mesh(gpus=config["resources"], env={
-            "CUDA_VISIBLE_DEVICES": "1",
+        #"CUDA_VISIBLE_DEVICES": "1", # philip
         },)
     
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)    
@@ -290,4 +307,4 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(main(config))   
+    asyncio.run(main(config), debug=True)  # philip  
