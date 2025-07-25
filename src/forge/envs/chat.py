@@ -5,17 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import TypedDict
 
 import torch
-from forge.interfaces import Environment, ModelTokenizer, Transform
+from forge.interfaces import Environment, Message, ModelTokenizer, Transform
 
 from forge.types import Action, Observation, State
-
-
-class Message(TypedDict):
-    role: str
-    content: str
 
 
 @dataclass
