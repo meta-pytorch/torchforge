@@ -109,7 +109,7 @@ class ForgeSFTRecipe(ForgeEngine):
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
-            target_tokens_per_pack=1024,  # TODO: get this from model
+            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
         )
         dataloader = StatefulDataLoader(
             dataset=dataset,
