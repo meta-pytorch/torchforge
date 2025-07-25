@@ -218,7 +218,7 @@ class ForgeSFTRecipe(ForgeEngine):
                         self.current_step
                     ),
                     async_mode=self.checkpointer.async_mode,
-                    to_hf=False,
+                    to_hf=True,
                 )
 
     def cleanup(self) -> None:
