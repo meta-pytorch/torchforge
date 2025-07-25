@@ -208,15 +208,18 @@ class ForgeSFTRecipe(ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            # if self.current_step % self.train_config.val_every_n_steps == 0:
-            #     self.validate()
-            # TODO: uncomment
-            # if (
-            #     self.current_step
-            #     % self.train_config.checkpoint_config.save_every_n_steps
-            #     == 0
-            # ):
-            #     self.checkpointer.save()
+            if self.checkpointer._should_save(
+                self.current_step,
+                last_step=(self.current_step == self.job_config.training.steps),
+            ):
+                self.checkpointer.dcp_save(
+                    ModelWrapper(self.model_parts).state_dict(),
+                    checkpoint_id=self.checkpointer._create_checkpoint_id(
+                        self.current_step
+                    ),
+                    async_mode=self.checkpointer.async_mode,
+                    to_hf=False,
+                )
 
     def cleanup(self) -> None:
         if self.checkpointer:
