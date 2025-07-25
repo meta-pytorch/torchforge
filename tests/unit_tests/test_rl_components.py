@@ -20,7 +20,7 @@ from forge.rl.replay_buffer import ReplayBuffer
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
-from monarch.actor import Actor, endpoint, local_proc_mesh
+from monarch.actor_mesh import Actor, endpoint, local_proc_mesh
 
 
 class TestToyEnvironment:

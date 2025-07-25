@@ -13,12 +13,11 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
-from forge.config.parse import parse
+from forge.cli.config import parse
 from forge.data.collate import collate_packed
-from forge.data.transforms.tokenizers import HuggingFaceModelTokenizer
-from forge.data.transforms.transforms import AlpacaToMessages
-from forge.datasets.packed import PackedDataset, TextPacker
-from forge.datasets.sft import sft_iterable_dataset
+from forge.data.datasets.packed import PackedDataset, TextPacker
+from forge.data.datasets.sft_dataset import sft_iterable_dataset
+from forge.data.tokenizer import HuggingFaceModelTokenizer
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
