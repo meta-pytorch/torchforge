@@ -18,7 +18,7 @@ from functools import partial
 import pytest
 import torch
 from forge.actors.collector import Collector
-from forge.data.replay_buffer import ReplayBuffer
+from forge.data.replay_buffer import SimpleReplayBuffer
 from forge.interfaces import Trajectory
 
 # local_proc_mesh is an implementation of proc_mesh for
@@ -113,14 +113,14 @@ class TestToyPolicy:
         assert len(set(actions)) > 1
 
 
-class TestReplayBuffer:
-    """Test the ReplayBuffer component."""
+class TestSimpleReplayBuffer:
+    """Test the SimpleReplayBuffer component."""
 
     @pytest.mark.asyncio
     async def test_replay_buffer_initialization(self):
-        """Test that ReplayBuffer initializes correctly."""
+        """Test that SimpleReplayBuffer initializes correctly."""
         proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
+        buffer = await proc.spawn("buffer", SimpleReplayBuffer)
 
         length = await buffer.len.choose()
         is_empty = await buffer.is_empty.choose()
@@ -132,7 +132,7 @@ class TestReplayBuffer:
     async def test_replay_buffer_extend_and_sample(self):
         """Test adding and sampling trajectories."""
         proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
+        buffer = await proc.spawn("buffer", SimpleReplayBuffer)
 
         # Create a test trajectory
         trajectory = Trajectory()
@@ -164,7 +164,7 @@ class TestReplayBuffer:
     async def test_replay_buffer_multiple_trajectories(self):
         """Test buffer with multiple trajectories."""
         proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
+        buffer = await proc.spawn("buffer", SimpleReplayBuffer)
         batch_size = 5
 
         # Add multiple trajectories
@@ -202,7 +202,7 @@ class TestCollector:
             async def generate(self, observation):
                 return ToyAction(data=torch.tensor([1.0]))
 
-        class MockReplayBuffer(Actor):
+        class MockSimpleReplayBuffer(Actor):
             def __init__(self):
                 self.trajectories = []
 
@@ -213,7 +213,7 @@ class TestCollector:
         max_collector_steps = 5
         proc = await local_proc_mesh(gpus=1)
         mock_policy = await proc.spawn("policy", MockPolicy)
-        mock_replay_buffer = await proc.spawn("replay_buffer", MockReplayBuffer)
+        mock_replay_buffer = await proc.spawn("replay_buffer", MockSimpleReplayBuffer)
 
         def environment_creator():
             return ToyEnvironment(name="test", max_steps=5)
@@ -286,7 +286,7 @@ class TestIntegration:
         max_collector_steps = 5
         proc = await local_proc_mesh(gpus=1)
         policy = await proc.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
-        replay_buffer = await proc.spawn("replay_buffer", ReplayBuffer)
+        replay_buffer = await proc.spawn("replay_buffer", SimpleReplayBuffer)
         collector = await proc.spawn(
             "collector",
             Collector,

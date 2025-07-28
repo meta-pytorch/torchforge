@@ -17,7 +17,7 @@ from apps.toy_rl.components import ToyEnvironment, ToyPolicy
 from forge.actors.collector import Collector
 
 from forge.controller.stack import stack
-from forge.data.replay_buffer import ReplayBuffer
+from forge.data.replay_buffer import SimpleReplayBuffer
 from monarch.actor import proc_mesh
 
 
@@ -37,7 +37,7 @@ async def main():
     coder_procs = await proc_mesh(gpus=8)
 
     # Actor instantiation
-    replay_buffer = await replay_procs.spawn("replay_buffer", ReplayBuffer)
+    replay_buffer = await replay_procs.spawn("replay_buffer", SimpleReplayBuffer)
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
     # This policy just generates something between -2. and 2.
