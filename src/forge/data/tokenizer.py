@@ -240,7 +240,6 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
 
         # It is used sometimes in HF chat_templates
         _env.globals["raise_exception"] = self._raise_helper
-
         self.template = _env.from_string(config["chat_template"])
         self.truncation_type = truncation_type
 
@@ -256,6 +255,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         for key, value in config.items():
             if not isinstance(value, (dict, list)):
                 top_level[key] = value
+            elif isinstance(value, dict) and "content" in value:
+                top_level[key] = value["content"]
         return top_level
 
     def render_template(

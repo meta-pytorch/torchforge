@@ -18,7 +18,7 @@ from forge.types import Trajectory
 # Silly replay buffer implementation for testing.
 # One nice thing if we implement our own Replay buffer is that
 # we can wrap RDMA calls / torchstore calls here.
-class ReplayBuffer(ReplayBuffer):
+class SimpleReplayBuffer(ReplayBuffer):
     """Simple in-memory replay buffer implementation."""
 
     def __init__(self):
