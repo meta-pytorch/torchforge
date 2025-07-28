@@ -50,10 +50,7 @@ class StackedEndpoint(Generic[P, R]):
                 results.append(await future)
             return results
 
-        def process_blocking() -> list[ValueMesh[R]]:
-            return [future.get() for future in futures]
-
-        return Future(process, process_blocking)
+        return Future(impl=process, requires_loop=False)
 
     async def stream(self, *args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[R, R]:
         """Broadcasts to all actors in all stacked endpoints and yields responses as a stream."""

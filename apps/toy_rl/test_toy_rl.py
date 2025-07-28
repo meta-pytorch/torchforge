@@ -4,23 +4,29 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Unit tests for RL components."""
+"""Unit tests for Toy RL components.
+
+Run this with
+
+pytest apps/toy_rl/test_toy_rl.py
+
+"""
 
 import asyncio
 from functools import partial
 
 import pytest
 import torch
-from forge.data.environments import ToyAction, ToyEnvironment, ToyObservation
-from forge.data.policies import ToyPolicy
-from forge.rl.collector import Collector
-from forge.rl.interfaces import Trajectory
-from forge.rl.replay_buffer import ReplayBuffer
+from forge.actors.collector import Collector
+from forge.data.replay_buffer import ReplayBuffer
+from forge.interfaces import Trajectory
 
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
-from monarch.actor_mesh import Actor, endpoint, local_proc_mesh
+from monarch.actor import Actor, endpoint, local_proc_mesh
+
+from toy_rl.components import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
 
 
 class TestToyEnvironment:
