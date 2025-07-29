@@ -11,12 +11,11 @@ from functools import partial
 from typing import Any
 
 import torch
-
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
-from forge.data.datasets.sft_dataset import sft_iterable_dataset
+from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 
 from omegaconf import DictConfig, OmegaConf

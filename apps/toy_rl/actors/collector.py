@@ -12,7 +12,7 @@ A "collector" in this context refers to the orchestrator that coordinates
 
 from typing import Callable
 
-from forge.interfaces import Policy, ReplayBuffer
+from apps.toy_rl.interfaces import Policy, ReplayBuffer
 
 from forge.types import Trajectory
 

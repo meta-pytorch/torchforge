@@ -8,7 +8,7 @@
 
 import random
 
-from forge.interfaces import ReplayBuffer
+from apps.toy_rl.interfaces import ReplayBuffer
 
 from forge.types import Trajectory
 

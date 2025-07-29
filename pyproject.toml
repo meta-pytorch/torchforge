@@ -12,9 +12,6 @@ keywords = ["pytorch", "training", "llm"]
 dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
-    "torchtitan",
-    "torch",
-    "torchmonarch-nightly",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -36,6 +33,9 @@ dev = [
     "tensorboard",
     "tomli>=1.1.0",
 ]
+rl = [
+    "torchmonarch-nightly",
+]
 
 [project.scripts]
 forge = "forge.cli.forge:main"
@@ -55,20 +55,3 @@ include = ["forge*"]
 
 [tool.pytest.ini_options]
 addopts = ["--showlocals"]  # show local variables in tracebacks
-
-[tool.uv.workspace]
-members = [
-    "forge",
-]
-
-[[tool.uv.index]]
-name = "pytorch-nightly"
-url  = "https://download.pytorch.org/whl/nightly/"
-explicit = true
-
-[tool.uv.sources]
-torchtitan = { index = "pytorch-nightly" }
-torch = { index = "pytorch-nightly" }
-
-[tool.uv]
-prerelease = "allow"

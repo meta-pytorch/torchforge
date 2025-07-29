@@ -8,14 +8,16 @@
 
 ## Installation
 
+torchforge depends on torchtitan, which should first be installed from source.
+
 ```bash
-pip install uv
+pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
+[For AMD GPU] pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3 --force-reinstall
+git clone https://github.com/pytorch/torchtitan
+pip install -e ./torchtitan
 git clone https://github.com/pytorch-labs/forge
 cd forge
-uv sync
-
-# Or for dev install:
-uv sync --all-extras
+pip install -r requirements.txt
 ```
 
 ## Quick Start
@@ -23,8 +25,8 @@ uv sync --all-extras
 To run SFT for Llama3 8B, run
 
 ```bash
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
-uv run forge run --nproc_per_node 2 apps/sft/main.py --config apps/sft/llama3_8b.yaml
+forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
+forge run --nproc_per_node 2 apps/sft/main.py --config apps/sft/llama3_8b.yaml
 ```
 
 ### Citation
