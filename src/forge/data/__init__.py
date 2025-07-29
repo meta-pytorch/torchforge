@@ -8,3 +8,5 @@ from .collate import collate_packed
 __all__ = [
     "collate_packed",
 ]
+
+CROSS_ENTROPY_IGNORE_IDX = -100

@@ -1,8 +1,15 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from abc import ABC, abstractmethod
 from typing import Any
 
+from monarch.actor import Actor, endpoint
+
 from forge.types import Action, Message, Observation, State, Trajectory
-from monarch.actor_mesh import Actor, endpoint
 
 
 class Transform(ABC):
