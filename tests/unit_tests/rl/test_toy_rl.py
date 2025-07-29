@@ -8,7 +8,7 @@
 
 Run this with
 
-pytest apps/toy_rl/test_toy_rl.py
+pytest tests/unit_tests/rl/test_toy_rl.py
 
 """
 
@@ -17,6 +17,8 @@ from functools import partial
 
 import pytest
 import torch
+
+from apps.toy_rl.main import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
 from forge.actors.collector import Collector
 from forge.data.replay_buffer import SimpleReplayBuffer
 from forge.interfaces import Trajectory
@@ -25,8 +27,6 @@ from forge.interfaces import Trajectory
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
 from monarch.actor import Actor, endpoint, local_proc_mesh
-
-from toy_rl.components import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
 
 
 class TestToyEnvironment:

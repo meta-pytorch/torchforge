@@ -41,7 +41,9 @@ async def main():
     # note that interface can be deduced, but adding it explicitly
     # helps the type checker
     envs = stack(browser, coding, interface=Environment)
-    await envs.step.call()
+    # Temporary hack due to Monarch changes
+    res = envs.step.call()
+    [await r for r in res]
 
 
 if __name__ == "__main__":

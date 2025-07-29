@@ -10,18 +10,120 @@ Run this with:
 """
 
 import asyncio
+from dataclasses import dataclass
 from functools import partial
 
-from apps.toy_rl.components import ToyEnvironment, ToyPolicy
-
+import torch
 from forge.actors.collector import Collector
 
 from forge.controller.stack import stack
 from forge.data.replay_buffer import SimpleReplayBuffer
-from monarch.actor import proc_mesh
-
+from forge.interfaces import Environment, Policy
+from forge.types import Action, Observation, State
+from monarch.actor import endpoint, proc_mesh
 
 SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
+
+
+@dataclass
+class ToyState(State):
+    """State for the toy environment."""
+
+    data: torch.Tensor
+    step: int
+
+    def __repr__(self) -> str:
+        return f"ToyState(step={self.step}, data={self.data})"
+
+
+@dataclass
+class ToyObservation(Observation):
+    """Observation for the toy environment."""
+
+    data: torch.Tensor
+    step: int
+    text: str
+
+    def __repr__(self) -> str:
+        return f"ToyObservation(step={self.step}, data={self.data})"
+
+
+@dataclass
+class ToyAction(Action):
+    """Action for the toy environment."""
+
+    data: torch.Tensor
+
+
+class ToyEnvironment(Environment):
+    """A simple toy environment for testing the RL pipeline.
+
+    This environment maintains a simple numeric state that gets modified by actions.
+    It follows the base Environment abstraction with only reset, step, and state methods.
+    """
+
+    def __init__(self, name: str, max_steps: int = 10):
+        self.name = name
+        self.max_steps = max_steps
+        self.reset()
+
+    def reset(self) -> ToyObservation:
+        """Reset the environment to initial state."""
+        self._state = ToyState(
+            step=0,
+            data=torch.tensor([0.0]),
+        )
+        return ToyObservation(
+            step=self._state.step,
+            data=self._state.data,
+            text=f"[{self.name}] Step {self._state.step}, Value: {self._state.data}",
+        )
+
+    def step(self, action: ToyAction) -> ToyObservation:
+        """Take a step in the environment."""
+        next_state = ToyState(
+            step=self._state.step + 1,
+            data=self._state.data + action.data,
+        )
+
+        self._state = next_state
+
+        return ToyObservation(
+            step=next_state.step,
+            data=next_state.data,
+            text=f"[{self.name}] Step {next_state.step}, Value: {next_state.data}",
+        )
+
+    @property
+    def state(self) -> ToyState:
+        """Get the current state of the environment."""
+        return self._state
+
+
+class ToyPolicy(Policy):
+    """A simple toy policy for testing."""
+
+    def __init__(self, action_range: tuple[float, float] = (-1.0, 1.0)):
+        super().__init__()
+        self.action_range = action_range
+
+    @endpoint
+    async def generate(self, request: Observation) -> Action:
+        """Generate a simple random action."""
+        # Generate a random action within the specified range
+        action_value = (
+            torch.rand(1).item() * (self.action_range[1] - self.action_range[0])
+            + self.action_range[0]
+        )
+        action = ToyAction(
+            data=torch.tensor([action_value]),
+        )
+        return action
+
+    @endpoint
+    async def update_weights(self):
+        """No-op for toy policy."""
+        pass
 
 
 async def main():
@@ -72,7 +174,6 @@ async def main():
         environment_creator=partial(ToyEnvironment, name="coding", max_steps=5),
     )
 
-    # Here's our stack API in action!
     collectors = stack(
         browser_collectors,
         deep_research_collectors,
@@ -93,7 +194,10 @@ async def main():
                 # What's pretty elegant here is if we wanted to control off policiness, we could
                 # easily counter on steps and call policy.update_weights.call() at our desired
                 # frequency.
-                results = await collectors.run_episode.call()
+                results = collectors.run_episode.call()
+
+                # Temporary hack due to Monarch changes - ideally you could just await results
+                results = [await r for r in results]
                 num_trajectories = sum([len(r._values) for r in results])
                 episode_count += 1
                 print(

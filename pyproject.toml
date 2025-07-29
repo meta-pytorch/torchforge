@@ -55,6 +55,7 @@ include = ["forge*"]
 
 [tool.pytest.ini_options]
 addopts = ["--showlocals"]  # show local variables in tracebacks
+pythonpath = "."
 
 [tool.uv.workspace]
 members = [
