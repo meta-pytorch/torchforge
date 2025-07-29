@@ -68,7 +68,8 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
 
     def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
-        self.num_training_steps = 1000  # Example value, adjust as needed
+        self.num_training_steps = job_config.training.steps
+        self.metric_logger = None
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self.rank = current_rank()["gpus"]
         self.world_size = current_size()["gpus"]
@@ -96,7 +97,7 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
             "ROLE_WORLD_SIZE": str(self.world_size),
             "ROLE_NAME": "rank",
             "WORLD_SIZE": str(self.world_size),
-            "CUDA_VISIBLE_DEVICES": str(self.rank + 4),
+            "CUDA_VISIBLE_DEVICES": str(self.rank + 2),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
@@ -249,6 +250,7 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
         )
 
         while self.current_step < self.num_training_steps:
+            self.rlog("step {}/{}".format(self.current_step, self.num_training_steps))
             batch = next(dataloader)
             # Move tensors to the appropriate device
             for k, v in batch.items():
@@ -339,7 +341,7 @@ async def run(cfg: DictConfig) -> None:
     if required_gpus > 8:
         raise NotImplementedError("Only supports up to 8 GPUs (single host) for now")
 
-    p = await proc_mesh(gpus=required_gpus, env={"CUDA_VISIBLE_DEVICES": "6,7"})
+    p = await proc_mesh(gpus=4)
     # p = await proc_mesh(gpus=required_gpus)
     print("Created proc mesh: ", p)
 
