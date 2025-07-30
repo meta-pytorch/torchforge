@@ -15,8 +15,7 @@ from typing import Callable
 from apps.toy_rl.interfaces import Policy, ReplayBuffer
 
 from forge.types import Trajectory
-
-from monarch.actor_mesh import Actor, endpoint
+from monarch.actor import Actor, endpoint
 
 
 class Collector(Actor):
