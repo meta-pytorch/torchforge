@@ -14,7 +14,7 @@ torchforge depends on torchtitan, which should first be installed from source.
 pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
 [For AMD GPU] pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3 --force-reinstall
 git clone https://github.com/pytorch/torchtitan
-pip install -e ./torchtitanin
+pip install -e ./torchtitan
 git clone https://github.com/pytorch-labs/forge
 cd forge
 pip install -e ".[dev]"
