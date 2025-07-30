@@ -4,10 +4,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import asyncio
 import logging
+import sys
 from dataclasses import dataclass
 
+import torch
 from monarch.actor import Actor, endpoint, current_rank, proc_mesh
 
 from vllm.engine.arg_utils import EngineArgs
@@ -17,18 +20,20 @@ from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import RequestOutputKind, SamplingParams
+from vllm.v1.engine import EngineCoreOutputs
 from vllm.v1.engine.processor import Processor
 from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.v1.request import Request
 from vllm.v1.core.sched.output import SchedulerOutput
+from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
-
-
-import pdb # philip
+from vllm.v1.core.kv_cache_utils import get_kv_cache_config 
+from vllm.v1.structured_output import StructuredOutputManager
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PolicyRouter(Actor):
@@ -41,8 +46,8 @@ class PolicyRouter(Actor):
     @endpoint
     async def setup(self):
         self.request_id = 0
-        self.vllm_args = await self.policy.vllm_args.call_one()
-
+        self.requests = {}
+        self.vllm_args = await self.policy.get_vllm_args.choose()
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
@@ -59,10 +64,14 @@ class PolicyRouter(Actor):
         # Setup schduuler
         # TODO: Add support for `log_stats`
         kv_cache_configs = await self.policy.setup_kv_cache.call()
+        kv_cache_config = kv_cache_configs._values[0]
+        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_args.cache_config.num_cpu_blocks = 0
+
         structured_output_manager = StructuredOutputManager(self.vllm_args)
         self.scheduler = Scheduler(
             vllm_config=self.vllm_args,
-            kv_cache_config=kv_cache_configs[0],
+            kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
             include_finished_set=False,
             log_stats=None,
@@ -80,7 +89,7 @@ class PolicyRouter(Actor):
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
-        truncate_prompt_tokens = sampling_params.truncate_prompt_tokens
+        truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(self.vllm_args.model_config.max_model_len, truncate_prompt_tokens, tokenization_kwargs)
 
         # process and tokenize prompt 
@@ -100,8 +109,9 @@ class PolicyRouter(Actor):
             self.output_processor.add_request(request, prompt_str, None, 0)
             request = Request.from_engine_core_request(request)
             # TODO: mm_hash and sturcutured_output
-            self.requests["request_id"] = asyncio.Future()
-            self.scheduer.add_request(request)
+            request_fut = asyncio.Future()
+            self.requests[request_id] = request_fut
+            self.scheduler.add_request(request)
         else:
             raise NotImplementedError("Multiple samples not supported yet")
             # # Fan out child requests (for n>1).
@@ -111,31 +121,33 @@ class PolicyRouter(Actor):
             #     child_request = request if idx == n - 1 else copy(request)
             #     child_request.request_id = request_id
             #     child_request.sampling_params = sampling_params
-
             #     # Make a new RequestState and queue.
             #     output_processor.add_request(child_request, prompt_str,
             #                                     parent_req, idx)
             #     child_request = Request.from_engine_core_request(child_request)
-            #     self.scheduer.add_request(chile_request)
+            #     self.scheduler.add_request(chile_request)
         
-        return await self.request[request_id]
+        return await request_fut 
 
     @endpoint
     async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
+        parallel_config = self.vllm_args.parallel_config
+        output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
-            worker_output = await self.policy.execute_model(scheduler_output)
+            worker_outputs = await self.policy.execute_model.call(scheduler_output)
+            worker_output = worker_outputs._values[output_rank]
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
-            outputs = outputs.get(0) or EngineCoreOutputs
-            await asyncio.sleep(0) # philip
+            outputs = outputs.get(0) or EngineCoreOutputs()
+            await asyncio.sleep(0) # Release control before processing outputs
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
                 iteration_stats=None)
-            for output in processed_outputs:
+            for output in processed_outputs.request_outputs:
                 if output.finished:
                     fut = self.requests.pop(output.request_id)
                     fut.set_result(output)
@@ -158,12 +170,10 @@ class Policy(Actor):
         """ Build vLLM Arguments 
 
         vLLM specific TODOS
-        - output rank
         - output format
         - check_health
         - _aggregate workers output
         - register_failure_callback
-        - _get_output_rank
 
         Testing
         - all LLM generate methods, verify against LLM inputs
@@ -177,6 +187,8 @@ class Policy(Actor):
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
             )
+            # Original method returns False when not run in the main thread
+            self.vllm_args._is_v1_supported_oracle = lambda *_: True
         else:
             # Check that provided args match Policy args
             cfg = ["model", "tensor_parallel_size", "pipeline_parallel_size", "data_parallel_size"]
@@ -217,8 +229,7 @@ class Policy(Actor):
             available_gpu_memory = 0
 
         # Get the kv cache tensor size
-        kv_cache_config = get_kv_cache_config(vllm_config, kv_cache_spec, available_gpu_memory)
-
+        kv_cache_config = get_kv_cache_config(self.vllm_args, kv_cache_spec, available_gpu_memory)
         # TODO: unify configs across TorchStore
         # unify_kv_cache_configs(kv_cache_configs)
         self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
@@ -226,28 +237,34 @@ class Policy(Actor):
 
         # Initialize kv cache and warmup the execution: 
         # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
-        kv_cache_configs = [None] * vllm_config.parallel_config.world_size
+        kv_cache_configs = [None] * self.vllm_args.parallel_config.world_size
         kv_cache_configs[self.rank] = kv_cache_config
         self.worker.initialize_from_config(kv_cache_configs)
-        self.worker.compile_or_warmup_model()
+        self.worker.compile_or_warm_up_model()
         self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
         return kv_cache_config
+
+    @endpoint
+    async def get_vllm_args(self):
+        return self.vllm_args
 
     def setup_worker(self):
         """ Build and Instantiate vLLM worker """
         parallel_config = self.vllm_args.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
-        distributed_init_method = get_distributed_init_method(get_loopback_ip(), get_open_port())
+        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
+        distributed_init_method = get_distributed_init_method(ip, port)
         all_kwargs = [{}] * parallel_config.world_size
+        local_rank = self.rank % torch.accelerator.device_count()
         is_driver_worker = (self.rank % parallel_config.tensor_parallel_size == 0)
         all_kwargs[self.rank] = {
             "vllm_config": self.vllm_args,
-            "local_rank": self.rank,
+            "local_rank": local_rank,
             "rank": self.rank,
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
-        worker = WorkerWrapperBase(self.vllm_args, self.rank)     
+        worker = WorkerWrapperBase(self.vllm_args, self.rank)
         worker.init_worker(all_kwargs)
         worker.init_device()
         worker.load_model()
@@ -266,6 +283,7 @@ def convert_input(prompt=None, prompt_token_ids=None):
 
 def get_default_sampling_params(vllm_config, overrides=None):
     default_params = vllm_config.model_config.get_diff_sampling_param()
+    default_params["max_tokens"] = 512
     if overrides is not None:
         default_params |= overrides
     if default_params:
@@ -277,13 +295,15 @@ def get_default_sampling_params(vllm_config, overrides=None):
     return params
 
 
-async def main(config):
+async def _test(config):
+    # TODO: Create proper test
     router_mesh = await proc_mesh(gpus=1)
     policy_mesh = await proc_mesh(gpus=config["resources"], env={
-        #"CUDA_VISIBLE_DEVICES": "1", # philip
-        },)
+        "MASTER_ADDR": str(get_loopback_ip()),
+        "MASTER_PORT": str(get_open_port()),
+    },)
     
-    policy_actor = await policy_mesh.spawn("policy", Policy, **config)    
+    policy_actor = await policy_mesh.spawn("policy", Policy, **config)
     router = await router_mesh.spawn("policy_router", PolicyRouter, policy=policy_actor)
 
     await policy_actor.setup.call()
@@ -294,10 +314,11 @@ async def main(config):
     print("Model running")
 
     prompt = "Tell me a joke"
-    response = await router.generate.call(prompt)
-    print(f"User: {prompt}\nAssistant: {response}")
+    response = await router.generate.call_one(prompt)
+    print(f"User: {prompt}\nAssistant: {response.outputs[0].text}")
 
     await router.shutdown.call()
+
 
 if __name__ == "__main__":
     config = {
@@ -307,4 +328,4 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(main(config), debug=True)  # philip  
+    asyncio.run(_test(config))  
