@@ -15,11 +15,11 @@ from functools import partial
 
 import torch
 
-from forge.actors.collector import Collector
+from apps.toy_rl.actors.collector import Collector
 
-from forge.controller.stack import stack
-from forge.data.replay_buffer import ReplayBuffer
-from forge.interfaces import Environment, Policy
+from apps.toy_rl.controller.stack import stack
+from apps.toy_rl.data.replay_buffer import ReplayBuffer
+from apps.toy_rl.interfaces import Environment, Policy
 
 from forge.types import Action, Observation, State
 

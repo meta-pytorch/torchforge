@@ -14,7 +14,7 @@ $ pytest ./tests/unit_tests/test_monarch_utils.py
 import operator
 
 import pytest
-from forge.monarch_utils.stack import _common_ancestor, stack, StackedActorMeshRef
+from apps.toy_rl.monarch_utils.stack import _common_ancestor, stack, StackedActorMeshRef
 from monarch.actor_mesh import Accumulator, Actor, endpoint
 from monarch.proc_mesh import local_proc_mesh
 

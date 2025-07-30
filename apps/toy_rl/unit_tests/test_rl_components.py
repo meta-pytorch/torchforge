@@ -11,11 +11,10 @@ from functools import partial
 
 import pytest
 import torch
-from forge.data.environments import ToyAction, ToyEnvironment, ToyObservation
-from forge.data.policies import ToyPolicy
-from forge.rl.collector import Collector
-from forge.rl.interfaces import Trajectory
-from forge.rl.replay_buffer import ReplayBuffer
+from apps.toy_rl.actors.collector import Collector
+from apps.toy_rl.data.replay_buffer import ReplayBuffer
+from apps.toy_rl.main import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
+from forge.types import Trajectory
 
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
