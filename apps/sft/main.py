@@ -16,7 +16,7 @@ import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
-from forge.data.datasets.sft_dataset import sft_iterable_dataset
+from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 
 from omegaconf import DictConfig, OmegaConf
@@ -108,7 +108,7 @@ class ForgeSFTRecipe(ForgeEngine):
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
-            target_tokens_per_pack=1024,  # TODO: get this from model
+            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
         )
         dataloader = StatefulDataLoader(
             dataset=dataset,
@@ -215,15 +215,18 @@ class ForgeSFTRecipe(ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            # if self.current_step % self.train_config.val_every_n_steps == 0:
-            #     self.validate()
-            # TODO: uncomment
-            # if (
-            #     self.current_step
-            #     % self.train_config.checkpoint_config.save_every_n_steps
-            #     == 0
-            # ):
-            #     self.checkpointer.save()
+            if self.checkpointer._should_save(
+                self.current_step,
+                last_step=(self.current_step == self.job_config.training.steps),
+            ):
+                self.checkpointer.dcp_save(
+                    ModelWrapper(self.model_parts).state_dict(),
+                    checkpoint_id=self.checkpointer._create_checkpoint_id(
+                        self.current_step
+                    ),
+                    async_mode=self.checkpointer.async_mode,
+                    to_hf=True,
+                )
 
     def cleanup(self) -> None:
         if self.checkpointer:

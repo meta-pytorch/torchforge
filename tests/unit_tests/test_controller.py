@@ -7,16 +7,15 @@
 """Tests for monarch_utils.py.
 
 Run this with:
-$ pytest ./tests/unit_tests/test_monarch_utils.py
+$ pytest ./tests/unit_tests/test_controller.py
 
 """
 
 import operator
 
 import pytest
-from forge.monarch_utils.stack import _common_ancestor, stack, StackedActorMeshRef
-from monarch.actor_mesh import Accumulator, Actor, endpoint
-from monarch.proc_mesh import local_proc_mesh
+from forge.controller.stack import _common_ancestor, stack, StackedActorMeshRef
+from monarch.actor import Accumulator, Actor, endpoint, local_proc_mesh
 
 
 class Counter(Actor):
@@ -141,7 +140,8 @@ def test_identical_actor_stack():
     assert stacked is not None
     assert isinstance(stacked, StackedActorMeshRef)
 
-    stacked.incr.call().get()
+    result = stacked.incr.call()
+    [r.get() for r in result]
     assert counter1.value.choose().get() == 1
     assert counter2.value.choose().get() == 1
 
@@ -167,7 +167,8 @@ def test_heterogeneous_actor_stack():
     assert not hasattr(stacked, "reset")  # CounterB specific
 
     # Test that the common endpoints work
-    stacked.incr.call().get()
+    res = stacked.incr.call()
+    [r.get() for r in res]
 
     # Verify each actor was affected according to its implementation
     assert counter.value.choose().get() == 1  # Regular counter: +1
@@ -196,7 +197,8 @@ def test_stack_with_custom_interface():
     assert not hasattr(stacked, "multiply")  # CounterD specific
 
     # Test that the common endpoints work
-    stacked.incr.call().get()
+    res = stacked.incr.call()
+    [r.get() for r in res]
 
     # Verify each actor was affected according to its implementation
     assert counter_a.value.choose().get() == 1  # CounterA: +step (default 1)
@@ -250,7 +252,8 @@ def test_stacked_endpoint_call():
     stacked_endpoint = stacked.incr
 
     # Test call
-    result = stacked_endpoint.call().get()
+    result = stacked_endpoint.call()
+    [r.get() for r in result]
     assert isinstance(result, list)
     assert len(result) == 2
 
@@ -289,10 +292,7 @@ async def test_stacked_endpoint_stream():
 
     # Test stream
     async def test_stream():
-        results = []
-        async for _ in stacked_endpoint.stream():
-            results.append(1)
-        return results
+        return [await x for x in stacked_endpoint.stream()]
 
     results = await test_stream()
     assert len(results) == 2
