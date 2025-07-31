@@ -23,7 +23,6 @@ scheduler:
   num_gpus: 8
   oncall: torchtune
   identity: pytorch_distributed
-  # image: forge:c64f223ebe651c60285e1150891886b6 # eventually we want this to be forge:prod
   image: forge_workspace:latest
 
 optimizer:

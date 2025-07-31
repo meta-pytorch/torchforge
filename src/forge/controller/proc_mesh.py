@@ -57,8 +57,7 @@ async def get_proc_mesh(scheduler_config: DictConfig) -> ProcMesh:
                 "rmAttribution": "pytorch4all_clients_approved",
             },
             appdef=hyperactor.host_mesh_conda(
-                image=scheduler_config.image,
-                # image="monarch_default_workspace:latest",
+                image=str(scheduler_config.image),
                 meshes=[f"mesh0:{scheduler_config.num_hosts}:gtt_any"],
             ),
             workspace=str(os.getcwd()),
@@ -81,6 +80,8 @@ async def get_proc_mesh(scheduler_config: DictConfig) -> ProcMesh:
             {MastAllocator.ALLOC_LABEL_TASK_GROUP: mesh_name}
         )
         alloc = await allocator.allocate(AllocSpec(constraints, **mesh_dimensions))
-        return await ProcMesh.from_alloc(alloc)
+        p = await ProcMesh.from_alloc(alloc)
+        await p.logging_option(stream_to_client=True, aggregate_window_sec=3)
+        return p
     else:
         raise ValueError("Unsupported scheduler: {}".format(scheduler_config.scheduler))

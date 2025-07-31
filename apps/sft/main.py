@@ -13,6 +13,7 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 import asyncio
 
 import logging
+import math
 import os
 import sys
 from dataclasses import asdict
@@ -75,8 +76,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.num_training_steps = job_config.training.steps
         self.metric_logger = None
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
-        self._rank = current_rank()["gpus"]
-        self._size = current_size()["gpus"]
+        print("getting ranks!")
+        self._rank = current_rank().rank
+        print("rank: ", self._rank)
+        self._size = math.prod(current_size().values())
+        print("size: ", self._size)
         self._init_dist()
         super().__init__(job_config)
 
@@ -287,13 +291,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
 async def run(cfg: DictConfig) -> None:
     logging.info("Creating proc mesh")
+    print("Creating proc mesh")
     p = await proc_mesh(cfg.scheduler)
 
-    # what to do with required GPUs?
+    print("Proc mesh: ", p)
     logging.info("Created proc mesh: ", p)
 
+    print("Creating recipe..")
     recipe = await p.spawn("sft", ForgeSFTRecipe, cfg)
     logging.info("Created recipe: ", recipe)
+    print("Recipe: ", recipe)
     await recipe.setup.call()
 
     logging.info("Recipe has been setup. Training now.")

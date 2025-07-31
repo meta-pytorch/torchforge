@@ -6,6 +6,7 @@
 
 import logging
 
+import math
 import sys
 
 from monarch.actor import Actor, current_rank, current_size
@@ -14,9 +15,9 @@ from monarch.actor import Actor, current_rank, current_size
 class ForgeActor(Actor):
     def __init__(self, *args, **kwargs):
         if not hasattr(self, "_rank"):
-            self._rank = current_rank()["gpus"]
+            self._rank = current_rank().rank
         if not hasattr(self, "_size"):
-            self._size = current_size()["gpus"]
+            self._size = math.prod(current_size().values())
 
         # Custom formatter that includes rank/size info with blue prefix
         BLUE = "\033[34m"
