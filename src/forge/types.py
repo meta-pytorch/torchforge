@@ -57,6 +57,7 @@ class Action:
 class Trajectory:
     """A trajectory containing a sequence of states, actions, etc."""
 
+    policy_version: int
     states: list[Observation] = field(default_factory=list)
     actions: list[Action] = field(default_factory=list)
 
