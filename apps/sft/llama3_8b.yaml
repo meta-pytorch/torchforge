@@ -17,6 +17,15 @@ model:
   flavor: 8B
   tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
 
+scheduler:
+  scheduler: mast # local | mast
+  num_hosts: 1
+  num_gpus: 8
+  oncall: torchtune
+  identity: pytorch_distributed
+  # image: forge:c64f223ebe651c60285e1150891886b6 # eventually we want this to be forge:prod
+  image: forge_workspace:latest
+
 optimizer:
   name: AdamW
   lr: 1e-5
@@ -27,7 +36,7 @@ lr_scheduler:
 
 training:
   local_batch_size: 1
-  seq_len: 8192
+  seq_len: 2048
   max_norm: 1.0
   steps: 5
   compile: false

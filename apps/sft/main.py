@@ -11,9 +11,10 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 """
 
 import asyncio
+
+import logging
 import os
 import sys
-import time
 from dataclasses import asdict
 from functools import partial
 from typing import Any
@@ -22,13 +23,13 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
+from forge.controller import ForgeActor, proc_mesh
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 
-from monarch.actor import Actor, current_rank, current_size, endpoint, proc_mesh
-
+from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -48,8 +49,11 @@ MetricLogger = Any
 Profiler = Any
 Tokenizer = Any
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-class ForgeSFTRecipe(Actor, ForgeEngine):
+
+class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     job_config: ForgeJobConfig
     train_spec: forge_train_spec.ForgeTrainSpec
     parallel_dims: ParallelDims
@@ -71,38 +75,38 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
         self.num_training_steps = job_config.training.steps
         self.metric_logger = None
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
-        self.rank = current_rank()["gpus"]
-        self.world_size = current_size()["gpus"]
+        self._rank = current_rank()["gpus"]
+        self._size = current_size()["gpus"]
         self._init_dist()
         super().__init__(job_config)
 
     def _init_dist(self):
         """Initializes torch distributed.
 
-        torchrun would normally do this. We'll need to do something
-        similar for all Torch-based actors - probably enough
-        reason to introduce a `TorchActor` abstraction, or something
-        similar.
+        torchrun normally hands this, but we need to do it ourselves
+        in monarch for now.
+
+        We should consider putting this into ForgeActor, but having this
+        be explicit for now.
 
         """
         env = {
             "MASTER_ADDR": "localhost",
             "MASTER_PORT": "12345",
-            "RANK": str(self.rank),
-            "LOCAL_RANK": str(self.rank),
-            "LOCAL_WORLD_SIZE": str(self.world_size),
-            "GROUP_RANK": str(self.world_size),
-            "GROUP_WORLD_SIZE": str(self.world_size),
-            "ROLE_RANK": str(self.rank),
-            "ROLE_WORLD_SIZE": str(self.world_size),
+            "RANK": str(self._rank),
+            "LOCAL_RANK": str(self._rank),
+            "LOCAL_WORLD_SIZE": str(self._size),
+            "GROUP_RANK": str(self._size),
+            "GROUP_WORLD_SIZE": str(self._size),
+            "ROLE_RANK": str(self._rank),
+            "ROLE_WORLD_SIZE": str(self._size),
             "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self.world_size),
-            "CUDA_VISIBLE_DEVICES": str(self.rank + 2),
+            "WORLD_SIZE": str(self._size),
+            "CUDA_VISIBLE_DEVICES": str(self._rank),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
-        self.rlog("env: {}".format(env))
-        self.clog("full env: {}".format(os.environ))
+        logger.info("env: {}".format(env))
 
     @endpoint
     async def setup(self):
@@ -250,7 +254,7 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
         )
 
         while self.current_step < self.num_training_steps:
-            self.rlog("step {}/{}".format(self.current_step, self.num_training_steps))
+            logger.info(f"step: {self.current_step}/{self.num_training_steps}")
             batch = next(dataloader)
             # Move tensors to the appropriate device
             for k, v in batch.items():
@@ -280,79 +284,27 @@ class ForgeSFTRecipe(Actor, ForgeEngine):
     def __repr__(self) -> str:
         return "Trainer"
 
-    def rlog(self, msg: str):
-        """Log for all replicas."""
-        timestamp = time.strftime("%m-%d %H:%M:%S")
-        print(
-            "{} [{}-{}/{}] {}".format(timestamp, self, self.rank, self.world_size, msg)
-        )
-
-    def clog(self, msg: str):
-        """Log only for worker 0."""
-        timestamp = time.strftime("%m-%d %H:%M:%S")
-        print("{} [Trainer] {}".format(timestamp, msg))
-
-
-def calculate_gpu_count_from_parallelism(parallelism_cfg):
-    """
-    Calculate the total number of GPUs needed based on parallelism configuration.
-
-    Args:
-        parallelism_cfg: Parallelism configuration object with degrees
-
-    Returns:
-        int: Total number of GPUs required
-    """
-    # Extract parallelism degrees
-    data_parallel_replicate = getattr(
-        parallelism_cfg, "data_parallel_replicate_degree", 1
-    )
-    data_parallel_shard = getattr(parallelism_cfg, "data_parallel_shard_degree", 1)
-    tensor_parallel = getattr(parallelism_cfg, "tensor_parallel_degree", 1)
-    pipeline_parallel = getattr(parallelism_cfg, "pipeline_parallel_degree", 1)
-    context_parallel = getattr(parallelism_cfg, "context_parallel_degree", 1)
-    expert_parallel = getattr(parallelism_cfg, "expert_parallel_degree", 1)
-
-    # Handle special case where -1 means use all available or auto-determine
-    # For now, treat -1 as 1, but this might need adjustment based on your specific use case
-    if data_parallel_shard == -1:
-        data_parallel_shard = 1
-
-    # Calculate total GPU count as product of all parallelism degrees
-    total_gpus = (
-        data_parallel_replicate
-        * data_parallel_shard
-        * tensor_parallel
-        * pipeline_parallel
-        * context_parallel
-        * expert_parallel
-    )
-
-    return total_gpus
-
 
 async def run(cfg: DictConfig) -> None:
-    print("parallelism cfg: ", cfg.parallelism)
+    logging.info("Creating proc mesh")
+    p = await proc_mesh(cfg.scheduler)
 
-    # Parallelism to proc setup
-    required_gpus = calculate_gpu_count_from_parallelism(cfg.parallelism)
-    print(f"Required GPUs based on parallelism config: {required_gpus}")
-
-    if required_gpus > 8:
-        raise NotImplementedError("Only supports up to 8 GPUs (single host) for now")
-
-    p = await proc_mesh(gpus=4)
-    # p = await proc_mesh(gpus=required_gpus)
-    print("Created proc mesh: ", p)
+    # what to do with required GPUs?
+    logging.info("Created proc mesh: ", p)
 
     recipe = await p.spawn("sft", ForgeSFTRecipe, cfg)
-    print("Created recipe: ", recipe)
+    logging.info("Created recipe: ", recipe)
     await recipe.setup.call()
 
-    print("Recipe has been setup. Training now.")
+    logging.info("Recipe has been setup. Training now.")
     await recipe.train.call()
-    print("Done training. Clean up")
+    logging.info("Done training. Clean up")
     await recipe.cleanup.call()
+
+    logging.info("Cleaning up proc")
+    await p.stop()
+    logging.info("All done!")
+    recipe = ForgeSFTRecipe(cfg)
 
 
 @parse
@@ -362,7 +314,6 @@ def recipe_main(cfg: DictConfig) -> None:
     # Hack to deal with literal types from titan
     default_cfg = asdict(default_cfg)
     cfg = OmegaConf.merge(default_cfg, cfg)
-    print("Cfg is: ", cfg)
     asyncio.run(run(cfg))
 
 
