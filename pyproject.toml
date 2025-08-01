@@ -38,7 +38,7 @@ dev = [
 ]
 
 [project.scripts]
-forge = "src.forge.cli.forge:main"
+forge = "forge.cli.forge:main"
 
 [tool.setuptools.dynamic]
 version = {file = "assets/version.txt"}
@@ -55,6 +55,7 @@ include = ["forge*"]
 
 [tool.pytest.ini_options]
 addopts = ["--showlocals"]  # show local variables in tracebacks
+pythonpath = "."
 
 [tool.uv.workspace]
 members = [

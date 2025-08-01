@@ -5,5 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .collector import Collector
+from .policy import Policy, PolicyRouter
 
-__all__ = ["Collector"]
+__all__ = ["Collector", "Policy", "PolicyRouter"]

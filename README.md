@@ -13,6 +13,9 @@ pip install uv
 git clone https://github.com/pytorch-labs/forge
 cd forge
 uv sync
+
+# Or for dev install:
+uv sync --all-extras
 ```
 
 ## Quick Start

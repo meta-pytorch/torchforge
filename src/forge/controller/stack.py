@@ -6,13 +6,24 @@
 
 import inspect
 import random
-from typing import Any, Generic, Optional, overload, ParamSpec, Tuple, Type, TypeVar
+from typing import (
+    Any,
+    Coroutine,
+    Generator,
+    Generic,
+    Optional,
+    overload,
+    ParamSpec,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 from monarch._rust_bindings.monarch_hyperactor.shape import Shape
+from monarch._src.actor.actor_mesh import Actor, ActorMeshRef, Endpoint, ValueMesh
 
 from monarch._src.actor.future import Future
 from monarch._src.actor.shape import MeshTrait, NDSlice
-from monarch.actor_mesh import Actor, ActorMeshRef, AsyncGenerator, Endpoint, ValueMesh
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -40,26 +51,37 @@ class StackedEndpoint(Generic[P, R]):
         endpoint = random.choice(self.endpoints)
         return endpoint.choose(*args, **kwargs)
 
-    def call(self, *args: P.args, **kwargs: P.kwargs) -> "Future[list[ValueMesh[R]]]":
-        """Sends a message to all actors in all stacked endpoints and collects results."""
-        futures = [endpoint.call(*args, **kwargs) for endpoint in self.endpoints]
+    def call(self, *args: P.args, **kwargs: P.kwargs) -> "list[Future[ValueMesh[R]]]":
+        """Sends a message to all actors in all stacked endpoints and collects results.
 
-        async def process() -> list[ValueMesh[R]]:
-            results = []
-            for future in futures:
-                results.append(await future)
-            return results
+        Currently this returns a list of futures rather than a single future, due to
+        changes in Monarch.
 
-        def process_blocking() -> list[ValueMesh[R]]:
-            return [future.get() for future in futures]
+        """
+        return [endpoint.call(*args, **kwargs) for endpoint in self.endpoints]
 
-        return Future(process, process_blocking)
+    def _stream(
+        self, *args: P.args, **kwargs: P.kwargs
+    ) -> "Generator[Coroutine[Any, Any, R], None, None]":
+        """
+        Broadcasts to all actors in all stacked endpoints and yields their responses as coroutines.
 
-    async def stream(self, *args: P.args, **kwargs: P.kwargs) -> AsyncGenerator[R, R]:
+        This enables processing results from multiple stacked endpoints incrementally as
+        they become available. Returns a generator of coroutines that can be awaited.
+        """
+        for endpoint in self.endpoints:
+            # Get the coroutines from each endpoint's _stream method
+            for coro in endpoint._stream(*args, **kwargs):
+                yield coro
+
+    def stream(
+        self, *args: P.args, **kwargs: P.kwargs
+    ) -> Generator[Future[R], None, None]:
         """Broadcasts to all actors in all stacked endpoints and yields responses as a stream."""
         for endpoint in self.endpoints:
-            async for result in endpoint.stream(*args, **kwargs):
-                yield result
+            # endpoint.stream() returns a Generator[Future[R], None, None]
+            for future in endpoint.stream(*args, **kwargs):
+                yield future
 
     def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> None:
         """Fire-and-forget broadcast to all actors in all stacked endpoints."""

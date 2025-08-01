@@ -7,6 +7,8 @@
 from enum import Enum
 from typing import Any, Literal, Optional, Union
 
+CROSS_ENTROPY_IGNORE_IDX = -100
+
 Role = Literal[
     "system",  # Origin is system prompt
     "user",  # Origin is user
