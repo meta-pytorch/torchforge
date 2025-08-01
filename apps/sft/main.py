@@ -15,6 +15,7 @@ import asyncio
 import logging
 import math
 import os
+import subprocess
 import sys
 from dataclasses import asdict
 from functools import partial
@@ -289,10 +290,20 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         return "Trainer"
 
 
+class EnvSetupActor(ForgeActor):
+    @endpoint
+    async def setup(self):
+        print("Setting up env!")
+        subprocess.run(["pip", "install", "-e", "."], check=True)
+
+
 async def run(cfg: DictConfig) -> None:
     logging.info("Creating proc mesh")
     print("Creating proc mesh")
     p = await proc_mesh(cfg.scheduler)
+
+    e = await p.spawn("env_setup", EnvSetupActor)
+    e.setup.call()
 
     print("Proc mesh: ", p)
     logging.info("Created proc mesh: ", p)
