@@ -32,7 +32,7 @@ class ReplayBuffer(Actor, Stateful):
 
     @endpoint
     async def sample(
-        self, curr_policy_version: int, batch_size: int | None
+        self, curr_policy_version: int, batch_size: int | None = None
     ) -> list[Trajectory] | None:
         """Sample from the replay buffer.
 
@@ -73,7 +73,7 @@ class ReplayBuffer(Actor, Stateful):
             if (curr_policy_version - trajectory.policy_version) < self.max_policy_age
         ]
 
-    def len(self) -> int:
+    def __len__(self) -> int:
         return len(self.buffer)
 
     def clear(self) -> None:
