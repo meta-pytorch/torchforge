@@ -7,13 +7,12 @@
 import random
 from typing import Any
 
-from forge.types import Trajectory
 from monarch.actor import Actor, endpoint
 
-from torchdata.stateful_dataloader import Stateful
+from forge.types import Trajectory
 
 
-class ReplayBuffer(Actor, Stateful):
+class ReplayBuffer(Actor):
     """Simple in-memory replay buffer implementation."""
 
     def __init__(
@@ -46,13 +45,15 @@ class ReplayBuffer(Actor, Stateful):
         """
         bsz = batch_size if batch_size is not None else self.batch_size
 
-        if bsz > len(self.buffer):
+        # Evict old trajectories
+        self._evict(curr_policy_version)
+
+        if bsz > len(self):
+            print("Not enough trajectories in the buffer.")
             return None
 
-        await self.evict(curr_policy_version)
-
         # TODO: Make this more efficient
-        idx_to_sample = self.sampler(range(len(self.buffer)), k=bsz)
+        idx_to_sample = self.sampler(range(len(self)), k=bsz)
         sorted_idxs = sorted(
             idx_to_sample, reverse=True
         )  # Sort in desc order to avoid shifting idxs
@@ -67,25 +68,44 @@ class ReplayBuffer(Actor, Stateful):
         Args:
             curr_policy_version (int): The current policy version.
         """
+        self._evict(curr_policy_version)
+
+    def _evict(self, curr_policy_version: int) -> None:
         self.buffer = [
             trajectory
             for trajectory in self.buffer
-            if (curr_policy_version - trajectory.policy_version) < self.max_policy_age
+            if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
         ]
+
+    @endpoint
+    async def get_item(self, idx: int) -> Trajectory:
+        """Get the trajectory at the given index from Actor mesh"""
+        return self[idx]
+
+    def __getitem__(self, idx: int) -> Trajectory:
+        return self.buffer[idx]
+
+    @endpoint
+    async def get_length(self) -> int:
+        """Get the length of the replay buffer from Actor mesh"""
+        return len(self)
 
     def __len__(self) -> int:
         return len(self.buffer)
 
-    def clear(self) -> None:
+    @endpoint
+    async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all trajectories."""
         self.buffer.clear()
 
-    def state_dict(self) -> dict[str, Any]:
+    @endpoint
+    async def state_dict(self) -> dict[str, Any]:
         return {
             "buffer": self.buffer,
             "rng_state": random.getstate(),
         }
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+    @endpoint
+    async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.buffer = state_dict["buffer"]
         random.setstate(state_dict["rng_state"])

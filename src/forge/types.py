@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
@@ -60,6 +66,9 @@ class Trajectory:
     policy_version: int
     states: list[Observation] = field(default_factory=list)
     actions: list[Action] = field(default_factory=list)
+
+    def __post_init__(self):
+        assert self.policy_version >= 0
 
 
 @dataclass(kw_only=True)
