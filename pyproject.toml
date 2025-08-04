@@ -14,9 +14,10 @@ dependencies = [
     "torchdata>=0.8.0",
     "torchtitan",
     "torch",
-    "torchmonarch-nightly==2025.7.26",
+    "torchmonarch-nightly==2025.8.1",
     # vLLM
-    "vllm",
+    # TODO: pin specific vllm version
+    #"vllm==0.10.0",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -65,26 +66,29 @@ members = [
 ]
 
 # pytorch
+# TODO: get auto backend to work
 [[tool.uv.index]]
-name = "pytorch-nightly"
-url  = "https://download.pytorch.org/whl/nightly"
-explicit = true
+name = "pytorch-nightly-cu128"
+url  = "https://download.pytorch.org/whl/nightly/cu128"
+#explicit = true
 
 # vllm
-[[tool.uv.index]]
-name = "vllm-nightly"
-url = "https://wheels.vllm.ai/nightly"
-explicit = true
+# [[tool.uv.index]]
+# name = "vllm-nightly"
+# url = "https://wheels.vllm.ai/nightly"
+# explicit = true
 
 [tool.uv.sources]
-torchtitan = { index = "pytorch-nightly" }
-torch = { index = "pytorch-nightly" }
-vllm = { index = "vllm-nightly" }
+torchtitan = { index = "pytorch-nightly-cu128" }
+torch = { index = "pytorch-nightly-cu128" }
+#vllm = { index = "vllm-nightly" }
 
 [tool.uv]
+# TODO: revert to stricter default uv strategy
+index-strategy = "unsafe-best-match"
 prerelease = "allow"
+# TODO: add more backends
 environments = [
-    "sys_platform == 'darwin'",
     "sys_platform == 'linux'",
 ]
-override-dependencies = ["torch>2.7.1"]
+# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
