@@ -58,6 +58,7 @@ class ForgeSFTRecipe(ForgeEngine):
 
     def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
+        self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         super().__init__(job_config)
         self.metric_logger = None  # TODO: fix this
