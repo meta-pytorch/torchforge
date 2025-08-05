@@ -4,8 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .collector import Collector
-from .policy import Policy, PolicyRouter
-from .trainer import Trainer
+from forge.controller import ForgeActor
 
-__all__ = ["Collector", "Policy", "PolicyRouter", "Trainer"]
+
+class Reference(ForgeActor):
+    pass

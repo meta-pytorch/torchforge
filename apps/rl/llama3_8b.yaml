@@ -1,0 +1,78 @@
+
+# profiling:
+#   enable_profiling: false
+
+# metrics:
+#   log_freq: 10
+#   enable_tensorboard: true
+#   save_tb_folder: "tb"
+
+# TODO: required by torchtitan
+# https://github.com/pytorch/torchtitan/blob/2f1c814da071cc8ad165d00be6f9c1a66f8e1cce/torchtitan/distributed/utils.py#L265
+comm:
+  trace_buf_size: 0
+
+model:
+  name: llama3
+  flavor: 8B
+  tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
+
+
+trainer:
+  scheduler:
+    scheduler: local # local | mast (not supported yet)
+    num_hosts: 1
+    num_gpus: 8
+    oncall: torchtune
+    identity: pytorch_distributed
+    image: forge_workspace:latest
+
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+
+  lr_scheduler:
+    warmup_steps: 1
+
+  training:
+    local_batch_size: 1
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 5
+    compile: false
+    dataset: "c4"
+
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: -1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: false
+
+  checkpoint:
+    enable_checkpoint: true
+    folder: /tmp/Meta-Llama-3.1-8B-Instruct/
+    interval: 500
+    async_mode: "disabled"
+
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+
+policy:
+  scheduler:
+    scheduler: local # local | mast (not supported yet)
+    num_hosts: 1
+    num_gpus: 1
+    oncall: torchtune
+    identity: pytorch_distributed
+    image: forge_workspace:latest
+
+  model: "meta-llama/Llama-3.1-8B-Instruct"
+  tensor_parallel_size: 2
+  pipeline_parallel_size: 1
+  enforce_eager: false
