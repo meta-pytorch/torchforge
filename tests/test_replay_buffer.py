@@ -27,8 +27,8 @@ class TestReplayBuffer:
     async def test_add(self, replay_buffer: ReplayBuffer) -> None:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
-        assert replay_buffer.get_length.call_one().get() == 1
-        assert replay_buffer.get_item.call_one(0).get() == trajectory
+        assert replay_buffer._numel.call_one().get() == 1
+        assert replay_buffer._getitem.call_one(0).get() == trajectory
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -37,9 +37,9 @@ class TestReplayBuffer:
         trajectory_1 = Trajectory(policy_version=1)
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer.get_length.call_one().get() == 2
-        assert replay_buffer.get_item.call_one(0).get() == trajectory_0
-        assert replay_buffer.get_item.call_one(1).get() == trajectory_1
+        assert replay_buffer._numel.call_one().get() == 2
+        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
+        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -48,9 +48,9 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory)
         state_dict = replay_buffer.state_dict.call_one().get()
         replay_buffer.clear.call_one().get()
-        assert replay_buffer.get_length.call_one().get() == 0
+        assert replay_buffer._numel.call_one().get() == 0
         await replay_buffer.load_state_dict.call_one(state_dict)
-        assert replay_buffer.get_length.call_one().get() == 1
+        assert replay_buffer._numel.call_one().get() == 1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -59,9 +59,9 @@ class TestReplayBuffer:
         trajectory_1 = Trajectory(policy_version=1)
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer.get_length.call_one().get() == 2
+        assert replay_buffer._numel.call_one().get() == 2
         await replay_buffer.evict.call_one(curr_policy_version=2)
-        assert replay_buffer.get_length.call_one().get() == 1
+        assert replay_buffer._numel.call_one().get() == 1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -70,7 +70,7 @@ class TestReplayBuffer:
         trajectory_1 = Trajectory(policy_version=1)
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer.get_length.call_one().get() == 2
+        assert replay_buffer._numel.call_one().get() == 2
 
         # Test a simple sampling w/ no evictions
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
@@ -99,7 +99,7 @@ class TestReplayBuffer:
         trajectory_1 = Trajectory(policy_version=1)
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer.get_length.call_one().get() == 2
+        assert replay_buffer._numel.call_one().get() == 2
         samples = await replay_buffer.sample.call_one(
             curr_policy_version=2, batch_size=1
         )

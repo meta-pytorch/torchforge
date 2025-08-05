@@ -48,12 +48,12 @@ class ReplayBuffer(Actor):
         # Evict old trajectories
         self._evict(curr_policy_version)
 
-        if bsz > len(self):
+        if bsz > len(self.buffer):
             print("Not enough trajectories in the buffer.")
             return None
 
         # TODO: Make this more efficient
-        idx_to_sample = self.sampler(range(len(self)), k=bsz)
+        idx_to_sample = self.sampler(range(len(self.buffer)), k=bsz)
         sorted_idxs = sorted(
             idx_to_sample, reverse=True
         )  # Sort in desc order to avoid shifting idxs
@@ -78,19 +78,12 @@ class ReplayBuffer(Actor):
         ]
 
     @endpoint
-    async def get_item(self, idx: int) -> Trajectory:
-        """Get the trajectory at the given index from Actor mesh"""
-        return self[idx]
-
-    def __getitem__(self, idx: int) -> Trajectory:
+    async def _getitem(self, idx: int) -> Trajectory:
         return self.buffer[idx]
 
     @endpoint
-    async def get_length(self) -> int:
-        """Get the length of the replay buffer from Actor mesh"""
-        return len(self)
-
-    def __len__(self) -> int:
+    async def _numel(self) -> int:
+        """Number of elements (trajectories) in the replay buffer."""
         return len(self.buffer)
 
     @endpoint
