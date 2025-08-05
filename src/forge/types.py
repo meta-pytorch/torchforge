@@ -5,13 +5,17 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
+import torch
 
-class Message(TypedDict):
-    role: str
-    content: str | dict[str, Any]
-    tools: dict[str, Any] | None
+Role = Literal[
+    "system",  # Origin is system prompt
+    "user",  # Origin is user
+    "assistant",  # Origin is the model output
+    "ipython",  # Origin is return from a tool call
+    "tool",  # Origin is return from a tool call
+]
 
 
 @dataclass
@@ -69,6 +73,24 @@ class Trajectory:
 
     def __post_init__(self):
         assert self.policy_version >= 0
+
+
+class Message(TypedDict):
+    role: Role
+    content: str | dict[str, Any]
+    tools: dict[str, Any] | None
+
+
+@dataclass
+class Conversation:
+    messages: list[Message]
+    input_ids: torch.Tensor
+    mask: torch.Tensor
+    label: torch.Tensor
+    # Extra things for RL
+    logprobs: dict[str, torch.Tensor] | None = None
+    rewards: dict[str, Any] | None = None
+    policy_version: int | None = None
 
 
 @dataclass(kw_only=True)

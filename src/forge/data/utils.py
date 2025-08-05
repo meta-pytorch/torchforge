@@ -5,17 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
 CROSS_ENTROPY_IGNORE_IDX = -100
-
-Role = Literal[
-    "system",  # Origin is system prompt
-    "user",  # Origin is user
-    "assistant",  # Origin is the model output
-    "ipython",  # Origin is return from a tool call
-    "tool",  # Origin is return from a tool call
-]
+from forge.types import Role
 
 
 class MaskingStrategy(Enum):
