@@ -13,8 +13,9 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
-    "torch",
-    "torchmonarch-nightly==2025.8.1",
+    # Temporarily comment out in favor of enabling MAST path
+    #"torch",
+    #"torchmonarch-nightly==2025.8.1",
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
