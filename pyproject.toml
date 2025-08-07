@@ -40,10 +40,6 @@ dev = [
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
-    "pytest-tornasync",
-    "pytest-trio",
-    "pytest-twisted",
-    "twisted",
 ]
 
 [project.scripts]

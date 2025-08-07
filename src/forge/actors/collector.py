@@ -44,7 +44,8 @@ class Collector(Actor):
         state = self.environment.reset()
 
         # Initialize trajectory storage
-        trajectory = Trajectory()
+        # TODO: Policy doesn't have a version??
+        trajectory = Trajectory(policy_version=42)
 
         step = 0
         max_steps = self.max_collector_steps
@@ -64,6 +65,6 @@ class Collector(Actor):
             step += 1
 
         # Write trajectory to replay buffer
-        await self.replay_buffer.extend.call_one(trajectory)
+        await self.replay_buffer.add.call_one(trajectory)
 
         return trajectory
