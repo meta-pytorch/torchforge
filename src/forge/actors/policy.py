@@ -40,13 +40,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PolicyRouter(ForgeActor):
     # TODO: Add dp support
-    policy: ForgeActor
     sampling_params: SamplingParams = None
     lora_request: LoRARequest = None
     tokenization_kwargs: dict = None
 
     @endpoint
-    async def setup(self):
+    async def setup(self, policy: ForgeActor):
+        self.policy = policy
         self.request_id = 0
         self.requests = {}
         self.vllm_args = await self.policy.get_vllm_args.choose()

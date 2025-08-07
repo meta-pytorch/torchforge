@@ -6,6 +6,7 @@
 
 from .collector import Collector
 from .policy import Policy, PolicyRouter
+from .postprocessor import PostProcessor
 from .trainer import Trainer
 
-__all__ = ["Collector", "Policy", "PolicyRouter", "Trainer"]
+__all__ = ["Collector", "Policy", "PolicyRouter", "Trainer", "PostProcessor"]
