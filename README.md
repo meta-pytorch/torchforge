@@ -32,11 +32,9 @@ cd forge
 uv sync --all-extras
 source .venv/bin/activate
 ```
-```
 
 2. Install Monarch
 
-```
 ```bash
 uv pip install torchmonarch-nightly==2025.8.1
 ```
@@ -44,7 +42,6 @@ uv pip install torchmonarch-nightly==2025.8.1
 3. Setup CUDA on local machine
 
 ```bash
-```
 # feature install if you don't have /user/local/cuda-12.8
 feature install --persist cuda_12_8
 
@@ -57,7 +54,6 @@ export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-```
 ```
 
 4 Build vllm from source
