@@ -143,7 +143,7 @@ async def main():
         "replay_buffer",
         ReplayBuffer,
         SAMPLES_PER_BATCH,  # batch_size
-        1,  # max_policy_age
+        float("inf"),  # max_policy_age
     )
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
@@ -235,7 +235,9 @@ async def main():
                 trajectories = []
                 for _ in range(SAMPLES_PER_BATCH):
                     trajectory = await replay_buffer.sample.choose(
-                        curr_policy_version=42  # Update with true policy version when available
+                        curr_policy_version=float(
+                            "inf"
+                        )  # Update with true policy version when available
                     )
                     if trajectory is not None:
                         trajectories += trajectory
