@@ -7,9 +7,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from monarch.actor import Actor, endpoint
-
 from forge.types import Action, Message, Observation, State
+
+from monarch.actor import Actor, endpoint
 
 
 class Transform(ABC):

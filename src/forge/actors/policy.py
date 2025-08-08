@@ -4,33 +4,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import asyncio
 import logging
+import os
 import sys
 from dataclasses import dataclass
 
 import torch
-from monarch.actor import Actor, endpoint, current_rank, proc_mesh
+from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 
 from vllm.engine.arg_utils import EngineArgs
-from vllm.usage.usage_lib import UsageContext
-from vllm.worker.worker_base import WorkerWrapperBase
 from vllm.entrypoints.utils import _validate_truncation_size
+from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import RequestOutputKind, SamplingParams
-from vllm.v1.engine import EngineCoreOutputs
-from vllm.v1.engine.processor import Processor
-from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
-from vllm.v1.request import Request
+from vllm.usage.usage_lib import UsageContext
+from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
+from vllm.v1.core.kv_cache_utils import get_kv_cache_config
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
-from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
-from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
-from vllm.v1.core.kv_cache_utils import get_kv_cache_config 
+from vllm.v1.engine import EngineCoreOutputs
+from vllm.v1.engine.output_processor import OutputProcessor
+from vllm.v1.engine.processor import Processor
+from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
+from vllm.worker.worker_base import WorkerWrapperBase
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +54,11 @@ class PolicyRouter(Actor):
         tokenizer = init_tokenizer_from_configs(
             model_config=self.vllm_args.model_config,
             scheduler_config=self.vllm_args.scheduler_config,
-            lora_config=self.vllm_args.lora_config)
+            lora_config=self.vllm_args.lora_config,
+        )
         self.processor = Processor(
-            vllm_config=self.vllm_args,
-            tokenizer=tokenizer,
-            mm_registry=None)
+            vllm_config=self.vllm_args, tokenizer=tokenizer, mm_registry=None
+        )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
         # Setup schduuler
@@ -77,11 +77,10 @@ class PolicyRouter(Actor):
             log_stats=None,
         )
 
-
     @endpoint
     async def generate(self, prompt: str, priority: int = 0):
         self.request_id += 1 % sys.maxsize
-        request_id = str(self.request_id) # implement from a counter
+        request_id = str(self.request_id)  # implement from a counter
 
         prompt = convert_input(prompt)
         if self.sampling_params is None:
@@ -90,16 +89,20 @@ class PolicyRouter(Actor):
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
-        _validate_truncation_size(self.vllm_args.model_config.max_model_len, truncate_prompt_tokens, tokenization_kwargs)
+        _validate_truncation_size(
+            self.vllm_args.model_config.max_model_len,
+            truncate_prompt_tokens,
+            tokenization_kwargs,
+        )
 
-        # process and tokenize prompt 
+        # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
-            request_id=request_id, 
-            prompt=prompt, 
+            request_id=request_id,
+            prompt=prompt,
             params=self.sampling_params,
-            arrival_time=None, 
+            arrival_time=None,
             lora_request=self.lora_request,
-            tokenization_kwargs=tokenization_kwargs, 
+            tokenization_kwargs=tokenization_kwargs,
             trace_headers=None,
             priority=priority,
             data_parallel_rank=None,
@@ -126,8 +129,8 @@ class PolicyRouter(Actor):
             #                                     parent_req, idx)
             #     child_request = Request.from_engine_core_request(child_request)
             #     self.scheduler.add_request(chile_request)
-        
-        return await request_fut 
+
+        return await request_fut
 
     @endpoint
     async def run(self):
@@ -142,11 +145,12 @@ class PolicyRouter(Actor):
             worker_output = worker_outputs._values[output_rank]
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
-            await asyncio.sleep(0) # Release control before processing outputs
+            await asyncio.sleep(0)  # Release control before processing outputs
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
-                iteration_stats=None)
+                iteration_stats=None,
+            )
             for output in processed_outputs.request_outputs:
                 if output.finished:
                     fut = self.requests.pop(output.request_id)
@@ -167,7 +171,7 @@ class Policy(Actor):
     resources: int = 1
 
     def __post_init__(self):
-        """ Build vLLM Arguments 
+        """Build vLLM Arguments
 
         vLLM specific TODOS
         - output format
@@ -191,11 +195,18 @@ class Policy(Actor):
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
         else:
             # Check that provided args match Policy args
-            cfg = ["model", "tensor_parallel_size", "pipeline_parallel_size", "data_parallel_size"]
+            cfg = [
+                "model",
+                "tensor_parallel_size",
+                "pipeline_parallel_size",
+                "data_parallel_size",
+            ]
             for key in cfg:
                 value = getattr(self, key) if key != "data_parallel_size" else 1
                 if getattr(self.vllm_args, key) != value:
-                    logger.warning(f"{key} args don't match value in EngineArgs, overriding with {value}")
+                    logger.warning(
+                        f"{key} args don't match value in EngineArgs, overriding with {value}"
+                    )
                     setattr(self.vllm_args, key, value)
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
@@ -218,8 +229,8 @@ class Policy(Actor):
 
     @endpoint
     async def setup_kv_cache(self):
-        """ Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
-            TODO: test that fails if vllm method updates
+        """Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
+        TODO: test that fails if vllm method updates
         """
         kv_cache_spec = self.worker.get_kv_cache_spec()
         if kv_cache_spec is not None:
@@ -229,13 +240,15 @@ class Policy(Actor):
             available_gpu_memory = 0
 
         # Get the kv cache tensor size
-        kv_cache_config = get_kv_cache_config(self.vllm_args, kv_cache_spec, available_gpu_memory)
+        kv_cache_config = get_kv_cache_config(
+            self.vllm_args, kv_cache_spec, available_gpu_memory
+        )
         # TODO: unify configs across TorchStore
         # unify_kv_cache_configs(kv_cache_configs)
         self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_args.cache_config.num_cpu_blocks = 0
 
-        # Initialize kv cache and warmup the execution: 
+        # Initialize kv cache and warmup the execution:
         # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
         kv_cache_configs = [None] * self.vllm_args.parallel_config.world_size
         kv_cache_configs[self.rank] = kv_cache_config
@@ -249,14 +262,14 @@ class Policy(Actor):
         return self.vllm_args
 
     def setup_worker(self):
-        """ Build and Instantiate vLLM worker """
+        """Build and Instantiate vLLM worker"""
         parallel_config = self.vllm_args.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
         distributed_init_method = get_distributed_init_method(ip, port)
         all_kwargs = [{}] * parallel_config.world_size
         local_rank = self.rank % torch.accelerator.device_count()
-        is_driver_worker = (self.rank % parallel_config.tensor_parallel_size == 0)
+        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
         all_kwargs[self.rank] = {
             "vllm_config": self.vllm_args,
             "local_rank": local_rank,
@@ -298,11 +311,14 @@ def get_default_sampling_params(vllm_config, overrides=None):
 async def _test(config):
     # TODO: Create proper test
     router_mesh = await proc_mesh(gpus=1)
-    policy_mesh = await proc_mesh(gpus=config["resources"], env={
-        "MASTER_ADDR": str(get_loopback_ip()),
-        "MASTER_PORT": str(get_open_port()),
-    },)
-    
+    policy_mesh = await proc_mesh(
+        gpus=config["resources"],
+        env={
+            "MASTER_ADDR": str(get_loopback_ip()),
+            "MASTER_PORT": str(get_open_port()),
+        },
+    )
+
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)
     router = await router_mesh.spawn("policy_router", PolicyRouter, policy=policy_actor)
 
@@ -328,4 +344,4 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(_test(config))  
+    asyncio.run(_test(config))
