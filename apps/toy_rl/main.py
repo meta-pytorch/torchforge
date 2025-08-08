@@ -139,7 +139,12 @@ async def main():
     coder_procs = await proc_mesh(gpus=8)
 
     # Actor instantiation
-    replay_buffer = await replay_procs.spawn("replay_buffer", ReplayBuffer)
+    replay_buffer = await replay_procs.spawn(
+        "replay_buffer",
+        ReplayBuffer,
+        SAMPLES_PER_BATCH,  # batch_size
+        1,  # max_policy_age
+    )
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
     # This policy just generates something between -2. and 2.
@@ -219,7 +224,7 @@ async def main():
                 await asyncio.sleep(3)  # Wait a bit before sampling
 
                 # Check if buffer has enough data
-                buffer_length = await replay_buffer.len.choose()
+                buffer_length = await replay_buffer._numel.choose()
                 if buffer_length < SAMPLES_PER_BATCH:
                     print(
                         f"📦 Replay buffer has {buffer_length} trajectories, waiting for at least {SAMPLES_PER_BATCH}..."
@@ -229,7 +234,9 @@ async def main():
                 # Sample multiple trajectories at once
                 trajectories = []
                 for _ in range(SAMPLES_PER_BATCH):
-                    trajectory = await replay_buffer.sample.choose()
+                    trajectory = await replay_buffer.sample.choose(
+                        curr_policy_version=42  # Update with true policy version when available
+                    )
                     if trajectory is not None:
                         trajectories += trajectory
 
