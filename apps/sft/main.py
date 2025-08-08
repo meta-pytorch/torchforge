@@ -58,9 +58,10 @@ class ForgeSFTRecipe(ForgeEngine):
 
     def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
-        self.num_training_steps = 1000  # Example value, adjust as needed
+        self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         super().__init__(job_config)
+        self.metric_logger = None  # TODO: fix this
 
     def setup(self):
         self.train_dataloader = self.setup_data()
@@ -77,11 +78,7 @@ class ForgeSFTRecipe(ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
-        self.checkpointer.dcp_load(
-            state_dict=ModelWrapper(self.model_parts).state_dict(),
-            checkpoint_id=self.job_config.checkpoint.folder,
-            from_hf=True,
-        )
+        self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
@@ -215,18 +212,10 @@ class ForgeSFTRecipe(ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            if self.checkpointer._should_save(
-                self.current_step,
-                last_step=(self.current_step == self.job_config.training.steps),
-            ):
-                self.checkpointer.dcp_save(
-                    ModelWrapper(self.model_parts).state_dict(),
-                    checkpoint_id=self.checkpointer._create_checkpoint_id(
-                        self.current_step
-                    ),
-                    async_mode=self.checkpointer.async_mode,
-                    to_hf=True,
-                )
+            self.checkpointer.save(
+                curr_step=self.current_step,
+                last_step=self.current_step == self.num_training_steps,
+            )
 
     def cleanup(self) -> None:
         if self.checkpointer:

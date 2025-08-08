@@ -3,7 +3,7 @@
 name = "forge"
 description = "A PyTorch native platform for post-training generative AI models"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10, <3.13"
 license = {file = "LICENSE"}
 authors = [
     { name = "PyTorch Team", email = "packages@pytorch.org" },
@@ -13,11 +13,18 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
+    "torch",
+    # TODO: uncomment when this doesn't break MAST
+    #"torchmonarch-nightly==2025.8.1",
+    # vLLM
+    # TODO: pin specific vllm version
+    #"vllm==0.10.0",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
     # Miscellaneous
     "omegaconf",
+    "torchstore",
 ]
 dynamic = ["version"]
 
@@ -33,6 +40,8 @@ dev = [
     "pytest-cov",
     "tensorboard",
     "tomli>=1.1.0",
+    "anyio",
+    "pytest-asyncio",
 ]
 
 [project.scripts]
@@ -60,14 +69,31 @@ members = [
     "forge",
 ]
 
+# pytorch
+# TODO: get auto backend to work
 [[tool.uv.index]]
-name = "pytorch-nightly"
-url  = "https://download.pytorch.org/whl/nightly/"
-explicit = true
+name = "pytorch-nightly-cu128"
+url  = "https://download.pytorch.org/whl/nightly/cu128"
+#explicit = true
+
+# vllm
+# [[tool.uv.index]]
+# name = "vllm-nightly"
+# url = "https://wheels.vllm.ai/nightly"
+# explicit = true
 
 [tool.uv.sources]
-torchtitan = { index = "pytorch-nightly" }
-torch = { index = "pytorch-nightly" }
+torchtitan = { index = "pytorch-nightly-cu128" }
+torch = { index = "pytorch-nightly-cu128" }
+torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
+#vllm = { index = "vllm-nightly" }
 
 [tool.uv]
+# TODO: revert to stricter default uv strategy
+index-strategy = "unsafe-best-match"
 prerelease = "allow"
+# TODO: add more backends
+environments = [
+    "sys_platform == 'linux'",
+]
+# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
