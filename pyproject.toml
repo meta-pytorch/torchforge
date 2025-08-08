@@ -15,6 +15,7 @@ dependencies = [
     "torchtitan",
     # Temporarily comment out in favor of enabling MAST path
     #"torch",
+    # TODO: uncomment when this doesn't break MAST
     #"torchmonarch-nightly==2025.8.1",
     # vLLM
     # TODO: pin specific vllm version
@@ -24,6 +25,7 @@ dependencies = [
     "tokenizers",
     # Miscellaneous
     "omegaconf",
+    "torchstore",
 ]
 dynamic = ["version"]
 
@@ -82,6 +84,7 @@ url  = "https://download.pytorch.org/whl/nightly/cu128"
 [tool.uv.sources]
 torchtitan = { index = "pytorch-nightly-cu128" }
 torch = { index = "pytorch-nightly-cu128" }
+torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
 #vllm = { index = "vllm-nightly" }
 
 [tool.uv]
