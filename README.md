@@ -1,5 +1,3 @@
-<div align="center">
-
 # forge
 
 #### A PyTorch native platform for post-training generative AI models
