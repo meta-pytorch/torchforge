@@ -48,6 +48,7 @@ db.sqlite3-journal
 # Environments
 .env
 .venv
+uv.lock
 env/
 venv/
 ENV/

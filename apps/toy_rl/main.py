@@ -14,16 +14,15 @@ from dataclasses import dataclass
 from functools import partial
 
 import torch
-
 from forge.actors.collector import Collector
 
 from forge.controller.stack import stack
 from forge.data.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
-
 from forge.types import Action, Observation, State
+from monarch.actor import endpoint, proc_mesh
 
-from monarch.actor_mesh import endpoint, proc_mesh
+SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
 
 
 @dataclass
@@ -127,9 +126,6 @@ class ToyPolicy(Policy):
         pass
 
 
-SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
-
-
 async def main():
     print("Starting RL example with toy environment...")
 
@@ -178,7 +174,6 @@ async def main():
         environment_creator=partial(ToyEnvironment, name="coding", max_steps=5),
     )
 
-    # Here's our stack API in action!
     collectors = stack(
         browser_collectors,
         deep_research_collectors,
@@ -199,7 +194,10 @@ async def main():
                 # What's pretty elegant here is if we wanted to control off policiness, we could
                 # easily counter on steps and call policy.update_weights.call() at our desired
                 # frequency.
-                results = await collectors.run_episode.call()
+                results = collectors.run_episode.call()
+
+                # Temporary hack due to Monarch changes - ideally you could just await results
+                results = [await r for r in results]
                 num_trajectories = sum([len(r._values) for r in results])
                 episode_count += 1
                 print(

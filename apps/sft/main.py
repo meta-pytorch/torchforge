@@ -35,7 +35,6 @@ from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torchdata.stateful_dataloader import StatefulDataLoader
-from torchtitan.components.checkpoint import ModelWrapper
 from torchtitan.components.loss import LossFunction
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.optimizer import OptimizersContainer
@@ -75,7 +74,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
-        self.metric_logger = None
+        self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         print("getting ranks!")
         self._rank = current_rank().rank
@@ -129,11 +128,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
-        self.checkpointer.dcp_load(
-            state_dict=ModelWrapper(self.model_parts).state_dict(),
-            checkpoint_id=self.job_config.checkpoint.folder,
-            from_hf=True,
-        )
+        self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
@@ -269,15 +264,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            # if self.current_step % self.train_config.val_every_n_steps == 0:
-            #     self.validate()
-            # TODO: uncomment
-            # if (
-            #     self.current_step
-            #     % self.train_config.checkpoint_config.save_every_n_steps
-            #     == 0
-            # ):
-            #     self.checkpointer.save()
+            self.checkpointer.save(
+                curr_step=self.current_step,
+                last_step=self.current_step == self.num_training_steps,
+            )
 
     @endpoint
     async def cleanup(self) -> None:

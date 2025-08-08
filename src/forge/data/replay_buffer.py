@@ -4,55 +4,101 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Concrete replay buffer implementations."""
-
 import random
+from typing import Any
 
-from forge.interfaces import ReplayBuffer
+from monarch.actor import Actor, endpoint
 
 from forge.types import Trajectory
 
-from monarch.actor_mesh import endpoint
 
-
-# Silly replay buffer implementation for testing.
-# One nice thing if we implement our own Replay buffer is that
-# we can wrap RDMA calls / torchstore calls here.
-class SimpleReplayBuffer(ReplayBuffer):
+class ReplayBuffer(Actor):
     """Simple in-memory replay buffer implementation."""
 
-    def __init__(self):
+    def __init__(
+        self, batch_size: int, max_policy_age: int, seed: int | None = None
+    ) -> None:
         self.buffer: list[Trajectory] = []
+        self.batch_size = batch_size
+        self.max_policy_age = max_policy_age
+        if seed is not None:
+            random.seed(seed)
+        self.sampler = random.sample
 
     @endpoint
-    async def extend(self, sample: Trajectory):
-        """Add a trajectory to the replay buffer."""
-        self.buffer.append(sample)
+    async def add(self, trajectory: Trajectory) -> None:
+        self.buffer.append(trajectory)
 
     @endpoint
-    async def sample(self, batch_size=1) -> list[Trajectory] | None:
+    async def sample(
+        self, curr_policy_version: int, batch_size: int | None = None
+    ) -> list[Trajectory] | None:
         """Sample from the replay buffer.
 
         Args:
-            batch_size: Number of trajectories to sample.
+            curr_policy_version (int): The current policy version.
+            batch_size (int, optional): Number of trajectories to sample. If none, defaults to batch size
+                passed in at initialization.
 
         Returns:
-            A list of sampled trajectories or None if buffer is empty.
+            A list of sampled trajectories or None if there are not enough trajectories in the buffer.
         """
-        if batch_size > len(self.buffer):
+        bsz = batch_size if batch_size is not None else self.batch_size
+
+        # Evict old trajectories
+        self._evict(curr_policy_version)
+
+        if bsz > len(self.buffer):
+            print("Not enough trajectories in the buffer.")
             return None
 
-        if batch_size == 1:
-            return [random.choice(self.buffer)]
-        else:
-            return random.choices(self.buffer, k=batch_size)
+        # TODO: Make this more efficient
+        idx_to_sample = self.sampler(range(len(self.buffer)), k=bsz)
+        sorted_idxs = sorted(
+            idx_to_sample, reverse=True
+        )  # Sort in desc order to avoid shifting idxs
+        sampled_trajectories = [self.buffer.pop(i) for i in sorted_idxs]
+        return sampled_trajectories
 
     @endpoint
-    async def len(self) -> int:
-        """Return the length of the replay buffer."""
+    async def evict(self, curr_policy_version: int) -> None:
+        """Evict trajectories from the replay buffer if they are too old based on the current policy version
+        and the max policy age allowed.
+
+        Args:
+            curr_policy_version (int): The current policy version.
+        """
+        self._evict(curr_policy_version)
+
+    def _evict(self, curr_policy_version: int) -> None:
+        self.buffer = [
+            trajectory
+            for trajectory in self.buffer
+            if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
+        ]
+
+    @endpoint
+    async def _getitem(self, idx: int) -> Trajectory:
+        return self.buffer[idx]
+
+    @endpoint
+    async def _numel(self) -> int:
+        """Number of elements (trajectories) in the replay buffer."""
         return len(self.buffer)
 
     @endpoint
-    async def is_empty(self) -> bool:
-        """Check if the replay buffer is empty."""
-        return len(self.buffer) == 0
+    async def clear(self) -> None:
+        """Clear the replay buffer immediately - dropping all trajectories."""
+        self.buffer.clear()
+
+    @endpoint
+    async def state_dict(self) -> dict[str, Any]:
+        return {
+            "buffer": self.buffer,
+            "rng_state": random.getstate(),
+        }
+
+    @endpoint
+    async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.buffer = state_dict["buffer"]
+        random.setstate(state_dict["rng_state"])

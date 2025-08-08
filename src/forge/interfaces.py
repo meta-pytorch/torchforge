@@ -9,7 +9,7 @@ from typing import Any
 
 from monarch.actor import Actor, endpoint
 
-from forge.types import Action, Message, Observation, State, Trajectory
+from forge.types import Action, Message, Observation, State
 
 
 class Transform(ABC):
@@ -85,34 +85,6 @@ class Policy(Actor, ABC):
     @abstractmethod
     async def update_weights(self):
         """Update the policy weights."""
-        pass
-
-
-class ReplayBuffer(Actor, ABC):
-    """Abstract interface for replay buffers."""
-
-    @endpoint
-    @abstractmethod
-    async def extend(self, sample: Trajectory):
-        """Add a trajectory to the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def sample(self, batch_size: int) -> list[Trajectory] | None:
-        """Sample from the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def len(self) -> int:
-        """Return the length of the replay buffer."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def is_empty(self) -> bool:
-        """Check if the replay buffer is empty."""
         pass
 
 

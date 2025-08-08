@@ -12,9 +12,8 @@ Run this with python -m examples.stacked_envs
 
 import asyncio
 
-from forge.monarch_utils.stack import stack
-from monarch.actor_mesh import Actor, endpoint
-from monarch.proc_mesh import proc_mesh
+from forge.controller.stack import stack
+from monarch.actor import Actor, endpoint, proc_mesh
 
 
 class Environment(Actor):
@@ -42,7 +41,9 @@ async def main():
     # note that interface can be deduced, but adding it explicitly
     # helps the type checker
     envs = stack(browser, coding, interface=Environment)
-    await envs.step.call()
+    # Temporary hack due to Monarch changes
+    res = envs.step.call()
+    [await r for r in res]
 
 
 if __name__ == "__main__":

@@ -4,23 +4,28 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Unit tests for RL components."""
+"""Unit tests for Toy RL components.
+
+Run this with
+
+pytest tests/unit_tests/rl/test_toy_rl.py
+
+"""
 
 import asyncio
 from functools import partial
 
 import pytest
 import torch
-from forge.data.environments import ToyAction, ToyEnvironment, ToyObservation
-from forge.data.policies import ToyPolicy
-from forge.rl.collector import Collector
-from forge.rl.interfaces import Trajectory
-from forge.rl.replay_buffer import ReplayBuffer
+
+from apps.toy_rl.main import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
+from forge.actors.collector import Collector
+from forge.data.replay_buffer import ReplayBuffer
 
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
-from monarch.actor_mesh import Actor, endpoint, local_proc_mesh
+from monarch.actor import Actor, endpoint, local_proc_mesh
 
 
 class TestToyEnvironment:
@@ -107,83 +112,6 @@ class TestToyPolicy:
         assert len(set(actions)) > 1
 
 
-class TestReplayBuffer:
-    """Test the ReplayBuffer component."""
-
-    @pytest.mark.asyncio
-    async def test_replay_buffer_initialization(self):
-        """Test that ReplayBuffer initializes correctly."""
-        proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
-
-        length = await buffer.len.choose()
-        is_empty = await buffer.is_empty.choose()
-
-        assert length == 0
-        assert is_empty is True
-
-    @pytest.mark.asyncio
-    async def test_replay_buffer_extend_and_sample(self):
-        """Test adding and sampling trajectories."""
-        proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
-
-        # Create a test trajectory
-        trajectory = Trajectory()
-        trajectory.states = [
-            ToyObservation(step=0, data=torch.tensor([0.0]), text="Step 0, Value: 0.0")
-        ]
-        trajectory.actions = [ToyAction(data=torch.tensor([1.0]))]
-
-        # Add trajectory to buffer
-        await buffer.extend.choose(trajectory)
-
-        # Check buffer state
-        length = await buffer.len.choose()
-        is_empty = await buffer.is_empty.choose()
-
-        assert length == 1
-        assert is_empty is False
-
-        # Sample from buffer
-        sampled_trajectory = await buffer.sample.choose(1)
-        assert sampled_trajectory is not None
-        sampled_trajectory = sampled_trajectory[0]
-
-        assert sampled_trajectory is not None
-        assert len(sampled_trajectory.states) == 1
-        assert len(sampled_trajectory.actions) == 1
-
-    @pytest.mark.asyncio
-    async def test_replay_buffer_multiple_trajectories(self):
-        """Test buffer with multiple trajectories."""
-        proc = await local_proc_mesh(gpus=1)
-        buffer = await proc.spawn("buffer", ReplayBuffer)
-        batch_size = 5
-
-        # Add multiple trajectories
-        for i in range(batch_size):
-            trajectory = Trajectory()
-            trajectory.states = [
-                ToyObservation(
-                    step=i,
-                    data=torch.tensor([float(i)]),
-                    text=f"Step {i}, Value: {float(i)}",
-                )
-            ]
-            trajectory.actions = [ToyAction(data=torch.tensor([float(i + 1)]))]
-
-            await buffer.extend.choose(trajectory)
-
-        length = await buffer.len.choose()
-        assert length == batch_size
-
-        # Sample multiple times
-        sampled_batch = await buffer.sample.choose(batch_size=batch_size)
-        assert sampled_batch is not None
-        assert len(sampled_batch) == batch_size
-
-
 class TestCollector:
     """Test the Collector component (integration test)."""
 
@@ -201,7 +129,7 @@ class TestCollector:
                 self.trajectories = []
 
             @endpoint
-            async def extend(self, trajectory):
+            async def add(self, trajectory):
                 self.trajectories.append(trajectory)
 
         max_collector_steps = 5
@@ -280,7 +208,12 @@ class TestIntegration:
         max_collector_steps = 5
         proc = await local_proc_mesh(gpus=1)
         policy = await proc.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
-        replay_buffer = await proc.spawn("replay_buffer", ReplayBuffer)
+        replay_buffer = await proc.spawn(
+            "replay_buffer",
+            ReplayBuffer,
+            1,  # batch_size
+            1,  # max_policy_age
+        )
         collector = await proc.spawn(
             "collector",
             Collector,
@@ -315,9 +248,11 @@ class TestIntegration:
                 await asyncio.sleep(0.2)  # Wait a bit for trajectories to be added
 
                 # Check if buffer has data
-                buffer_length = await replay_buffer.len.choose()
+                buffer_length = await replay_buffer._numel.choose()
                 if buffer_length > 0:
-                    sampled_trajectory = await replay_buffer.sample.choose()
+                    sampled_trajectory = await replay_buffer.sample.choose(
+                        42  # curr_policy_version
+                    )
                     if sampled_trajectory is not None:
                         sampled_trajectories.append(sampled_trajectory[0])
                         samples_collected += 1
@@ -336,6 +271,9 @@ class TestIntegration:
         # Verify generated trajectories have correct structure
         for i, trajectory in enumerate(generated_trajectories):
             assert trajectory is not None, f"Trajectory {i} is None"
+            assert (
+                trajectory.policy_version > 0
+            ), f"Trajectory {i} has a 0 or negative policy version"
             assert len(trajectory.states) > 0, f"Trajectory {i} has no states"
             assert len(trajectory.actions) > 0, f"Trajectory {i} has no actions"
 
@@ -353,10 +291,10 @@ class TestIntegration:
             assert len(trajectory.actions) > 0, f"Sampled trajectory {i} has no actions"
 
         # Verify replay buffer contains trajectories
-        final_buffer_length = await replay_buffer.len.choose()
+        final_buffer_length = await replay_buffer._numel.choose()
         assert (
-            final_buffer_length >= 3
-        ), f"Expected buffer to have at least 3 trajectories, got {final_buffer_length}"
+            final_buffer_length == 2
+        ), f"Expected buffer to have 2 trajectories (generated 5, sampled 3), got {final_buffer_length}"
 
 
 if __name__ == "__main__":

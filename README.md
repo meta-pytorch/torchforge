@@ -1,5 +1,3 @@
-<div align="center">
-
 # forge
 
 #### A PyTorch native platform for post-training generative AI models
@@ -8,12 +6,66 @@
 
 ## Installation
 
+### Basic (Broken)
+
 ```bash
 pip install uv
 git clone https://github.com/pytorch-labs/forge
 cd forge
 uv sync
+
+# Or for dev install:
+uv sync --all-extras
 ```
+
+
+### Internal Machine
+
+1. Build uv package
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+git clone https://github.com/pytorch-labs/forge
+cd forge
+uv sync --all-extras
+source .venv/bin/activate
+```
+
+2. Install Monarch
+
+```bash
+uv pip install torchmonarch-nightly==2025.8.1
+```
+
+3. Setup CUDA on local machine
+
+```bash
+# feature install if you don't have /user/local/cuda-12.8
+feature install --persist cuda_12_8
+
+# add env variables
+export CUDA_VERSION=12.8
+export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
+export PATH="${CUDA_HOME}/bin:$PATH"
+export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
+export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+```
+
+4 Build vllm from source
+
+```bash
+git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
+cd vllm
+python use_existing_torch.py
+uv pip install -r requirements/build.txt
+uv pip install --no-build-isolation -e .bash
+```
+
+> [!WARNING]
+> If you add packages to the pyproject.toml, use `uv sync --inexact` so it doesn't remove Monarch and vLLM
 
 ## Quick Start
 
