@@ -12,8 +12,6 @@ Run this with:
 import asyncio
 from functools import partial
 
-import torch
-
 from forge.actors.rollout import RolloutActor
 
 from forge.controller.stack import stack
@@ -23,6 +21,7 @@ from forge.types import Message, State
 from monarch.actor import endpoint, proc_mesh
 
 SAMPLES_PER_BATCH = 2  # How many trajectories to sample at once
+from itertools import cycle
 
 
 class ToyEnvironment(Environment):
@@ -30,13 +29,15 @@ class ToyEnvironment(Environment):
 
     def __init__(self, name: str, dataloader):
         self.name = name
-        self._dataloader = dataloader
+        self._dataloader = cycle(dataloader)
         self.reset()
 
     def reset(self) -> State:
         """Reset the environment to initial state."""
         obs = next(self._dataloader)
-        return State(observations=[obs], info={"env_name": self.name})
+        return State(
+            observations=[Message.from_dict(obs)], info={"env_name": self.name}
+        )
 
     def step(self, state: State) -> State:
         """Take a step in the environment."""
@@ -51,6 +52,7 @@ class ToyPolicy(Policy):
 
     def __init__(self):
         super().__init__()
+        self._policy_version = 0
 
     @endpoint
     async def generate(self, state: State) -> State:
@@ -59,6 +61,7 @@ class ToyPolicy(Policy):
         request = state.observations[-1]
         response = self._generate_rand(request.content)
         state.observations.append(Message(role="assistant", content=response))
+        state.policy_version = self._policy_version
         return state
 
     def _generate_rand(self, request: str) -> str:
@@ -77,7 +80,7 @@ class ToyPolicy(Policy):
     @endpoint
     async def update_weights(self):
         """No-op for toy policy."""
-        pass
+        self._policy_version += 1
 
 
 async def main():
@@ -96,7 +99,7 @@ async def main():
         "replay_buffer",
         ReplayBuffer,
         batch_size=SAMPLES_PER_BATCH,
-        max_policy_age=int(torch.inf),
+        max_policy_age=1_000_000,
     )
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
@@ -205,7 +208,7 @@ async def main():
                         curr_policy_version=curr_policy_version
                     )
                     if state is not None:
-                        states.append(state)
+                        states += state
 
                 # Most of the rest of this is just boilerplate for pretty printing.
                 if not states:
@@ -217,9 +220,10 @@ async def main():
                 )
                 print("=" * 80)
 
-                for idx, state in enumerate(states, 1):
+                for idx, state in enumerate(states):
                     print(
-                        f"🏷️  State {idx} - Environment: {state.info['env_name']} - Prompt: {state.observations[0]} - Response: {state.observations[1]}"
+                        f"🏷️  State {idx} - Environment: {state.info['env_name']} - "
+                        f"Prompt: {state.observations[0]} - Response: {state.observations[1]}"
                     )
                     print("-" * 40)
 

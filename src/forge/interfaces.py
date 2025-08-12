@@ -5,34 +5,34 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 
 from monarch.actor import Actor, endpoint
 
-from forge.types import Action, Message, Observation, State
+from forge.types import Message, State
 
 
-class Transform(ABC):
-    """Abstract base class for observation transforms.
+# class Transform(ABC):
+#     """Abstract base class for observation transforms.
 
-    Transforms are first-class citizens that can modify observations,
-    typically to add rewards, compute metrics, or modify state.
+#     Transforms are first-class citizens that can modify observations,
+#     typically to add rewards, compute metrics, or modify state.
 
-    They follow a functional interface where they take an observation
-    and return a (potentially modified) observation.
-    """
+#     They follow a functional interface where they take an observation
+#     and return a (potentially modified) observation.
+#     """
 
-    @abstractmethod
-    def __call__(self, observation: Observation) -> Observation:
-        """Transform an observation.
+#     @abstractmethod
+#     def __call__(self, observation: Observation) -> Observation:
+#         """Transform an observation.
 
-        Args:
-            observation: The input observation to transform
+#         Args:
+#             observation: The input observation to transform
 
-        Returns:
-            The transformed observation (may be the same instance if no changes)
-        """
-        pass
+#         Returns:
+#             The transformed observation (may be the same instance if no changes)
+#         """
+#         pass
 
 
 class Environment(ABC):
@@ -45,7 +45,7 @@ class Environment(ABC):
 
     def __init__(
         self,
-        transform: Transform | None = None,
+        transform: Callable | None = None,
     ):
         self.transform = transform
 
@@ -59,11 +59,11 @@ class Environment(ABC):
         """Take a step in the environment and return an observation."""
         pass
 
-    @property
-    @abstractmethod
-    def state(self) -> State:
-        """Get the current state of the environment."""
-        pass
+    # @property
+    # @abstractmethod
+    # def state(self) -> State:
+    #     """Get the current state of the environment."""
+    #     pass
 
     # def _apply_transform(self, observation: Observation) -> Observation:
     #     """Apply the transform to an observation if one is provided."""

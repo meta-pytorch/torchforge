@@ -34,6 +34,10 @@ class Message:
     role: Role
     content: str | dict[str, Any]
 
+    @classmethod
+    def from_dict(cls, message_proto):
+        return cls(role=message_proto["role"], content=message_proto["content"])
+
 
 @dataclass
 class State:
