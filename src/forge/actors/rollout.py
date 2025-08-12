@@ -15,13 +15,12 @@ from typing import Callable
 from forge.data.replay_buffer import ReplayBuffer
 
 from forge.interfaces import Policy
-
-from forge.types import Trajectory
+from forge.types import State
 
 from monarch.actor import Actor, endpoint
 
 
-class Collector(Actor):
+class RolloutActor(Actor):
     """Collects trajectories for the training loop."""
 
     def __init__(
@@ -39,32 +38,19 @@ class Collector(Actor):
         self.environment = self.environment_creator()
 
     @endpoint
-    async def run_episode(self) -> Trajectory:
+    async def run_episode(self) -> list[State]:
         """Runs a single episode and writes it to the Replay buffer."""
         state = self.environment.reset()
 
-        # Initialize trajectory storage
-        # TODO: Policy doesn't have a version??
-        trajectory = Trajectory(policy_version=42)
-
-        step = 0
-        max_steps = self.max_collector_steps
-        should_run = lambda: True if max_steps is None else step < max_steps
-
-        while should_run():
-            # Get action from policy
-            action = await self.policy.generate.choose(state)
-
-            # Store current state and action
-            if trajectory.states is not None:
-                trajectory.states.append(state)
-            if trajectory.actions is not None:
-                trajectory.actions.append(action)
-            # Take step in environment
-            state = self.environment.step(action)
-            step += 1
-
-        # Write trajectory to replay buffer
-        await self.replay_buffer.add.call_one(trajectory)
-
-        return trajectory
+        # Keep track of all states just for reporting purposes
+        all_states = []
+        while True:
+            state = await self.policy.generate.choose(state)
+            state = self.environment.step(state)
+            if state.truncated or state.terminated:
+                # Rewards?
+                # Transforms?
+                all_states.append(state)
+                await self.replay_buffer.add.call_one(state)
+                break
+        return all_states

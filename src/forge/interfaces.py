@@ -7,9 +7,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from forge.types import Action, Message, Observation, State
-
 from monarch.actor import Actor, endpoint
+
+from forge.types import Action, Message, Observation, State
 
 
 class Transform(ABC):
@@ -50,12 +50,12 @@ class Environment(ABC):
         self.transform = transform
 
     @abstractmethod
-    def reset(self) -> Observation:
+    def reset(self) -> State:
         """Reset the environment and return an initial observation."""
         pass
 
     @abstractmethod
-    def step(self, action: Any) -> Observation:
+    def step(self, state: State) -> State:
         """Take a step in the environment and return an observation."""
         pass
 
@@ -65,11 +65,11 @@ class Environment(ABC):
         """Get the current state of the environment."""
         pass
 
-    def _apply_transform(self, observation: Observation) -> Observation:
-        """Apply the transform to an observation if one is provided."""
-        if self.transform is not None:
-            return self.transform(observation)
-        return observation
+    # def _apply_transform(self, observation: Observation) -> Observation:
+    #     """Apply the transform to an observation if one is provided."""
+    #     if self.transform is not None:
+    #         return self.transform(observation)
+    #     return observation
 
 
 class Policy(Actor, ABC):
@@ -77,7 +77,7 @@ class Policy(Actor, ABC):
 
     @endpoint
     @abstractmethod
-    async def generate(self, request: Observation) -> Action:
+    async def generate(self, state: State) -> State:
         """Generate an action given a state/request."""
         pass
 

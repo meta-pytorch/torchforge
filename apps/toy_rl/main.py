@@ -10,115 +10,69 @@ Run this with:
 """
 
 import asyncio
-from dataclasses import dataclass
 from functools import partial
 
 import torch
-from forge.actors.collector import Collector
+
+from forge.actors.rollout import RolloutActor
 
 from forge.controller.stack import stack
 from forge.data.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
-from forge.types import Action, Observation, State
+from forge.types import Message, State
 from monarch.actor import endpoint, proc_mesh
 
-SAMPLES_PER_BATCH = 4  # How many trajectories to sample at once
-
-
-@dataclass
-class ToyState(State):
-    """State for the toy environment."""
-
-    data: torch.Tensor
-    step: int
-
-    def __repr__(self) -> str:
-        return f"ToyState(step={self.step}, data={self.data})"
-
-
-@dataclass
-class ToyObservation(Observation):
-    """Observation for the toy environment."""
-
-    data: torch.Tensor
-    step: int
-    text: str
-
-    def __repr__(self) -> str:
-        return f"ToyObservation(step={self.step}, data={self.data})"
-
-
-@dataclass
-class ToyAction(Action):
-    """Action for the toy environment."""
-
-    data: torch.Tensor
+SAMPLES_PER_BATCH = 2  # How many trajectories to sample at once
 
 
 class ToyEnvironment(Environment):
-    """A simple toy environment for testing the RL pipeline.
+    """A simple toy environment for testing the RL pipeline."""
 
-    This environment maintains a simple numeric state that gets modified by actions.
-    It follows the base Environment abstraction with only reset, step, and state methods.
-    """
-
-    def __init__(self, name: str, max_steps: int = 10):
+    def __init__(self, name: str, dataloader):
         self.name = name
-        self.max_steps = max_steps
+        self._dataloader = dataloader
         self.reset()
 
-    def reset(self) -> ToyObservation:
+    def reset(self) -> State:
         """Reset the environment to initial state."""
-        self._state = ToyState(
-            step=0,
-            data=torch.tensor([0.0]),
-        )
-        return ToyObservation(
-            step=self._state.step,
-            data=self._state.data,
-            text=f"[{self.name}] Step {self._state.step}, Value: {self._state.data}",
-        )
+        obs = next(self._dataloader)
+        return State(observations=[obs], info={"env_name": self.name})
 
-    def step(self, action: ToyAction) -> ToyObservation:
+    def step(self, state: State) -> State:
         """Take a step in the environment."""
-        next_state = ToyState(
-            step=self._state.step + 1,
-            data=self._state.data + action.data,
-        )
-
-        self._state = next_state
-
-        return ToyObservation(
-            step=next_state.step,
-            data=next_state.data,
-            text=f"[{self.name}] Step {next_state.step}, Value: {next_state.data}",
-        )
-
-    @property
-    def state(self) -> ToyState:
-        """Get the current state of the environment."""
-        return self._state
+        action: Message = state.observations[-1]
+        if action.role == "assistant":
+            state.terminated = True
+        return state
 
 
 class ToyPolicy(Policy):
     """A simple toy policy for testing."""
 
-    def __init__(self, action_range: tuple[float, float] = (-1.0, 1.0)):
+    def __init__(self):
         super().__init__()
-        self.action_range = action_range
 
     @endpoint
-    async def generate(self, request: Observation) -> Action:
+    async def generate(self, state: State) -> State:
         """Generate a simple random action."""
         # Generate a random action within the specified range
-        action_value = (
-            torch.rand(1).item() * (self.action_range[1] - self.action_range[0])
-            + self.action_range[0]
-        )
-        action = ToyAction(
-            data=torch.tensor([action_value]),
-        )
-        return action
+        request = state.observations[-1]
+        response = self._generate_rand(request.content)
+        state.observations.append(Message(role="assistant", content=response))
+        return state
+
+    def _generate_rand(self, request: str) -> str:
+        import hashlib
+        import random
+        import string
+
+        seed = int(hashlib.sha256(request.encode()).hexdigest(), 16)
+        rng = random.Random(seed)
+
+        length = rng.randint(1, 20)
+
+        chars = string.ascii_letters + string.digits
+        return "".join(rng.choice(chars) for _ in range(length))
 
     @endpoint
     async def update_weights(self):
@@ -134,56 +88,68 @@ async def main():
     replay_procs = await proc_mesh(gpus=1)
 
     # Note - here is where we implement our "mixture" logic.
-    browser_procs = await proc_mesh(gpus=2)
-    deep_research_procs = await proc_mesh(gpus=4)
+    math_procs = await proc_mesh(gpus=4)
     coder_procs = await proc_mesh(gpus=8)
 
     # Actor instantiation
     replay_buffer = await replay_procs.spawn(
         "replay_buffer",
         ReplayBuffer,
-        SAMPLES_PER_BATCH,  # batch_size
-        float("inf"),  # max_policy_age
+        batch_size=SAMPLES_PER_BATCH,
+        max_policy_age=int(torch.inf),
     )
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"
-    # This policy just generates something between -2. and 2.
-    policy = await policy_procs.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
+    policy = await policy_procs.spawn("policy", ToyPolicy)
 
-    browser_collectors = await browser_procs.spawn(
-        "browser",
-        Collector,
-        max_collector_steps=5,
-        policy=policy,
-        replay_buffer=replay_buffer,
-        # here, we use a partial so that the collector itself
-        # can create its own environment.
-        # We could create the environment and pass it in, but it's slightly more efficient
-        # to do it this way.
-        environment_creator=partial(ToyEnvironment, name="browser", max_steps=5),
+    math_dataset = iter(
+        [
+            {"role": "user", "content": "What is 2+2?"},
+            {"role": "user", "content": "What is an approximation of Pi?"},
+            {
+                "role": "user",
+                "content": "If you have 1 turtle and I have 2 turtles, how many turtles do we have?",
+            },
+        ]
     )
-    deep_research_collectors = await deep_research_procs.spawn(
-        "deep_research",
-        Collector,
-        max_collector_steps=5,
+    math_collectors = await math_procs.spawn(
+        "math",
+        RolloutActor,
+        max_collector_steps=3,
         policy=policy,
         replay_buffer=replay_buffer,
-        environment_creator=partial(ToyEnvironment, name="deep_research", max_steps=5),
+        environment_creator=partial(
+            ToyEnvironment, name="math", dataloader=math_dataset
+        ),
+    )
+    coding_dataset = iter(
+        [
+            {
+                "role": "user",
+                "content": "Write a Python program to solve for x given a simple equation.",
+            },
+            {"role": "user", "content": "Fix the bug: ```def add(x, y): x - y```"},
+            {
+                "role": "user",
+                "content": "Add an inline comment explaining the function: ```def sub(x, y): x - y```",
+            },
+        ]
     )
     coding_collectors = await coder_procs.spawn(
         "coding",
-        Collector,
-        max_collector_steps=5,
+        RolloutActor,
+        max_collector_steps=3,
         policy=policy,
         replay_buffer=replay_buffer,
-        environment_creator=partial(ToyEnvironment, name="coding", max_steps=5),
+        environment_creator=partial(
+            ToyEnvironment, name="coding", dataloader=coding_dataset
+        ),
     )
 
     collectors = stack(
-        browser_collectors,
-        deep_research_collectors,
+        math_collectors,
         coding_collectors,
-        interface=Collector,
+        interface=RolloutActor,
     )
 
     # Create two async tasks
@@ -219,6 +185,7 @@ async def main():
     async def replay_buffer_sampler_task():
         """Task that samples from replay buffer and prints trajectories in a pretty way."""
         sample_count = 0
+        curr_policy_version = 0
         while True:
             try:
                 await asyncio.sleep(3)  # Wait a bit before sampling
@@ -232,18 +199,16 @@ async def main():
                     continue
 
                 # Sample multiple trajectories at once
-                trajectories = []
+                states = []
                 for _ in range(SAMPLES_PER_BATCH):
-                    trajectory = await replay_buffer.sample.choose(
-                        curr_policy_version=float(
-                            "inf"
-                        )  # Update with true policy version when available
+                    state = await replay_buffer.sample.choose(
+                        curr_policy_version=curr_policy_version
                     )
-                    if trajectory is not None:
-                        trajectories += trajectory
+                    if state is not None:
+                        states.append(state)
 
                 # Most of the rest of this is just boilerplate for pretty printing.
-                if not trajectories:
+                if not states:
                     continue
 
                 sample_count += 1
@@ -252,48 +217,17 @@ async def main():
                 )
                 print("=" * 80)
 
-                for idx, trajectory in enumerate(trajectories, 1):
-                    # Extract environment name from the first state text
-                    env_name = "unknown"
-                    if (
-                        trajectory.states
-                        and len(trajectory.states) > 0
-                        and trajectory.states[0].text
-                    ):
-                        state_text = trajectory.states[0].text
-                        if state_text.startswith("[") and "]" in state_text:
-                            env_name = state_text.split("]")[0][
-                                1:
-                            ]  # Extract name between [ and ]
-
-                    print(f"🏷️  Trajectory {idx} - Environment: {env_name}")
+                for idx, state in enumerate(states, 1):
+                    print(
+                        f"🏷️  State {idx} - Environment: {state.info['env_name']} - Prompt: {state.observations[0]} - Response: {state.observations[1]}"
+                    )
                     print("-" * 40)
 
-                    if trajectory.states and trajectory.actions:
-                        for i, (state, action) in enumerate(
-                            zip(
-                                trajectory.states,
-                                trajectory.actions,
-                            )
-                        ):
-                            # Extract values for pretty printing
-                            state_value = (
-                                float(state.data[0]) if state.data is not None else 0.0
-                            )
-                            action_value = (
-                                float(action.data[0])
-                                if action.data is not None
-                                else 0.0
-                            )
-
-                            print(
-                                f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f}"
-                            )
-
-                    if idx < len(trajectories):  # Add spacing between trajectories
+                    if idx < len(states):  # Add spacing between trajectories
                         print()
 
                 print("=" * 80)
+                curr_policy_version += 1
 
             except Exception as e:
                 print(f"❌ Error sampling from replay buffer: {e}")

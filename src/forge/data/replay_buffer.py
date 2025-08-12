@@ -9,7 +9,7 @@ from typing import Any
 
 from monarch.actor import Actor, endpoint
 
-from forge.types import Trajectory
+from forge.types import State
 
 
 class ReplayBuffer(Actor):
@@ -18,7 +18,7 @@ class ReplayBuffer(Actor):
     def __init__(
         self, batch_size: int, max_policy_age: int, seed: int | None = None
     ) -> None:
-        self.buffer: list[Trajectory] = []
+        self.buffer: list[State] = []
         self.batch_size = batch_size
         self.max_policy_age = max_policy_age
         if seed is not None:
@@ -26,13 +26,13 @@ class ReplayBuffer(Actor):
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, trajectory: Trajectory) -> None:
+    async def add(self, trajectory: State) -> None:
         self.buffer.append(trajectory)
 
     @endpoint
     async def sample(
         self, curr_policy_version: int, batch_size: int | None = None
-    ) -> list[Trajectory] | None:
+    ) -> list[State] | None:
         """Sample from the replay buffer.
 
         Args:
@@ -72,13 +72,13 @@ class ReplayBuffer(Actor):
 
     def _evict(self, curr_policy_version: int) -> None:
         self.buffer = [
-            trajectory
-            for trajectory in self.buffer
-            if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
+            state
+            for state in self.buffer
+            if (curr_policy_version - state.policy_version) <= self.max_policy_age
         ]
 
     @endpoint
-    async def _getitem(self, idx: int) -> Trajectory:
+    async def _getitem(self, idx: int) -> State:
         return self.buffer[idx]
 
     @endpoint
