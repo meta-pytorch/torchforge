@@ -15,7 +15,6 @@ import asyncio
 import logging
 import math
 import os
-import subprocess
 import sys
 from dataclasses import asdict
 from functools import partial
@@ -25,7 +24,7 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
-from forge.controller import ForgeActor, proc_mesh
+from forge.controller import ForgeActor, spawn_actors
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
@@ -41,7 +40,8 @@ from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-from tqdm import tqdm
+
+# from tqdm import tqdm
 
 # stubs for now
 Checkpointer = Any
@@ -76,11 +76,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.num_training_steps = job_config.training.steps
         self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
-        print("getting ranks!")
         self._rank = current_rank().rank
-        print("rank: ", self._rank)
         self._size = math.prod(current_size().values())
-        print("size: ", self._size)
         self._init_dist()
         super().__init__(job_config)
 
@@ -133,6 +130,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
     def setup_data(self):
+        print(os.path.join(self.job_config.model.tokenizer_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.tokenizer_path, "tokenizer.json"
@@ -236,9 +234,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
-        self.pbar.update(1)
-        self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
+        logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
+        # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
+        # self.pbar.update(1)
         self.optimizers.step()
         self.lr_schedulers.step()
 
@@ -247,14 +246,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         dataloader = iter(self.train_dataloader)
         self.optimizers.zero_grad()
 
-        self.pbar = tqdm(
-            initial=0,
-            total=self.num_training_steps,
-            desc=f"{self.current_step}",
-        )
+        # TODO: tqdm is broken in Monarch actors
+        # self.pbar = tqdm(initial=self.current_step, total=self.num_training_steps)
 
         while self.current_step < self.num_training_steps:
-            logger.info(f"step: {self.current_step}/{self.num_training_steps}")
             batch = next(dataloader)
             # Move tensors to the appropriate device
             for k, v in batch.items():
@@ -269,6 +264,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 last_step=self.current_step == self.num_training_steps,
             )
 
+        # self.pbar.close()
+
     @endpoint
     async def cleanup(self) -> None:
         if self.checkpointer:
@@ -280,39 +277,21 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         return "Trainer"
 
 
-class EnvSetupActor(ForgeActor):
-    @endpoint
-    async def setup(self):
-        print("Setting up env!")
-        subprocess.run(["pip", "install", "-e", "."], check=True)
-
-
 async def run(cfg: DictConfig) -> None:
-    logging.info("Creating proc mesh")
-    print("Creating proc mesh")
-    p = await proc_mesh(cfg.scheduler)
+    logging.info("Spawing recipe...")
+    process_cfg = cfg.pop("processes")
+    recipe = await spawn_actors("sft", ForgeSFTRecipe, cfg, process_cfg)
 
-    e = await p.spawn("env_setup", EnvSetupActor)
-    e.setup.call()
-
-    print("Proc mesh: ", p)
-    logging.info("Created proc mesh: ", p)
-
-    print("Creating recipe..")
-    recipe = await p.spawn("sft", ForgeSFTRecipe, cfg)
-    logging.info("Created recipe: ", recipe)
-    print("Recipe: ", recipe)
+    logging.info("Created recipe, running setup.")
     await recipe.setup.call()
 
     logging.info("Recipe has been setup. Training now.")
     await recipe.train.call()
+
     logging.info("Done training. Clean up")
     await recipe.cleanup.call()
-
-    logging.info("Cleaning up proc")
-    await p.stop()
+    await recipe.mesh.stop()
     logging.info("All done!")
-    recipe = ForgeSFTRecipe(cfg)
 
 
 @parse

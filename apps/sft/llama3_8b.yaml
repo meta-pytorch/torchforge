@@ -17,13 +17,10 @@ model:
   flavor: 8B
   tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
 
-scheduler:
+processes:
   scheduler: local # local | mast (not supported yet)
   num_hosts: 1
   num_gpus: 8
-  oncall: torchtune
-  identity: pytorch_distributed
-  image: forge_workspace:latest
 
 optimizer:
   name: AdamW
@@ -31,13 +28,13 @@ optimizer:
   eps: 1e-8
 
 lr_scheduler:
-  warmup_steps: 1
+  warmup_steps: 200
 
 training:
   local_batch_size: 1
   seq_len: 2048
   max_norm: 1.0
-  steps: 5
+  steps: 1000
   compile: false
   dataset: "c4"
 
