@@ -185,7 +185,7 @@ class RecoverableProcMesh(MeshTrait):
                 logger.warning(f"Error stopping old ProcMesh: {e}")
 
         try:
-            self._proc_mesh = proc_mesh(gpus=self.num_gpus)
+            self._proc_mesh = await proc_mesh(gpus=self.num_gpus)
             if self._proc_mesh is not None:
                 await hook(self._proc_mesh)
             self.state = MeshState.Healthy

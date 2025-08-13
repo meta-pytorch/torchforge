@@ -439,7 +439,6 @@ class Service:
         else:
             routing_hints = {}
 
-        # Get the replica using the consolidated function
         replica = await self._get_replica(sess_id, **routing_hints)
 
         # Create a request object to queue
@@ -1024,6 +1023,7 @@ class Service:
         # New session, assign to least loaded replica
         replica = self._get_least_loaded_replica()
         self._session_replica_map[sess_id] = replica.idx
+        logger.debug("Assigning session %s to replica %d", sess_id, replica.idx)
         return replica
 
     async def stop(self):
@@ -1130,7 +1130,14 @@ class Service:
             num_replicas: Number of replicas to remove (default: 1)
 
         Note:
-            Sessions are reassigned on their next request rather than immediately
+         # Test context manager usage
+        async with service.session():
+            await service.incr()
+            await service.incr()
+            result = await service.value()
+            assert result == 2
+
+           Sessions are reassigned on their next request rather than immediately
             to avoid disrupting active workloads.
         """
         logger.debug("Scaling down by %d replicas.", num_replicas)
