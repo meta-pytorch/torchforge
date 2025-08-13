@@ -13,9 +13,6 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
-    #"torch",
-    # TODO: uncomment when this doesn't break MAST
-    #,
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
