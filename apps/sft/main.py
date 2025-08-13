@@ -22,7 +22,6 @@ from forge.data.tokenizer import HuggingFaceModelTokenizer
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torchdata.stateful_dataloader import StatefulDataLoader
-from torchtitan.components.checkpoint import ModelWrapper
 from torchtitan.components.loss import LossFunction
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.optimizer import OptimizersContainer
@@ -76,8 +75,6 @@ class ForgeSFTRecipe(ForgeEngine):
         #     self.train_config.packing_config,
         # )
 
-        # TODO: confirm that this is working properly
-        # Should also use load, not dcp_load
         self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
@@ -85,13 +82,13 @@ class ForgeSFTRecipe(ForgeEngine):
     def setup_data(self):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer.json"
+                self.job_config.model.hf_assets_path, "tokenizer.json"
             ),
             tokenizer_config_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer_config.json"
+                self.job_config.model.hf_assets_path, "tokenizer_config.json"
             ),
             generation_config_path=os.path.join(
-                self.job_config.model.tokenizer_path, "generation_config.json"
+                self.job_config.model.hf_assets_path, "generation_config.json"
             ),
         )
 
