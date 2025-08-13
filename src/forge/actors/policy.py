@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import torch
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from torchstore import MultiProcessStore
+from torchstore._state_dict_utils import get_state_dict
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -169,6 +171,8 @@ class Policy(Actor):
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
     resources: int = 1
+    torchstore: MultiProcessStore = None
+    state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
         """Build vLLM Arguments
@@ -224,8 +228,30 @@ class Policy(Actor):
 
     @endpoint
     async def update(self):
-        # TODO: add TorchStore support
-        pass
+        """Update model weights by reading state dict from torchstore"""
+        if self.torchstore is None:
+            logger.warning("No torchstore configured, skipping model update")
+            return False
+        
+        try:
+            logger.info(f"Reading model state dict from torchstore with key: {self.state_dict_key}")
+            
+            # Get the current model from the worker
+            model = self.worker.model_runner.model
+            current_state_dict = model.state_dict()
+            
+            # Read updated state dict from torchstore
+            await get_state_dict(self.torchstore, self.state_dict_key, current_state_dict)
+            
+            # Load the updated state dict into the model
+            model.load_state_dict(current_state_dict, strict=True)
+            
+            logger.info("Successfully updated model weights from torchstore")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update model from torchstore: {e}")
+            return False
 
     @endpoint
     async def setup_kv_cache(self):
