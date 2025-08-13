@@ -25,7 +25,6 @@ dependencies = [
     "tokenizers",
     # Miscellaneous
     "omegaconf",
-    "torchstore",
 ]
 dynamic = ["version"]
 
