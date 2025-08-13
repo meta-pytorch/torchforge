@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from typing import Dict
 
 import torch
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
@@ -18,7 +19,7 @@ from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
-from vllm.sampling_params import RequestOutputKind, SamplingParams
+from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
 from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
@@ -82,7 +83,8 @@ class PolicyRouter(Actor):
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
-        prompt = convert_input(prompt)
+        # Wraps prompt into a dict
+        prompt: Dict[str, str] = convert_input(prompt)
         if self.sampling_params is None:
             self.sampling_params = get_default_sampling_params(self.vllm_args)
 
@@ -110,8 +112,14 @@ class PolicyRouter(Actor):
 
         if self.sampling_params.n == 1:
             self.output_processor.add_request(request, prompt_str, None, 0)
-            request = Request.from_engine_core_request(request)
-            # TODO: mm_hash and sturcutured_output
+
+            if request.mm_hashes is not None:
+                # TODO: Support mm_hash
+                pass
+            request: Request = Request.from_engine_core_request(request)
+            if request.use_structured_output:
+                self.scheduler.structured_output_manager.grammar_init(request)
+
             request_fut = asyncio.Future()
             self.requests[request_id] = request_fut
             self.scheduler.add_request(request)
@@ -284,17 +292,14 @@ class Policy(Actor):
         return worker
 
 
-def convert_input(prompt=None, prompt_token_ids=None):
-    assert prompt is None or prompt_token_ids is None
+def convert_input(prompt=None, prompt_token_ids=None) -> Dict:
+    assert (prompt is None) ^ (prompt_token_ids is None)
     if prompt is not None:
         return {"prompt": prompt}
-    elif prompt_token_ids is not None:
-        return {"prompt_token_ids": prompt_token_ids}
-    else:
-        raise ValueError("Either prompt or prompt_token_ids must be provided.")
+    return {"prompt_token_ids": prompt_token_ids}
 
 
-def get_default_sampling_params(vllm_config, overrides=None):
+def get_default_sampling_params(vllm_config, overrides=None) -> SamplingParams:
     default_params = vllm_config.model_config.get_diff_sampling_param()
     default_params["max_tokens"] = 512
     if overrides is not None:
@@ -308,7 +313,7 @@ def get_default_sampling_params(vllm_config, overrides=None):
     return params
 
 
-async def _test(config):
+async def _test(config, guided_decoding=False):
     # TODO: Create proper test
     router_mesh = await proc_mesh(gpus=1)
     policy_mesh = await proc_mesh(
@@ -320,7 +325,22 @@ async def _test(config):
     )
 
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)
-    router = await router_mesh.spawn("policy_router", PolicyRouter, policy=policy_actor)
+
+    sampling_params = None
+    if guided_decoding:
+        # Add config for structured output
+        vllm_args = await policy_actor.get_vllm_args.choose()
+        guided_decoding_params = GuidedDecodingParams(choice=["Positive", "Negative"])
+
+        sampling_params = get_default_sampling_params(vllm_args)
+        sampling_params.guided_decoding = guided_decoding_params
+
+    router = await router_mesh.spawn(
+        "policy_router",
+        PolicyRouter,
+        policy=policy_actor,
+        sampling_params=sampling_params,
+    )
 
     await policy_actor.setup.call()
     await router.setup.call()
@@ -329,7 +349,7 @@ async def _test(config):
     router.run.call()
     print("Model running")
 
-    prompt = "Tell me a joke"
+    prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
     response = await router.generate.call_one(prompt)
     print(f"User: {prompt}\nAssistant: {response.outputs[0].text}")
 
@@ -345,3 +365,4 @@ if __name__ == "__main__":
         "resources": 2,
     }
     asyncio.run(_test(config))
+    # asyncio.run(_test(config, guided_decoding=True))
