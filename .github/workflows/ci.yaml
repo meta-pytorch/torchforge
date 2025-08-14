@@ -13,12 +13,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
   cancel-in-progress: true
 
+jobs:
   test-cpu:
     name: Test CPU
-    needs: build-cpu
-    uses: ./.github/workflows/test-cpu.yml
+    uses: ./.github/workflows/tests-cpu.yaml
     with:
-      artifact-name: monarch-cpu-${{ github.sha }}
+      artifact-name: forge-cpu-${{ github.sha }}
 
   status-check:
     name: Status Check
