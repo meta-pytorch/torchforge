@@ -56,7 +56,7 @@ class Counter(Actor):
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
+        procs_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -88,7 +88,7 @@ async def test_basic_service_operations():
 async def test_sessionless_calls():
     """Test sessionless calls with round-robin load balancing."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -120,7 +120,7 @@ async def test_sessionless_calls():
 async def test_session_context_manager():
     """Test session context manager functionality."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=1, max_replicas=1, default_replicas=1
+        procs_per_replica=1, min_replicas=1, max_replicas=1, default_replicas=1
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -163,7 +163,7 @@ async def test_session_context_manager():
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -212,7 +212,7 @@ async def test_autoscaling_scale_up():
     )
 
     cfg = ServiceConfig(
-        gpus_per_replica=1,
+        procs_per_replica=1,
         min_replicas=1,
         max_replicas=3,
         default_replicas=1,
@@ -261,7 +261,7 @@ async def test_autoscaling_scale_down():
     )
 
     cfg = ServiceConfig(
-        gpus_per_replica=1,
+        procs_per_replica=1,
         min_replicas=1,
         max_replicas=3,
         default_replicas=2,  # Start with 2 replicas
@@ -308,7 +308,7 @@ async def test_autoscaling_limits():
     )
 
     cfg = ServiceConfig(
-        gpus_per_replica=1,
+        procs_per_replica=1,
         min_replicas=1,
         max_replicas=2,  # Tight limit
         default_replicas=1,
@@ -353,7 +353,7 @@ async def test_autoscaling_limits():
 async def test_metrics_collection():
     """Test comprehensive metrics collection."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -408,7 +408,7 @@ async def test_metrics_collection():
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -439,7 +439,7 @@ async def test_session_stickiness():
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -485,7 +485,7 @@ async def test_load_balancing_multiple_sessions():
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
     cfg = ServiceConfig(
-        gpus_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 

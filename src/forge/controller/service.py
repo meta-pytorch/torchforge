@@ -60,6 +60,7 @@ _session_context: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
 )
 
 
+# TODO - tie this into metric logger when it exists
 @dataclass
 class ReplicaMetrics:
     """
@@ -234,7 +235,7 @@ class AutoscalingConfig:
 
 @dataclass
 class ServiceConfig:
-    gpus_per_replica: int
+    procs_per_replica: int
     min_replicas: int
     max_replicas: int
     default_replicas: int
@@ -1099,7 +1100,7 @@ class Service:
         new_replicas = []
         for i in range(num_replicas):
             mesh = RecoverableProcMesh(
-                self._cfg.gpus_per_replica,
+                self._cfg.procs_per_replica,
             )
             replica = Replica(
                 proc_mesh=mesh,
