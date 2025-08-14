@@ -1,0 +1,35 @@
+
+name: Test CPU
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: 'Run Forge unit tests on CPUs.'
+        required: true
+        type: string
+
+concurrency:
+  group: test-cpu-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-cpu-no-tensor-engine:
+    name: Test CPU
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      timeout: 60
+      runner: linux.4xlarge
+      submodules: recursive
+      download-artifact: ${{ inputs.artifact-name }}
+      script: |
+        # Source common setup functions
+        source scripts/common-setup.sh
+
+        # Setup test environment
+        setup_conda_environment
+
+        pip install .[dev]
+        pip install .[oss]
+
+        pytest tests/unit_tests -vs

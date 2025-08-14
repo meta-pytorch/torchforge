@@ -13,6 +13,7 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
+    "torchao",
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
@@ -36,6 +37,7 @@ dev = [
     "pytest-cov",
     "tensorboard",
     "tomli>=1.1.0",
+    "tomli_w",
     "anyio",
     "pytest-asyncio",
 ]

@@ -4,14 +4,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .dataset import DatasetInfo, InfiniteTuneIterableDataset
+from .dataset import DatasetInfo, InfiniteTuneIterableDataset, InterleavedDataset
 from .hf_dataset import HfIterableDataset
 from .packed import PackedDataset
-from .sft_dataset import SFTOutputTransform, sft_iterable_dataset
+from .sft_dataset import sft_iterable_dataset, SFTOutputTransform
 
 __all__ = [
     "DatasetInfo",
     "HfIterableDataset",
+    "InterleavedDataset",
     "InfiniteTuneIterableDataset",
     "PackedDataset",
     "SFTOutputTransform",

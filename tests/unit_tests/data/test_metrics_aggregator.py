@@ -22,7 +22,7 @@ import logging
 import pytest
 import torch.distributed as dist
 
-from forge.data.metrics import AggregationType, Metric, MetricsAggregator
+from forge.data.dataset_metrics import AggregationType, Metric, MetricsAggregator
 from torch.testing._internal.common_fsdp import FSDPTest
 
 from tests.test_utils import gpu_test
@@ -237,7 +237,7 @@ class TestMetricsAggregator:
         aggregator.update(metrics)
 
         # Replace the SUM handler - should generate warning
-        from forge.data.metrics.metric_agg_handlers import SumAggHandler
+        from forge.data.dataset_metrics import SumAggHandler
 
         with caplog.at_level(logging.WARNING):
             aggregator.register_handler(AggregationType.SUM, SumAggHandler())
