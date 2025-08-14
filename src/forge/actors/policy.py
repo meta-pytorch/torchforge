@@ -188,12 +188,13 @@ class Policy(Actor):
         - all executor methods verify no changes
         """
         if self.vllm_args is None:
-            # Use default vllm EngineArgs
+            # Use default vllm EngineArgs with reduced GPU memory utilization
             self.vllm_args = EngineArgs(
                 model=self.model,
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
+                gpu_memory_utilization=0.7,  # Reduce from default 0.9 to 0.7 to fit in available memory
             )
             # Original method returns False when not run in the main thread
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
