@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - gh/**
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
+  cancel-in-progress: true
+
+  test-cpu:
+    name: Test CPU
+    needs: build-cpu
+    uses: ./.github/workflows/test-cpu.yml
+    with:
+      artifact-name: monarch-cpu-${{ github.sha }}
+
+  status-check:
+    name: Status Check
+    runs-on: ubuntu-latest
+    needs: [test-cpu]
+    if: always()
+    steps:
+      - name: Check all jobs status
+        run: |
+          if [[ "${{ needs.test-cpu.result }}" != "success" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          else
+            echo "All jobs passed"
+          fi
