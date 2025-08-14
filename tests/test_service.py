@@ -205,6 +205,7 @@ async def test_replica_failure_and_recovery():
 async def test_autoscaling_scale_up():
     """Test automatic scale up under high load."""
     autoscaling_cfg = AutoscalingConfig(
+        enabled=True,
         scale_up_capacity_threshold=0.5,
         scale_up_queue_depth_threshold=2.0,
         scale_up_cooldown=0.5,
@@ -253,6 +254,7 @@ async def test_autoscaling_scale_up():
 async def test_autoscaling_scale_down():
     """Test automatic scale down when idle."""
     autoscaling_cfg = AutoscalingConfig(
+        enabled=True,
         scale_down_capacity_threshold=0.2,
         scale_down_queue_depth_threshold=0.5,
         scale_down_idle_time_threshold=3.0,
@@ -303,6 +305,7 @@ async def test_autoscaling_scale_down():
 async def test_autoscaling_limits():
     """Test that autoscaling respects min/max limits."""
     autoscaling_cfg = AutoscalingConfig(
+        enabled=True,
         scale_up_queue_depth_threshold=1.0,
         scale_down_capacity_threshold=0.9,  # High threshold to prevent scale down
     )

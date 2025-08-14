@@ -199,6 +199,9 @@ class ServiceMetrics:
 class AutoscalingConfig:
     """Configuration for autoscaling behavior."""
 
+    # Autoscaling control
+    enabled: bool = False  # Whether autoscaling is enabled (disabled by default)
+
     # Scale up thresholds
     scale_up_queue_depth_threshold: float = (
         5.0  # Average queue depth to trigger scale up
@@ -881,6 +884,10 @@ class Service:
         """Executes autoscaling decisions based on current metrics."""
         # Skip autoscaling if shutdown is requested
         if self._shutdown_requested:
+            return
+
+        # Skip autoscaling if disabled
+        if not self._cfg.autoscaling.enabled:
             return
 
         # Check scale up first (higher priority)
