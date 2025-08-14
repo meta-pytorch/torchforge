@@ -2,11 +2,6 @@ name: CI
 
 on:
   pull_request:
-    paths:
-      - .github/workflows/ci.yaml
-    branches:
-      - main
-      - gh/**
   push:
     branches:
       - main
