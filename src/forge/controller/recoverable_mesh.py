@@ -57,16 +57,16 @@ class MeshState(Enum):
     Enumeration of possible mesh states for tracking recovery status.
 
     States:
-        Healthy: Mesh is operational and ready to handle requests
-        Recovering: Mesh is in the process of recovering from a failure
-        Unhealthy: Mesh has failed and needs recovery
-        Stopped: Mesh has been explicitly stopped and cannot be used
+        HEALTHY: Mesh is operational and ready to handle requests
+        RECOVERING: Mesh is in the process of recovering from a failure
+        UNHEALTHY: Mesh has failed and needs recovery
+        STOPPED: Mesh has been explicitly stopped and cannot be used
     """
 
-    Healthy = 0
-    Recovering = 1
-    Unhealthy = 2
-    Stopped = 3
+    HEALTHY = 0
+    RECOVERING = 1
+    UNHEALTHY = 2
+    STOPPED = 3
 
 
 class RecoverableProcMesh(MeshTrait):
@@ -86,7 +86,7 @@ class RecoverableProcMesh(MeshTrait):
 
     Attributes:
         num_gpus: Number of GPUs allocated to this mesh
-        state: Current state of the mesh (Healthy, Recovering, Unhealthy, Stopped)
+        state: Current state of the mesh (HEALTHY, RECOVERING, UNHEALTHY, STOPPED)
         healthy: True if the mesh is operational and ready for requests
         failed: True if the mesh has failed and needs recovery
 
@@ -126,7 +126,7 @@ class RecoverableProcMesh(MeshTrait):
         self.num_gpus = num_gpus
         self._proc_mesh: Optional[ProcMesh] = None
         self._recovery_task: Optional[asyncio.Task[None]] = None
-        self.state: MeshState = MeshState.Unhealthy
+        self.state: MeshState = MeshState.UNHEALTHY
 
     async def spawn(
         self, hook: Callable[[ProcMesh], Coroutine[Any, Any, None]]
@@ -159,10 +159,10 @@ class RecoverableProcMesh(MeshTrait):
     def _background_spawn(
         self, hook: Callable[[ProcMesh], Coroutine[Any, Any, None]]
     ) -> asyncio.Task[None]:
-        if self.state == MeshState.Stopped:
+        if self.state == MeshState.STOPPED:
             logger.warning("ProcMesh was already stopped when trying to spawn")
 
-        self.state = MeshState.Recovering
+        self.state = MeshState.RECOVERING
         self._recovery_task = asyncio.create_task(self._recover(hook))
 
         return self._recovery_task
@@ -173,7 +173,7 @@ class RecoverableProcMesh(MeshTrait):
     async def _recover(
         self, hook: Callable[[ProcMesh], Coroutine[Any, Any, None]]
     ) -> None:
-        self.state = MeshState.Recovering
+        self.state = MeshState.RECOVERING
 
         old_proc_mesh = self._proc_mesh
         self._proc_mesh = None
@@ -188,19 +188,19 @@ class RecoverableProcMesh(MeshTrait):
             self._proc_mesh = await proc_mesh(gpus=self.num_gpus)
             if self._proc_mesh is not None:
                 await hook(self._proc_mesh)
-            self.state = MeshState.Healthy
+            self.state = MeshState.HEALTHY
 
         except Exception as e:
             logger.exception(f"Recovery attempt failed: {e}")
-            self.state = MeshState.Unhealthy
+            self.state = MeshState.UNHEALTHY
 
     @property
     def healthy(self) -> bool:
-        return self.state == MeshState.Healthy
+        return self.state == MeshState.HEALTHY
 
     @property
     def failed(self) -> bool:
-        return self.state == MeshState.Unhealthy
+        return self.state == MeshState.UNHEALTHY
 
     async def stop(self) -> None:
         """
@@ -216,7 +216,7 @@ class RecoverableProcMesh(MeshTrait):
             >>> # Mesh is now stopped and cannot be used
         """
         logger.info("Stopping RecoverableProcMesh")
-        if self.state == MeshState.Stopped:
+        if self.state == MeshState.STOPPED:
             logger.info("RecoverableProcMesh was already stopped")
             return
         try:
@@ -225,11 +225,11 @@ class RecoverableProcMesh(MeshTrait):
         except RuntimeError as e:
             logger.warning("RecoverableProcMesh could not be stopped: %s", e)
 
-        self.state = MeshState.Stopped
+        self.state = MeshState.STOPPED
 
     async def __aenter__(self) -> "RecoverableProcMesh":
         """Enter the async context manager."""
-        if self.state == MeshState.Stopped:
+        if self.state == MeshState.STOPPED:
             raise RuntimeError("RecoverableProcMesh has already been stopped")
         return self
 
@@ -239,7 +239,7 @@ class RecoverableProcMesh(MeshTrait):
         """Exit the async context manager."""
         # In case there are multiple nested "async with" statements, we only
         # want it to close once.
-        if self.state != MeshState.Stopped:
+        if self.state != MeshState.STOPPED:
             await self.stop()
 
     def mark_failed(self):
@@ -257,7 +257,7 @@ class RecoverableProcMesh(MeshTrait):
             >>> except Exception:
             ...     mesh.mark_failed()  # Mark for recovery
         """
-        self.state = MeshState.Unhealthy
+        self.state = MeshState.UNHEALTHY
 
     @property
     def _shape(self) -> Shape:
