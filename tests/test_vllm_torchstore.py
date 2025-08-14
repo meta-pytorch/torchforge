@@ -19,34 +19,36 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
 
-# Add the forge source directory to Python path
-sys.path.insert(0, '/data/users/ankitageorge/forge/src')
 from forge.actors.policy import Policy
 
 
 async def test_llama3_torchstore_write():
     """
-    First phase: Load Llama 3 8B and write state dict to torchstore
+    First phase: Load Llama 3.1 8B and write state dict to torchstore
     """
-    print("=== PHASE 1: Writing Llama 3 8B to TorchStore ===")
+    print("=== PHASE 1: Writing Llama 3.1 8B to TorchStore ===")
     print("Initializing MultiProcessStore...")
     store = MultiProcessStore()
     
-    print("Loading Llama 3 8B model from HuggingFace...")
-    # Note: You may need to authenticate with HuggingFace and accept the license
-    model_name = "meta-llama/Meta-Llama-3-8B"
+    print("Loading Llama 3.1 8B model from local path...")
+    # Load from local directory instead of HuggingFace download
+    model_path = "/tmp/Meta-Llama-3.1-8B"
     
     try:
-        # Load the model - using device_map="auto" for efficient loading
+        # Load the model from local path - using device_map="auto" for efficient loading
         model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            model_path,
             torch_dtype=torch.float16,  # Use half precision to save memory
             device_map="auto",
-            trust_remote_code=True
+            trust_remote_code=True,
+            local_files_only=True  # Ensure we don't try to download
         )
         
         # Also load tokenizer for completeness
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            local_files_only=True  # Ensure we don't try to download
+        )
         
         print(f"Model loaded successfully. Model type: {type(model)}")
         print(f"Model device: {next(model.parameters()).device}")
@@ -222,15 +224,16 @@ async def test_llama3_fsdp_torchstore_write():
     print("Initializing MultiProcessStore...")
     store = MultiProcessStore()
     
-    print("Loading Llama 3 8B model from HuggingFace...")
-    model_name = "meta-llama/Meta-Llama-3-8B"
+    print("Loading Llama 3.1 8B model from local path...")
+    model_path = "/tmp/Meta-Llama-3.1-8B"
     
     try:
-        # Load the model - NOT using device_map since we'll use FSDP
+        # Load the model from local path - NOT using device_map since we'll use FSDP
         model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            model_path,
             torch_dtype=torch.float16,
-            trust_remote_code=True
+            trust_remote_code=True,
+            local_files_only=True  # Ensure we don't try to download
         )
         
         # Move model to current device before FSDP wrapping
@@ -246,7 +249,10 @@ async def test_llama3_fsdp_torchstore_write():
         )
         
         # Also load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            local_files_only=True  # Ensure we don't try to download
+        )
         
         print(f"FSDP Model loaded successfully. Model type: {type(fsdp_model)}")
         print(f"Model device: {next(fsdp_model.parameters()).device}")
