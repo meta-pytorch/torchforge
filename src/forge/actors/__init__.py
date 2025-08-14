@@ -7,25 +7,3 @@
 from .collector import Collector
 
 __all__ = ["Collector"]
-
-try:
-    from .policy import Policy, PolicyRouter
-
-    __all__.extend(["Policy", "PolicyRouter"])
-except ImportError as e:
-    # Create placeholder classes that give helpful error messages
-    class Policy:
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "Policy requires vLLM to be installed. "
-                "Install it with: pip install vllm"
-            ) from e
-
-    class PolicyRouter:
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "PolicyRouter requires vLLM to be installed. "
-                "Install it with: pip install vllm"
-            ) from e
-
-    __all__.extend(["Policy", "PolicyRouter"])
