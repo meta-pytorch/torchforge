@@ -121,9 +121,9 @@ class RecoverableProcMesh(MeshTrait):
 
     def __init__(
         self,
-        num_gpus: int,
+        num_procs: int,
     ) -> None:
-        self.num_gpus = num_gpus
+        self.num_procs = num_procs
         self._proc_mesh: Optional[ProcMesh] = None
         self._recovery_task: Optional[asyncio.Task[None]] = None
         self.state: MeshState = MeshState.UNHEALTHY
@@ -168,7 +168,7 @@ class RecoverableProcMesh(MeshTrait):
         return self._recovery_task
 
     def gpus(self) -> int:
-        return self.num_gpus
+        return self.num_procs
 
     async def _recover(
         self, hook: Callable[[ProcMesh], Coroutine[Any, Any, None]]
@@ -185,7 +185,7 @@ class RecoverableProcMesh(MeshTrait):
                 logger.warning(f"Error stopping old ProcMesh: {e}")
 
         try:
-            self._proc_mesh = await proc_mesh(gpus=self.num_gpus)
+            self._proc_mesh = await proc_mesh(gpus=self.num_procs)
             if self._proc_mesh is not None:
                 await hook(self._proc_mesh)
             self.state = MeshState.HEALTHY

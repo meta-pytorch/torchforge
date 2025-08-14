@@ -17,7 +17,6 @@ from monarch.tools.config import Config
 from omegaconf import DictConfig
 
 from forge.controller import ForgeActor
-
 from forge.types import ProcessConfig
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -54,7 +53,7 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
     if process_config.scheduler == "local":
         if process_config.num_hosts != 1:
             raise ValueError("Local scheduler only supports 1 host")
-        return await proc_mesh(gpus=process_config.num_gpus)
+        return await proc_mesh(gpus=process_config.num_procs)
     elif process_config.scheduler == "mast":
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
