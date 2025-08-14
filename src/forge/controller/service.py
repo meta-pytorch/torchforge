@@ -30,7 +30,7 @@ Example:
 
     Session-based usage:
 
-    >>> async with service.session() as session:
+    >>> async with service.session():
     ...     result = await service.my_endpoint(arg1, arg2)
 """
 
@@ -332,7 +332,7 @@ class Service:
 
         Session-based usage:
 
-        >>> async with service.session() as session:
+        >>> async with service.session():
         ...     result1 = await service.my_endpoint(arg1, arg2)
         ...     result2 = await service.another_endpoint(arg3)
 
