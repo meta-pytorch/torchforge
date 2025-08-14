@@ -13,10 +13,6 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
-    # Temporarily comment out in favor of enabling MAST path
-    #"torch",
-    # TODO: uncomment when this doesn't break MAST
-    #"torchmonarch-nightly==2025.8.1",
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
@@ -25,7 +21,6 @@ dependencies = [
     "tokenizers",
     # Miscellaneous
     "omegaconf",
-    "torchstore",
 ]
 dynamic = ["version"]
 
@@ -44,6 +39,12 @@ dev = [
     "anyio",
     "pytest-asyncio",
 ]
+oss = [
+    "torch",
+    "torchmonarch-nightly==2025.8.1",
+    "torchstore",
+]
+
 
 [project.scripts]
 forge = "forge.cli.forge:main"
