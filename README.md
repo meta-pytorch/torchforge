@@ -31,13 +31,7 @@ uv sync --all-extras
 source .venv/bin/activate
 ```
 
-2. Install Monarch
-
-```bash
-uv pip install torchmonarch-nightly==2025.8.1
-```
-
-3. Setup CUDA on local machine
+2. Setup CUDA on local machine
 
 ```bash
 # feature install if you don't have /user/local/cuda-12.8
@@ -54,14 +48,14 @@ export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 ```
 
-4 Build vllm from source
+3. Build vllm from source
 
 ```bash
 git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
 cd vllm
 python use_existing_torch.py
 uv pip install -r requirements/build.txt
-uv pip install --no-build-isolation -e .bash
+uv pip install --no-build-isolation -e .
 ```
 
 > [!WARNING]
