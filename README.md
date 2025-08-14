@@ -55,7 +55,7 @@ git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
 cd vllm
 python use_existing_torch.py
 uv pip install -r requirements/build.txt
-uv pip install --no-build-isolation -e .bash
+uv pip install --no-build-isolation -e .
 ```
 
 > [!WARNING]
