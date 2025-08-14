@@ -1,0 +1,16 @@
+name: PR Test
+
+on:
+  pull_request:
+
+jobs:
+  test-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Say hello
+        run: echo "✅ This PR workflow has triggered successfully!"
+    
+    
