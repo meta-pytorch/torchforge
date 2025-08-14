@@ -15,7 +15,12 @@ comm:
 model:
   name: llama3
   flavor: 8B
-  hf_assets_path: /tmp/Meta-Llama-3.1-8B-Instruct
+  tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
+
+processes:
+  scheduler: local # local | mast (not supported yet)
+  num_hosts: 1
+  num_gpus: 8
 
 optimizer:
   name: AdamW
