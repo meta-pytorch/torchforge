@@ -28,11 +28,20 @@ async def test_llama3_torchstore_write():
     """
     print("=== PHASE 1: Writing Llama 3.1 8B to TorchStore ===")
     print("Initializing MultiProcessStore...")
-    store = MultiProcessStore()
+
+    # Use the class method create_store() which properly spawns the actors
+    store = await MultiProcessStore.create_store()
+    print("MultiProcessStore initialized successfully using create_store()")
+        
+    # Check if the client is properly initialized
+    if hasattr(store, '_client') and store._client is not None:
+        print("Store client is properly initialized")
+    else:
+        print("Warning: Store client may not be properly initialized")
     
     print("Loading Llama 3.1 8B model from local path...")
     # Load from local directory instead of HuggingFace download
-    model_path = "/tmp/Meta-Llama-3.1-8B"
+    model_path = "/tmp/Meta-Llama-3.1-8B-Instruct"
     
     try:
         # Load the model from local path - using device_map="auto" for efficient loading
