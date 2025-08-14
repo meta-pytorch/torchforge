@@ -232,23 +232,27 @@ class Policy(Actor):
         if self.torchstore is None:
             logger.warning("No torchstore configured, skipping model update")
             return False
-        
+
         try:
-            logger.info(f"Reading model state dict from torchstore with key: {self.state_dict_key}")
-            
+            logger.info(
+                f"Reading model state dict from torchstore with key: {self.state_dict_key}"
+            )
+
             # Get the current model from the worker
             model = self.worker.model_runner.model
             current_state_dict = model.state_dict()
-            
+
             # Read updated state dict from torchstore
-            await get_state_dict(self.torchstore, self.state_dict_key, current_state_dict)
-            
+            await get_state_dict(
+                self.torchstore, self.state_dict_key, current_state_dict
+            )
+
             # Load the updated state dict into the model
             model.load_state_dict(current_state_dict, strict=True)
-            
+
             logger.info("Successfully updated model weights from torchstore")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to update model from torchstore: {e}")
             return False
@@ -286,6 +290,28 @@ class Policy(Actor):
     @endpoint
     async def get_vllm_args(self):
         return self.vllm_args
+
+    @endpoint
+    async def test_forward_pass(self, input_ids, attention_mask=None):
+        """Perform a forward pass for testing purposes and return logits"""
+        import torch
+
+        model = self.worker.model_runner.model
+        device = next(model.parameters()).device
+
+        # Ensure inputs are on the correct device
+        input_ids = input_ids.to(device)
+
+        # vLLM models require positions argument
+        seq_len = input_ids.shape[1]
+        positions = torch.arange(seq_len, device=device, dtype=torch.long).unsqueeze(0)
+
+        with torch.no_grad():
+            # vLLM models require input_ids and positions
+            outputs = model(input_ids, positions)
+
+            # Return just the logits tensor, moved to CPU to avoid device issues
+            return outputs.cpu()
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
