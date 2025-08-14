@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script to:
-1. Initialize Llama 3 8B model from HuggingFace transformers
+1. Initialize Llama 3.1 8B-Instruct model from HuggingFace transformers
 2. Write its state dict to torchstore
 3. Initialize Policy with torchstore
 4. Call update to load model weights into Policy
@@ -24,9 +24,9 @@ from forge.actors.policy import Policy
 
 async def test_llama3_torchstore_write():
     """
-    First phase: Load Llama 3.1 8B and write state dict to torchstore
+    First phase: Load Llama 3.1 8B-Instruct and write state dict to torchstore
     """
-    print("=== PHASE 1: Writing Llama 3.1 8B to TorchStore ===")
+    print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
     print("Initializing MultiProcessStore...")
 
     # Use the class method create_store() which properly spawns the actors
@@ -131,7 +131,7 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
         print("Initializing Policy with torchstore...")
         # Initialize Policy with torchstore integration
         policy = Policy(
-            model="meta-llama/Meta-Llama-3-8B",
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct",
             tensor_parallel_size=1,
             pipeline_parallel_size=1,
             enforce_eager=True,
@@ -218,9 +218,9 @@ def setup_distributed_fsdp():
 
 async def test_llama3_fsdp_torchstore_write():
     """
-    FSDP Phase 1: Load Llama 3 8B with FSDP=2 and write state dict to torchstore
+    FSDP Phase 1: Load Llama 3.1 8B-Instruct with FSDP=2 and write state dict to torchstore
     """
-    print("\n=== FSDP PHASE 1: Writing Llama 3 8B with FSDP=2 to TorchStore ===")
+    print("\n=== FSDP PHASE 1: Writing Llama 3.1 8B-Instruct with FSDP=2 to TorchStore ===")
     
     # Setup distributed environment for FSDP
     print("Setting up distributed environment for FSDP=2...")
@@ -345,7 +345,7 @@ async def test_policy_integration_fsdp(store, state_dict_key, original_logits, t
         print("Initializing Policy with tensor_parallel_size=2 and torchstore...")
         # Initialize Policy with tensor parallel size 2 and torchstore integration
         policy = Policy(
-            model="meta-llama/Meta-Llama-3-8B",
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct",
             tensor_parallel_size=2,  # Use tensor parallelism instead of FSDP for vLLM
             pipeline_parallel_size=1,
             enforce_eager=True,
@@ -436,7 +436,7 @@ async def test_llama3_fsdp_torchstore():
         success = await test_policy_integration_fsdp(store, key, original_logits, tokenizer)
         
         if success:
-            print("\n🎉 Complete FSDP test passed! Llama 3 8B FSDP model successfully loaded into Policy via TorchStore!")
+            print("\n🎉 Complete FSDP test passed! Llama 3.1 8B-Instruct FSDP model successfully loaded into Policy via TorchStore!")
         else:
             print("\n❌ FSDP test failed during Policy integration phase")
             
@@ -470,7 +470,7 @@ async def test_llama3_torchstore():
         success = await test_policy_integration(store, key, original_logits, tokenizer)
         
         if success:
-            print("\n🎉 Complete test passed! Llama 3 8B model successfully loaded into Policy via TorchStore!")
+            print("\n🎉 Complete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!")
         else:
             print("\n❌ Test failed during Policy integration phase")
             
