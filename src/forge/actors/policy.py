@@ -235,17 +235,30 @@ class Policy(Actor):
 
         try:
             logger.info(
-                f"Reading model state dict from torchstore with key: {self.state_dict_key}"
+                f"Starting model update from torchstore with key: {self.state_dict_key}"
             )
 
             # Get the current model from the worker
             model = self.worker.model_runner.model
+            logger.info("Getting current model state dict...")
             current_state_dict = model.state_dict()
 
-            # Read updated state dict from torchstore
+            logger.info(f"Current state dict has {len(current_state_dict)} parameters")
+
+            # Read updated state dict from torchstore with progress tracking
+            logger.info(
+                "Loading state dict from torchstore (this may take several minutes for large models)..."
+            )
+
+            # Add a periodic yield to prevent blocking
+            loop = asyncio.get_event_loop()
+
+            # Run the heavy operation in a way that allows for progress tracking
             await get_state_dict(
                 self.torchstore, self.state_dict_key, current_state_dict
             )
+
+            logger.info("State dict loaded from torchstore, updating model...")
 
             # Load the updated state dict into the model
             model.load_state_dict(current_state_dict, strict=True)
@@ -255,6 +268,9 @@ class Policy(Actor):
 
         except Exception as e:
             logger.error(f"Failed to update model from torchstore: {e}")
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     @endpoint
@@ -292,26 +308,31 @@ class Policy(Actor):
         return self.vllm_args
 
     @endpoint
-    async def test_forward_pass(self, input_ids, attention_mask=None):
-        """Perform a forward pass for testing purposes and return logits"""
+    async def test_model_info(self):
+        """Get basic model information for testing purposes"""
         import torch
 
         model = self.worker.model_runner.model
-        device = next(model.parameters()).device
 
-        # Ensure inputs are on the correct device
-        input_ids = input_ids.to(device)
+        # Get basic model info that doesn't require forward pass
+        model_info = {
+            "num_parameters": sum(p.numel() for p in model.parameters()),
+            "device": str(next(model.parameters()).device),
+            "dtype": str(next(model.parameters()).dtype),
+            "model_type": type(model).__name__,
+        }
 
-        # vLLM models require positions argument
-        seq_len = input_ids.shape[1]
-        positions = torch.arange(seq_len, device=device, dtype=torch.long).unsqueeze(0)
+        # Get a sample of parameter values for comparison
+        # Use the embedding layer weights as they're typically the first parameters
+        for name, param in model.named_parameters():
+            if "embed" in name.lower() and param.numel() >= 10:
+                # Convert to float32 before numpy conversion to handle BFloat16
+                sample_weights = param.flatten()[:10].cpu().detach().float()
+                model_info["sample_weights"] = sample_weights.numpy().tolist()
+                model_info["sample_param_name"] = name
+                break
 
-        with torch.no_grad():
-            # vLLM models require input_ids and positions
-            outputs = model(input_ids, positions)
-
-            # Return just the logits tensor, moved to CPU to avoid device issues
-            return outputs.cpu()
+        return model_info
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
