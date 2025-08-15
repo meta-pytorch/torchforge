@@ -163,6 +163,7 @@ def sft_iterable_dataset(
     dataset_name: Optional[str] = None,
     filter_fn: Optional[Callable] = None,
     filter_kwargs: Optional[dict[str, Any]] = None,
+    single_pass: bool = False,
     **load_dataset_kwargs: dict[str, Any],
 ) -> HfIterableDataset:
     """
@@ -207,5 +208,6 @@ def sft_iterable_dataset(
         dataset_name=dataset_name,
         filter_fn=filter_fn,
         filter_kwargs=filter_kwargs,
+        single_pass=single_pass,
         **load_dataset_kwargs,
     )
