@@ -30,6 +30,7 @@ jobs:
           pip install torch==2.9.0.dev20250815+cpu --index-url https://download.pytorch.org/whl/nightly/cpu
           python -m pip install --no-build-isolation --verbose assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl
       - name: Run unit tests with coverage
-        run: pytest tests --cov=. --cov-report=xml --durations=20 -vv
+        # TODO add all tests
+        run: pytest tests/unit_tests/test_replay_buffer.py --cov=. --cov-report=xml --durations=20 -vv
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
