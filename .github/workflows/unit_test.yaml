@@ -14,17 +14,6 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
-      - name: Conda init
-        run: conda init
-      - name: Create conda env
-        run: conda create -n forge python=${{ matrix.python-version }} --yes
-      - name: Activate conda env
-        run: conda activate forge
-        # remove the next two steps
-      - name: Pip debug
-        run: python -m pip debug --verbose
-      - name: Check Python version
-        run: python --version
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
@@ -39,7 +28,7 @@ jobs:
           python -m pip install -e ".[dev]"
           # Will have to pin until monarch wheel is reasonable
           pip install torch==2.9.0.dev20250815+cpu --index-url https://download.pytorch.org/whl/nightly/cpu
-          python -m pip install --no-build-isolation --verbose assets/wheels/monarch_no_torch-0.1.0.dev20250815-cp310-cp310-linux_x86_64.whl
+          python -m pip install --no-build-isolation --verbose assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl
       - name: Run unit tests with coverage
         run: pytest tests --cov=. --cov-report=xml --durations=20 -vv
       - name: Upload Coverage to Codecov
