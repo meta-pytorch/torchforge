@@ -42,7 +42,7 @@ dev = [
 ]
 oss = [
     "torch",
-    "torchmonarch-nightly==2025.8.1",
+    # "torchmonarch-nightly==2025.8.1",
     # "torchstore",
 ]
 
