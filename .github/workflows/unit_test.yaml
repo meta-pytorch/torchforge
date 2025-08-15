@@ -1,17 +1,8 @@
 name: Unit Test
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
 
-concurrency:
-  group: unit-test${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
-  cancel-in-progress: true
-
-defaults:
-  run:
-    shell: bash -l -eo pipefail {0}
 
 jobs:
   unit_tests:
@@ -33,7 +24,6 @@ jobs:
         run: python -m pip install --upgrade pip
       - name: Install dependencies
         run: |
-          python -m pip install torch torchao
           python -m pip install -e ".[dev]"
           python -m pip install -e ".[oss]"
       - name: Run unit tests with coverage
