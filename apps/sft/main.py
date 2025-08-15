@@ -84,6 +84,7 @@ class ForgeSFTRecipe(ForgeEngine):
         self.val_dataloader = self.setup_data(
             self.job_config.dataset_val,
             batch_size=self.job_config.training.local_batch_size,
+            single_pass=True,
         )
 
         # self.train_dataloader = self.setup_data(
@@ -101,7 +102,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self, dataset_config, batch_size):
+    def setup_data(self, dataset_config, batch_size, single_pass=False):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -119,6 +120,7 @@ class ForgeSFTRecipe(ForgeEngine):
             message_transform=AlpacaToMessages(),
             path=dataset_config.path,
             split=dataset_config.split,
+            single_pass=single_pass,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -254,8 +256,6 @@ class ForgeSFTRecipe(ForgeEngine):
         with torch.no_grad():
             val_pbar = tqdm(self.val_dataloader, desc="Validation", leave=False)
             for batch_idx, batch in enumerate(val_pbar):
-                if batch_idx >= 100:  # TODO: remove this
-                    break
                 batch_to_device(batch, self.device)
                 current_num_tokens = (batch["labels"] != CROSS_ENTROPY_IGNORE_IDX).sum()
                 # Compute loss
