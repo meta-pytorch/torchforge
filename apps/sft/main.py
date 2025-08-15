@@ -18,6 +18,7 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -256,9 +257,7 @@ class ForgeSFTRecipe(ForgeEngine):
                 if batch_idx >= 100:  # TODO: remove this
                     break
                 batch_to_device(batch, self.device)
-                current_num_tokens = batch[
-                    "labels"
-                ].numel()  # TODO: exclude ignore index
+                current_num_tokens = (batch["labels"] != CROSS_ENTROPY_IGNORE_IDX).sum()
                 # Compute loss
                 labels = batch.pop("labels")
                 loss = self.forward_backward(batch, labels, do_backward=False)
