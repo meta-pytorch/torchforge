@@ -227,98 +227,26 @@ class Policy(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    def _get_tensor_parallel_sharding_strategy(self, param_name: str) -> tuple[int, bool]:
-        """
-        Determine the sharding strategy for a parameter in tensor parallel setup.
-        
-        Returns:
-            tuple[int, bool]: (shard_dimension, is_sharded)
-                - shard_dimension: Which dimension to shard (0 or 1) 
-                - is_sharded: Whether this parameter should be sharded at all
-        
-        Based on vLLM's tensor parallel implementation for LLaMA models:
-        - Embedding layers: shard along vocab dimension (dim 0)
-        - Attention projections: q/k/v_proj shard along hidden dimension (dim 0), o_proj along input dimension (dim 1)
-        - MLP projections: gate/up_proj shard along hidden dimension (dim 0), down_proj along input dimension (dim 1)  
-        - Layer norms: not sharded (replicated)
-        - Output layer: shard along vocab dimension (dim 0)
-        """
-        # Parameters that are not sharded (replicated across all tensor parallel ranks)
-        if any(keyword in param_name for keyword in [
-            'norm', 'bias', 'rotary_emb'
-        ]):
-            return 0, False
-            
-        # Embedding layers - shard along vocab dimension (dim 0)
-        if 'embed_tokens' in param_name or 'lm_head' in param_name:
-            return 0, True
-            
-        # Attention projections
-        if any(proj in param_name for proj in ['q_proj', 'k_proj', 'v_proj']):
-            # Input projections: shard output dimension (dim 0)
-            return 0, True
-        elif 'o_proj' in param_name:
-            # Output projection: shard input dimension (dim 1) 
-            return 1, True
-            
-        # MLP projections
-        elif any(proj in param_name for proj in ['gate_proj', 'up_proj']):
-            # Input projections: shard output dimension (dim 0)
-            return 0, True
-        elif 'down_proj' in param_name:
-            # Output projection: shard input dimension (dim 1)
-            return 1, True
-            
-        # Default: try to infer from tensor shape patterns
-        return 0, True
-
-    def _calculate_tensor_shard(self, full_tensor: torch.Tensor, shard_dim: int) -> torch.Tensor:
-        """
-        Calculate the shard of a full tensor for the current tensor parallel rank.
-        
-        Args:
-            full_tensor: The full tensor to shard
-            shard_dim: Which dimension to shard along (0 or 1)
-            
-        Returns:
-            torch.Tensor: The sharded tensor for this rank
-        """
-        tp_rank = self.rank % self.tensor_parallel_size
-        tensor_size = full_tensor.shape[shard_dim]
-        
-        if tensor_size % self.tensor_parallel_size != 0:
-            raise ValueError(
-                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
-                f"across {self.tensor_parallel_size} ranks: not evenly divisible"
-            )
-            
-        shard_size = tensor_size // self.tensor_parallel_size
-        start_idx = tp_rank * shard_size
-        end_idx = start_idx + shard_size
-        
-        if shard_dim == 0:
-            return full_tensor[start_idx:end_idx]
-        elif shard_dim == 1:
-            return full_tensor[:, start_idx:end_idx]
-        else:
-            raise ValueError(f"Unsupported shard dimension: {shard_dim}")
-
     async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
         """
-        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
+        Load full state dict from torchstore into tensor parallel model.
+        Uses DTensor's distribution system when available for automatic sharding.
         """
         from torchstore._state_dict_utils import DELIM, MAPPING
-        
+
         # Get the mapping of stored parameters
         try:
-            fetched_mapping = await self.torchstore.get(f"{self.state_dict_key}{DELIM}{MAPPING}")
+            fetched_mapping = await self.torchstore.get(
+                f"{self.state_dict_key}{DELIM}{MAPPING}"
+            )
         except Exception as e:
-            raise RuntimeError(f"Could not load mapping for state dict key {self.state_dict_key}: {e}")
+            raise RuntimeError(
+                f"Could not load mapping for state dict key {self.state_dict_key}: {e}"
+            )
 
-        logger.info(f"Loading {len(fetched_mapping)} parameters with tensor parallel sharding")
+        logger.info(f"Loading {len(fetched_mapping)} parameters with tensor parallel support")
         
         updated_count = 0
-        skipped_params = []
         
         for param_name in fetched_mapping.keys():
             if param_name not in current_state_dict:
@@ -331,65 +259,48 @@ class Policy(Actor):
                 # Load the full tensor from torchstore
                 stored_tensor = await self.torchstore.get(f"{self.state_dict_key}{DELIM}{param_name}")
                 
-                # Determine sharding strategy for this parameter
-                shard_dim, is_sharded = self._get_tensor_parallel_sharding_strategy(param_name)
-                
-                if not is_sharded:
-                    # Parameter is replicated - shapes should match exactly
-                    if stored_tensor.shape != current_tensor.shape:
-                        logger.warning(
-                            f"Replicated parameter {param_name} has mismatched shapes: "
-                            f"{stored_tensor.shape} vs {current_tensor.shape}, skipping"
-                        )
-                        skipped_params.append(param_name)
-                        continue
+                # Check if the current tensor is a DTensor
+                if hasattr(current_tensor, '_spec') and current_tensor._spec is not None:
+                    # This is a DTensor - use DTensor's distribution system
+                    logger.debug(f"Distributing DTensor parameter {param_name} with spec: {current_tensor._spec}")
                     
-                    # Direct copy for replicated parameters
-                    current_state_dict[param_name].copy_(stored_tensor)
-                    logger.debug(f"Copied replicated parameter {param_name}")
-                    
-                else:
-                    # Parameter should be sharded
-                    if stored_tensor.shape == current_tensor.shape:
-                        # Already sharded - direct copy
-                        current_state_dict[param_name].copy_(stored_tensor)
-                        logger.debug(f"Copied pre-sharded parameter {param_name}")
+                    try:
+                        from torch.distributed._tensor import distribute_tensor
                         
-                    else:
-                        # Need to shard the full tensor
-                        try:
-                            sharded_tensor = self._calculate_tensor_shard(stored_tensor, shard_dim)
-                            
-                            if sharded_tensor.shape != current_tensor.shape:
-                                logger.warning(
-                                    f"Calculated shard for {param_name} has wrong shape: "
-                                    f"{sharded_tensor.shape} vs expected {current_tensor.shape}, skipping"
-                                )
-                                skipped_params.append(param_name)
-                                continue
-                                
-                            current_state_dict[param_name].copy_(sharded_tensor)
-                            logger.debug(
-                                f"Sharded parameter {param_name} along dim {shard_dim}: "
-                                f"{stored_tensor.shape} -> {sharded_tensor.shape}"
+                        # Get the DTensor's distribution spec
+                        device_mesh = current_tensor.device_mesh
+                        placements = current_tensor._spec.placements
+                        
+                        # Distribute the stored tensor according to the current tensor's spec
+                        distributed_tensor = distribute_tensor(stored_tensor, device_mesh, placements)
+                        
+                        # Copy the local shard to the current tensor
+                        current_state_dict[param_name].copy_(distributed_tensor._local_tensor)
+                        logger.debug(f"Successfully distributed DTensor parameter {param_name}")
+                        
+                    except Exception as dtensor_e:
+                        logger.warning(f"Failed to distribute DTensor {param_name}: {dtensor_e}")
+                        continue
+                        
+                else:
+                    # Regular tensor - direct copy (should have matching shapes)
+                    if stored_tensor.shape != current_tensor.shape:
+                        if stored_tensor.shape != current_tensor.shape:
+                            raise RuntimeError(
+                            f"Shape mismatch for regular tensor {param_name}: {stored_tensor.shape} vs {current_tensor.shape}"
                             )
-                            
-                        except ValueError as shard_e:
-                            logger.warning(f"Could not shard parameter {param_name}: {shard_e}")
-                            skipped_params.append(param_name)
-                            continue
+                        
+                    current_state_dict[param_name].copy_(stored_tensor)
+                    logger.debug(f"Copied regular parameter {param_name}")
                 
                 updated_count += 1
                 
             except Exception as e:
                 logger.warning(f"Failed to load parameter {param_name}: {e}")
-                skipped_params.append(param_name)
                 continue
         
         logger.info(f"Successfully updated {updated_count} parameters")
-        if skipped_params:
-            logger.warning(f"Skipped {len(skipped_params)} parameters: {skipped_params[:10]}...")
-            
+        
         if updated_count == 0:
             raise RuntimeError("No parameters were successfully updated")
 
@@ -401,7 +312,9 @@ class Policy(Actor):
             return False
 
         try:
-            logger.info(f"Starting model update from torchstore with key: {self.state_dict_key}")
+            logger.info(
+                f"Starting model update from torchstore with key: {self.state_dict_key}"
+            )
 
             # Get the current model from the worker
             model = self.worker.model_runner.model
@@ -417,7 +330,9 @@ class Policy(Actor):
             else:
                 # Single GPU model - use standard loading
                 logger.info("Loading state dict for single GPU model...")
-                await get_state_dict(self.torchstore, self.state_dict_key, current_state_dict)
+                await get_state_dict(
+                    self.torchstore, self.state_dict_key, current_state_dict
+                )
 
             # Load the updated state dict into the model
             model.load_state_dict(current_state_dict, strict=True)
@@ -428,6 +343,7 @@ class Policy(Actor):
         except Exception as e:
             logger.error(f"Failed to update model from torchstore: {e}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 

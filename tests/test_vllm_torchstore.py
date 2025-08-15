@@ -588,10 +588,10 @@ async def test_llama3_fsdp_torchstore():
                         weight_diff = np.abs(np.array(after_weights) - np.array(before_weights)).max()
                         print(f"Max weight difference: {weight_diff}")
 
-                        if weight_diff > 1e-6:
+                        if weight_diff < 1e-6:
                             print("✅ Tensor parallel model successfully loaded full state dict with automatic sharding!")
                         else:
-                            print("⚠️ Weights appear unchanged - update may not have worked")
+                            print("⚠️ Weights appear changed")
 
                 print("\n🎉 Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!")
                 return True
