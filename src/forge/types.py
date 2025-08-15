@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class Message(TypedDict):
@@ -85,3 +85,16 @@ class State:
     """
 
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProcessConfig:
+    """A proc_mesh config for the torchx scheduler."""
+
+    scheduler: Literal["mast", "local"] = "local"
+    num_procs: int = 1
+    num_hosts: int = 1
+    # The following is mast specific.
+    oncall: str = "torchtune"
+    identity: str = "pytorch_distributed"
+    image: str = "forge_workspace:latest"
