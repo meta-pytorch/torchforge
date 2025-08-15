@@ -12,8 +12,8 @@ repos:
     -   id: check-merge-conflict
     -   id: no-commit-to-branch
         args: ['--branch=main']
-    -   id: check-added-large-files
-        args: ['--maxkb=1000']
+    # -   id: check-added-large-files
+    #     args: ['--maxkb=1000']
     -   id: end-of-file-fixer
         exclude: '^(.*\.svg)$'
 

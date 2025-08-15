@@ -28,7 +28,7 @@ jobs:
           python -m pip install -e ".[dev]"
           # Will have to pin until monarch wheel is reasonable
           pip install torch==2.9.0.dev20250815+cpu --index-url https://download.pytorch.org/whl/nightly/cpu
-          python -m pip install assets/wheels/monarch-no-torch20250815.whl
+          python -m pip install assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl
       - name: Run unit tests with coverage
         run: pytest tests --cov=. --cov-report=xml --durations=20 -vv
       - name: Upload Coverage to Codecov
