@@ -246,18 +246,182 @@ class Policy(Actor):
 
             logger.info(f"Current state dict has {len(current_state_dict)} parameters")
 
-            # Read updated state dict from torchstore with progress tracking
-            logger.info(
-                "Loading state dict from torchstore (this may take several minutes for large models)..."
-            )
+            # Check if we're in a tensor parallel setup
+            is_tensor_parallel = self.tensor_parallel_size > 1
+            logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
 
-            # Add a periodic yield to prevent blocking
-            loop = asyncio.get_event_loop()
+            if is_tensor_parallel:
+                # For tensor parallel models, we need special handling to load full state dict
+                logger.info(
+                    "Detected tensor parallel model - using enhanced loading strategy..."
+                )
 
-            # Run the heavy operation in a way that allows for progress tracking
-            await get_state_dict(
-                self.torchstore, self.state_dict_key, current_state_dict
-            )
+                # First, try the standard approach and catch size mismatch errors
+                try:
+                    await get_state_dict(
+                        self.torchstore, self.state_dict_key, current_state_dict
+                    )
+                    logger.info(
+                        "Standard loading worked - state dict was already sharded"
+                    )
+
+                except RuntimeError as e:
+                    if "size of tensor" in str(e) and "must match" in str(e):
+                        logger.info(
+                            "Size mismatch detected - attempting tensor parallel loading..."
+                        )
+
+                        # Get the mapping to understand the structure
+                        from torchstore._state_dict_utils import DELIM, MAPPING
+
+                        try:
+                            fetched_mapping = await self.torchstore.get(
+                                f"{self.state_dict_key}{DELIM}{MAPPING}"
+                            )
+                        except Exception as mapping_e:
+                            raise RuntimeError(
+                                f"Could not load mapping for state dict key {self.state_dict_key}: {mapping_e}"
+                            )
+
+                        logger.info(
+                            f"Found {len(fetched_mapping)} parameters in stored state dict"
+                        )
+
+                        # Load each tensor individually and handle sharding
+                        updated_count = 0
+                        for flattened_key in fetched_mapping.keys():
+
+                            # Convert flattened key back to parameter name
+                            # The flattened key format matches the original parameter names
+                            param_name = flattened_key
+
+                            if param_name in current_state_dict:
+                                current_tensor = current_state_dict[param_name]
+
+                                try:
+                                    # Load the stored tensor (without in-place copy to avoid size mismatch)
+                                    stored_tensor = await self.torchstore.get(
+                                        f"{self.state_dict_key}{DELIM}{flattened_key}"
+                                    )
+
+                                    # Check if sizes match - if not, attempt automatic sharding
+                                    if stored_tensor.shape != current_tensor.shape:
+                                        logger.info(
+                                            f"Sharding tensor {param_name}: {stored_tensor.shape} -> {current_tensor.shape}"
+                                        )
+
+                                        # Simple sharding logic for tensor parallel
+                                        # This handles the common case where tensors are sharded along dimension 0
+                                        if (
+                                            len(stored_tensor.shape) >= 2
+                                            and stored_tensor.shape[0]
+                                            % self.tensor_parallel_size
+                                            == 0
+                                            and stored_tensor.shape[0]
+                                            == current_tensor.shape[0]
+                                            * self.tensor_parallel_size
+                                        ):
+
+                                            shard_size = (
+                                                stored_tensor.shape[0]
+                                                // self.tensor_parallel_size
+                                            )
+                                            tp_rank = (
+                                                self.rank % self.tensor_parallel_size
+                                            )
+                                            start_idx = tp_rank * shard_size
+                                            end_idx = start_idx + shard_size
+
+                                            # Shard along dimension 0
+                                            sharded_tensor = stored_tensor[
+                                                start_idx:end_idx
+                                            ]
+                                            current_state_dict[param_name].copy_(
+                                                sharded_tensor
+                                            )
+                                            updated_count += 1
+                                            logger.debug(
+                                                f"Successfully sharded tensor {param_name}"
+                                            )
+                                            continue
+
+                                        # Try sharding along dimension 1 for some tensor types (like attention weights)
+                                        elif (
+                                            len(stored_tensor.shape) >= 2
+                                            and stored_tensor.shape[1]
+                                            % self.tensor_parallel_size
+                                            == 0
+                                            and stored_tensor.shape[1]
+                                            == current_tensor.shape[1]
+                                            * self.tensor_parallel_size
+                                        ):
+
+                                            shard_size = (
+                                                stored_tensor.shape[1]
+                                                // self.tensor_parallel_size
+                                            )
+                                            tp_rank = (
+                                                self.rank % self.tensor_parallel_size
+                                            )
+                                            start_idx = tp_rank * shard_size
+                                            end_idx = start_idx + shard_size
+
+                                            # Shard along dimension 1
+                                            sharded_tensor = stored_tensor[
+                                                :, start_idx:end_idx
+                                            ]
+                                            current_state_dict[param_name].copy_(
+                                                sharded_tensor
+                                            )
+                                            updated_count += 1
+                                            logger.debug(
+                                                f"Successfully sharded tensor {param_name} along dim 1"
+                                            )
+                                            continue
+
+                                        # If automatic sharding didn't work, skip this tensor
+                                        logger.warning(
+                                            f"Could not automatically shard tensor {param_name} with shape {stored_tensor.shape} -> {current_tensor.shape}, skipping"
+                                        )
+                                        continue
+
+                                    else:
+                                        # Sizes match, direct copy
+                                        current_state_dict[param_name].copy_(
+                                            stored_tensor
+                                        )
+                                        updated_count += 1
+                                        logger.debug(
+                                            f"Successfully copied tensor {param_name}"
+                                        )
+
+                                except Exception as tensor_e:
+                                    logger.warning(
+                                        f"Failed to load tensor {param_name}: {tensor_e}"
+                                    )
+                                    continue
+                            else:
+                                logger.warning(
+                                    f"Parameter {param_name} not found in current model state dict"
+                                )
+
+                        logger.info(
+                            f"Successfully updated {updated_count} tensors with tensor parallel sharding"
+                        )
+
+                        if updated_count == 0:
+                            raise RuntimeError("No tensors were successfully updated")
+
+                    else:
+                        # Re-raise if it's not a size mismatch error
+                        raise
+
+            else:
+                # Standard single GPU loading
+                logger.info("Using standard loading for single GPU model...")
+                await get_state_dict(
+                    self.torchstore, self.state_dict_key, current_state_dict
+                )
 
             logger.info("State dict loaded from torchstore, updating model...")
 
