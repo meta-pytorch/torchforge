@@ -38,6 +38,16 @@ Profiler = Any
 Tokenizer = Any
 
 
+_SUPPORTS_FLEX_ATTENTION = (
+    torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5)
+)
+
+if _SUPPORTS_FLEX_ATTENTION:
+    from torch.nn.attention.flex_attention import BlockMask
+else:
+    BlockMask = torch.Tensor
+
+
 class ForgeSFTRecipe(ForgeEngine):
     job_config: ForgeJobConfig
     train_spec: forge_train_spec.ForgeTrainSpec
@@ -59,8 +69,10 @@ class ForgeSFTRecipe(ForgeEngine):
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
+        self._run_val_every_n_steps = job_config.get("run_val_every_n_steps", None)
         super().__init__(job_config)
         self.metric_logger = None  # TODO: fix this
+        self.model = nn.ModuleList(self.model_parts)
 
     def setup(self):
         self.train_dataloader = self.setup_data(
@@ -128,7 +140,10 @@ class ForgeSFTRecipe(ForgeEngine):
         return dataloader
 
     def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
+        self,
+        input_dict: dict[str, torch.Tensor],
+        labels: torch.Tensor,
+        do_backward: bool = True,
     ) -> torch.Tensor:
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
@@ -179,7 +194,8 @@ class ForgeSFTRecipe(ForgeEngine):
                     loss = self.loss_fn(pred, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                loss.backward()
+                if do_backward:
+                    loss.backward()
 
         return loss
 
@@ -223,11 +239,82 @@ class ForgeSFTRecipe(ForgeEngine):
                 last_step=self.current_step == self.num_training_steps,
             )
 
+            if (
+                self._run_val_every_n_steps is not None
+                and self.current_step % self._run_val_every_n_steps == 0
+            ):
+                # pbar.refresh()
+                self.validate()
+
+    def validate(self) -> None:
+        self.model.eval()
+        total_val_loss = torch.tensor(0.0, device=self.device)
+        total_val_tokens = torch.tensor(0.0, device=self.device)
+        with torch.no_grad():
+            val_pbar = tqdm(self.val_dataloader, desc="Validation", leave=False)
+            for batch_idx, batch in enumerate(val_pbar):
+                if batch_idx >= 100:  # TODO: remove this
+                    break
+                batch_to_device(batch, self.device)
+                current_num_tokens = batch[
+                    "labels"
+                ].numel()  # TODO: exclude ignore index
+                # Compute loss
+                labels = batch.pop("labels")
+                loss = self.forward_backward(batch, labels, do_backward=False)
+                val_loss = loss * current_num_tokens
+                total_val_loss += val_loss
+                total_val_tokens += current_num_tokens
+                # Update progress bar description with current average loss
+                avg_loss_so_far = (
+                    (total_val_loss / total_val_tokens).item()
+                    if total_val_tokens > 0
+                    else float("inf")
+                )
+                val_pbar.set_description(f"Validation Loss: {avg_loss_so_far:.4f}")
+        # Aggregate validation metrics across all ranks
+        torch.distributed.all_reduce(total_val_loss)
+        torch.distributed.all_reduce(total_val_tokens)
+        avg_val_loss = (
+            (total_val_loss / total_val_tokens).item()
+            if total_val_tokens > 0
+            else float("inf")
+        )
+        self.model.train()
+        print(f"Validation loss: {avg_val_loss}")
+
     def cleanup(self) -> None:
         if self.checkpointer:
             self.checkpointer.close()
         if self.metric_logger:
             self.metric_logger.close()
+
+
+def batch_to_device(batch: dict, device: torch.device) -> None:
+    """Function that takes a dictionary (or nested dictionary) of tensors and sets them
+    all to the same device. This utility is intended to be used for batches of data to be
+    moved to device, the update is inplace.
+
+    Args:
+        batch (dict): dict of Tensors or more nested dicts of tensors.
+        device (torch.device): torch device to move the tensors to.
+
+    Raises:
+        ValueError: if batch dict contains anything other than ``torch.Tensor``.
+
+    """
+    for k, v in batch.items():
+        if isinstance(v, dict):
+            batch_to_device(v, device)
+        elif isinstance(v, torch.Tensor):
+            batch[k] = v.to(device)
+        elif _SUPPORTS_FLEX_ATTENTION and isinstance(v, BlockMask):
+            batch[k] = v.to(device)
+        else:
+            raise ValueError(
+                f"""To use batch_to_device, all elements in the batch must be a dict or Tensor.
+Got key "{k}" with value of type {type(v)}"""
+            )
 
 
 @parse
