@@ -25,7 +25,7 @@ jobs:
         run: python -m pip install --upgrade pip
       - name: Install dependencies
         run: |
-          python -m pip install --no-build-isolation -e ".[dev,cpu]" --index-url https://download.pytorch.org/whl/nightly/cpu --find-links assets/wheels
+          python -m pip install --no-build-isolation -e ".[dev,cpu]" --extra-index-url https://download.pytorch.org/whl/nightly/cpu --find-links assets/wheels
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
