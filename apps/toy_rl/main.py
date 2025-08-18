@@ -16,7 +16,6 @@ from functools import partial
 import torch
 from forge.actors.collector import Collector
 
-from forge.controller.stack import stack
 from forge.data.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
 from forge.types import Action, Observation, State
@@ -150,7 +149,8 @@ async def main():
     # This policy just generates something between -2. and 2.
     policy = await policy_procs.spawn("policy", ToyPolicy, action_range=(-2.0, 2.0))
 
-    browser_collectors = await browser_procs.spawn(
+    # TODO - replace multiple collectors with a service.
+    collectors = await browser_procs.spawn(
         "browser",
         Collector,
         max_collector_steps=5,
@@ -162,29 +162,6 @@ async def main():
         # to do it this way.
         environment_creator=partial(ToyEnvironment, name="browser", max_steps=5),
     )
-    deep_research_collectors = await deep_research_procs.spawn(
-        "deep_research",
-        Collector,
-        max_collector_steps=5,
-        policy=policy,
-        replay_buffer=replay_buffer,
-        environment_creator=partial(ToyEnvironment, name="deep_research", max_steps=5),
-    )
-    coding_collectors = await coder_procs.spawn(
-        "coding",
-        Collector,
-        max_collector_steps=5,
-        policy=policy,
-        replay_buffer=replay_buffer,
-        environment_creator=partial(ToyEnvironment, name="coding", max_steps=5),
-    )
-
-    collectors = stack(
-        browser_collectors,
-        deep_research_collectors,
-        coding_collectors,
-        interface=Collector,
-    )
 
     # Create two async tasks
     async def episode_collector_task():
@@ -193,16 +170,7 @@ async def main():
         while True:
             try:
                 print(f"🎮 Running episode {episode_count + 1}...")
-
-                # call() is essentially our "map" - every collector runs their own
-                # episode loop.
-                # What's pretty elegant here is if we wanted to control off policiness, we could
-                # easily counter on steps and call policy.update_weights.call() at our desired
-                # frequency.
-                results = collectors.run_episode.call()
-
-                # Temporary hack due to Monarch changes - ideally you could just await results
-                results = [await r for r in results]
+                results = await collectors.run_episode.call()
                 num_trajectories = sum([len(r._values) for r in results])
                 episode_count += 1
                 print(

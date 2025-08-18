@@ -8,7 +8,6 @@ from .proc_mesh import get_proc_mesh, spawn_actors
 from .recoverable_mesh import RecoverableProcMesh
 from .service import AutoscalingConfig, Service, ServiceConfig
 from .spawn import spawn_service
-from .stack import stack
 
 __all__ = [
     "AutoscalingConfig",
@@ -19,5 +18,4 @@ __all__ = [
     "get_proc_mesh",
     "ForgeActor",
     "RecoverableProcMesh",
-    "stack",
 ]
