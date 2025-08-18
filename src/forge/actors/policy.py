@@ -194,7 +194,6 @@ class Policy(Actor):
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
-                gpu_memory_utilization=0.7,  # Reduce from default 0.9 to 0.7 to fit in available memory
             )
             # Original method returns False when not run in the main thread
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
@@ -312,22 +311,16 @@ class Policy(Actor):
             return False
 
         try:
-            logger.info(
-                f"Starting model update from torchstore with key: {self.state_dict_key}"
-            )
 
             # Get the current model from the worker
             model = self.worker.model_runner.model
             current_state_dict = model.state_dict()
 
-            logger.info(f"Current state dict has {len(current_state_dict)} parameters")
-            logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
-
             if self.tensor_parallel_size > 1:
-                logger.info("Loading state dict with tensor parallel sharding...")
+                logger.info("Loading state dict with tensor parallel sharding")
                 await self._load_tensor_parallel_state_dict(current_state_dict)
             else:
-                logger.info("Loading state dict for single GPU model...")
+                logger.info("Loading state dict for single GPU model")
                 await get_state_dict(
                     self.torchstore, self.state_dict_key, current_state_dict
                 )

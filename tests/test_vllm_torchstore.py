@@ -142,12 +142,12 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
         try:
             success = await policy.update.call()
             if success:
-                print("✅ Policy update successful!")
+                print("Policy update successful!")
             else:
-                print("❌ Policy update failed!")
+                print("Policy update failed!")
                 return False
         except Exception as e:
-            print(f"⚠️  Policy.update() timed out or failed: {e}")
+            print(f"Policy.update() timed out or failed: {e}")
             success = None  # Mark as unknown
 
         # Test the model after update (run regardless of timeout)
@@ -172,7 +172,7 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
 
                     if weight_diff < 1e-6:
                         print(
-                            "✅ Model weights preserved correctly after torchstore update!"
+                            "Model weights preserved correctly after torchstore update!"
                         )
                     else:
                         print("⚠️ Model weights changed unexpectedly during update")
@@ -370,7 +370,7 @@ async def test_policy_integration_fsdp(
         success = await policy.update.call()
 
         if success:
-            print("✅ Policy update successful!")
+            print("Policy update successful!")
 
             # Test the model after update (only on rank 0)
             if dist.get_rank() == 0:
@@ -398,15 +398,15 @@ async def test_policy_integration_fsdp(
 
                         if weight_diff < 1e-6:
                             print(
-                                "✅ FSDP model weights preserved correctly after torchstore update!"
+                                "FSDP model weights preserved correctly after torchstore update!"
                             )
                         else:
                             print(
-                                "⚠️ FSDP model weights changed unexpectedly during update"
+                                "FSDP model weights changed unexpectedly during update"
                             )
 
         else:
-            print("❌ Policy update failed!")
+            print("Policy update failed!")
             return False
 
         return True
@@ -479,16 +479,16 @@ async def test_llama3_fsdp_torchstore():
 
     # Check if we have enough GPUs
     if not torch.cuda.is_available():
-        print("❌ No CUDA available for tensor parallel test")
+        print("No CUDA available for tensor parallel test")
         return False
     elif torch.cuda.device_count() < 2:
         print(
-            f"❌ Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+            f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
         )
         return False
 
     print(
-        f"✅ {torch.cuda.device_count()} GPU(s) available - proceeding with tensor parallel test"
+        f"{torch.cuda.device_count()} GPU(s) available - proceeding with tensor parallel test"
     )
 
     try:
@@ -588,14 +588,14 @@ async def test_llama3_fsdp_torchstore():
             "Calling Policy.update() to load full state dict into tensor parallel model..."
         )
         print(
-            "🔄 This should automatically shard the full tensors for tensor parallel loading..."
+            "This should automatically shard the full tensors for tensor parallel loading..."
         )
 
         try:
             success = await policy.update.call()
 
             if success:
-                print("✅ Policy update successful!")
+                print("Policy update successful!")
 
                 # Get model info after update
                 model_info_result = await policy.test_model_info.call()
@@ -620,17 +620,17 @@ async def test_llama3_fsdp_torchstore():
 
                         if weight_diff < 1e-6:
                             print(
-                                "✅ Tensor parallel model successfully loaded full state dict with automatic sharding!"
+                                "Tensor parallel model successfully loaded full state dict with automatic sharding!"
                             )
                         else:
-                            print("⚠️ Weights appear changed")
+                            print("Weights appear changed")
 
                 print(
-                    "\n🎉 Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
+                    "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
                 )
                 return True
             else:
-                print("❌ Policy update failed!")
+                print("Policy update failed!")
                 return False
 
         except Exception as e:
@@ -645,7 +645,7 @@ async def test_llama3_fsdp_torchstore():
             return False  # Return False since this is a real limitation we need to fix
 
     except Exception as e:
-        print(f"💥 Tensor parallel test failed with error: {e}")
+        print(f"Tensor parallel test failed with error: {e}")
         import traceback
 
         traceback.print_exc()
@@ -671,15 +671,15 @@ async def test_llama3_torchstore():
 
         if success:
             print(
-                "\n🎉 Complete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
+                "\nComplete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
             )
         else:
-            print("\n❌ Test failed during Policy integration phase")
+            print("\nTest failed during Policy integration phase")
 
         return success
 
     except Exception as e:
-        print(f"\n💥 Test failed with error: {e}")
+        print(f"\nTest failed with error: {e}")
         raise
 
     finally:
