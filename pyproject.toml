@@ -49,7 +49,7 @@ oss = [
 ]
 cpu = [
     "torch==2.9.0.dev20250815",
-    "monarch-no-torch @ file:assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl",
+    "monarch-no-torch==0.1.0.dev20250815",
 ]
 
 
