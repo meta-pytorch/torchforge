@@ -490,7 +490,9 @@ async def test_concurrent_operations():
     cfg = ServiceConfig(
         procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
     )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await spawn_service(
+        service_cfg=cfg, actor_def=Counter, name="counter", v=0
+    )
 
     try:
         # Mix of session and sessionless calls
