@@ -226,83 +226,6 @@ class Policy(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
-        """
-        Load full state dict from torchstore into tensor parallel model.
-        Uses DTensor's distribution system when available for automatic sharding.
-        """
-        from torchstore._state_dict_utils import DELIM, MAPPING
-
-        # Get the mapping of stored parameters
-        try:
-            fetched_mapping = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{MAPPING}"
-            )
-        except Exception as e:
-            raise RuntimeError(
-                f"Could not load mapping for state dict key {self.state_dict_key}: {e}"
-            )
-
-        logger.info(f"Loading {len(fetched_mapping)} parameters with tensor parallel support")
-        
-        updated_count = 0
-        
-        for param_name in fetched_mapping.keys():
-            if param_name not in current_state_dict:
-                logger.warning(f"Parameter {param_name} not found in current model, skipping")
-                continue
-                
-            current_tensor = current_state_dict[param_name]
-            
-            try:
-                # Load the full tensor from torchstore
-                stored_tensor = await self.torchstore.get(f"{self.state_dict_key}{DELIM}{param_name}")
-                
-                # Check if the current tensor is a DTensor
-                if hasattr(current_tensor, '_spec') and current_tensor._spec is not None:
-                    # This is a DTensor - use DTensor's distribution system
-                    logger.debug(f"Distributing DTensor parameter {param_name} with spec: {current_tensor._spec}")
-                    
-                    try:
-                        from torch.distributed._tensor import distribute_tensor
-                        
-                        # Get the DTensor's distribution spec
-                        device_mesh = current_tensor.device_mesh
-                        placements = current_tensor._spec.placements
-                        
-                        # Distribute the stored tensor according to the current tensor's spec
-                        distributed_tensor = distribute_tensor(stored_tensor, device_mesh, placements)
-                        
-                        # Copy the local shard to the current tensor
-                        current_state_dict[param_name].copy_(distributed_tensor._local_tensor)
-                        logger.debug(f"Successfully distributed DTensor parameter {param_name}")
-                        
-                    except Exception as dtensor_e:
-                        logger.warning(f"Failed to distribute DTensor {param_name}: {dtensor_e}")
-                        continue
-                        
-                else:
-                    # Regular tensor - direct copy (should have matching shapes)
-                    if stored_tensor.shape != current_tensor.shape:
-                        if stored_tensor.shape != current_tensor.shape:
-                            raise RuntimeError(
-                                f"Shape mismatch for regular tensor {param_name}: {stored_tensor.shape} vs {current_tensor.shape}"
-                            )
-                        
-                    current_state_dict[param_name].copy_(stored_tensor)
-                    logger.debug(f"Copied regular parameter {param_name}")
-                
-                updated_count += 1
-                
-            except Exception as e:
-                logger.warning(f"Failed to load parameter {param_name}: {e}")
-                continue
-        
-        logger.info(f"Successfully updated {updated_count} parameters")
-        
-        if updated_count == 0:
-            raise RuntimeError("No parameters were successfully updated")
-
     @endpoint
     async def update(self):
         """Update model weights by reading state dict from torchstore"""
@@ -311,24 +234,38 @@ class Policy(Actor):
             return False
 
         try:
+            from torchstore._state_dict_utils import DELIM
 
             # Get the current model from the worker
             model = self.worker.model_runner.model
             current_state_dict = model.state_dict()
 
-            if self.tensor_parallel_size > 1:
-                logger.info("Loading state dict with tensor parallel sharding")
-                await self._load_tensor_parallel_state_dict(current_state_dict)
-            else:
-                logger.info("Loading state dict for single GPU model")
-                await get_state_dict(
-                    self.torchstore, self.state_dict_key, current_state_dict
-                )
+            logger.info(f"Loading {len(current_state_dict)} parameters from torchstore")
+            updated_count = 0
 
-            # Load the updated state dict into the model
-            model.load_state_dict(current_state_dict, strict=True)
+            # Iterate through each parameter in current state dict and load directly using torchstore.get
+            for param_name, current_tensor in current_state_dict.items():
+                try:
+                    # Use torchstore.get to load directly into the current tensor
+                    # This automatically handles both tensor parallelized and regular tensors
+                    await self.torchstore.get(
+                        f"{self.state_dict_key}{DELIM}{param_name}",
+                        current_tensor,
+                    )
+                    updated_count += 1
+                    logger.debug(f"Successfully loaded parameter {param_name}")
 
-            logger.info("Successfully updated model weights from torchstore")
+                except Exception as e:
+                    logger.warning(f"Failed to load parameter {param_name}: {e}")
+                    continue
+
+            logger.info(
+                f"Successfully updated {updated_count} parameters from torchstore"
+            )
+
+            if updated_count == 0:
+                raise RuntimeError("No parameters were successfully updated")
+
             return True
 
         except Exception as e:
