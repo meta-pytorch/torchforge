@@ -150,3 +150,9 @@ class ModelTokenizer(ABC):
             tuple[list[int], list[bool]]: The list of token ids and the list of masks.
         """
         pass
+
+
+# class RLLoss(ABC):
+
+# class SFTLoss(ABC): # inherit from titan loss
+# from torchtitan.components.loss import LossFunction

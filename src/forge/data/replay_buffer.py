@@ -7,12 +7,13 @@
 import random
 from typing import Any
 
-from monarch.actor import Actor, endpoint
+from monarch.actor import endpoint
 
+from forge.controller import ForgeActor
 from forge.types import Trajectory
 
 
-class ReplayBuffer(Actor):
+class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
     def __init__(

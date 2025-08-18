@@ -8,7 +8,8 @@
 import logging
 import math
 import os
-from functools import partial
+
+# from functools import partial
 from typing import Any
 
 import torch
@@ -17,21 +18,25 @@ import torchtitan.experiments.forge.train_spec as forge_train_spec
 
 from monarch.actor import current_rank, current_size, endpoint
 from torch import nn
-from torchdata.stateful_dataloader import StatefulDataLoader
-from torchtitan.components.checkpoint import ModelWrapper
-from torchtitan.components.loss import LossFunction
+
+# from torchdata.stateful_dataloader import StatefulDataLoader
+# from torchtitan.components.checkpoint import ModelWrapper
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-from tqdm import tqdm
+
+# from tqdm import tqdm
 
 from forge.controller import ForgeActor
-from forge.data.collate import collate_packed
-from forge.data.datasets.packed import PackedDataset, TextPacker
-from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
-from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.data.replay_buffer import ReplayBuffer
+from forge.interfaces import RLLoss
+
+# from forge.data.collate import collate_packed
+# from forge.data.datasets.packed import PackedDataset, TextPacker
+# from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
+# from forge.data.tokenizer import HuggingFaceModelTokenizer
 
 # stubs for now
 Checkpointer = Any
@@ -43,13 +48,19 @@ Tokenizer = Any
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# TODO
+# 1. test trainer step
+# 2. loss types
+# 3. compare to cabernet trainer/losses
+# 4. cleanup/remove postprocessing and other actor updates
 
-class Trainer(ForgeActor, ForgeEngine):
+
+class RLTrainer(ForgeActor, ForgeEngine):
     job_config: ForgeJobConfig
     train_spec: forge_train_spec.ForgeTrainSpec
     parallel_dims: ParallelDims
     model: list[nn.Module]
-    loss_fn: LossFunction
+    loss_fn: RLLoss
     optimizer: OptimizersContainer
     lr_scheduler: LRSchedulersContainer
     checkpointer: Checkpointer
@@ -100,57 +111,50 @@ class Trainer(ForgeActor, ForgeEngine):
         logger.info("env: {}".format(env))
 
     @endpoint
-    async def setup(self):
-        self.train_dataloader = self.setup_data()
-
-        # TODO: confirm that this is working properly
-        # Should also use load, not dcp_load
-        self.checkpointer.dcp_load(
-            state_dict=ModelWrapper(self.model_parts).state_dict(),
-            checkpoint_id=self.job_config.checkpoint.folder,
-            from_hf=True,
-        )
+    async def setup(self, replay_buffer: ReplayBuffer):
+        self.replay_buffer = replay_buffer
+        self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self):
-        tokenizer = HuggingFaceModelTokenizer(
-            tokenizer_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer.json"
-            ),
-            tokenizer_config_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer_config.json"
-            ),
-            generation_config_path=os.path.join(
-                self.job_config.model.tokenizer_path, "generation_config.json"
-            ),
-        )
-
-        dataset = sft_iterable_dataset(
-            model_transform=tokenizer,
-            message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
-        )
-        packer = TextPacker(padding_idx=0)
-        dataset = PackedDataset(
-            dataset=dataset,
-            packer=packer,
-            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
-        )
-        dataloader = StatefulDataLoader(
-            dataset=dataset,
-            batch_size=self.job_config.training.local_batch_size,
-            collate_fn=partial(
-                collate_packed, mask_fn=packer.create_block_mask, device=self.device
-            ),
-        )
-
-        # Ultimately we probably want something like this
-        # packer = build_packing_strategy(packing_config)
-        # dataset = build_dataset(dataset_config)
-        # dataloader = build_dataloader(dataloader_config, dataset, packer)
-        return dataloader
+    # def setup_data(self):
+    #     tokenizer = HuggingFaceModelTokenizer(
+    #         tokenizer_json_path=os.path.join(
+    #             self.job_config.model.tokenizer_path, "tokenizer.json"
+    #         ),
+    #         tokenizer_config_json_path=os.path.join(
+    #             self.job_config.model.tokenizer_path, "tokenizer_config.json"
+    #         ),
+    #         generation_config_path=os.path.join(
+    #             self.job_config.model.tokenizer_path, "generation_config.json"
+    #         ),
+    #     )
+    #
+    #     dataset = sft_iterable_dataset(
+    #         model_transform=tokenizer,
+    #         message_transform=AlpacaToMessages(),
+    #         path="yahma/alpaca-cleaned",
+    #         split="train",
+    #     )
+    #     packer = TextPacker(padding_idx=0)
+    #     dataset = PackedDataset(
+    #         dataset=dataset,
+    #         packer=packer,
+    #         target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
+    #     )
+    #     dataloader = StatefulDataLoader(
+    #         dataset=dataset,
+    #         batch_size=self.job_config.training.local_batch_size,
+    #         collate_fn=partial(
+    #             collate_packed, mask_fn=packer.create_block_mask, device=self.device
+    #         ),
+    #     )
+    #
+    #     # Ultimately we probably want something like this
+    #     # packer = build_packing_strategy(packing_config)
+    #     # dataset = build_dataset(dataset_config)
+    #     # dataloader = build_dataloader(dataloader_config, dataset, packer)
+    #     return dataloader
 
     def forward_backward(
         self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
@@ -174,27 +178,29 @@ class Trainer(ForgeActor, ForgeEngine):
         )
 
         if parallel_dims.pp_enabled:
-            # Pipeline Parallel forward / backward inside step() call
-            with self.train_context(optional_context_parallel_ctx):
-                targets, losses = (
-                    (labels, []) if self.pp_has_last_stage else (None, None)
-                )
-                if self.pp_has_first_stage:
-                    self.pp_schedule.step(
-                        inputs, target=targets, losses=losses, input_batch=inputs
-                    )
-                else:
-                    self.pp_schedule.step(
-                        target=targets, losses=losses, input_batch=inputs
-                    )
-
-            # accumulate losses across pipeline microbatches
-            # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
-            loss = (
-                torch.mean(torch.stack(losses)).to(self.device)
-                if self.pp_has_last_stage
-                else torch.tensor([-1.0], device=self.device)
-            )
+            raise NotImplementedError("PP not implemented yet")
+            # TODO implement PP
+            # # Pipeline Parallel forward / backward inside step() call
+            # with self.train_context(optional_context_parallel_ctx):
+            #     targets, losses = (
+            #         (labels, []) if self.pp_has_last_stage else (None, None)
+            #     )
+            #     if self.pp_has_first_stage:
+            #         self.pp_schedule.step(
+            #             inputs, target=targets, losses=losses, input_batch=inputs
+            #         )
+            #     else:
+            #         self.pp_schedule.step(
+            #             target=targets, losses=losses, input_batch=inputs
+            #         )
+            #
+            # # accumulate losses across pipeline microbatches
+            # # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
+            # loss = (
+            #     torch.mean(torch.stack(losses)).to(self.device)
+            #     if self.pp_has_last_stage
+            #     else torch.tensor([-1.0], device=self.device)
+            # )
         else:
             # Non-PP forward / backward
             with self.train_context(optional_context_parallel_ctx):
@@ -217,26 +223,30 @@ class Trainer(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
-        self.pbar.update(1)
-        self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
+        # self.pbar.update(1)
+        # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
         self.optimizers.step()
         self.lr_schedulers.step()
 
+    def push_weights(self) -> None:
+        pass
+
     @endpoint
     async def train(self) -> None:
-        dataloader = iter(self.train_dataloader)
+        # dataloader = iter(self.train_dataloader)
         self.optimizers.zero_grad()
 
-        self.pbar = tqdm(
-            initial=0,
-            total=self.num_training_steps,
-            desc=f"{self.current_step}",
-        )
+        # self.pbar = tqdm(
+        #     initial=0,
+        #     total=self.num_training_steps,
+        #     desc=f"{self.current_step}",
+        # )
 
         while self.current_step < self.num_training_steps:
             logger.info(f"step: {self.current_step}/{self.num_training_steps}")
-            batch = next(dataloader)
+            batch = self.replay_buffer.sample()
+
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
@@ -247,13 +257,12 @@ class Trainer(ForgeActor, ForgeEngine):
 
             # if self.current_step % self.train_config.val_every_n_steps == 0:
             #     self.validate()
-            # TODO: uncomment
-            # if (
-            #     self.current_step
-            #     % self.train_config.checkpoint_config.save_every_n_steps
-            #     == 0
-            # ):
-            #     self.checkpointer.save()
+            self.checkpointer.save(
+                curr_step=self.current_step,
+                last_step=self.current_step == self.num_training_steps,
+            )
+
+        # self.pbar.close()
 
     @endpoint
     async def cleanup(self) -> None:
@@ -264,3 +273,40 @@ class Trainer(ForgeActor, ForgeEngine):
 
     def __repr__(self) -> str:
         return "Trainer"
+
+
+async def _test(config, guided_decoding=False):
+    # TODO: Create proper test
+    trainer_mesh = await proc_mesh(
+        gpus=config["resources"],
+        env={
+            "MASTER_ADDR": str(get_loopback_ip()),
+            "MASTER_PORT": str(get_open_port()),
+        },
+    )
+
+    policy_actor = await policy_mesh.spawn("policy", Policy, **config)
+
+    await policy_actor.setup.call()
+    await router.setup.call()
+    print("Model setup")
+
+    router.run.call()
+    print("Model running")
+
+    prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
+    response = await router.generate.call_one(prompt)
+    print(f"User: {prompt}\nAssistant: {response.outputs[0].text}")
+
+    await router.shutdown.call()
+
+
+if __name__ == "__main__":
+    config = {
+        "model": "meta-llama/Llama-3.1-8B-Instruct",
+        "tensor_parallel_size": 2,
+        "pipeline_parallel_size": 1,
+        "enforce_eager": True,
+        "resources": 2,
+    }
+    asyncio.run(_test(config))
