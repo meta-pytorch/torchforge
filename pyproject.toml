@@ -43,8 +43,13 @@ dev = [
     "pytest-asyncio",
 ]
 oss = [
-    "torch==2.9.0.dev20250815+cpu",
-    "monarch-no-torch @ file:///${PROJECT_ROOT}/assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl",
+    "torch",
+    "torchmonarch-nightly==2025.8.1",
+    "torchstore",
+]
+cpu = [
+    "torch==2.9.0.dev20250815",
+    "monarch-no-torch @ file:assets/wheels/monarch_no_torch-0.1.0.dev20250815-py3-none-any.whl",
 ]
 
 
@@ -77,10 +82,6 @@ name = "pytorch-nightly-cu128"
 url  = "https://download.pytorch.org/whl/nightly/cu128"
 #explicit = true
 
-[[tool.uv.index]]
-name = "pytorch-nightly-cpu"
-url = "https://download.pytorch.org/whl/nightly/cpu"
-
 # vllm
 # [[tool.uv.index]]
 # name = "vllm-nightly"
@@ -89,7 +90,7 @@ url = "https://download.pytorch.org/whl/nightly/cpu"
 
 [tool.uv.sources]
 torchtitan = { index = "pytorch-nightly-cu128" }
-torch = { index = "pytorch-nightly-cpu" }
+torch = { index = "pytorch-nightly-cu128" }
 torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
 #vllm = { index = "vllm-nightly" }
 
