@@ -175,7 +175,7 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
                             "Model weights preserved correctly after torchstore update!"
                         )
                     else:
-                        print("⚠️ Model weights changed unexpectedly during update")
+                        print("Model weights changed unexpectedly during update")
 
         return True
 
@@ -635,13 +635,6 @@ async def test_llama3_fsdp_torchstore():
 
         except Exception as e:
             print(f"Policy update failed with error: {e}")
-            print(
-                "💡 This indicates that TorchStore needs better support for loading full state dicts into sharded models"
-            )
-            print(
-                "   The error shows the size mismatch between full tensors and sharded tensors"
-            )
-            print("   This is a valid limitation that could be addressed in TorchStore")
             return False  # Return False since this is a real limitation we need to fix
 
     except Exception as e:
@@ -718,6 +711,6 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"FSDP test failed: {e}")
 
-        print("\n✨ All requested tests completed!")
+        print("\n All requested tests completed!")
 
     asyncio.run(run_tests())

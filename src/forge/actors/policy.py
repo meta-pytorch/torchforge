@@ -188,7 +188,7 @@ class Policy(Actor):
         - all executor methods verify no changes
         """
         if self.vllm_args is None:
-            # Use default vllm EngineArgs with reduced GPU memory utilization
+            # Use default vllm EngineArgs
             self.vllm_args = EngineArgs(
                 model=self.model,
                 tensor_parallel_size=self.tensor_parallel_size,
