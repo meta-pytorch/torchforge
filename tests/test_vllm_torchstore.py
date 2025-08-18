@@ -31,9 +31,7 @@ async def test_llama3_torchstore_write():
 
     # Use the class method create_store() which properly spawns the actors
     store = await MultiProcessStore.create_store()
-    print("MultiProcessStore initialized successfully")
 
-    print("Loading Llama 3.1 8B model from local path...")
     # Load from local directory instead of HuggingFace download
     model_path = "/tmp/Meta-Llama-3.1-8B-Instruct"
 
@@ -52,14 +50,10 @@ async def test_llama3_torchstore_write():
             model_path, local_files_only=True  # Ensure we don't try to download
         )
 
-        print(f"Model loaded successfully. Total parameters: {sum(p.numel() for p in model.parameters()):,}")
-
         # Get the model's state dict
         state_dict = model.state_dict()
-        print(f"State dict contains {len(state_dict)} parameters")
 
         # Write state dict to torchstore
-        print("Writing state dict to torchstore...")
         key = "llama3_8b_state_dict"
         await push_state_dict(store, state_dict, key)
         print(f"Successfully wrote state dict to torchstore with key: {key}")
@@ -75,7 +69,6 @@ async def test_llama3_torchstore_write():
             outputs = model(**test_input)
             # Store first few logits for comparison
             original_logits = outputs.logits[0, -1, :10].cpu()
-            print(f"Original model forward pass successful")
 
         return store, key, original_logits, tokenizer
 
@@ -133,19 +126,19 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
         )
 
         await policy.setup.call()
-        print("Policy setup completed successfully!")
 
         # Get model info before update
         model_info_result = await policy.test_model_info.call()
-        model_info_before = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-        print(f"Policy model (before update) - Parameters: {model_info_before['num_parameters']:,}")
-        
-        if 'sample_weights' in model_info_before:
-            before_weights = model_info_before['sample_weights']
-            print(f"Sample weights before update: {before_weights[:5]}")
+        model_info_before = (
+            model_info_result._values[0]
+            if hasattr(model_info_result, "_values")
+            else model_info_result
+        )
+
+        if "sample_weights" in model_info_before:
+            before_weights = model_info_before["sample_weights"]
 
         # Now call update to load weights from torchstore
-        print("Calling Policy.update() to load weights from torchstore...")
         try:
             success = await policy.update.call()
             if success:
@@ -155,26 +148,32 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
                 return False
         except Exception as e:
             print(f"⚠️  Policy.update() timed out or failed: {e}")
-            print("Checking if weights were updated anyway...")
             success = None  # Mark as unknown
 
         # Test the model after update (run regardless of timeout)
         if success is not False:  # Continue if successful or unknown
             model_info_result = await policy.test_model_info.call()
-            model_info_after = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-            
-            if 'sample_weights' in model_info_after:
-                after_weights = model_info_after['sample_weights']
-                print(f"Sample weights after update: {after_weights[:5]}")
+            model_info_after = (
+                model_info_result._values[0]
+                if hasattr(model_info_result, "_values")
+                else model_info_result
+            )
+
+            if "sample_weights" in model_info_after:
+                after_weights = model_info_after["sample_weights"]
 
                 # Verify the update operation worked (weights should be preserved)
-                if 'sample_weights' in model_info_before:
+                if "sample_weights" in model_info_before:
                     import numpy as np
-                    weight_diff = np.abs(np.array(after_weights) - np.array(before_weights)).max()
-                    print(f"Max weight difference: {weight_diff}")
+
+                    weight_diff = np.abs(
+                        np.array(after_weights) - np.array(before_weights)
+                    ).max()
 
                     if weight_diff < 1e-6:
-                        print("✅ Model weights preserved correctly after torchstore update!")
+                        print(
+                            "✅ Model weights preserved correctly after torchstore update!"
+                        )
                     else:
                         print("⚠️ Model weights changed unexpectedly during update")
 
@@ -194,8 +193,6 @@ def setup_distributed_fsdp():
         master_addr = os.environ.get("MASTER_ADDR", "localhost")
         master_port = os.environ.get("MASTER_PORT", "12356")
 
-        print(f"Rank {rank}: Initializing distributed with MASTER_PORT={master_port}")
-
         try:
             # Initialize process group with timeout
             dist.init_process_group(
@@ -204,9 +201,7 @@ def setup_distributed_fsdp():
                 world_size=world_size,
                 timeout=torch.distributed.timedelta(seconds=30),  # Add timeout
             )
-            print(f"Rank {rank}: Successfully initialized distributed")
         except Exception as e:
-            print(f"Rank {rank}: Failed to initialize distributed: {e}")
             raise
 
 
@@ -214,14 +209,15 @@ async def test_llama3_fsdp_torchstore_write():
     """
     FSDP Phase 1: Load Llama 3.1 8B-Instruct with FSDP=2 and write state dict to torchstore
     """
-    print("\n=== FSDP PHASE 1: Writing Llama 3.1 8B-Instruct with FSDP=2 to TorchStore ===")
+    print(
+        "\n=== FSDP PHASE 1: Writing Llama 3.1 8B-Instruct with FSDP=2 to TorchStore ==="
+    )
 
     # Setup distributed environment for FSDP
     setup_distributed_fsdp()
 
     # Create device mesh for FSDP with 2 shards
     device_mesh = init_device_mesh("cuda", (2,))
-    print(f"Created device mesh: {device_mesh}")
 
     store = MultiProcessStore()
     model_path = "/tmp/Meta-Llama-3.1-8B"
@@ -251,8 +247,6 @@ async def test_llama3_fsdp_torchstore_write():
             model_path, local_files_only=True  # Ensure we don't try to download
         )
 
-        print(f"FSDP Model loaded successfully")
-
         # Get the model's state dict from FSDP model
         with FSDP.state_dict_type(fsdp_model, FSDP.StateDictType.FULL_STATE_DICT):
             state_dict = fsdp_model.state_dict()
@@ -260,13 +254,11 @@ async def test_llama3_fsdp_torchstore_write():
         # Print some info about the state dict (only on rank 0)
         if dist.get_rank() == 0:
             total_params = sum(p.numel() for p in state_dict.values())
-            print(f"Total parameters: {total_params:,}")
 
         # Write state dict to torchstore (only on rank 0)
         if dist.get_rank() == 0:
             key = "llama3_8b_fsdp_state_dict"
             await push_state_dict(store, state_dict, key)
-            print(f"Successfully wrote FSDP state dict to torchstore")
         else:
             key = "llama3_8b_fsdp_state_dict"
 
@@ -282,7 +274,6 @@ async def test_llama3_fsdp_torchstore_write():
             # Store first few logits for comparison (only on rank 0)
             if dist.get_rank() == 0:
                 original_logits = outputs.logits[0, -1, :10].cpu()
-                print(f"FSDP model forward pass successful")
             else:
                 original_logits = None
 
@@ -315,18 +306,18 @@ async def test_policy_integration_fsdp(
     """
     FSDP Phase 2: Initialize Policy with tensor_parallel_size=2 and test update functionality
     """
-    print("\n=== FSDP PHASE 2: Testing Policy Integration with Tensor Parallel Size 2 ===")
+    print(
+        "\n=== FSDP PHASE 2: Testing Policy Integration with Tensor Parallel Size 2 ==="
+    )
 
     # Set up environment variables for vLLM distributed initialization
     from vllm.utils import get_open_port
-    
+
     master_addr = "localhost"
     master_port = str(get_open_port())  # Use dynamic port to avoid conflicts
-    
+
     os.environ.setdefault("MASTER_ADDR", master_addr)
     os.environ["MASTER_PORT"] = master_port  # Always set a fresh port
-
-    print(f"Using MASTER_PORT: {master_port} for Policy FSDP test")
 
     try:
         # Create a process mesh and spawn the Policy actor properly for tensor parallelism
@@ -361,11 +352,17 @@ async def test_policy_integration_fsdp(
         if dist.get_rank() == 0:
             # Get model info before update
             model_info_result = await policy.test_model_info.call()
-            model_info_before = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-            print(f"Policy model (before update) - Parameters: {model_info_before['num_parameters']:,}")
-            
-            if 'sample_weights' in model_info_before:
-                before_weights = model_info_before['sample_weights']
+            model_info_before = (
+                model_info_result._values[0]
+                if hasattr(model_info_result, "_values")
+                else model_info_result
+            )
+            print(
+                f"Policy model (before update) - Parameters: {model_info_before['num_parameters']:,}"
+            )
+
+            if "sample_weights" in model_info_before:
+                before_weights = model_info_before["sample_weights"]
                 print(f"Sample weights before update: {before_weights[:5]}")
 
         # Now call update to load weights from torchstore
@@ -379,23 +376,34 @@ async def test_policy_integration_fsdp(
             if dist.get_rank() == 0:
                 # Get model info after update
                 model_info_result = await policy.test_model_info.call()
-                model_info_after = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-                
-                if 'sample_weights' in model_info_after:
-                    after_weights = model_info_after['sample_weights']
+                model_info_after = (
+                    model_info_result._values[0]
+                    if hasattr(model_info_result, "_values")
+                    else model_info_result
+                )
+
+                if "sample_weights" in model_info_after:
+                    after_weights = model_info_after["sample_weights"]
                     print(f"Sample weights after update: {after_weights[:5]}")
 
                     # Verify the update operation worked (weights should be preserved)
-                    if model_info_before and 'sample_weights' in model_info_before:
+                    if model_info_before and "sample_weights" in model_info_before:
                         import numpy as np
-                        before_weights = model_info_before['sample_weights']
-                        weight_diff = np.abs(np.array(after_weights) - np.array(before_weights)).max()
+
+                        before_weights = model_info_before["sample_weights"]
+                        weight_diff = np.abs(
+                            np.array(after_weights) - np.array(before_weights)
+                        ).max()
                         print(f"Max weight difference: {weight_diff}")
 
                         if weight_diff < 1e-6:
-                            print("✅ FSDP model weights preserved correctly after torchstore update!")
+                            print(
+                                "✅ FSDP model weights preserved correctly after torchstore update!"
+                            )
                         else:
-                            print("⚠️ FSDP model weights changed unexpectedly during update")
+                            print(
+                                "⚠️ FSDP model weights changed unexpectedly during update"
+                            )
 
         else:
             print("❌ Policy update failed!")
@@ -413,55 +421,52 @@ def fsdp_worker_main(rank, world_size, master_port):
     Worker function that runs in each FSDP process
     """
     import asyncio
-    
+
     # Set up environment for this rank
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(master_port)
-    
-    print(f"Rank {rank}: Starting FSDP worker with MASTER_PORT={master_port}")
-    
+
     async def worker_async_main():
         try:
             # Phase 1: Write FSDP model to torchstore
-            store, key, original_logits, tokenizer = await test_llama3_fsdp_torchstore_write()
-            
+            store, key, original_logits, tokenizer = (
+                await test_llama3_fsdp_torchstore_write()
+            )
+
             # Phase 2: Test Policy integration (only on rank 0)
             if rank == 0:
-                print(f"Rank {rank}: Running Policy integration test...")
-                success = await test_policy_integration_fsdp(store, key, original_logits, tokenizer)
-                print(f"Rank {rank}: Policy integration test result: {success}")
+                success = await test_policy_integration_fsdp(
+                    store, key, original_logits, tokenizer
+                )
                 return success
             else:
-                print(f"Rank {rank}: Participating in FSDP but not running Policy test")
                 # Other ranks just participate in FSDP but don't run the Policy test
                 return True
-                
+
         except Exception as e:
-            print(f"Rank {rank}: Error in FSDP worker: {e}")
             import traceback
+
             traceback.print_exc()
             return False
         finally:
             # Clean up
             if dist.is_initialized():
                 dist.destroy_process_group()
-                print(f"Rank {rank}: Destroyed process group")
-            
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            print(f"Rank {rank}: Cleanup completed")
-    
+
     # Run the async main function
     try:
         result = asyncio.run(worker_async_main())
-        print(f"Rank {rank}: Worker completed with result: {result}")
         return result
     except Exception as e:
         print(f"Rank {rank}: Worker failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -470,64 +475,72 @@ async def test_llama3_fsdp_torchstore():
     """
     Test loading a full state dict into a tensor parallel model
     """
-    print("🚀 Starting tensor parallel test (load full state dict into sharded model)...")
-    
+    print("Starting tensor parallel test (load full state dict into sharded model)...")
+
     # Check if we have enough GPUs
     if not torch.cuda.is_available():
         print("❌ No CUDA available for tensor parallel test")
         return False
     elif torch.cuda.device_count() < 2:
-        print(f"❌ Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel")
+        print(
+            f"❌ Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+        )
         return False
-    
-    print(f"✅ {torch.cuda.device_count()} GPU(s) available - proceeding with tensor parallel test")
-    
+
+    print(
+        f"✅ {torch.cuda.device_count()} GPU(s) available - proceeding with tensor parallel test"
+    )
+
     try:
         # Phase 1: Save a full (non-sharded) model to torchstore, then modify it
-        print("Phase 1: Loading regular model and saving modified full state dict to torchstore...")
+        print(
+            "Phase 1: Loading regular model and saving modified full state dict to torchstore..."
+        )
         store, key, original_logits, tokenizer = await test_llama3_torchstore_write()
-        
+
         # Modify the stored state dict to create detectable differences
         print("Modifying stored state dict for verification...")
         from torchstore._state_dict_utils import DELIM, MAPPING
-        
+
         # Get the mapping to see what parameters are stored
         fetched_mapping = await store.get(f"{key}{DELIM}{MAPPING}")
-        
+
         # Find an embedding parameter to modify (these are typically safe to modify slightly)
         embedding_param_key = None
         for param_key in fetched_mapping.keys():
             if "embed" in param_key.lower() and "weight" in param_key:
                 embedding_param_key = param_key
                 break
-        
+
         if embedding_param_key:
             # Load the original tensor
             original_tensor = await store.get(f"{key}{DELIM}{embedding_param_key}")
-            
+
             # Create a modified version (add small constant to make it detectable)
             modified_tensor = original_tensor + 0.001  # Small but detectable change
-            
+
             # Store the modified tensor back
             await store.put(f"{key}{DELIM}{embedding_param_key}", modified_tensor)
-            print(f"Modified parameter {embedding_param_key} by adding 0.001 to all values")
+            print(
+                f"Modified parameter {embedding_param_key} by adding 0.001 to all values"
+            )
         else:
             print("No embedding parameter found to modify - using original state dict")
-        
+
         # Phase 2: Load full state dict into tensor parallel Policy
         print("Phase 2: Loading full state dict into tensor parallel Policy...")
-        
+
         # Set up environment variables for vLLM distributed initialization
         from vllm.utils import get_open_port
-        
+
         master_addr = "localhost"
         master_port = str(get_open_port())
-        
+
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = master_port
-        
+
         print(f"Using MASTER_PORT: {master_port} for tensor parallel Policy")
-        
+
         # Create a process mesh and spawn the Policy actor with tensor parallelism
         from monarch.actor import proc_mesh
 
@@ -557,61 +570,87 @@ async def test_llama3_fsdp_torchstore():
 
         # Get model info before update
         model_info_result = await policy.test_model_info.call()
-        model_info_before = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-        print(f"Tensor parallel model (before update) - Parameters: {model_info_before['num_parameters']:,}")
-        
-        if 'sample_weights' in model_info_before:
-            before_weights = model_info_before['sample_weights']
+        model_info_before = (
+            model_info_result._values[0]
+            if hasattr(model_info_result, "_values")
+            else model_info_result
+        )
+        print(
+            f"Tensor parallel model (before update) - Parameters: {model_info_before['num_parameters']:,}"
+        )
+
+        if "sample_weights" in model_info_before:
+            before_weights = model_info_before["sample_weights"]
             print(f"Sample weights before update: {before_weights[:5]}")
 
         # Now call update to load full weights from torchstore into sharded model
-        print("Calling Policy.update() to load full state dict into tensor parallel model...")
-        print("🔄 This should automatically shard the full tensors for tensor parallel loading...")
-        
+        print(
+            "Calling Policy.update() to load full state dict into tensor parallel model..."
+        )
+        print(
+            "🔄 This should automatically shard the full tensors for tensor parallel loading..."
+        )
+
         try:
             success = await policy.update.call()
-            
+
             if success:
                 print("✅ Policy update successful!")
-                
+
                 # Get model info after update
                 model_info_result = await policy.test_model_info.call()
-                model_info_after = model_info_result._values[0] if hasattr(model_info_result, '_values') else model_info_result
-                
-                if 'sample_weights' in model_info_after:
-                    after_weights = model_info_after['sample_weights']
+                model_info_after = (
+                    model_info_result._values[0]
+                    if hasattr(model_info_result, "_values")
+                    else model_info_result
+                )
+
+                if "sample_weights" in model_info_after:
+                    after_weights = model_info_after["sample_weights"]
                     print(f"Sample weights after update: {after_weights[:5]}")
 
                     # The weights should be different since we're loading from the saved full model
-                    if 'sample_weights' in model_info_before:
+                    if "sample_weights" in model_info_before:
                         import numpy as np
-                        weight_diff = np.abs(np.array(after_weights) - np.array(before_weights)).max()
+
+                        weight_diff = np.abs(
+                            np.array(after_weights) - np.array(before_weights)
+                        ).max()
                         print(f"Max weight difference: {weight_diff}")
 
                         if weight_diff < 1e-6:
-                            print("✅ Tensor parallel model successfully loaded full state dict with automatic sharding!")
+                            print(
+                                "✅ Tensor parallel model successfully loaded full state dict with automatic sharding!"
+                            )
                         else:
                             print("⚠️ Weights appear changed")
 
-                print("\n🎉 Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!")
+                print(
+                    "\n🎉 Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
+                )
                 return True
             else:
                 print("❌ Policy update failed!")
                 return False
-                
+
         except Exception as e:
             print(f"Policy update failed with error: {e}")
-            print("💡 This indicates that TorchStore needs better support for loading full state dicts into sharded models")
-            print("   The error shows the size mismatch between full tensors and sharded tensors")
+            print(
+                "💡 This indicates that TorchStore needs better support for loading full state dicts into sharded models"
+            )
+            print(
+                "   The error shows the size mismatch between full tensors and sharded tensors"
+            )
             print("   This is a valid limitation that could be addressed in TorchStore")
             return False  # Return False since this is a real limitation we need to fix
-        
+
     except Exception as e:
         print(f"💥 Tensor parallel test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
-    
+
     finally:
         # Final cleanup
         if torch.cuda.is_available():
@@ -666,14 +705,14 @@ if __name__ == "__main__":
 
     async def run_tests():
         if args.test in ["single", "both"]:
-            print("🚀 Starting Llama 3 8B torchstore test (single GPU)...")
+            print("Starting Llama 3 8B torchstore test (single GPU)...")
             try:
                 await test_llama3_torchstore()
             except Exception as e:
                 print(f"Single GPU test failed: {e}")
 
         if args.test in ["fsdp", "both"]:
-            print("\n🚀 Starting Llama 3 8B FSDP torchstore test (world_size=2)...")
+            print("Starting Llama 3 8B FSDP torchstore test (world_size=2)...")
             try:
                 await test_llama3_fsdp_torchstore()
             except Exception as e:

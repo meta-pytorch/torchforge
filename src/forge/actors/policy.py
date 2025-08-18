@@ -287,7 +287,7 @@ class Policy(Actor):
                     if stored_tensor.shape != current_tensor.shape:
                         if stored_tensor.shape != current_tensor.shape:
                             raise RuntimeError(
-                            f"Shape mismatch for regular tensor {param_name}: {stored_tensor.shape} vs {current_tensor.shape}"
+                                f"Shape mismatch for regular tensor {param_name}: {stored_tensor.shape} vs {current_tensor.shape}"
                             )
                         
                     current_state_dict[param_name].copy_(stored_tensor)
@@ -324,11 +324,9 @@ class Policy(Actor):
             logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
 
             if self.tensor_parallel_size > 1:
-                # Tensor parallel model - use deterministic sharding strategy
                 logger.info("Loading state dict with tensor parallel sharding...")
                 await self._load_tensor_parallel_state_dict(current_state_dict)
             else:
-                # Single GPU model - use standard loading
                 logger.info("Loading state dict for single GPU model...")
                 await get_state_dict(
                     self.torchstore, self.state_dict_key, current_state_dict
