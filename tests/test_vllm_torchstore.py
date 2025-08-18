@@ -23,6 +23,44 @@ from torchstore._state_dict_utils import push_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+def convert_state_dict(saved_sd):
+    """
+    Convert transformers state dict to vLLM format.
+    
+    Key conversions:
+    1. Copy over directly mapped keys (down_proj, input_layernorm, etc.)
+    2. Fuse QKV projections: combine q_proj, k_proj, v_proj into qkv_proj 
+    3. Fuse MLP projections: combine gate_proj and up_proj into gate_up_proj
+    """
+    load_sd = {}
+    num_layers = 32  # For Llama-8B-3.1, adjust if needed
+    
+    # Copy over directly mapped keys
+    for k in saved_sd:
+        if any(x in k for x in [
+            'down_proj', 'input_layernorm', 'post_attention_layernorm', 'o_proj', 
+            'norm.weight', 'embed_tokens.weight', 'lm_head.weight'
+        ]):
+            load_sd[k] = saved_sd[k]
+    
+    # Fuse QKV and gate_up_proj
+    for i in range(num_layers):
+        prefix = f"model.layers.{i}."
+        
+        # QKV fusion
+        q = saved_sd[prefix + "self_attn.q_proj.weight"]
+        k = saved_sd[prefix + "self_attn.k_proj.weight"]
+        v = saved_sd[prefix + "self_attn.v_proj.weight"]
+        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+        
+        # MLP gate_up_proj fusion
+        gate = saved_sd[prefix + "mlp.gate_proj.weight"]
+        up = saved_sd[prefix + "mlp.up_proj.weight"]
+        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+    
+    return load_sd
+
+
 async def test_llama3_torchstore_write():
     """
     First phase: Load Llama 3.1 8B-Instruct and write state dict to torchstore
@@ -51,12 +89,18 @@ async def test_llama3_torchstore_write():
         )
 
         # Get the model's state dict
-        state_dict = model.state_dict()
+        original_state_dict = model.state_dict()
+        print(f"Original state dict has {len(original_state_dict)} parameters")
 
-        # Write state dict to torchstore
+        # Convert transformers state dict to vLLM format
+        print("Converting transformers state dict to vLLM format...")
+        converted_state_dict = convert_state_dict(original_state_dict)
+        print(f"Converted state dict has {len(converted_state_dict)} parameters")
+
+        # Write converted state dict to torchstore
         key = "llama3_8b_state_dict"
-        await push_state_dict(store, state_dict, key)
-        print(f"Successfully wrote state dict to torchstore with key: {key}")
+        await push_state_dict(store, converted_state_dict, key)
+        print(f"Successfully wrote converted state dict to torchstore with key: {key}")
 
         # Test a simple forward pass to verify original model works
         test_input = tokenizer("Hello, how are you?", return_tensors="pt")

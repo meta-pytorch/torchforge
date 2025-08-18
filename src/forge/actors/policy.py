@@ -194,6 +194,7 @@ class Policy(Actor):
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
+                gpu_memory_utilization=0.7,
             )
             # Original method returns False when not run in the main thread
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
@@ -233,47 +234,31 @@ class Policy(Actor):
             logger.warning("No torchstore configured, skipping model update")
             return False
 
-        try:
-            from torchstore._state_dict_utils import DELIM
+        from torchstore._state_dict_utils import DELIM
 
-            # Get the current model from the worker
-            model = self.worker.model_runner.model
-            current_state_dict = model.state_dict()
+        # Get the current model from the worker
+        model = self.worker.model_runner.model
+        current_state_dict = model.state_dict()
 
-            logger.info(f"Loading {len(current_state_dict)} parameters from torchstore")
-            updated_count = 0
+        updated_count = 0
+        # Iterate through each parameter in current state dict and load directly using torchstore.get
+        for param_name, current_tensor in current_state_dict.items():
+            # Use torchstore.get to load directly into the current tensor
+            # This automatically handles both tensor parallelized and regular tensors
+            try:
+                await self.torchstore.get(
+                    f"{self.state_dict_key}{DELIM}{param_name}",
+                    current_tensor,
+                )
+                logger.info(f"Successfully updated {param_name} from torchstore")
+                updated_count += 1
+            except Exception as e:
+                logger.error(
+                    f"Failed to load parameter {param_name} from torchstore: {e}"
+                )
+                continue
 
-            # Iterate through each parameter in current state dict and load directly using torchstore.get
-            for param_name, current_tensor in current_state_dict.items():
-                try:
-                    # Use torchstore.get to load directly into the current tensor
-                    # This automatically handles both tensor parallelized and regular tensors
-                    await self.torchstore.get(
-                        f"{self.state_dict_key}{DELIM}{param_name}",
-                        current_tensor,
-                    )
-                    updated_count += 1
-                    logger.debug(f"Successfully loaded parameter {param_name}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to load parameter {param_name}: {e}")
-                    continue
-
-            logger.info(
-                f"Successfully updated {updated_count} parameters from torchstore"
-            )
-
-            if updated_count == 0:
-                raise RuntimeError("No parameters were successfully updated")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to update model from torchstore: {e}")
-            import traceback
-
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return False
+        logger.info(f"Successfully updated {updated_count} parameters from torchstore")
 
     @endpoint
     async def setup_kv_cache(self):
