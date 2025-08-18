@@ -34,6 +34,7 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
+    "pytest-timeout",
     "tensorboard",
     "tomli>=1.1.0",
     "anyio",

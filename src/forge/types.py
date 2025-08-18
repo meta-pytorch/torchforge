@@ -92,7 +92,7 @@ class ProcessConfig:
     """A proc_mesh config for the torchx scheduler."""
 
     scheduler: Literal["mast", "local"] = "local"
-    num_gpus: int = 1
+    num_procs: int = 1
     num_hosts: int = 1
     # The following is mast specific.
     oncall: str = "torchtune"
