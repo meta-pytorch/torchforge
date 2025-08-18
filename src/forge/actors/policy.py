@@ -43,6 +43,7 @@ class PolicyRouter(Actor):
     sampling_params: SamplingParams = None
     lora_request: LoRARequest = None
     tokenization_kwargs: dict = None
+    version: int = 0
 
     @endpoint
     async def setup(self):
@@ -77,6 +78,10 @@ class PolicyRouter(Actor):
             include_finished_set=False,
             log_stats=None,
         )
+
+    @endpoint
+    async def get_current_version(self) -> int:
+        return self.version
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0):

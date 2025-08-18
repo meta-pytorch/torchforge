@@ -49,8 +49,8 @@ async def main():
 
     async def continuous_rollouts():
         while True:
-            current_version = await policy.get_current_version()
-            episode = await generate_rollout()
+            version = await policy.get_current_version.choose()
+            episode = await generate_rollout(version)
             await replay_buffer.add.call(episode)
 
     rollout_task = asyncio.create_task(continuous_rollouts())
