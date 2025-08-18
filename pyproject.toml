@@ -37,6 +37,7 @@ dev = [
     "pytest-cov",
     "pytest-timeout",
     "tensorboard",
+    "expecttest",
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
