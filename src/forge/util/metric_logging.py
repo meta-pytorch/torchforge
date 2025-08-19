@@ -174,7 +174,6 @@ class WandBLogger(MetricLogger):
                 self._wandb.define_metric("step")
                 self._wandb.define_metric("*", step_metric="step", step_sync=True)
 
-
     def _log(self, name: str, data: Scalar, step: int) -> None:
         if self._wandb.run:
             self._wandb.log({name: data, "step": step})
