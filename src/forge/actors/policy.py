@@ -10,7 +10,7 @@ import os
 import sys
 from copy import copy
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 import torch
 
@@ -21,6 +21,7 @@ from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
+from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
@@ -50,9 +51,7 @@ class PolicyRouter(Actor):
     @endpoint
     async def setup(self):
         self.request_id = 0
-        self.requests: Dict[
-            str, asyncio.Future | Tuple[ParentRequest, asyncio.Future]
-        ] = {}
+        self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy.get_vllm_args.choose()
         # Setup processors
         # TODO: move all processing to the Environment
@@ -84,7 +83,7 @@ class PolicyRouter(Actor):
         )
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0):
+    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -123,7 +122,7 @@ class PolicyRouter(Actor):
             request, _ = self.preprocess_add_request(request)
 
             request_fut = asyncio.Future()
-            self.requests[request_id] = request_fut
+            self.requests[request_id] = (None, request_fut)
 
             self.scheduler.add_request(request)
         else:
@@ -150,8 +149,7 @@ class PolicyRouter(Actor):
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
     def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
         if request.mm_hashes is not None:
-            # TODO: Support mm_hash
-            pass
+            raise NotImplementedError("Support for mm_hash is not implemented yet.")
         request: Request = Request.from_engine_core_request(request)
         if request.use_structured_output:
             self.scheduler.structured_output_manager.grammar_init(request)
@@ -180,18 +178,8 @@ class PolicyRouter(Actor):
             )
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
-                    if isinstance(
-                        payload := self.requests.get(request_output.request_id), tuple
-                    ) and isinstance(request := payload[0], ParentRequest):
-                        _, fut = self.requests.pop(request.request_id)
-                        fut.set_result(request_output.outputs)
-                    elif isinstance(payload, asyncio.Future):
-                        fut = self.requests.pop(request_output.request_id)
-                        fut.set_result(request_output.outputs)
-                    else:
-                        raise ValueError(
-                            f"Invalid request {request} of type: {type(request)}"
-                        )
+                    _, fut = self.requests.pop(request_output.request_id)
+                    fut.set_result(request_output.outputs)
 
     @endpoint
     async def shutdown(self):
@@ -383,7 +371,7 @@ async def _test(config, guided_decoding=False, num_samples=1):
     print("Model running")
 
     prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
-    responses = await router.generate.call_one(prompt)
+    responses: List[CompletionOutput] = await router.generate.call_one(prompt)
 
     for batch, response in enumerate(responses):
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -402,7 +390,7 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    # asyncio.run(_test(config))
+    asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
-    asyncio.run(_test(config, num_samples=2))
+    # asyncio.run(_test(config, num_samples=2))
     # asyncio.run(_test(config, guided_decoding=True, num_samples=3))
