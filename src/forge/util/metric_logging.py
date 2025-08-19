@@ -194,7 +194,6 @@ class WandBLogger(MetricLogger):
 # TODO: replace with direct instantiation via a path to the class in the config
 METRIC_LOGGER_STR_TO_CLS = {
     "stdout": StdoutLogger,
-    "disk": DiskLogger,
     "tensorboard": TensorBoardLogger,
     "wandb": WandBLogger,
 }
