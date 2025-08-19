@@ -63,7 +63,7 @@ class TensorBoardLogger(MetricLogger):
     def __init__(
         self,
         log_freq: Mapping[str, int],
-        log_dir: str,
+        log_dir: str = "metrics_log",
         organize_logs: bool = True,
         **kwargs,
     ):
@@ -138,8 +138,8 @@ class WandBLogger(MetricLogger):
     def __init__(
         self,
         log_freq: Mapping[str, int],
-        log_dir: str,
         project: str,
+        log_dir: str = "metrics_log",
         entity: Optional[str] = None,
         group: Optional[str] = None,
         **kwargs,
@@ -169,14 +169,11 @@ class WandBLogger(MetricLogger):
             )
 
         if self._wandb.run:
-            self._wandb.run._label(repo="torchtune")
+            # define default x-axis (for latest wandb versions)
+            if getattr(self._wandb, "define_metric", None):
+                self._wandb.define_metric("step")
+                self._wandb.define_metric("*", step_metric="step", step_sync=True)
 
-        # define default x-axis (for latest wandb versions)
-        if getattr(self._wandb, "define_metric", None):
-            self._wandb.define_metric("step")
-            self._wandb.define_metric("*", step_metric="step", step_sync=True)
-
-        self.config_allow_val_change = kwargs.get("allow_val_change", False)
 
     def _log(self, name: str, data: Scalar, step: int) -> None:
         if self._wandb.run:
