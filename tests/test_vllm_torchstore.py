@@ -50,37 +50,6 @@ async def save_state_dict_multiplied_by_2(store, state_dict, key_prefix):
     print(f"Successfully saved {len(state_dict)} tensors multiplied by 2")
 
 
-async def validate_tensors_multiplied_by_2(store, original_state_dict, key_prefix):
-    """
-    Custom function to validate that every tensor in store is multiplied by 2
-    compared to the original state dict.
-    """
-    print(f"Validating {len(original_state_dict)} tensors are multiplied by 2...")
-
-    validation_errors = []
-
-    for param_name, original_tensor in original_state_dict.items():
-        # Load tensor from store
-        tensor_key = f"{key_prefix}{DELIM}{param_name}"
-        stored_tensor = await store.get(tensor_key)
-
-        # Check if stored tensor is original tensor * 2
-        expected_tensor = original_tensor * 2.0
-
-        # Use torch.allclose for floating point comparison
-        if not torch.allclose(stored_tensor, expected_tensor, rtol=1e-5, atol=1e-8):
-            validation_errors.append(
-                f"Tensor {param_name} is not properly multiplied by 2"
-            )
-
-    if validation_errors:
-        raise ValueError(f"Validation failed: {validation_errors}")
-
-    print(
-        f"Successfully validated all {len(original_state_dict)} tensors are multiplied by 2"
-    )
-
-
 def validate_loaded_tensors_equals_original_times_2(
     loaded_state_dict, original_state_dict, test_name="Policy"
 ):
@@ -94,7 +63,12 @@ def validate_loaded_tensors_equals_original_times_2(
     for param_name, loaded_tensor in loaded_state_dict.items():
         if param_name in original_state_dict:
             expected_tensor = original_state_dict[param_name] * 2.0
-            if not torch.allclose(loaded_tensor, expected_tensor, rtol=1e-5, atol=1e-8):
+            if not torch.allclose(
+                loaded_tensor.float(),
+                expected_tensor.cpu().float(),
+                rtol=1e-5,
+                atol=1e-8,
+            ):
                 validation_errors.append(
                     f"Loaded tensor {param_name} does not equal original * 2"
                 )
@@ -105,6 +79,86 @@ def validate_loaded_tensors_equals_original_times_2(
     print(
         f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original * 2"
     )
+
+
+async def test_policy_integration(
+    store, original_state_dict, num_gpus=1, test_name="Policy"
+):
+    """
+    Common helper function to test Policy integration with different GPU configurations.
+
+    Args:
+        store: TorchStore instance
+        original_state_dict: Original state dict for validation
+        num_gpus: Number of GPUs to use (1 for single GPU, 2+ for tensor parallel)
+        test_name: Name for test identification in validation messages
+    """
+    print(f"\n=== PHASE 2: Testing {test_name} Integration (GPUs: {num_gpus}) ===")
+
+    # Set up environment variables for vLLM distributed initialization
+    if num_gpus == 1:
+        # Single GPU setup
+        os.environ.setdefault("MASTER_ADDR", "localhost")
+        os.environ.setdefault("MASTER_PORT", "12355")
+        os.environ.setdefault("RANK", "0")
+        os.environ.setdefault("WORLD_SIZE", "1")
+        master_addr = os.environ.get("MASTER_ADDR", "localhost")
+        master_port = os.environ.get("MASTER_PORT", "12355")
+    else:
+        # Multi-GPU setup
+        master_addr = "localhost"
+        master_port = str(get_open_port())
+        os.environ["MASTER_ADDR"] = master_addr
+        os.environ["MASTER_PORT"] = master_port
+        print(f"Using MASTER_PORT: {master_port} for tensor parallel Policy")
+
+    policy_mesh = await proc_mesh(
+        gpus=num_gpus,
+        env={
+            "MASTER_ADDR": master_addr,
+            "MASTER_PORT": master_port,
+        },
+    )
+
+    # Spawn Policy as a proper Monarch actor
+    policy = await policy_mesh.spawn(
+        "policy",
+        Policy,
+        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
+        tensor_parallel_size=num_gpus,
+        pipeline_parallel_size=1,
+        enforce_eager=True,
+        resources=num_gpus,
+        torchstore=store,
+        state_dict_key=STATE_DICT_KEY,
+    )
+
+    await policy.setup.call()
+    print(f"{test_name} setup completed successfully!")
+
+    # Call update to load weights from torchstore
+    print(f"Calling Policy.update() to load weights from torchstore...")
+    if num_gpus > 1:
+        print(
+            "This should automatically shard the full tensors for tensor parallel loading..."
+        )
+    await policy.update.call()
+    print(f"Successfully called Policy.update() to load weights from torchstore!")
+
+    # Get model info including state dict after update
+    model_info = await policy.get_model_info.call()
+    model_info_result = (
+        model_info._values[0] if hasattr(model_info, "_values") else model_info
+    )
+    loaded_state_dict = model_info_result["state_dict"]
+    print("Successfully got model state dict after update")
+
+    # Validate that every tensor loaded by the policy equals the original tensor * 2
+    validate_loaded_tensors_equals_original_times_2(
+        loaded_state_dict, original_state_dict, test_name
+    )
+
+    print(f"\n{test_name} test passed! State dict successfully loaded into Policy!")
 
 
 def convert_state_dict(saved_sd):
@@ -165,114 +219,31 @@ async def llama3_torchstore_write():
     # Load from local directory instead of HuggingFace download
     model_path = "/tmp/Meta-Llama-3.1-8B-Instruct"
 
-    try:
-        # Load the model from local path - using device_map="auto" for efficient loading
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float16,  # Use half precision to save memory
-            device_map="auto",
-            trust_remote_code=True,
-            local_files_only=True,  # Ensure we don't try to download
-        )
+    # Load the model from local path - using device_map="auto" for efficient loading
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        torch_dtype=torch.float16,  # Use half precision to save memory
+        device_map="auto",
+        trust_remote_code=True,
+        local_files_only=True,  # Ensure we don't try to download
+    )
 
-        # Get the model's state dict
-        original_state_dict = model.state_dict()
-        print(f"Original state dict has {len(original_state_dict)} parameters")
+    # Get the model's state dict
+    original_state_dict = model.state_dict()
+    print(f"Original state dict has {len(original_state_dict)} parameters")
 
-        # Convert transformers state dict to vLLM format
-        print("Converting transformers state dict to vLLM format...")
-        converted_state_dict = convert_state_dict(original_state_dict)
-        print(f"Converted state dict has {len(converted_state_dict)} parameters")
+    # Convert transformers state dict to vLLM format
+    print("Converting transformers state dict to vLLM format...")
+    converted_state_dict = convert_state_dict(original_state_dict)
+    print(f"Converted state dict has {len(converted_state_dict)} parameters")
 
-        # Write converted state dict to torchstore with 2x multiplication
-        await save_state_dict_multiplied_by_2(
-            store, converted_state_dict, STATE_DICT_KEY
-        )
-        print(
-            f"Successfully wrote converted state dict (multiplied by 2) to torchstore with key: {STATE_DICT_KEY}"
-        )
-
-        return store, converted_state_dict
-
-    except Exception as e:
-        print(f"Error during model loading or processing: {e}")
-        raise
-
-    finally:
-        # Clean up original model
-        try:
-            model_var = locals().get("model")
-            if model_var is not None:
-                del model_var
-        except:
-            pass
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-
-def setup_distributed_fsdp():
-    """Initialize distributed environment for FSDP with world_size=2"""
-    if not dist.is_initialized():
-        # Use environment variables that should already be set by multiprocessing
-        rank = int(os.environ.get("RANK", "0"))
-        world_size = int(os.environ.get("WORLD_SIZE", "2"))
-        master_addr = os.environ.get("MASTER_ADDR", "localhost")
-        master_port = os.environ.get("MASTER_PORT", "12356")
-
-        try:
-            # Initialize process group with timeout
-            dist.init_process_group(
-                backend="nccl" if torch.cuda.is_available() else "gloo",
-                rank=rank,
-                world_size=world_size,
-                timeout=torch.distributed.timedelta(seconds=30),  # Add timeout
-            )
-        except Exception as e:
-            raise
-
-
-async def test_policy_integration_fsdp(
-    store, state_dict_key, original_logits, tokenizer
-):
-    """
-    FSDP Phase 2: Initialize Policy with tensor_parallel_size=2 and test update functionality
-    """
+    # Write converted state dict to torchstore with 2x multiplication
+    await save_state_dict_multiplied_by_2(store, converted_state_dict, STATE_DICT_KEY)
     print(
-        "\n=== FSDP PHASE 2: Testing Policy Integration with Tensor Parallel Size 2 ==="
+        f"Successfully wrote converted state dict (multiplied by 2) to torchstore with key: {STATE_DICT_KEY}"
     )
 
-    master_addr = "localhost"
-    master_port = str(get_open_port())  # Use dynamic port to avoid conflicts
-
-    os.environ.setdefault("MASTER_ADDR", master_addr)
-    os.environ["MASTER_PORT"] = master_port  # Always set a fresh port
-
-    policy_mesh = await proc_mesh(
-        gpus=2,  # 2 GPUs for tensor parallelism
-        env={
-            "MASTER_ADDR": master_addr,
-            "MASTER_PORT": master_port,
-        },
-    )
-
-    # Spawn Policy as a proper Monarch actor with tensor parallelism
-    policy = await policy_mesh.spawn(
-        "policy",
-        Policy,
-        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        tensor_parallel_size=2,  # Use tensor parallelism instead of FSDP for vLLM
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        resources=2,  # 2 resources for 2 GPUs
-        torchstore=store,
-        state_dict_key=state_dict_key,
-    )
-
-    await policy.setup.call()
-
-    # Now call update to load weights from torchstore
-    print("Calling Policy.update() to load weights from torchstore...")
-    await policy.update.call()
+    return store, converted_state_dict
 
 
 async def test_llama3_torchstore_fsdp():
@@ -291,68 +262,17 @@ async def test_llama3_torchstore_fsdp():
         )
         return False
 
-    print(
-        "Phase 1: Loading regular model and saving modified full state dict to torchstore..."
-    )
+    # Phase 1: Write model to torchstore
     store, original_state_dict = await llama3_torchstore_write()
 
-    master_addr = "localhost"
-    master_port = str(get_open_port())
-
-    os.environ["MASTER_ADDR"] = master_addr
-    os.environ["MASTER_PORT"] = master_port
-
-    print(f"Using MASTER_PORT: {master_port} for tensor parallel Policy")
-
-    policy_mesh = await proc_mesh(
-        gpus=2,  # 2 GPUs for tensor parallelism
-        env={
-            "MASTER_ADDR": master_addr,
-            "MASTER_PORT": master_port,
-        },
-    )
-
-    # Spawn Policy as a proper Monarch actor with tensor parallelism
-    policy = await policy_mesh.spawn(
-        "policy",
-        Policy,
-        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        tensor_parallel_size=2,  # Use tensor parallelism
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        resources=2,  # 2 resources for 2 GPUs
-        torchstore=store,
-        state_dict_key=STATE_DICT_KEY,  # Use the key from the full model
-    )
-
-    await policy.setup.call()
-    print("Tensor parallel Policy setup completed successfully!")
-
-    # Get model state dict before update
-    initial_state_dict = await policy.get_model_state_dict.call()
-
-    # Now call update to load full weights from torchstore into sharded model
-    print(
-        "Calling Policy.update() to load full state dict into tensor parallel model..."
-    )
-    print(
-        "This should automatically shard the full tensors for tensor parallel loading..."
-    )
-
-    await policy.update.call()
-
-    # Get model state dict after update
-    loaded_state_dict = await policy.get_model_state_dict.call()
-
-    # Validate that every tensor loaded by the policy equals the original tensor * 2
-    validate_loaded_tensors_equals_original_times_2(
-        loaded_state_dict, original_state_dict, "FSDP Policy"
+    # Phase 2: Test Policy integration with 2 GPUs
+    await test_policy_integration(
+        store, original_state_dict, num_gpus=2, test_name="FSDP Policy"
     )
 
     print(
         "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
     )
-    return True
 
 
 async def test_llama3_torchstore():
@@ -363,47 +283,13 @@ async def test_llama3_torchstore():
     # Phase 1: Write model to torchstore
     store, original_state_dict = await llama3_torchstore_write()
 
-    # Phase 2: Test Policy integration
-    # Set up environment variables for vLLM distributed initialization
-    os.environ.setdefault("MASTER_ADDR", "localhost")
-    os.environ.setdefault("MASTER_PORT", "12355")
-    os.environ.setdefault("RANK", "0")
-    os.environ.setdefault("WORLD_SIZE", "1")
-
-    policy_mesh = await proc_mesh(
-        gpus=1,
-        env={
-            "MASTER_ADDR": os.environ.get("MASTER_ADDR", "localhost"),
-            "MASTER_PORT": os.environ.get("MASTER_PORT", "12355"),
-        },
+    # Phase 2: Test Policy integration with 1 GPU
+    await test_policy_integration(
+        store, original_state_dict, num_gpus=1, test_name="Single GPU Policy"
     )
 
-    # Spawn Policy as a proper Monarch actor
-    policy = await policy_mesh.spawn(
-        "policy",
-        Policy,
-        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        tensor_parallel_size=1,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        resources=1,
-        torchstore=store,
-        state_dict_key=STATE_DICT_KEY,
-    )
-
-    await policy.setup.call()
-
-    # Get model state dict before update
-    initial_state_dict = await policy.get_model_state_dict.call()
-
-    await policy.update.call()
-
-    # Get model state dict after update
-    loaded_state_dict = await policy.get_model_state_dict.call()
-
-    # Validate that every tensor loaded by the policy equals the original tensor * 2
-    validate_loaded_tensors_equals_original_times_2(
-        loaded_state_dict, original_state_dict, "Single GPU Policy"
+    print(
+        "\nComplete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
 
 

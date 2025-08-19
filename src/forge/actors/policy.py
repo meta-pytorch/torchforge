@@ -371,16 +371,9 @@ class Policy(Actor):
         logger.info(f"Current state dict has {len(current_state_dict)} parameters")
         logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
 
-        if self.tensor_parallel_size > 1:
-            # Tensor parallel model - use deterministic sharding strategy
-            logger.info("Loading state dict with tensor parallel sharding...")
-            await self._load_tensor_parallel_state_dict(current_state_dict)
-        else:
-            # Single GPU model - use standard loading
-            logger.info("Loading state dict for single GPU model...")
-            await get_state_dict(
-                self.torchstore, self.state_dict_key, current_state_dict
-            )
+        # Tensor parallel model - use deterministic sharding strategy
+        logger.info("Loading state dict with tensor parallel sharding...")
+        await self._load_tensor_parallel_state_dict(current_state_dict)
 
         # Load the updated state dict into the model
         model.load_state_dict(current_state_dict, strict=True)
@@ -422,12 +415,29 @@ class Policy(Actor):
         return self.vllm_args
 
     @endpoint
-    async def get_model_state_dict(self):
-        """Get basic model information for testing purposes"""
+    async def get_model_info(self):
+        """Get complete model information including all parameters for testing purposes"""
+        import torch
 
         model = self.worker.model_runner.model
 
-        return model.state_dict()
+        # Get basic model info that doesn't require forward pass
+        model_info = {
+            "num_parameters": sum(p.numel() for p in model.parameters()),
+            "device": str(next(model.parameters()).device),
+            "dtype": str(next(model.parameters()).dtype),
+            "model_type": type(model).__name__,
+            "state_dict": {},
+        }
+
+        # Get all parameters in the state dict
+        state_dict = model.named_parameters()
+        for name, param in state_dict:
+            # Convert to CPU and detach for serialization
+            model_info["state_dict"][name] = param.cpu().detach()
+            break
+
+        return model_info
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
