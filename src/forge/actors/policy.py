@@ -433,10 +433,9 @@ class Policy(Actor):
         # Get all parameters in the state dict
         state_dict = model.named_parameters()
         for name, param in state_dict:
-            # Convert to CPU and detach for serialization
-            model_info["state_dict"][name] = param.cpu().detach()
-            break
-
+            # only use one layer for testing, otherwise it's too slow
+            if "layers.0" in name:
+                model_info["state_dict"][name] = param.cpu().detach()
         return model_info
 
     def setup_worker(self):

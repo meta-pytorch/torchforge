@@ -72,6 +72,8 @@ def validate_loaded_tensors_equals_original_times_2(
                 validation_errors.append(
                     f"Loaded tensor {param_name} does not equal original * 2"
                 )
+            else:
+                print(f"Loaded tensor {param_name} correctly")
 
     if validation_errors:
         raise ValueError(f"{test_name} validation failed: {validation_errors}")
