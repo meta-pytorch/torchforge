@@ -68,7 +68,13 @@ async def main():
         ForgeDataset,
         path="gsm8k",
     )
+    compute_advantages = await spawn_service(
+        default_service_cfg,
+        ComputeAdvantages,
+    )
+    ref_model = await spawn_service(default_service_cfg, RefModel)
 
+    # ---- Core RL loops ---- #
     async def continuous_rollouts():
         while True:
             prompt = await dataloader.__next__.call()
@@ -77,7 +83,7 @@ async def main():
                 return
             version = await policy.get_current_version.choose()
             episode = Episode()
-            with policy.session(version=version):
+            async with policy.session(version=version):
                 action = await policy.generate.call(prompt)
                 episode.add_turn((prompt, action))
             episode.add_advantages(await compute_advantages.__call__.call(episode))
