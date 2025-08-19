@@ -18,10 +18,11 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
-from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
+from forge.data.utils import batch_to_device, CROSS_ENTROPY_IGNORE_IDX
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
+
 from torchdata.stateful_dataloader import StatefulDataLoader
 from torchtitan.components.loss import LossFunction
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
@@ -31,6 +32,7 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from tqdm import tqdm
 
+
 # stubs for now
 Checkpointer = Any
 Dataloader = Any
@@ -39,14 +41,14 @@ Profiler = Any
 Tokenizer = Any
 
 
-_SUPPORTS_FLEX_ATTENTION = (
-    torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5)
-)
+# _SUPPORTS_FLEX_ATTENTION = (
+#     torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5)
+# )
 
-if _SUPPORTS_FLEX_ATTENTION:
-    from torch.nn.attention.flex_attention import BlockMask
-else:
-    BlockMask = torch.Tensor
+# if _SUPPORTS_FLEX_ATTENTION:
+#     from torch.nn.attention.flex_attention import BlockMask
+# else:
+#     BlockMask = torch.Tensor
 
 
 class ForgeSFTRecipe(ForgeEngine):
@@ -289,33 +291,6 @@ class ForgeSFTRecipe(ForgeEngine):
             self.checkpointer.close()
         if self.metric_logger:
             self.metric_logger.close()
-
-
-def batch_to_device(batch: dict, device: torch.device) -> None:
-    """Function that takes a dictionary (or nested dictionary) of tensors and sets them
-    all to the same device. This utility is intended to be used for batches of data to be
-    moved to device, the update is inplace.
-
-    Args:
-        batch (dict): dict of Tensors or more nested dicts of tensors.
-        device (torch.device): torch device to move the tensors to.
-
-    Raises:
-        ValueError: if batch dict contains anything other than ``torch.Tensor``.
-
-    """
-    for k, v in batch.items():
-        if isinstance(v, dict):
-            batch_to_device(v, device)
-        elif isinstance(v, torch.Tensor):
-            batch[k] = v.to(device)
-        elif _SUPPORTS_FLEX_ATTENTION and isinstance(v, BlockMask):
-            batch[k] = v.to(device)
-        else:
-            raise ValueError(
-                f"""To use batch_to_device, all elements in the batch must be a dict, Tensor, or BlockMask with flexattention enabled.
-Got key "{k}" with value of type {type(v)}"""
-            )
 
 
 @parse
