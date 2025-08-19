@@ -7,124 +7,17 @@ import json
 import os
 import sys
 import time
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Mapping, Optional
 
 import torch
 
+from forge.interfaces import MetricLogger
 from forge.types import Scalar
 
 
 def get_metric_logger(logger: str = "stdout", **log_config):
     return METRIC_LOGGER_STR_TO_CLS[logger](**log_config)
-
-
-class MetricLogger(ABC):
-    """Abstract metric logger.
-
-    Args:
-        log_freq (Mapping[str, int]):
-            calls to `log` and `log_dict` will be ignored if `step % log_freq[metric_name] != 0`
-    """
-
-    def __init__(self, log_freq: Mapping[str, int]):
-        self._log_freq = log_freq
-        self._step = None
-
-    def set_step(self, step: int) -> None:
-        """Subsequent log calls will use this step number by default if not provided to the log call."""
-        self._step = step
-
-    def is_log_step(self, name: str, step: Optional[int] = None):
-        """Returns true if the current step is a logging step.
-
-        Args:
-            name (str): metric name (for checking the log freq for this metric)
-            step (int): current step. if not given, will use the one last provided via set_step()
-        """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-        return step % self._log_freq[name] == 0
-
-    def log(
-        self,
-        name: str,
-        data: Scalar,
-        step: Optional[int] = None,
-    ) -> None:
-        """Log scalar data if this is a logging step.
-
-        Args:
-            name (str): tag name used to group scalars
-            data (Scalar): scalar data to log
-            step (int): step value to record. if not given, will use the one last provided via set_step()
-        """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-        if step % self._log_freq[name] == 0:
-            self._log(name, data, step)
-
-    def log_dict(
-        self, metrics: Mapping[str, Scalar], step: Optional[int] = None
-    ) -> None:
-        """Log multiple scalar values if this is a logging step.
-
-        Args:
-            metrics (Mapping[str, Scalar]): dictionary of tag name and scalar value
-            step (int): step value to record. if not given, will use the one last provided via set_step()
-        """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-
-        log_step_metrics = {
-            name: value
-            for name, value in metrics.items()
-            if step % self._log_freq[name] == 0
-        }
-        if log_step_metrics:
-            self._log_dict(log_step_metrics, step)
-
-    @abstractmethod
-    def _log(self, name: str, data: Scalar, step: int) -> None:
-        """Log scalar data.
-
-        Args:
-            name (str): tag name used to group scalars
-            data (Scalar): scalar data to log
-            step (int): step value to record
-        """
-        pass
-
-    @abstractmethod
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
-        """Log multiple scalar values.
-
-        Args:
-            payload (Mapping[str, Scalar]): dictionary of tag name and scalar value
-            step (int): step value to record
-        """
-        pass
-
-    def __del__(self) -> None:
-        self.close()
-
-    def close(self) -> None:
-        """
-        Close log resource, flushing if necessary.
-        This will automatically be called via __del__ when the instance goes out of scope.
-        Logs should not be written after `close` is called.
-        """
-        pass
 
 
 class StdoutLogger(MetricLogger):
@@ -264,21 +157,21 @@ class TensorBoardLogger(MetricLogger):
         from torch.utils.tensorboard import SummaryWriter
 
         self._writer: Optional[SummaryWriter] = None
-        _, self._rank = get_world_size_and_rank()
+        rank = _get_rank()
 
         # In case organize_logs is `True`, update log_dir to include a subdirectory for the
         # current run
         self.log_dir = (
-            os.path.join(log_dir, f"run_{self._rank}_{time.time()}")
+            os.path.join(log_dir, f"run_{rank}_{time.time()}")
             if organize_logs
             else log_dir
         )
 
         # Initialize the log writer only if we're on rank 0.
-        if self._rank == 0:
+        if rank == 0:
             self._writer = SummaryWriter(log_dir=self.log_dir)
 
-    def log(self, name: str, data: Scalar, step: int) -> None:
+    def _log(self, name: str, data: Scalar, step: int) -> None:
         if self._writer:
             self._writer.add_scalar(name, data, global_step=step, new_style=True)
 
