@@ -22,6 +22,13 @@ from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from vllm.utils import get_open_port
+from monarch.actor import proc_mesh
+import numpy as np
+import asyncio
+import traceback
+import argparse
+
 
 def convert_state_dict(saved_sd):
     """
@@ -145,9 +152,6 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
     os.environ.setdefault("WORLD_SIZE", "1")
 
     try:
-        # Create a process mesh and spawn the Policy actor properly
-        from monarch.actor import proc_mesh
-
         policy_mesh = await proc_mesh(
             gpus=1,
             env={
@@ -208,8 +212,6 @@ async def test_policy_integration(store, state_dict_key, original_logits, tokeni
 
                 # Verify the update operation worked (weights should be preserved)
                 if "sample_weights" in model_info_before:
-                    import numpy as np
-
                     weight_diff = np.abs(
                         np.array(after_weights) - np.array(before_weights)
                     ).max()
@@ -354,9 +356,6 @@ async def test_policy_integration_fsdp(
         "\n=== FSDP PHASE 2: Testing Policy Integration with Tensor Parallel Size 2 ==="
     )
 
-    # Set up environment variables for vLLM distributed initialization
-    from vllm.utils import get_open_port
-
     master_addr = "localhost"
     master_port = str(get_open_port())  # Use dynamic port to avoid conflicts
 
@@ -364,9 +363,6 @@ async def test_policy_integration_fsdp(
     os.environ["MASTER_PORT"] = master_port  # Always set a fresh port
 
     try:
-        # Create a process mesh and spawn the Policy actor properly for tensor parallelism
-        from monarch.actor import proc_mesh
-
         policy_mesh = await proc_mesh(
             gpus=2,  # 2 GPUs for tensor parallelism
             env={
@@ -432,7 +428,6 @@ async def test_policy_integration_fsdp(
 
                     # Verify the update operation worked (weights should be preserved)
                     if model_info_before and "sample_weights" in model_info_before:
-                        import numpy as np
 
                         before_weights = model_info_before["sample_weights"]
                         weight_diff = np.abs(
@@ -464,7 +459,6 @@ def fsdp_worker_main(rank, world_size, master_port):
     """
     Worker function that runs in each FSDP process
     """
-    import asyncio
 
     # Set up environment for this rank
     os.environ["RANK"] = str(rank)
@@ -491,8 +485,6 @@ def fsdp_worker_main(rank, world_size, master_port):
                 return True
 
         except Exception as e:
-            import traceback
-
             traceback.print_exc()
             return False
         finally:
@@ -509,7 +501,6 @@ def fsdp_worker_main(rank, world_size, master_port):
         return result
     except Exception as e:
         print(f"Rank {rank}: Worker failed with error: {e}")
-        import traceback
 
         traceback.print_exc()
         return False
@@ -542,41 +533,6 @@ async def test_llama3_fsdp_torchstore():
         )
         store, key, original_logits, tokenizer = await test_llama3_torchstore_write()
 
-        # Modify the stored state dict to create detectable differences
-        print("Modifying stored state dict for verification...")
-        from torchstore._state_dict_utils import DELIM, MAPPING
-
-        # Get the mapping to see what parameters are stored
-        fetched_mapping = await store.get(f"{key}{DELIM}{MAPPING}")
-
-        # Find an embedding parameter to modify (these are typically safe to modify slightly)
-        embedding_param_key = None
-        for param_key in fetched_mapping.keys():
-            if "embed" in param_key.lower() and "weight" in param_key:
-                embedding_param_key = param_key
-                break
-
-        if embedding_param_key:
-            # Load the original tensor
-            original_tensor = await store.get(f"{key}{DELIM}{embedding_param_key}")
-
-            # Create a modified version (add small constant to make it detectable)
-            modified_tensor = original_tensor + 0.001  # Small but detectable change
-
-            # Store the modified tensor back
-            await store.put(f"{key}{DELIM}{embedding_param_key}", modified_tensor)
-            print(
-                f"Modified parameter {embedding_param_key} by adding 0.001 to all values"
-            )
-        else:
-            print("No embedding parameter found to modify - using original state dict")
-
-        # Phase 2: Load full state dict into tensor parallel Policy
-        print("Phase 2: Loading full state dict into tensor parallel Policy...")
-
-        # Set up environment variables for vLLM distributed initialization
-        from vllm.utils import get_open_port
-
         master_addr = "localhost"
         master_port = str(get_open_port())
 
@@ -584,9 +540,6 @@ async def test_llama3_fsdp_torchstore():
         os.environ["MASTER_PORT"] = master_port
 
         print(f"Using MASTER_PORT: {master_port} for tensor parallel Policy")
-
-        # Create a process mesh and spawn the Policy actor with tensor parallelism
-        from monarch.actor import proc_mesh
 
         policy_mesh = await proc_mesh(
             gpus=2,  # 2 GPUs for tensor parallelism
@@ -655,8 +608,6 @@ async def test_llama3_fsdp_torchstore():
 
                     # The weights should be different since we're loading from the saved full model
                     if "sample_weights" in model_info_before:
-                        import numpy as np
-
                         weight_diff = np.abs(
                             np.array(after_weights) - np.array(before_weights)
                         ).max()
@@ -683,7 +634,6 @@ async def test_llama3_fsdp_torchstore():
 
     except Exception as e:
         print(f"Tensor parallel test failed with error: {e}")
-        import traceback
 
         traceback.print_exc()
         return False
@@ -727,8 +677,6 @@ async def test_llama3_torchstore():
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Test Llama 3 8B with TorchStore and Policy integration"
     )

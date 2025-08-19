@@ -34,6 +34,8 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from torchstore._state_dict_utils import DELIM, MAPPING
+
 logger = logging.getLogger(__name__)
 
 
@@ -194,7 +196,7 @@ class Policy(Actor):
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
-                gpu_memory_utilization=0.7,
+                gpu_memory_utilization=0.4,
             )
             # Original method returns False when not run in the main thread
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
@@ -227,38 +229,156 @@ class Policy(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
+    def _get_tensor_parallel_sharding_strategy(self, param_name: str) -> tuple[int, bool]:
+        """
+        Determine the sharding strategy for a parameter in tensor parallel setup.
+        
+        Returns:
+            tuple[int, bool]: (shard_dimension, is_sharded)
+                - shard_dimension: Which dimension to shard (0 or 1) 
+                - is_sharded: Whether this parameter should be sharded at all
+        
+        Based on vLLM's tensor parallel implementation for LLaMA models:
+        - Embedding layers: shard along vocab dimension (dim 0)
+        - Attention projections: qk/_proj shard along hidden dimension (dim 0), o_proj along input dimension (dim 1)
+        - MLP projections: gate/up_proj shard along hidden dimension (dim 0), down_proj along input dimension (dim 1)  
+        - Layer norms: not sharded (replicated)
+        - Output layer: shard along vocab dimension (dim 0)
+        """
+        # Parameters that are not sharded (replicated across all tensor parallel ranks)
+        if any(keyword in param_name for keyword in [
+            'norm', 'bias', 'rotary_emb'
+        ]):
+            return 0, False
+
+        # Embedding layers - shard along vocab dimension (dim 0)
+        if 'embed_tokens' in param_name or 'lm_head' in param_name:
+            return 0, True
+
+        # Attention projections
+        if 'qkv_proj' in param_name:
+            # Input projections: shard output dimension (dim 0)
+            return 0, True
+        elif 'o_proj' in param_name:
+            # Output projection: shard input dimension (dim 1) 
+            return 1, True
+
+        # MLP projections
+        elif any(proj in param_name for proj in ['gate_proj', 'up_proj']):
+            # Input projections: shard output dimension (dim 0)
+            return 0, True
+        elif 'down_proj' in param_name:
+            # Output projection: shard input dimension (dim 1)
+            return 1, True
+
+        # Default: try to infer from tensor shape patterns
+        return 0, True
+
+    def _calculate_tensor_shard(self, full_tensor: torch.Tensor, shard_dim: int) -> torch.Tensor:
+        """
+        Calculate the shard of a full tensor for the current tensor parallel rank.
+        
+        Args:
+            full_tensor: The full tensor to shard
+            shard_dim: Which dimension to shard along (0 or 1)
+            
+        Returns:
+            torch.Tensor: The sharded tensor for this rank
+        """
+        tp_rank = self.rank % self.tensor_parallel_size
+        tensor_size = full_tensor.shape[shard_dim]
+        
+        if tensor_size % self.tensor_parallel_size != 0:
+            raise ValueError(
+                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
+                f"across {self.tensor_parallel_size} ranks: not evenly divisible"
+            )
+            
+        shard_size = tensor_size // self.tensor_parallel_size
+        start_idx = tp_rank * shard_size
+        end_idx = start_idx + shard_size
+        
+        if shard_dim == 0:
+            return full_tensor[start_idx:end_idx]
+        elif shard_dim == 1:
+            return full_tensor[:, start_idx:end_idx]
+        else:
+            raise ValueError(f"Unsupported shard dimension: {shard_dim}")
+
+    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+        """
+        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
+        """
+        
+        updated_count = 0
+        
+        for param_name in current_state_dict.keys():
+            current_tensor = current_state_dict[param_name]
+
+            # Load the full tensor from torchstore
+            stored_tensor = await self.torchstore.get(f"{self.state_dict_key}{DELIM}{param_name}")
+                
+            # Determine sharding strategy for this parameter
+            shard_dim, is_sharded = self._get_tensor_parallel_sharding_strategy(param_name)
+                
+            if not is_sharded:
+                # Parameter is replicated - shapes should match exactly
+                if stored_tensor.shape != current_tensor.shape:
+                    raise ValueError(
+                            f"Replicated parameter {param_name} has mismatched shapes: "
+                            f"{stored_tensor.shape} vs {current_tensor.shape}, skipping"
+                    )
+                    
+                # Direct copy for replicated parameters
+                current_state_dict[param_name].copy_(stored_tensor)
+                    
+            else:
+                # Need to shard the full tensor
+                sharded_tensor = self._calculate_tensor_shard(stored_tensor, shard_dim)
+                            
+                if sharded_tensor.shape != current_tensor.shape:
+                    raise ValueError(
+                                f"Calculated shard for {param_name} has wrong shape: "
+                                f"{sharded_tensor.shape} vs expected {current_tensor.shape}, skipping"
+                            )
+                                
+                current_state_dict[param_name].copy_(sharded_tensor)
+                
+            updated_count += 1
+        
+        logger.info(f"Successfully updated {updated_count} parameters")
+
     @endpoint
     async def update(self):
         """Update model weights by reading state dict from torchstore"""
-        if self.torchstore is None:
-            logger.warning("No torchstore configured, skipping model update")
-            return False
 
-        from torchstore._state_dict_utils import DELIM
+        if self.torchstore is None:
+            raise Exception("No torchstore configured, skipping model update")
+
+
+        logger.info(f"Starting model update from torchstore with key: {self.state_dict_key}")
 
         # Get the current model from the worker
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        updated_count = 0
-        # Iterate through each parameter in current state dict and load directly using torchstore.get
-        for param_name, current_tensor in current_state_dict.items():
-            # Use torchstore.get to load directly into the current tensor
-            # This automatically handles both tensor parallelized and regular tensors
-            try:
-                await self.torchstore.get(
-                    f"{self.state_dict_key}{DELIM}{param_name}",
-                    current_tensor,
-                )
-                logger.info(f"Successfully updated {param_name} from torchstore")
-                updated_count += 1
-            except Exception as e:
-                logger.error(
-                    f"Failed to load parameter {param_name} from torchstore: {e}"
-                )
-                continue
+        logger.info(f"Current state dict has {len(current_state_dict)} parameters")
+        logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
 
-        logger.info(f"Successfully updated {updated_count} parameters from torchstore")
+        if self.tensor_parallel_size > 1:
+            # Tensor parallel model - use deterministic sharding strategy
+            logger.info("Loading state dict with tensor parallel sharding...")
+            await self._load_tensor_parallel_state_dict(current_state_dict)
+        else:
+            # Single GPU model - use standard loading
+            logger.info("Loading state dict for single GPU model...")
+            await get_state_dict(self.torchstore, self.state_dict_key, current_state_dict)
+
+        # Load the updated state dict into the model
+        model.load_state_dict(current_state_dict, strict=True)
+
+        logger.info("Successfully updated model weights from torchstore")
+
 
     @endpoint
     async def setup_kv_cache(self):
@@ -297,7 +417,6 @@ class Policy(Actor):
     @endpoint
     async def test_model_info(self):
         """Get basic model information for testing purposes"""
-        import torch
 
         model = self.worker.model_runner.model
 
@@ -325,11 +444,26 @@ class Policy(Actor):
         """Build and Instantiate vLLM worker"""
         parallel_config = self.vllm_args.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
+
+        # Get distributed init info
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
         distributed_init_method = get_distributed_init_method(ip, port)
-        all_kwargs = [{}] * parallel_config.world_size
-        local_rank = self.rank % torch.accelerator.device_count()
+
+        # Calculate local rank properly
+        device_count = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        local_rank = self.rank % device_count
+
+        # Validate local rank
+        if local_rank >= device_count:
+            raise ValueError(
+                f"Local rank {local_rank} exceeds available devices {device_count}"
+            )
+
+        # Calculate driver worker properly
         is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
+
+        # Prepare worker kwargs
+        all_kwargs = [{}] * parallel_config.world_size
         all_kwargs[self.rank] = {
             "vllm_config": self.vllm_args,
             "local_rank": local_rank,
@@ -337,11 +471,25 @@ class Policy(Actor):
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
-        worker = WorkerWrapperBase(self.vllm_args, self.rank)
-        worker.init_worker(all_kwargs)
-        worker.init_device()
-        worker.load_model()
-        return worker
+
+        logger.info(
+            f"Setting up worker: rank={self.rank}, local_rank={local_rank}, "
+            f"is_driver={is_driver_worker}, device_count={device_count}"
+        )
+
+        try:
+            worker = WorkerWrapperBase(self.vllm_args, self.rank)
+            worker.init_worker(all_kwargs)
+            worker.init_device()
+            worker.load_model()
+            return worker
+        except Exception as e:
+            logger.error(f"Failed to setup worker: {e}")
+            logger.error(
+                f"Worker config: rank={self.rank}, local_rank={local_rank}, "
+                f"device_count={device_count}, world_size={parallel_config.world_size}"
+            )
+            raise
 
 
 def convert_input(prompt=None, prompt_token_ids=None):
