@@ -3,11 +3,9 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-import json
 import os
 import sys
 import time
-from pathlib import Path
 from typing import Mapping, Optional
 
 import torch
@@ -34,89 +32,6 @@ class StdoutLogger(MetricLogger):
 
     def close(self) -> None:
         sys.stdout.flush()
-
-
-class DiskLogger(MetricLogger):
-    """Logger to disk.
-
-    Args:
-        log_dir (str): directory to store logs
-        output_fmt (str): format of the output file. Default: 'txt'.
-            Supported formats: 'txt', 'jsonl'.
-        filename (Optional[str]): optional filename to write logs to.
-            Default: None, in which case log_{unixtimestamp}.txt will be used.
-        **kwargs: additional arguments
-
-    Warning:
-        This logger is not thread-safe.
-
-    Note:
-        This logger creates a new file based on the current time.
-    """
-
-    def __init__(
-        self,
-        log_freq: Mapping[str, int],
-        log_dir: str,
-        output_fmt: str = "txt",
-        filename: Optional[str] = None,
-        **kwargs,
-    ):
-        super().__init__(log_freq)
-
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.output_fmt = output_fmt
-        assert self.output_fmt in [
-            "txt",
-            "jsonl",
-        ], f"Unsupported output format: {self.output_fmt}. Supported formats: 'txt', 'jsonl'."
-        if not filename:
-            unix_timestamp = int(time.time())
-            filename = f"log_{unix_timestamp}.{self.output_fmt}"
-        self._file_name = self.log_dir / filename
-        self._file = open(self._file_name, "a")
-        print(f"Writing logs to {self._file_name}")
-
-    def path_to_log_file(self) -> Path:
-        return self._file_name
-
-    def _log(self, name: str, data: Scalar, step: int) -> None:
-        if self.output_fmt == "txt":
-            self._file.write(f"Step {step} | {name}:{data}\n")
-        elif self.output_fmt == "jsonl":
-            json.dump(
-                {"step": step, name: data},
-                self._file,
-                default=lambda x: x.tolist() if isinstance(x, torch.Tensor) else str(x),
-            )
-            self._file.write("\n")
-        else:
-            raise ValueError(
-                f"Unsupported output format: {self.output_fmt}. Supported formats: 'txt', 'jsonl'."
-            )
-        self._file.flush()
-
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
-        if self.output_fmt == "txt":
-            self._file.write(f"Step {step} | ")
-            for name, data in payload.items():
-                self._file.write(f"{name}:{data} ")
-        elif self.output_fmt == "jsonl":
-            json.dump(
-                {"step": step} | {name: data for name, data in payload.items()},
-                self._file,
-                default=lambda x: x.tolist() if isinstance(x, torch.Tensor) else str(x),
-            )
-        else:
-            raise ValueError(
-                f"Unsupported output format: {self.output_fmt}. Supported formats: 'txt', 'jsonl'."
-            )
-        self._file.write("\n")
-        self._file.flush()
-
-    def close(self) -> None:
-        self._file.close()
 
 
 class TensorBoardLogger(MetricLogger):

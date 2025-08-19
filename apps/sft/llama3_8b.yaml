@@ -4,7 +4,6 @@
 
 metrics:
   logger: "stdout"
-  log_dir: "metrics_log"
   log_freq:
     loss: 10
 
