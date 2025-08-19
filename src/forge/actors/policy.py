@@ -50,7 +50,9 @@ class PolicyRouter(Actor):
     @endpoint
     async def setup(self):
         self.request_id = 0
-        self.requests: Dict[str, asyncio.Future | ParentRequest] = {}
+        self.requests: Dict[
+            str, asyncio.Future | Tuple[ParentRequest, asyncio.Future]
+        ] = {}
         self.vllm_args = await self.policy.get_vllm_args.choose()
         # Setup processors
         # TODO: move all processing to the Environment
@@ -91,8 +93,6 @@ class PolicyRouter(Actor):
         if self.sampling_params is None:
             self.sampling_params = get_default_sampling_params(self.vllm_args)
 
-        self.sampling_params.n = 2
-
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
@@ -118,8 +118,6 @@ class PolicyRouter(Actor):
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
         # TODO: Clean up before release
-        request_futures: list[asyncio.Future] = []
-
         if (num_samples := self.sampling_params.n) == 1:
             self.output_processor.add_request(request, prompt_str, None, 0)
             request, _ = self.preprocess_add_request(request)
@@ -128,7 +126,6 @@ class PolicyRouter(Actor):
             self.requests[request_id] = request_fut
 
             self.scheduler.add_request(request)
-            request_futures.append(request_fut)
         else:
             parent_req = ParentRequest(request_id, self.sampling_params)
             for idx in range(num_samples):
@@ -143,16 +140,11 @@ class PolicyRouter(Actor):
                 )
                 child_request, _ = self.preprocess_add_request(child_request)
 
-                request_fut = asyncio.Future()
-                self.requests[child_request_id] = request_fut  # 0_1, 1_1
-
                 self.scheduler.add_request(child_request)
-                request_futures.append(request_fut)
-            self.requests[request_id] = parent_req
+            request_fut = asyncio.Future()
+            self.requests[request_id] = (parent_req, request_fut)
 
-        generate_out = await asyncio.gather(*request_futures)
-        print("[generate] generate_out: ", generate_out)
-        return generate_out
+        return await request_fut
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -189,24 +181,13 @@ class PolicyRouter(Actor):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     if isinstance(
-                        request := self.requests.get(request_output.request_id),
-                        ParentRequest,
-                    ):
-                        for output in request_output.outputs:
-                            # Set child response
-                            child_req_id, _ = request.get_child_info(output.index)
-                            parent_id, parent_output, parent_finished = (
-                                request.get_outputs(child_req_id, output)
-                            )
-                            fut = self.requests.pop(child_req_id)
-                            fut.set_result(parent_output[output.index])
-
-                            # Cleans up parent
-                            if parent_finished:
-                                self.requests.pop(parent_id)
-                    elif isinstance(request, asyncio.Future):
+                        payload := self.requests.get(request_output.request_id), tuple
+                    ) and isinstance(request := payload[0], ParentRequest):
+                        _, fut = self.requests.pop(request.request_id)
+                        fut.set_result(request_output.outputs)
+                    elif isinstance(payload, asyncio.Future):
                         fut = self.requests.pop(request_output.request_id)
-                        fut.set_result(request.outputs[0])
+                        fut.set_result(request_output.outputs)
                     else:
                         raise ValueError(
                             f"Invalid request {request} of type: {type(request)}"
@@ -375,16 +356,19 @@ async def _test(config, guided_decoding=False, num_samples=1):
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)
 
     sampling_params = None
-    if guided_decoding:
-        # TODO: Consider making this customizable from the config
-        # Add config for structured output
+    if guided_decoding or num_samples > 1:
+        # TODO: Make this customizable from the config
         vllm_args = await policy_actor.get_vllm_args.choose()
-        guided_decoding_params = GuidedDecodingParams(choice=["Positive", "Negative"])
 
         sampling_params = get_default_sampling_params(
-            vllm_args, overrides={n: num_samples}
+            vllm_args, overrides={"n": num_samples}
         )
-        sampling_params.guided_decoding = guided_decoding_params
+
+        sampling_params.guided_decoding = (
+            GuidedDecodingParams(choice=["Positive", "Negative"])
+            if guided_decoding
+            else None
+        )
 
     router = await router_mesh.spawn(
         "policy_router",
@@ -403,9 +387,8 @@ async def _test(config, guided_decoding=False, num_samples=1):
     prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
     responses = await router.generate.call_one(prompt)
 
-    print("[test] Responses: ", responses)
     for batch, response in enumerate(responses):
-        print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         print(f"Batch {batch}:")
         print(f"User: {prompt}\nAssistant: {response.text}")
         print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -421,5 +404,7 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(_test(config))
+    # asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
+    # asyncio.run(_test(config, num_samples=2))
+    asyncio.run(_test(config, guided_decoding=True, num_samples=3))
