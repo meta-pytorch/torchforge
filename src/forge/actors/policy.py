@@ -355,20 +355,18 @@ async def _test(config, guided_decoding=False, num_samples=1):
 
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)
 
-    sampling_params = None
-    if guided_decoding or num_samples > 1:
-        # TODO: Make this customizable from the config
-        vllm_args = await policy_actor.get_vllm_args.choose()
-
-        sampling_params = get_default_sampling_params(
-            vllm_args, overrides={"n": num_samples}
-        )
-
-        sampling_params.guided_decoding = (
+    # TODO: Make this customizable from the config
+    overrides = {
+        "n": num_samples,
+        "guided_decoding": (
             GuidedDecodingParams(choice=["Positive", "Negative"])
             if guided_decoding
             else None
-        )
+        ),
+    }
+
+    vllm_args = await policy_actor.get_vllm_args.choose()
+    sampling_params = get_default_sampling_params(vllm_args, overrides=overrides)
 
     router = await router_mesh.spawn(
         "policy_router",
@@ -406,5 +404,5 @@ if __name__ == "__main__":
     }
     # asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
-    # asyncio.run(_test(config, num_samples=2))
-    asyncio.run(_test(config, guided_decoding=True, num_samples=3))
+    asyncio.run(_test(config, num_samples=2))
+    # asyncio.run(_test(config, guided_decoding=True, num_samples=3))
