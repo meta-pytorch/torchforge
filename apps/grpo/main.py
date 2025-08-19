@@ -1,21 +1,64 @@
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import torch
-
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyRouter
 from forge.controller import ServiceConfig, spawn_service
 from forge.data.replay_buffer import ReplayBuffer
 from monarch.actor import Actor, endpoint
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import CompletionOutput, SamplingParams
+
+
+def compute_sequence_logprobs(
+    model: torch.nn.Module,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    requires_grad: bool = True,
+) -> torch.Tensor:
+    """
+    Utility function to compute log probabilities for input sequences.
+
+    Args:
+        model: The model to use for computing logprobs
+        input_ids: Input token IDs [batch_size, seq_len]
+        attention_mask: Attention mask [batch_size, seq_len]
+        requires_grad: Whether gradients are required
+
+    Returns:
+        Tensor of sequence log probabilities [batch_size]
+    """
+    context_manager = torch.enable_grad() if requires_grad else torch.no_grad()
+
+    with context_manager:
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        logits = outputs.logits
+
+        # Apply log softmax to get log probabilities
+        log_probs = torch.log_softmax(logits, dim=-1)
+
+        # Extract log probabilities for the actual tokens (excluding the first token for next-token prediction)
+        shifted_input_ids = input_ids[:, 1:]  # Remove first token
+        shifted_log_probs = log_probs[:, :-1, :]  # Remove last logit
+
+        # Gather log probabilities for actual tokens
+        token_log_probs = torch.gather(
+            shifted_log_probs, dim=-1, index=shifted_input_ids.unsqueeze(-1)
+        ).squeeze(-1)
+
+        # Sum log probabilities across sequence (masked by attention)
+        shifted_attention_mask = attention_mask[:, 1:]
+        sequence_log_probs = (token_log_probs * shifted_attention_mask).sum(dim=-1)
+
+        return sequence_log_probs
 
 
 @dataclass
 class Group:
-    response: str
-    current_logprobs: torch.Tensor
+    response: str  # The response text for tokenization
     ref_logprobs: torch.Tensor
     reward: float
     advantage: float = 0.0
@@ -24,7 +67,10 @@ class Group:
 class Episode:
     """Episode container for GRPO rollouts."""
 
-    def __init__(self):
+    def __init__(self, episode_id: int, prompt: str, target: str):
+        self.episode_id = episode_id
+        self.prompt = prompt
+        self.target = target
         self.groups: list[Group] = []
 
     def add_group(self, group: Group):
@@ -34,19 +80,38 @@ class Episode:
 class Trainer(Actor):
     """GRPO Trainer implementation for policy optimization."""
 
-    def __init__(self, learning_rate: float = 1e-5, beta: float = 0.1):
+    def __init__(
+        self,
+        learning_rate: float = 1e-5,
+        beta: float = 0.1,
+        model_name: str = "",
+    ):
         super().__init__()
         self.learning_rate = learning_rate
         self.beta = beta  # KL penalty coefficient
-        self.model = None  # Will be set during initialization
-        self.optimizer = None
+        self.model_name = model_name
 
-    def _initialize_model_and_optimizer(self, model):
-        """Initialize model and optimizer - called when model is available."""
-        self.model = model
+        # Set device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Initialize model and tokenizer
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        ).to(self.device)
+        self.model.train()
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.learning_rate
         )
+
+        print(f"Trainer initialized on device: {self.device}")
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
@@ -56,36 +121,49 @@ class Trainer(Actor):
         for episode in batch:
             groups = episode.groups
 
-            current_logprobs_list = []
+            # Collect all response texts and corresponding data
+            response_texts = []
             ref_logprobs_list = []
             advantages_list = []
 
             for group in groups:
-                current_logprobs_list.append(group.current_logprobs)
+                response_texts.append(group.response)
                 ref_logprobs_list.append(group.ref_logprobs)
                 advantages_list.append(group.advantage)
 
-            if not current_logprobs_list:
-                continue
+            # Tokenize all responses in batch
+            tokenized = self.tokenizer(
+                response_texts,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+                max_length=512,  # Adjust based on your needs
+            )
 
-            # Convert to tensors
-            current_logprobs_tensor = torch.stack(current_logprobs_list)
-            ref_logprobs_tensor = torch.stack(ref_logprobs_list)
-            advantages_tensor = torch.tensor(advantages_list, dtype=torch.float32)
+            input_ids = tokenized["input_ids"].to(self.device)
+            attention_mask = tokenized["attention_mask"].to(self.device)
 
-            # Ensure current_logprobs requires gradients for training
-            current_logprobs_tensor.requires_grad_(True)
+            # Compute current policy log probabilities using the model
+            current_logprobs = compute_sequence_logprobs(
+                self.model, input_ids, attention_mask, requires_grad=True
+            )
+
+            # Convert ref_logprobs and advantages to tensors
+            ref_logprobs_tensor = torch.stack(ref_logprobs_list).to(self.device)
+            advantages_tensor = torch.tensor(advantages_list, dtype=torch.float32).to(
+                self.device
+            )
 
             # Compute GRPO loss components
             # Ratio between current policy and reference policy
-            ratio = torch.exp(current_logprobs_tensor - ref_logprobs_tensor)
+            ratio = torch.exp(current_logprobs - ref_logprobs_tensor)
 
             # Policy gradient loss weighted by advantages
             pg_loss = -torch.mean(ratio * advantages_tensor)
 
             # KL penalty to prevent policy from deviating too far from reference
             kl_penalty = self.beta * torch.mean(
-                (current_logprobs_tensor - ref_logprobs_tensor) ** 2
+                (current_logprobs - ref_logprobs_tensor) ** 2
             )
 
             # Total GRPO loss
@@ -93,24 +171,48 @@ class Trainer(Actor):
             total_loss += loss.item()
             num_groups_processed += len(groups)
 
-            # Backward pass and optimization
-            if loss.requires_grad and self.optimizer is not None:
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+            # Backward pass and optimization with FSDP
+            self.optimizer.zero_grad()
+            loss.backward()
+
+            # Gradient clipping (optional but recommended for stability)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+            self.optimizer.step()
 
         avg_loss = total_loss / len(batch) if batch else 0.0
         print(
             f"Training step completed. Average loss: {avg_loss:.4f}, Groups processed: {num_groups_processed}"
         )
+
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    async def update_weights(self):
-        """Update policy weights - placeholder for policy distribution."""
-        # In a distributed setting, this would sync weights across workers
-        print("Policy weights updated")
-        return {"status": "weights_updated"}
+    async def update_weights(self, policy_actor):
+        """Update policy model weights with trainer's current weights."""
+        # Time how long it takes to update weights
+        start_time = time.time()
+
+        # Set model to eval mode for weight extraction
+        self.model.eval()
+
+        # Extract current model state dict
+        model_state_dict = self.model.state_dict()
+
+        # Convert tensors to CPU for transfer (if they're on GPU)
+        cpu_state_dict = {}
+        for key, tensor in model_state_dict.items():
+            cpu_state_dict[key] = tensor.cpu() if tensor.is_cuda else tensor
+
+        # Update the policy actor's model weights
+        await policy_actor.update_model_weights.call(cpu_state_dict)
+
+        # Set model back to training mode
+        self.model.train()
+
+        # Log the time taken
+        end_time = time.time()
+        print(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
 def math_scoring_function(prompt: str, response: str, target: str) -> float:
@@ -219,17 +321,51 @@ class ComputeAdvantages(Actor):
 
 
 class RefModel(Actor):
-    def __init__(self):
+    def __init__(self, model_name):
         super().__init__()
-        self.model = None
+        self.model_name = model_name
+
+        # Set device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Initialize model and tokenizer
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        ).to(self.device)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Set model to eval mode for reference computations
+        self.model.eval()
+
+        print(f"RefModel initialized on device: {self.device}")
 
     @endpoint
-    async def forward(self, tokens: list[int]) -> torch.Tensor:
-        # Placeholder implementation - in practice would use actual reference model
-        # to compute log probabilities for the tokens
-        logprob_value = -torch.log(torch.tensor(float(len(tokens))))
-        logprobs = torch.full((len(tokens),), logprob_value.item(), dtype=torch.float32)
-        return logprobs
+    async def forward(self, response_text: str) -> torch.Tensor:
+        # Tokenize the response text
+        tokenized = self.tokenizer(
+            response_text,
+            return_tensors="pt",
+            max_length=512,  # Adjust based on your needs
+            truncation=True,
+            padding=False,
+        )
+
+        input_ids = tokenized["input_ids"].to(self.device)
+        attention_mask = tokenized["attention_mask"].to(self.device)
+
+        # Compute log probabilities using shared utility function
+        sequence_log_probs = compute_sequence_logprobs(
+            self.model, input_ids, attention_mask, requires_grad=False
+        )
+
+        return (
+            sequence_log_probs.squeeze()
+        )  # Remove batch dimension for single response
 
 
 class DatasetActor(Actor):
@@ -263,6 +399,7 @@ class DatasetActor(Actor):
 async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 5
+    model = "Qwen/Qwen3-1.7B"
 
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
@@ -274,7 +411,7 @@ async def main():
     policy = await spawn_service(
         default_service_cfg,
         PolicyRouter,
-        policy=Policy(model="Deepseek/Deepseek-v3"),
+        policy=Policy(model=model),
         sampling_params=SamplingParams(n=group_size),
     )
 
@@ -283,6 +420,7 @@ async def main():
         Trainer,
         learning_rate=1e-5,
         beta=0.1,
+        model_name=model,
     )
 
     replay_buffer = await spawn_service(
@@ -310,7 +448,7 @@ async def main():
     ref_model = await spawn_service(
         default_service_cfg,
         RefModel,
-        model_name="reference_model",
+        model_name=model,
     )
 
     reward_actor = await spawn_service(
@@ -331,20 +469,23 @@ async def main():
                 return
 
             prompt, target = sample
-            version = await policy.get_current_version.choose()
-            episode = Episode()
+            episode = Episode(episode_id=rollout_count, prompt=prompt, target=target)
 
+            version = await policy.get_current_version.choose()
             async with policy.session(version=version):
                 actions: list[CompletionOutput] = await policy.generate.call(prompt)
 
             for action in actions:
-                current_logprobs = await policy.compute_logprobs.call(action.tokens)
                 ref_logprobs = await ref_model.forward.call(action.tokens)
                 reward = await reward_actor.evaluate_response.call(
                     prompt, action.text, target
                 )
                 episode.add_group(
-                    Group(action.text, current_logprobs, ref_logprobs, reward)
+                    Group(
+                        response=action.text,
+                        ref_logprobs=ref_logprobs,
+                        reward=reward,
+                    )
                 )
 
             advantages = await compute_advantages.__call__.call(episode.groups)
@@ -370,7 +511,7 @@ async def main():
                     print(f"Completed {training_step} training steps")
                     if training_result:
                         print(f"Latest loss: {training_result.get('loss', 'N/A')}")
-                await trainer.update_weights.call()
+                await trainer.update_weights.call(policy)
 
     print("Starting GRPO training loops...")
     rollout_task = asyncio.create_task(continuous_rollouts())
