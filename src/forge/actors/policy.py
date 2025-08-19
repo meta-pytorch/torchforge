@@ -390,7 +390,7 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(_test(config))
+    # asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
     # asyncio.run(_test(config, num_samples=2))
     # asyncio.run(_test(config, guided_decoding=True, num_samples=3))
