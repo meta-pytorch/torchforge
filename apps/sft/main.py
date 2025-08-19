@@ -18,6 +18,7 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.util import get_metric_logger
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -60,7 +61,7 @@ class ForgeSFTRecipe(ForgeEngine):
         self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         super().__init__(job_config)
-        self.metric_logger = None  # TODO: fix this
+        self.metric_logger = get_metric_logger(**job_config.metrics)
 
     def setup(self):
         self.train_dataloader = self.setup_data()
@@ -185,6 +186,7 @@ class ForgeSFTRecipe(ForgeEngine):
         loss = self.forward_backward(batch, labels)
         self.pbar.update(1)
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
+        self.metric_logger.log("loss", loss, self.current_step)
 
         self.optimizers.step()
         self.lr_schedulers.step()

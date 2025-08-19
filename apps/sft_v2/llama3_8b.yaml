@@ -2,10 +2,10 @@
 # profiling:
 #   enable_profiling: false
 
-# metrics:
-#   log_freq: 10
-#   enable_tensorboard: true
-#   save_tb_folder: "tb"
+metrics:
+  logger: 'wandb'
+  log_dir: "metrics_log"
+  log_freq: 10
 
 # TODO: required by torchtitan
 # https://github.com/pytorch/torchtitan/blob/2f1c814da071cc8ad165d00be6f9c1a66f8e1cce/torchtitan/distributed/utils.py#L265

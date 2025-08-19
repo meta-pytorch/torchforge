@@ -5,7 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, Union
+
+from numpy import ndarray
+from torch import Tensor
 
 
 class Message(TypedDict):
@@ -98,3 +101,6 @@ class ProcessConfig:
     oncall: str = "torchtune"
     identity: str = "pytorch_distributed"
     image: str = "forge_workspace:latest"
+
+
+Scalar = Union[Tensor, ndarray, int, float]
