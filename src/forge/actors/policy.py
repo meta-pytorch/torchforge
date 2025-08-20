@@ -34,7 +34,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.data.llama3_sharding import load_from_source_to_target
+from forge.data.sharding import Llama3vLLMSharding
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,6 @@ class Policy(Actor):
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
-                gpu_memory_utilization=0.4,
             )
             # Original method returns False when not run in the main thread
             self.vllm_args._is_v1_supported_oracle = lambda *_: True
@@ -235,20 +234,21 @@ class Policy(Actor):
         """
 
         updated_count = 0
+        # setting explictly to llama3 for now as its our only use case
+        sharding = Llama3vLLMSharding(self.tensor_parallel_size, self.rank)
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
 
             # Load the full tensor from torchstore
+            # TODO: only get the part of the tensor that is needed
             stored_tensor = await self.torchstore.get(
                 f"{self.state_dict_key}{DELIM}{param_name}"
             )
-            load_from_source_to_target(
+            sharding.load_from_source_to_target(
                 param_name,
                 stored_tensor,
-                current_state_dict,
-                self.tensor_parallel_size,
-                self.rank,
+                current_tensor,
             )
 
             updated_count += 1
