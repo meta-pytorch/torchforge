@@ -18,10 +18,15 @@ from transformers import AutoModelForCausalLM
 
 from vllm.utils import get_open_port
 
-STATE_DICT_KEY = "llama3_8b_state_dict"
+requires_cuda = pytest.mark.skipif(
+    not torch.cuda.is_available(),
+    reason="CUDA not available",
+)
 
 
-async def save_state_dict(store, state_dict, key_prefix):
+async def save_state_dict(
+    store: MultiProcessStore, state_dict: dict[str, torch.Tensor], key_prefix: str
+):
     """
     Custom function to save state dict by iterating key by key
     """
@@ -33,7 +38,10 @@ async def save_state_dict(store, state_dict, key_prefix):
 
 
 def validate_loaded_tensors_equals_original(
-    loaded_state_dict, original_state_dict, tensor_parallel_size, rank
+    loaded_state_dict: dict[str, torch.Tensor],
+    original_state_dict: dict[str, torch.Tensor],
+    tensor_parallel_size: int,
+    rank: int,
 ):
     """
     Shared validation function to verify that every tensor loaded by the policy
@@ -177,6 +185,8 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
     """
     print(f"\n=== PHASE 2: Testing Policy Integration (GPUs: {num_gpus}) ===")
 
+    state_dict_key = "llama3_8b_state_dict"
+
     # Set up environment variables for vLLM distributed initialization
     if num_gpus == 1:
         # Single GPU setup
@@ -214,7 +224,7 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
         enforce_eager=True,
         resources=num_gpus,
         torchstore=store,
-        state_dict_key=STATE_DICT_KEY,
+        state_dict_key=state_dict_key,
     )
 
     await policy.setup.call()
@@ -316,8 +326,9 @@ async def llama3_torchstore_write():
     converted_state_dict = convert_state_dict(original_state_dict)
     print(f"Converted state dict has {len(converted_state_dict)} parameters")
 
-    # Write converted state dict to torchstore with 2x multiplication
-    await save_state_dict(store, converted_state_dict, STATE_DICT_KEY)
+    state_dict_key = "llama3_8b_state_dict"
+    # Write converted state dict to torchstore
+    await save_state_dict(store, converted_state_dict, state_dict_key)
     print(
         f"Successfully wrote converted state dict to torchstore with key: {STATE_DICT_KEY}"
     )
@@ -326,6 +337,7 @@ async def llama3_torchstore_write():
 
 
 @pytest.mark.asyncio
+@requires_cuda
 async def test_llama3_torchstore_single():
     """
     Test: Single GPU Llama 3.1 8B-Instruct via TorchStore.
@@ -345,6 +357,7 @@ async def test_llama3_torchstore_single():
 
 
 @pytest.mark.asyncio
+@requires_cuda
 async def test_llama3_torchstore_tp():
     """
     Test: Tensor Parallel Llama 3.1 8B-Instruct via TorchStore.
@@ -352,10 +365,7 @@ async def test_llama3_torchstore_tp():
     """
     print("Starting tensor parallel test (load full state dict into sharded model)...")
 
-    # Check if we have enough GPUs
-    if not torch.cuda.is_available():
-        pytest.skip("No CUDA available for tensor parallel test")
-    elif torch.cuda.device_count() < 2:
+    if torch.cuda.device_count() < 2:
         pytest.skip(
             f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
         )

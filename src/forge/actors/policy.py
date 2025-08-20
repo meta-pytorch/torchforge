@@ -428,20 +428,11 @@ class Policy(Actor):
         """Build and Instantiate vLLM worker"""
         parallel_config = self.vllm_args.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
-
-        # Get distributed init info
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
         distributed_init_method = get_distributed_init_method(ip, port)
-
-        # Calculate local rank properly
-        device_count = torch.cuda.device_count() if torch.cuda.is_available() else 1
-        local_rank = self.rank % device_count
-
-        # Calculate driver worker properly
-        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
-
-        # Prepare worker kwargs
         all_kwargs = [{}] * parallel_config.world_size
+        local_rank = self.rank % torch.accelerator.device_count()
+        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
         all_kwargs[self.rank] = {
             "vllm_config": self.vllm_args,
             "local_rank": local_rank,
@@ -449,25 +440,11 @@ class Policy(Actor):
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
-
-        logger.info(
-            f"Setting up worker: rank={self.rank}, local_rank={local_rank}, "
-            f"is_driver={is_driver_worker}, device_count={device_count}"
-        )
-
-        try:
-            worker = WorkerWrapperBase(self.vllm_args, self.rank)
-            worker.init_worker(all_kwargs)
-            worker.init_device()
-            worker.load_model()
-            return worker
-        except Exception as e:
-            logger.error(f"Failed to setup worker: {e}")
-            logger.error(
-                f"Worker config: rank={self.rank}, local_rank={local_rank}, "
-                f"device_count={device_count}, world_size={parallel_config.world_size}"
-            )
-            raise
+        worker = WorkerWrapperBase(self.vllm_args, self.rank)
+        worker.init_worker(all_kwargs)
+        worker.init_device()
+        worker.load_model()
+        return worker
 
 
 def convert_input(prompt=None, prompt_token_ids=None):
