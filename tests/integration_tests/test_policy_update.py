@@ -7,6 +7,7 @@
 import os
 
 import pytest
+import pytest_asyncio
 
 import torch
 
@@ -23,6 +24,52 @@ requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="CUDA not available",
 )
+
+
+def convert_state_dict(saved_sd):
+    """
+    Convert transformers state dict to vLLM format.
+
+    Key conversions:
+    1. Copy over directly mapped keys (down_proj, input_layernorm, etc.)
+    2. Fuse QKV projections: combine q_proj, k_proj, v_proj into qkv_proj
+    3. Fuse MLP projections: combine gate_proj and up_proj into gate_up_proj
+    """
+    load_sd = {}
+    num_layers = 32  # For Llama-8B-3.1
+
+    # Copy over directly mapped keys
+    for k in saved_sd:
+        if any(
+            x in k
+            for x in [
+                "down_proj",
+                "input_layernorm",
+                "post_attention_layernorm",
+                "o_proj",
+                "norm.weight",
+                "embed_tokens.weight",
+                "lm_head.weight",
+            ]
+        ):
+            load_sd[k] = saved_sd[k]
+
+    # Fuse QKV and gate_up_proj
+    for i in range(num_layers):
+        prefix = f"model.layers.{i}."
+
+        # QKV fusion
+        q = saved_sd[prefix + "self_attn.q_proj.weight"]
+        k = saved_sd[prefix + "self_attn.k_proj.weight"]
+        v = saved_sd[prefix + "self_attn.v_proj.weight"]
+        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+
+        # MLP gate_up_proj fusion
+        gate = saved_sd[prefix + "mlp.gate_proj.weight"]
+        up = saved_sd[prefix + "mlp.up_proj.weight"]
+        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+
+    return load_sd
 
 
 async def save_state_dict(
@@ -230,55 +277,11 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
     print("\nTest passed! State dict successfully loaded into Policy!")
 
 
-def convert_state_dict(saved_sd):
+@pytest_asyncio.fixture(scope="session")
+async def llama3_torchstore_setup():
     """
-    Convert transformers state dict to vLLM format.
-
-    Key conversions:
-    1. Copy over directly mapped keys (down_proj, input_layernorm, etc.)
-    2. Fuse QKV projections: combine q_proj, k_proj, v_proj into qkv_proj
-    3. Fuse MLP projections: combine gate_proj and up_proj into gate_up_proj
-    """
-    load_sd = {}
-    num_layers = 32  # For Llama-8B-3.1, adjust if needed
-
-    # Copy over directly mapped keys
-    for k in saved_sd:
-        if any(
-            x in k
-            for x in [
-                "down_proj",
-                "input_layernorm",
-                "post_attention_layernorm",
-                "o_proj",
-                "norm.weight",
-                "embed_tokens.weight",
-                "lm_head.weight",
-            ]
-        ):
-            load_sd[k] = saved_sd[k]
-
-    # Fuse QKV and gate_up_proj
-    for i in range(num_layers):
-        prefix = f"model.layers.{i}."
-
-        # QKV fusion
-        q = saved_sd[prefix + "self_attn.q_proj.weight"]
-        k = saved_sd[prefix + "self_attn.k_proj.weight"]
-        v = saved_sd[prefix + "self_attn.v_proj.weight"]
-        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
-
-        # MLP gate_up_proj fusion
-        gate = saved_sd[prefix + "mlp.gate_proj.weight"]
-        up = saved_sd[prefix + "mlp.up_proj.weight"]
-        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-
-    return load_sd
-
-
-async def llama3_torchstore_write():
-    """
-    First phase: Load Llama 3.1 8B-Instruct and write state dict to torchstore
+    Pytest fixture to load Llama 3.1 8B-Instruct and write state dict to torchstore.
+    Uses session scope so it's only called once when both tests are run.
     """
     print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
 
@@ -318,11 +321,11 @@ async def llama3_torchstore_write():
 
 @pytest.mark.asyncio
 @requires_cuda
-async def test_llama3_policy_update_single():
+async def test_llama3_policy_update_single(llama3_torchstore_setup):
     print("Starting Llama 3 8B torchstore test (single GPU)...")
 
-    # Phase 1: Write model to torchstore
-    store, original_state_dict = await llama3_torchstore_write()
+    # Get store and original state dict from fixture
+    store, original_state_dict = llama3_torchstore_setup
 
     # Phase 2: Test Policy integration with 1 GPU
     await run_policy_integration(store, original_state_dict, num_gpus=1)
@@ -334,7 +337,7 @@ async def test_llama3_policy_update_single():
 
 @pytest.mark.asyncio
 @requires_cuda
-async def test_llama3_policy_update_tp():
+async def test_llama3_policy_update_tp(llama3_torchstore_setup):
     print("Starting tensor parallel test (load full state dict into sharded model)...")
 
     if torch.cuda.device_count() < 2:
@@ -342,8 +345,8 @@ async def test_llama3_policy_update_tp():
             f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
         )
 
-    # Phase 1: Write model to torchstore
-    store, original_state_dict = await llama3_torchstore_write()
+    # Get store and original state dict from fixture
+    store, original_state_dict = llama3_torchstore_setup
 
     # Phase 2: Test Policy integration with 2 GPUs
     await run_policy_integration(store, original_state_dict, num_gpus=2)
