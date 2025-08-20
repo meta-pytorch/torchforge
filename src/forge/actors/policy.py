@@ -34,10 +34,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.data.llama3_sharding import (
-    calculate_tensor_shard,
-    get_tensor_parallel_sharding_strategy,
-)
+from forge.data.llama3_sharding import load_from_source_to_target
 
 logger = logging.getLogger(__name__)
 
@@ -246,34 +243,13 @@ class Policy(Actor):
             stored_tensor = await self.torchstore.get(
                 f"{self.state_dict_key}{DELIM}{param_name}"
             )
-
-            # Determine sharding strategy for this parameter
-            shard_dim, is_sharded = get_tensor_parallel_sharding_strategy(param_name)
-
-            if not is_sharded:
-                # Parameter is replicated - shapes should match exactly
-                if stored_tensor.shape != current_tensor.shape:
-                    raise ValueError(
-                        f"Replicated parameter {param_name} has mismatched shapes: "
-                        f"{stored_tensor.shape} vs {current_tensor.shape}, skipping"
-                    )
-
-                # Direct copy for replicated parameters
-                current_state_dict[param_name].copy_(stored_tensor)
-
-            else:
-                # Need to shard the full tensor
-                sharded_tensor = calculate_tensor_shard(
-                    stored_tensor, shard_dim, self.tensor_parallel_size, self.rank
-                )
-
-                if sharded_tensor.shape != current_tensor.shape:
-                    raise ValueError(
-                        f"Calculated shard for {param_name} has wrong shape: "
-                        f"{sharded_tensor.shape} vs expected {current_tensor.shape}, skipping"
-                    )
-
-                current_state_dict[param_name].copy_(sharded_tensor)
+            load_from_source_to_target(
+                param_name,
+                stored_tensor,
+                current_state_dict,
+                self.tensor_parallel_size,
+                self.rank,
+            )
 
             updated_count += 1
 

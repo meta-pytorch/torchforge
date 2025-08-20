@@ -14,7 +14,47 @@ when using tensor parallelism with Llama3 models in vLLM.
 import torch
 
 
-def get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
+def load_from_source_to_target(
+    param_name: str,
+    source_tensor: torch.Tensor,
+    target_state_dict: dict[str, torch.Tensor],
+    tensor_parallel_size: int,
+    rank: int,
+):
+    """
+    Copy a source tensor to a target tensor, handling sharding and replication.
+
+    """
+
+    # Determine sharding strategy for this parameter
+    shard_dim, is_sharded = _get_tensor_parallel_sharding_strategy(param_name)
+    target_tensor = target_state_dict[param_name]
+    if not is_sharded:
+        # Parameter is replicated - shapes should match exactly
+        if source_tensor.shape != target_tensor.shape:
+            raise ValueError(
+                f"Replicated parameter {param_name} has mismatched shapes: "
+                f"{source_tensor.shape} vs {target_tensor.shape}, skipping"
+            )
+
+        # Direct copy for replicated parameters
+        target_state_dict[param_name].copy_(source_tensor)
+    else:
+        # Need to shard the full tensor
+        sharded_tensor = _calculate_tensor_shard(
+            source_tensor, shard_dim, tensor_parallel_size, rank
+        )
+
+        if sharded_tensor.shape != target_tensor.shape:
+            raise ValueError(
+                f"Calculated shard for {param_name} has wrong shape: "
+                f"{sharded_tensor.shape} vs expected {target_tensor.shape}, skipping"
+            )
+
+        target_state_dict[param_name].copy_(sharded_tensor)
+
+
+def _get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
     """
     Determine the sharding strategy for a parameter in tensor parallel setup.
 
@@ -58,7 +98,7 @@ def get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
     return 0, True
 
 
-def calculate_tensor_shard(
+def _calculate_tensor_shard(
     full_tensor: torch.Tensor, shard_dim: int, tensor_parallel_size: int, rank: int
 ) -> torch.Tensor:
     """
@@ -116,7 +156,7 @@ def _calculate_expected_shard(
         torch.Tensor: The expected sharded tensor for this rank
     """
     # Get sharding strategy for this parameter
-    shard_dim, is_sharded = get_tensor_parallel_sharding_strategy(param_name)
+    shard_dim, is_sharded = _get_tensor_parallel_sharding_strategy(param_name)
 
     if not is_sharded:
         # Parameter is replicated - should match exactly
@@ -149,51 +189,3 @@ def _calculate_expected_shard(
         raise ValueError(f"Unsupported shard dimension: {shard_dim}")
 
     return result
-
-
-def load_tensor_parallel_state_dict(self, current_state_dict: dict):
-    """
-    Load full state dict from torchstore into tensor parallel model with deterministic sharding.
-    """
-
-    updated_count = 0
-
-    for param_name in current_state_dict.keys():
-        current_tensor = current_state_dict[param_name]
-
-        # Load the full tensor from torchstore
-        stored_tensor = await self.torchstore.get(
-            f"{self.state_dict_key}{DELIM}{param_name}"
-        )
-
-        # Determine sharding strategy for this parameter
-        shard_dim, is_sharded = get_tensor_parallel_sharding_strategy(param_name)
-
-        if not is_sharded:
-            # Parameter is replicated - shapes should match exactly
-            if stored_tensor.shape != current_tensor.shape:
-                raise ValueError(
-                    f"Replicated parameter {param_name} has mismatched shapes: "
-                    f"{stored_tensor.shape} vs {current_tensor.shape}, skipping"
-                )
-
-            # Direct copy for replicated parameters
-            current_state_dict[param_name].copy_(stored_tensor)
-
-        else:
-            # Need to shard the full tensor
-            sharded_tensor = calculate_tensor_shard(
-                stored_tensor, shard_dim, self.tensor_parallel_size, self.rank
-            )
-
-            if sharded_tensor.shape != current_tensor.shape:
-                raise ValueError(
-                    f"Calculated shard for {param_name} has wrong shape: "
-                    f"{sharded_tensor.shape} vs expected {current_tensor.shape}, skipping"
-                )
-
-            current_state_dict[param_name].copy_(sharded_tensor)
-
-        updated_count += 1
-
-    logger.info(f"Successfully updated {updated_count} parameters")

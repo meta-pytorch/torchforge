@@ -11,7 +11,7 @@ import pytest
 import torch
 
 from forge.actors.policy import Policy
-from forge.data.llama3_sharding import calculate_expected_shard
+from forge.data.llama3_sharding import _calculate_expected_shard
 from monarch.actor import proc_mesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
@@ -61,7 +61,7 @@ def validate_loaded_tensors_equals_original(
 
             if tensor_parallel_size > 1:
                 # For tensor parallel case, shard the expected tensor to match the loaded shard
-                expected_shard = calculate_expected_shard(
+                expected_shard = _calculate_expected_shard(
                     expected_tensor,
                     param_name,
                     loaded_tensor.shape,
