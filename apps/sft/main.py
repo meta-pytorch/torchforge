@@ -92,12 +92,22 @@ class ForgeSFTRecipe(ForgeEngine):
             ),
         )
 
+        # dataset = sft_iterable_dataset(
+        #     model_transform=tokenizer,
+        #     message_transform=AlpacaToMessages(),
+        #     path="yahma/alpaca-cleaned",
+        #     split="train",
+        # )
+
         dataset = sft_iterable_dataset(
+            path="arrow",
+            data_dir="/mnt/mffuse/forge/alpaca-cleaned/train",
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
+            data_files={"train": "data-00000-of-00001.arrow"},
             split="train",
         )
+
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
             dataset=dataset,
