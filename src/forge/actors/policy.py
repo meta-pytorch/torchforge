@@ -14,6 +14,7 @@ from typing import Dict, List
 
 import torch
 
+from forge.interfaces import Policy as PolicyInterface
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 from torchstore import MultiProcessStore
 
@@ -45,18 +46,21 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PolicyRouter(Actor):
+class Policy(PolicyInterface):
     # TODO: Add dp support
-    policy: Actor
+    policy_worker: Actor = None
     sampling_params: SamplingParams = None
     lora_request: LoRARequest = None
     tokenization_kwargs: dict = None
 
     @endpoint
-    async def setup(self):
+    async def setup(self, config, guided_decoding=False, num_samples=1):
+        # Set up workers
+        await self.setupWorker(config, guided_decoding, num_samples)
+
         self.request_id = 0
         self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = await self.policy.get_vllm_args.choose()
+        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
@@ -72,7 +76,7 @@ class PolicyRouter(Actor):
 
         # Setup schduuler
         # TODO: Add support for `log_stats`
-        kv_cache_configs = await self.policy.setup_kv_cache.call()
+        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         kv_cache_config = kv_cache_configs._values[0]
         self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_args.cache_config.num_cpu_blocks = 0
@@ -85,6 +89,34 @@ class PolicyRouter(Actor):
             include_finished_set=False,
             log_stats=None,
         )
+
+    async def setupWorker(self, config, guided_decoding, num_samples):
+        self.worker_mesh = await proc_mesh(
+            gpus=config["resources"],
+            env={
+                "MASTER_ADDR": str(get_loopback_ip()),
+                "MASTER_PORT": str(get_open_port()),
+            },
+        )
+        self.policy_worker = await self.worker_mesh.spawn(
+            "policy_worker", PolicyWorker, **config
+        )
+
+        # TODO: Make this customizable from the config
+        vllm_args = await self.policy_worker.get_vllm_args.choose()
+        overrides = {
+            "n": num_samples,
+            "guided_decoding": (
+                GuidedDecodingParams(choice=["Positive", "Negative"])
+                if guided_decoding
+                else None
+            ),
+        }
+        self.sampling_params = get_default_sampling_params(
+            vllm_args, overrides=overrides
+        )
+
+        await self.policy_worker.setup.call()
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
@@ -169,7 +201,9 @@ class PolicyRouter(Actor):
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.policy.execute_model.call(scheduler_output)
+            worker_outputs = await self.policy_worker.execute_model.call(
+                scheduler_output
+            )
             worker_output = worker_outputs._values[output_rank]
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
@@ -186,12 +220,17 @@ class PolicyRouter(Actor):
                     fut.set_result(request_output.outputs)
 
     @endpoint
+    async def update_weights(self):
+        """Update the policy weights."""
+        pass
+
+    @endpoint
     async def shutdown(self):
         self.running = False
 
 
 @dataclass
-class Policy(Actor):
+class PolicyWorker(Actor):
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
@@ -389,46 +428,17 @@ def get_default_sampling_params(vllm_config, overrides=None) -> SamplingParams:
 
 async def _test(config, guided_decoding=False, num_samples=1):
     # TODO: Create proper test
-    router_mesh = await proc_mesh(gpus=1)
-    policy_mesh = await proc_mesh(
-        gpus=config["resources"],
-        env={
-            "MASTER_ADDR": str(get_loopback_ip()),
-            "MASTER_PORT": str(get_open_port()),
-        },
-    )
+    policy_mesh = await proc_mesh(gpus=1)
+    policy = await policy_mesh.spawn("policy", Policy)
 
-    policy_actor = await policy_mesh.spawn("policy", Policy, **config)
-
-    # TODO: Make this customizable from the config
-    overrides = {
-        "n": num_samples,
-        "guided_decoding": (
-            GuidedDecodingParams(choice=["Positive", "Negative"])
-            if guided_decoding
-            else None
-        ),
-    }
-
-    vllm_args = await policy_actor.get_vllm_args.choose()
-    sampling_params = get_default_sampling_params(vllm_args, overrides=overrides)
-
-    router = await router_mesh.spawn(
-        "policy_router",
-        PolicyRouter,
-        policy=policy_actor,
-        sampling_params=sampling_params,
-    )
-
-    await policy_actor.setup.call()
-    await router.setup.call()
     print("Model setup")
+    await policy.setup.call(config, guided_decoding, num_samples)
 
-    router.run.call()
     print("Model running")
+    policy.run.call()
 
     prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
-    responses: List[CompletionOutput] = await router.generate.call_one(prompt)
+    responses: List[CompletionOutput] = await policy.generate.call_one(prompt)
 
     for batch, response in enumerate(responses):
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -436,7 +446,7 @@ async def _test(config, guided_decoding=False, num_samples=1):
         print(f"User: {prompt}\nAssistant: {response.text}")
         print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
-    await router.shutdown.call()
+    await policy.shutdown.call()
 
 
 if __name__ == "__main__":
@@ -450,4 +460,4 @@ if __name__ == "__main__":
     # asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
     # asyncio.run(_test(config, num_samples=2))
-    # asyncio.run(_test(config, guided_decoding=True, num_samples=3))
+    asyncio.run(_test(config, guided_decoding=True, num_samples=3))
