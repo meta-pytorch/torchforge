@@ -274,8 +274,6 @@ class Policy(Actor):
 
         await self._load_tensor_parallel_state_dict(current_state_dict)
 
-        model.load_state_dict(current_state_dict, strict=True)
-
         logger.info("Successfully updated model weights from torchstore")
 
     @endpoint
