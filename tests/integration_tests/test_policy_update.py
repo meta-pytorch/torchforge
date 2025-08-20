@@ -115,33 +115,10 @@ def calculate_expected_shard(
         # Parameter is replicated - should match exactly
         return full_tensor
 
-    # Calculate tensor parallel rank (assumes tensor parallel within node)
-    tp_rank = rank % tensor_parallel_size
-    tensor_size = full_tensor.shape[shard_dim]
-
-    if tensor_size % tensor_parallel_size != 0:
-        # If not evenly divisible, the loaded tensor might be the full tensor
-        # (fallback case for testing)
-        if full_tensor.shape == expected_shape:
-            return full_tensor
-        else:
-            raise ValueError(
-                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
-                f"across {tensor_parallel_size} ranks: not evenly divisible"
-            )
-
-    shard_size = tensor_size // tensor_parallel_size
-    start_idx = tp_rank * shard_size
-    end_idx = start_idx + shard_size
-
-    if shard_dim == 0:
-        result = full_tensor[start_idx:end_idx]
-    elif shard_dim == 1:
-        result = full_tensor[:, start_idx:end_idx]
-    else:
-        raise ValueError(f"Unsupported shard dimension: {shard_dim}")
-
-    return result
+    sharded_tensor = sharding._calculate_tensor_shard(
+        full_tensor, shard_dim, tensor_parallel_size, rank
+    )
+    return sharded_tensor
 
 
 def validate_loaded_tensors_equals_original(
