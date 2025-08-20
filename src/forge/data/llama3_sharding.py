@@ -38,7 +38,7 @@ def load_from_source_to_target(
             )
 
         # Direct copy for replicated parameters
-        target_state_dict[param_name].copy_(source_tensor)
+        target_tensor.copy_(source_tensor)
     else:
         # Need to shard the full tensor
         sharded_tensor = _calculate_tensor_shard(
@@ -51,7 +51,7 @@ def load_from_source_to_target(
                 f"{sharded_tensor.shape} vs expected {target_tensor.shape}, skipping"
             )
 
-        target_state_dict[param_name].copy_(sharded_tensor)
+        target_tensor.copy_(sharded_tensor)
 
 
 def _get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
@@ -132,60 +132,3 @@ def _calculate_tensor_shard(
         return full_tensor[:, start_idx:end_idx]
     else:
         raise ValueError(f"Unsupported shard dimension: {shard_dim}")
-
-
-def _calculate_expected_shard(
-    full_tensor: torch.Tensor,
-    param_name: str,
-    expected_shape: torch.Size,
-    tensor_parallel_size: int,
-    rank: int,
-) -> torch.Tensor:
-    """
-    Calculate the expected shard of a full tensor for comparison with loaded tensor.
-    This is mainly used for validation in tests.
-
-    Args:
-        full_tensor: The full tensor to shard
-        param_name: Name of the parameter (used to determine sharding strategy)
-        expected_shape: Expected shape of the sharded tensor
-        tensor_parallel_size: Number of tensor parallel ranks
-        rank: Current rank
-
-    Returns:
-        torch.Tensor: The expected sharded tensor for this rank
-    """
-    # Get sharding strategy for this parameter
-    shard_dim, is_sharded = _get_tensor_parallel_sharding_strategy(param_name)
-
-    if not is_sharded:
-        # Parameter is replicated - should match exactly
-        return full_tensor
-
-    # Calculate tensor parallel rank (assumes tensor parallel within node)
-    tp_rank = rank % tensor_parallel_size
-    tensor_size = full_tensor.shape[shard_dim]
-
-    if tensor_size % tensor_parallel_size != 0:
-        # If not evenly divisible, the loaded tensor might be the full tensor
-        # (fallback case for testing)
-        if full_tensor.shape == expected_shape:
-            return full_tensor
-        else:
-            raise ValueError(
-                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
-                f"across {tensor_parallel_size} ranks: not evenly divisible"
-            )
-
-    shard_size = tensor_size // tensor_parallel_size
-    start_idx = tp_rank * shard_size
-    end_idx = start_idx + shard_size
-
-    if shard_dim == 0:
-        result = full_tensor[start_idx:end_idx]
-    elif shard_dim == 1:
-        result = full_tensor[:, start_idx:end_idx]
-    else:
-        raise ValueError(f"Unsupported shard dimension: {shard_dim}")
-
-    return result
