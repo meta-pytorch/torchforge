@@ -51,41 +51,140 @@ async def save_state_dict_multiplied_by_2(store, state_dict, key_prefix):
 
 
 def validate_loaded_tensors_equals_original_times_2(
-    loaded_state_dict, original_state_dict, test_name="Policy"
+    loaded_state_dict, original_state_dict, tensor_parallel_size, rank
 ):
     """
     Shared validation function to verify that every tensor loaded by the policy
     equals the original tensor multiplied by 2.
+
+    For tensor parallel cases, instead of gathering sharded tensors, we shard
+    the original tensor and compare it with the loaded shard.
     """
     print("Validating that loaded tensors equal original tensors * 2...")
 
     validation_errors = []
+
     for param_name, loaded_tensor in loaded_state_dict.items():
         if param_name in original_state_dict:
-            expected_tensor = original_state_dict[param_name] * 2.0
+            original_tensor = original_state_dict[param_name]
+            expected_tensor = original_tensor * 2.0
+
+            if tensor_parallel_size > 1:
+                # For tensor parallel case, shard the expected tensor to match the loaded shard
+                expected_shard = _calculate_expected_shard(
+                    expected_tensor,
+                    param_name,
+                    loaded_tensor.shape,
+                    tensor_parallel_size,
+                    rank,
+                )
+                tensor_to_compare = expected_shard.cpu().float()
+            else:
+                # Single GPU case - compare directly
+                tensor_to_compare = expected_tensor.cpu().float()
+
             if not torch.allclose(
                 loaded_tensor.float(),
-                expected_tensor.cpu().float(),
+                tensor_to_compare,
                 rtol=1e-5,
                 atol=1e-8,
             ):
                 validation_errors.append(
-                    f"Loaded tensor {param_name} does not equal original * 2"
+                    f"Loaded tensor {param_name} does not equal original * 2 "
+                    f"(shapes: loaded={loaded_tensor.shape}, expected={tensor_to_compare.shape})"
                 )
             else:
-                print(f"Loaded tensor {param_name} correctly")
+                print(f"Loaded tensor {param_name} correctly validated")
 
     if validation_errors:
-        raise ValueError(f"{test_name} validation failed: {validation_errors}")
+        raise ValueError(f"Validation failed: {validation_errors}")
 
     print(
         f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original * 2"
     )
 
 
-async def test_policy_integration(
-    store, original_state_dict, num_gpus=1, test_name="Policy"
-):
+def _get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
+    """
+    Determine the sharding strategy for a parameter in tensor parallel setup.
+    This mirrors the logic from Policy._get_tensor_parallel_sharding_strategy.
+    """
+    # Parameters that are not sharded (replicated across all tensor parallel ranks)
+    if any(keyword in param_name for keyword in ["norm", "bias", "rotary_emb"]):
+        return 0, False
+
+    # Embedding layers - shard along vocab dimension (dim 0)
+    if "embed_tokens" in param_name or "lm_head" in param_name:
+        return 0, True
+
+    # Attention projections
+    if "qkv_proj" in param_name:
+        # Input projections: shard output dimension (dim 0)
+        return 0, True
+    elif "o_proj" in param_name:
+        # Output projection: shard input dimension (dim 1)
+        return 1, True
+
+    # MLP projections
+    elif any(proj in param_name for proj in ["gate_proj", "up_proj", "gate_up_proj"]):
+        # Input projections: shard output dimension (dim 0)
+        return 0, True
+    elif "down_proj" in param_name:
+        # Output projection: shard input dimension (dim 1)
+        return 1, True
+
+    # Default: try to infer from tensor shape patterns
+    return 0, True
+
+
+def _calculate_expected_shard(
+    full_tensor: torch.Tensor,
+    param_name: str,
+    expected_shape: torch.Size,
+    tensor_parallel_size: int,
+    rank: int,
+) -> torch.Tensor:
+    """
+    Calculate the expected shard of a full tensor for comparison with loaded tensor.
+    """
+
+    # Get sharding strategy for this parameter
+    shard_dim, is_sharded = _get_tensor_parallel_sharding_strategy(param_name)
+
+    if not is_sharded:
+        # Parameter is replicated - should match exactly
+        return full_tensor
+
+    # Calculate tensor parallel rank (assumes tensor parallel within node)
+    tp_rank = rank % tensor_parallel_size
+    tensor_size = full_tensor.shape[shard_dim]
+
+    if tensor_size % tensor_parallel_size != 0:
+        # If not evenly divisible, the loaded tensor might be the full tensor
+        # (fallback case for testing)
+        if full_tensor.shape == expected_shape:
+            return full_tensor
+        else:
+            raise ValueError(
+                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
+                f"across {tensor_parallel_size} ranks: not evenly divisible"
+            )
+
+    shard_size = tensor_size // tensor_parallel_size
+    start_idx = tp_rank * shard_size
+    end_idx = start_idx + shard_size
+
+    if shard_dim == 0:
+        result = full_tensor[start_idx:end_idx]
+    elif shard_dim == 1:
+        result = full_tensor[:, start_idx:end_idx]
+    else:
+        raise ValueError(f"Unsupported shard dimension: {shard_dim}")
+
+    return result
+
+
+async def test_policy_integration(store, original_state_dict, num_gpus=1):
     """
     Common helper function to test Policy integration with different GPU configurations.
 
@@ -95,7 +194,7 @@ async def test_policy_integration(
         num_gpus: Number of GPUs to use (1 for single GPU, 2+ for tensor parallel)
         test_name: Name for test identification in validation messages
     """
-    print(f"\n=== PHASE 2: Testing {test_name} Integration (GPUs: {num_gpus}) ===")
+    print(f"\n=== PHASE 2: Testing Policy Integration (GPUs: {num_gpus}) ===")
 
     # Set up environment variables for vLLM distributed initialization
     if num_gpus == 1:
@@ -113,6 +212,8 @@ async def test_policy_integration(
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = master_port
         print(f"Using MASTER_PORT: {master_port} for tensor parallel Policy")
+
+    rank = int(os.environ.get("RANK", "0"))
 
     policy_mesh = await proc_mesh(
         gpus=num_gpus,
@@ -136,31 +237,26 @@ async def test_policy_integration(
     )
 
     await policy.setup.call()
-    print(f"{test_name} setup completed successfully!")
+    print("Setup completed successfully!")
 
     # Call update to load weights from torchstore
     print(f"Calling Policy.update() to load weights from torchstore...")
-    if num_gpus > 1:
-        print(
-            "This should automatically shard the full tensors for tensor parallel loading..."
-        )
     await policy.update.call()
     print(f"Successfully called Policy.update() to load weights from torchstore!")
 
     # Get model info including state dict after update
-    model_info = await policy.get_model_info.call()
-    model_info_result = (
-        model_info._values[0] if hasattr(model_info, "_values") else model_info
+    model_params = await policy.get_model_params.call()
+    loaded_state_dict = (
+        model_params._values[0] if hasattr(model_params, "_values") else model_params
     )
-    loaded_state_dict = model_info_result["state_dict"]
     print("Successfully got model state dict after update")
 
     # Validate that every tensor loaded by the policy equals the original tensor * 2
     validate_loaded_tensors_equals_original_times_2(
-        loaded_state_dict, original_state_dict, test_name
+        loaded_state_dict, original_state_dict, tensor_parallel_size=num_gpus, rank=rank
     )
 
-    print(f"\n{test_name} test passed! State dict successfully loaded into Policy!")
+    print(f"\nTest passed! State dict successfully loaded into Policy!")
 
 
 def convert_state_dict(saved_sd):
@@ -268,9 +364,7 @@ async def test_llama3_torchstore_fsdp():
     store, original_state_dict = await llama3_torchstore_write()
 
     # Phase 2: Test Policy integration with 2 GPUs
-    await test_policy_integration(
-        store, original_state_dict, num_gpus=2, test_name="FSDP Policy"
-    )
+    await test_policy_integration(store, original_state_dict, num_gpus=2)
 
     print(
         "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
@@ -286,9 +380,7 @@ async def test_llama3_torchstore():
     store, original_state_dict = await llama3_torchstore_write()
 
     # Phase 2: Test Policy integration with 1 GPU
-    await test_policy_integration(
-        store, original_state_dict, num_gpus=1, test_name="Single GPU Policy"
-    )
+    await test_policy_integration(store, original_state_dict, num_gpus=1)
 
     print(
         "\nComplete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"

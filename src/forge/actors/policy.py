@@ -415,28 +415,15 @@ class Policy(Actor):
         return self.vllm_args
 
     @endpoint
-    async def get_model_info(self):
-        """Get complete model information including all parameters for testing purposes"""
-        import torch
-
+    async def get_model_params(self):
         model = self.worker.model_runner.model
+        state_dict = {}
 
-        # Get basic model info that doesn't require forward pass
-        model_info = {
-            "num_parameters": sum(p.numel() for p in model.parameters()),
-            "device": str(next(model.parameters()).device),
-            "dtype": str(next(model.parameters()).dtype),
-            "model_type": type(model).__name__,
-            "state_dict": {},
-        }
-
-        # Get all parameters in the state dict
-        state_dict = model.named_parameters()
-        for name, param in state_dict:
+        for name, param in model.named_parameters():
             # only use one layer for testing, otherwise it's too slow
             if "layers.0" in name:
-                model_info["state_dict"][name] = param.cpu().detach()
-        return model_info
+                state_dict[name] = param.cpu().detach()
+        return state_dict
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
