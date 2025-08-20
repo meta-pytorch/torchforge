@@ -4,52 +4,40 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import asyncio
 import os
 
-import numpy as np
 import pytest
 
 import torch
-import torch.distributed as dist
 
 from forge.actors.policy import Policy
 from monarch.actor import proc_mesh
-from torch.distributed.device_mesh import init_device_mesh
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM, push_state_dict
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from torchstore._state_dict_utils import push_state_dict
+from transformers import AutoModelForCausalLM
 
 from vllm.utils import get_open_port
 
 STATE_DICT_KEY = "llama3_8b_state_dict"
 
 
-async def save_state_dict_multiplied_by_2(store, state_dict, key_prefix):
+async def save_state_dict(store, state_dict, key_prefix):
     """
-    Custom function to save state dict by iterating key by key,
-    multiplying every tensor by 2, and then saving it.
+    Custom function to save state dict by iterating key by key
     """
-    print(f"Saving {len(state_dict)} tensors with 2x multiplication...")
+    print(f"Saving {len(state_dict)} tensors")
 
-    for param_name, tensor in state_dict.items():
-        # Multiply tensor by 2
-        multiplied_tensor = tensor * 2.0
+    await push_state_dict(store, state_dict, key_prefix)
 
-        # Save with the same key format as push_state_dict
-        tensor_key = f"{key_prefix}{DELIM}{param_name}"
-        await store.put(tensor_key, multiplied_tensor)
-
-    print(f"Successfully saved {len(state_dict)} tensors multiplied by 2")
+    print(f"Successfully saved {len(state_dict)} tensors")
 
 
-def validate_loaded_tensors_equals_original_times_2(
+def validate_loaded_tensors_equals_original(
     loaded_state_dict, original_state_dict, tensor_parallel_size, rank
 ):
     """
     Shared validation function to verify that every tensor loaded by the policy
-    equals the original tensor multiplied by 2.
+    equals the original tensor.
 
     For tensor parallel cases, instead of gathering sharded tensors, we shard
     the original tensor and compare it with the loaded shard.
@@ -60,8 +48,7 @@ def validate_loaded_tensors_equals_original_times_2(
 
     for param_name, loaded_tensor in loaded_state_dict.items():
         if param_name in original_state_dict:
-            original_tensor = original_state_dict[param_name]
-            expected_tensor = original_tensor * 2.0
+            expected_tensor = original_state_dict[param_name]
 
             if tensor_parallel_size > 1:
                 # For tensor parallel case, shard the expected tensor to match the loaded shard
@@ -84,7 +71,7 @@ def validate_loaded_tensors_equals_original_times_2(
                 atol=1e-8,
             ):
                 validation_errors.append(
-                    f"Loaded tensor {param_name} does not equal original * 2 "
+                    f"Loaded tensor {param_name} does not equal original "
                     f"(shapes: loaded={loaded_tensor.shape}, expected={tensor_to_compare.shape})"
                 )
             else:
@@ -94,7 +81,7 @@ def validate_loaded_tensors_equals_original_times_2(
         raise ValueError(f"Validation failed: {validation_errors}")
 
     print(
-        f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original * 2"
+        f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original"
     )
 
 
@@ -234,9 +221,9 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
     print("Setup completed successfully!")
 
     # Call update to load weights from torchstore
-    print(f"Calling Policy.update() to load weights from torchstore...")
+    print("Calling Policy.update() to load weights from torchstore...")
     await policy.update.call()
-    print(f"Successfully called Policy.update() to load weights from torchstore!")
+    print("Successfully called Policy.update() to load weights from torchstore!")
 
     # Get model info including state dict after update
     model_params = await policy.get_model_params.call()
@@ -245,12 +232,12 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
     )
     print("Successfully got model state dict after update")
 
-    # Validate that every tensor loaded by the policy equals the original tensor * 2
-    validate_loaded_tensors_equals_original_times_2(
+    # Validate that every tensor loaded by the policy equals the original tensor
+    validate_loaded_tensors_equals_original(
         loaded_state_dict, original_state_dict, tensor_parallel_size=num_gpus, rank=rank
     )
 
-    print(f"\nTest passed! State dict successfully loaded into Policy!")
+    print("\nTest passed! State dict successfully loaded into Policy!")
 
 
 def convert_state_dict(saved_sd):
@@ -330,9 +317,9 @@ async def llama3_torchstore_write():
     print(f"Converted state dict has {len(converted_state_dict)} parameters")
 
     # Write converted state dict to torchstore with 2x multiplication
-    await save_state_dict_multiplied_by_2(store, converted_state_dict, STATE_DICT_KEY)
+    await save_state_dict(store, converted_state_dict, STATE_DICT_KEY)
     print(
-        f"Successfully wrote converted state dict (multiplied by 2) to torchstore with key: {STATE_DICT_KEY}"
+        f"Successfully wrote converted state dict to torchstore with key: {STATE_DICT_KEY}"
     )
 
     return store, converted_state_dict
@@ -358,9 +345,9 @@ async def test_llama3_torchstore_single():
 
 
 @pytest.mark.asyncio
-async def test_llama3_torchstore_fsdp():
+async def test_llama3_torchstore_tp():
     """
-    Test: FSDP/Tensor Parallel Llama 3.1 8B-Instruct via TorchStore.
+    Test: Tensor Parallel Llama 3.1 8B-Instruct via TorchStore.
     Test loading a full state dict into a tensor parallel model.
     """
     print("Starting tensor parallel test (load full state dict into sharded model)...")

@@ -14,12 +14,11 @@ import torch
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 from torchstore import MultiProcessStore
 
-from torchstore._state_dict_utils import DELIM, get_state_dict, MAPPING
+from torchstore._state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
-from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
@@ -437,12 +436,6 @@ class Policy(Actor):
         # Calculate local rank properly
         device_count = torch.cuda.device_count() if torch.cuda.is_available() else 1
         local_rank = self.rank % device_count
-
-        # Validate local rank
-        if local_rank >= device_count:
-            raise ValueError(
-                f"Local rank {local_rank} exceeds available devices {device_count}"
-            )
 
         # Calculate driver worker properly
         is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
