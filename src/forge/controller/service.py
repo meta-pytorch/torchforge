@@ -47,6 +47,7 @@ from monarch._src.actor.endpoint import EndpointProperty
 from monarch.actor import ActorError, ProcMesh
 
 from forge.controller import RecoverableProcMesh
+from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -188,17 +189,6 @@ class ServiceMetrics:
 
 
 @dataclass
-class ServiceConfig:
-    procs_per_replica: int
-    num_replicas: int
-    health_poll_rate: float = 0.2
-    replica_max_concurrent_requests: int = 10
-    return_first_rank_result: bool = (
-        True  # Auto-unwrap ValueMesh to first rank's result
-    )
-
-
-@dataclass
 class Replica:
     proc_mesh: RecoverableProcMesh
     actor: Any
@@ -335,9 +325,7 @@ class Service:
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
-            mesh = RecoverableProcMesh(
-                self._cfg.procs_per_replica,
-            )
+            mesh = RecoverableProcMesh(proc_config=self._cfg.to_process_config())
             replica = Replica(
                 proc_mesh=mesh,
                 actor=None,

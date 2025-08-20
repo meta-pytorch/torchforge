@@ -44,8 +44,11 @@ from typing import Any, Callable, Coroutine, Optional, TypeVar
 
 from monarch._rust_bindings.monarch_hyperactor.shape import Shape, Slice
 from monarch._src.actor.actor_mesh import Actor
-from monarch._src.actor.proc_mesh import proc_mesh, ProcMesh
+from monarch._src.actor.proc_mesh import ProcMesh
 from monarch._src.actor.shape import MeshTrait
+
+from forge.controller.proc_mesh import get_proc_mesh
+from forge.types import ProcessConfig
 
 T = TypeVar("T", bound=Actor)
 logger: logging.Logger = logging.getLogger(__name__)
@@ -82,10 +85,10 @@ class RecoverableProcMesh(MeshTrait):
     services that need high availability.
 
     Args:
-        num_gpus: Number of GPUs to allocate for the process mesh
+        proc_config: ProcessConfig containing mesh configuration including num_procs
 
     Attributes:
-        num_gpus: Number of GPUs allocated to this mesh
+        num_procs: Number of processes allocated to this mesh
         state: Current state of the mesh (HEALTHY, RECOVERING, UNHEALTHY, STOPPED)
         healthy: True if the mesh is operational and ready for requests
         failed: True if the mesh has failed and needs recovery
@@ -93,7 +96,8 @@ class RecoverableProcMesh(MeshTrait):
     Example:
         Basic usage with automatic recovery:
 
-        >>> mesh = RecoverableProcMesh(num_gpus=2)
+        >>> proc_config = ProcessConfig(num_procs=2, scheduler="local")
+        >>> mesh = RecoverableProcMesh(proc_config)
         >>>
         >>> async def setup_actor(proc_mesh):
         ...     actor = await proc_mesh.spawn("MyActor", MyActorClass)
@@ -104,7 +108,8 @@ class RecoverableProcMesh(MeshTrait):
 
         Context manager for automatic cleanup:
 
-        >>> async with RecoverableProcMesh(num_gpus=1) as mesh:
+        >>> proc_config = ProcessConfig(num_procs=1)
+        >>> async with RecoverableProcMesh(proc_config) as mesh:
         ...     await mesh.spawn(setup_actor)
         ...     # Use mesh for operations
         ...     # Mesh automatically stopped and cleaned up on exit
@@ -121,9 +126,10 @@ class RecoverableProcMesh(MeshTrait):
 
     def __init__(
         self,
-        num_procs: int,
+        proc_config: ProcessConfig,
     ) -> None:
-        self.num_procs = num_procs
+        self._proc_config: ProcessConfig = proc_config
+        self.num_procs = proc_config.num_procs
         self._proc_mesh: Optional[ProcMesh] = None
         self._recovery_task: Optional[asyncio.Task[None]] = None
         self.state: MeshState = MeshState.UNHEALTHY
@@ -185,7 +191,7 @@ class RecoverableProcMesh(MeshTrait):
                 logger.warning(f"Error stopping old ProcMesh: {e}")
 
         try:
-            self._proc_mesh = await proc_mesh(gpus=self.num_procs)
+            self._proc_mesh = await get_proc_mesh(process_config=self._proc_config)
             if self._proc_mesh is not None:
                 await hook(self._proc_mesh)
             self.state = MeshState.HEALTHY
