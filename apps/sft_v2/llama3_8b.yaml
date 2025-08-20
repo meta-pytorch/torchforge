@@ -3,8 +3,8 @@
 #   enable_profiling: false
 
 metrics:
-  logger: "stdout"
-  log_freq:
+  logger: stdout
+  freq:
     loss: 10
 
 # TODO: required by torchtitan

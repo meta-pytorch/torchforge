@@ -7,9 +7,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict, Union
 
-from numpy import ndarray
-from torch import Tensor
-
 
 class Message(TypedDict):
     role: str
@@ -103,4 +100,4 @@ class ProcessConfig:
     image: str = "forge_workspace:latest"
 
 
-Scalar = Union[Tensor, ndarray, int, float]
+Scalar = Union[int, float]

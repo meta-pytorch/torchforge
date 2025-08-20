@@ -8,10 +8,9 @@ import sys
 import time
 from typing import Mapping, Optional
 
-import torch
-
 from forge.interfaces import MetricLogger
 from forge.types import Scalar
+from forge.util.distributed import get_world_size_and_rank
 
 
 def get_metric_logger(logger: str = "stdout", **log_config):
@@ -19,14 +18,41 @@ def get_metric_logger(logger: str = "stdout", **log_config):
 
 
 class StdoutLogger(MetricLogger):
-    """Logger to standard output."""
+    """Logger to standard output.
 
-    def _log(self, name: str, data: Scalar, step: int) -> None:
+    Args:
+        freq (Mapping[str, int]):
+            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
+    """
+
+    def __init__(self, freq: Mapping[str, int]):
+        self._freq = freq
+
+    def is_log_step(self, name: str, step: int) -> bool:
+        """Returns true if the current step is a logging step.
+
+        Args:
+            name (str): metric name (for checking the freq for this metric)
+            step (int): current step
+        """
+        return step % self._freq[name] == 0
+
+    def log(self, name: str, data: Scalar, step: int) -> None:
+        if not self.is_log_step(name, step):
+            return
         print(f"Step {step} | {name}:{data}")
 
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
+    def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        log_step_metrics = {
+            name: value
+            for name, value in metrics.items()
+            if self.is_log_step(name, step)
+        }
+        if not log_step_metrics:
+            return
+
         print(f"Step {step} | ", end="")
-        for name, data in payload.items():
+        for name, data in log_step_metrics.items():
             print(f"{name}:{data} ", end="")
         print("\n", end="")
 
@@ -38,6 +64,8 @@ class TensorBoardLogger(MetricLogger):
     """Logger for use w/ PyTorch's implementation of TensorBoard (https://pytorch.org/docs/stable/tensorboard.html).
 
     Args:
+        freq (Mapping[str, int]):
+            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
         log_dir (str): torch.TensorBoard log directory
         organize_logs (bool): If `True`, this class will create a subdirectory within `log_dir` for the current
             run. Having sub-directories allows you to compare logs across runs. When TensorBoard is
@@ -62,17 +90,16 @@ class TensorBoardLogger(MetricLogger):
 
     def __init__(
         self,
-        log_freq: Mapping[str, int],
+        freq: Mapping[str, int],
         log_dir: str = "metrics_log",
         organize_logs: bool = True,
         **kwargs,
     ):
-        super().__init__(log_freq)
-
         from torch.utils.tensorboard import SummaryWriter
 
+        self._freq = freq
         self._writer: Optional[SummaryWriter] = None
-        rank = _get_rank()
+        _, rank = get_world_size_and_rank()
 
         # In case organize_logs is `True`, update log_dir to include a subdirectory for the
         # current run
@@ -86,18 +113,23 @@ class TensorBoardLogger(MetricLogger):
         if rank == 0:
             self._writer = SummaryWriter(log_dir=self.log_dir)
 
-    def _log(self, name: str, data: Scalar, step: int) -> None:
+    def is_log_step(self, name: str, step: int) -> bool:
+        """Returns true if the current step is a logging step.
+
+        Args:
+            name (str): metric name (for checking the freq for this metric)
+            step (int): current step
+        """
+        return step % self._freq[name] == 0
+
+    def log(self, name: str, data: Scalar, step: int) -> None:
         if self._writer:
             self._writer.add_scalar(name, data, global_step=step, new_style=True)
 
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
-        for name, data in payload.items():
-            self.log(name, data, step)
-
-    def __del__(self) -> None:
-        if self._writer:
-            self._writer.close()
-            self._writer = None
+    def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        for name, data in metrics.items():
+            if self.is_log_step(name, step):
+                self.log(name, data, step)
 
     def close(self) -> None:
         if self._writer:
@@ -110,6 +142,8 @@ class WandBLogger(MetricLogger):
     For more information about arguments expected by WandB, see https://docs.wandb.ai/ref/python/init.
 
     Args:
+        freq (Mapping[str, int]):
+            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
         log_dir (Optional[str]): WandB log directory.
         project (str): WandB project name. Default is `torchtune`.
         entity (Optional[str]): WandB entity name. If you don't specify an entity,
@@ -137,14 +171,14 @@ class WandBLogger(MetricLogger):
 
     def __init__(
         self,
-        log_freq: Mapping[str, int],
+        freq: Mapping[str, int],
         project: str,
         log_dir: str = "metrics_log",
         entity: Optional[str] = None,
         group: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(log_freq)
+        self._freq = freq
 
         try:
             import wandb
@@ -157,7 +191,7 @@ class WandBLogger(MetricLogger):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
 
-        rank = _get_rank()
+        _, rank = get_world_size_and_rank()
         if self._wandb.run is None and rank == 0:
             # we check if wandb.init got called externally
             run = self._wandb.init(
@@ -174,13 +208,30 @@ class WandBLogger(MetricLogger):
                 self._wandb.define_metric("step")
                 self._wandb.define_metric("*", step_metric="step", step_sync=True)
 
-    def _log(self, name: str, data: Scalar, step: int) -> None:
-        if self._wandb.run:
+    def is_log_step(self, name: str, step: int) -> bool:
+        """Returns true if the current step is a logging step.
+
+        Args:
+            name (str): metric name (for checking the freq for this metric)
+            step (int): current step
+        """
+        return step % self._freq[name] == 0
+
+    def log(self, name: str, data: Scalar, step: int) -> None:
+        if self._wandb.run and self.is_log_step(name, step):
             self._wandb.log({name: data, "step": step})
 
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
+    def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        log_step_metrics = {
+            name: value
+            for name, value in metrics.items()
+            if self.is_log_step(name, step)
+        }
+        if not log_step_metrics:
+            return
+
         if self._wandb.run:
-            self._wandb.log({**payload, "step": step})
+            self._wandb.log({**metrics, "step": step})
 
     def close(self) -> None:
         if hasattr(self, "_wandb") and self._wandb.run:
@@ -193,11 +244,3 @@ METRIC_LOGGER_STR_TO_CLS = {
     "tensorboard": TensorBoardLogger,
     "wandb": WandBLogger,
 }
-
-
-def _get_rank():
-    return (
-        torch.distributed.get_rank()
-        if torch.distributed.is_available() and torch.distributed.is_initialized()
-        else 0
-    )

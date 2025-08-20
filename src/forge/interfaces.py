@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from monarch.actor import Actor, endpoint
 
@@ -153,82 +153,21 @@ class ModelTokenizer(ABC):
 
 
 class MetricLogger(ABC):
-    """Abstract metric logger.
+    """Abstract metric logger."""
 
-    Args:
-        log_freq (Mapping[str, int]):
-            calls to `log` and `log_dict` will be ignored if `step % log_freq[metric_name] != 0`
-    """
-
-    def __init__(self, log_freq: Mapping[str, int]):
-        self._log_freq = log_freq
-        self._step = None
-
-    def set_step(self, step: int) -> None:
-        """Subsequent log calls will use this step number by default if not provided to the log call."""
-        self._step = step
-
-    def is_log_step(self, name: str, step: Optional[int] = None):
+    @abstractmethod
+    def is_log_step(self, name: str, step: int) -> bool:
         """Returns true if the current step is a logging step.
 
         Args:
-            name (str): metric name (for checking the log freq for this metric)
-            step (int): current step. if not given, will use the one last provided via set_step()
+            name (str): metric name (for checking the freq for this metric)
+            step (int): current step
         """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-        return step % self._log_freq[name] == 0
-
-    def log(
-        self,
-        name: str,
-        data: Scalar,
-        step: Optional[int] = None,
-    ) -> None:
-        """Log scalar data if this is a logging step.
-
-        Args:
-            name (str): tag name used to group scalars
-            data (Scalar): scalar data to log
-            step (int): step value to record. if not given, will use the one last provided via set_step()
-        """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-        if step % self._log_freq[name] == 0:
-            self._log(name, data, step)
-
-    def log_dict(
-        self, metrics: Mapping[str, Scalar], step: Optional[int] = None
-    ) -> None:
-        """Log multiple scalar values if this is a logging step.
-
-        Args:
-            metrics (Mapping[str, Scalar]): dictionary of tag name and scalar value
-            step (int): step value to record. if not given, will use the one last provided via set_step()
-        """
-        if step is None:
-            assert (
-                self._step is not None
-            ), "`step` arg required if `set_step` has not been called."
-            step = self._step
-
-        log_step_metrics = {
-            name: value
-            for name, value in metrics.items()
-            if step % self._log_freq[name] == 0
-        }
-        if log_step_metrics:
-            self._log_dict(log_step_metrics, step)
+        pass
 
     @abstractmethod
-    def _log(self, name: str, data: Scalar, step: int) -> None:
-        """Log scalar data.
+    def log(self, name: str, data: Scalar, step: int) -> None:
+        """Log scalar data if this is a logging step.
 
         Args:
             name (str): tag name used to group scalars
@@ -238,11 +177,11 @@ class MetricLogger(ABC):
         pass
 
     @abstractmethod
-    def _log_dict(self, payload: Mapping[str, Scalar], step: int) -> None:
-        """Log multiple scalar values.
+    def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        """Log multiple scalar values if this is a logging step.
 
         Args:
-            payload (Mapping[str, Scalar]): dictionary of tag name and scalar value
+            metrics (Mapping[str, Scalar]): dictionary of tag name and scalar value
             step (int): step value to record
         """
         pass
