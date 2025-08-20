@@ -21,9 +21,7 @@ Example:
 
     >>> config = ServiceConfig(
     ...     gpus_per_replica=1,
-    ...     min_replicas=2,
-    ...     max_replicas=10,
-    ...     default_replicas=3
+    ...     num_replicas=3
     ... )
     >>> service = Service(config, MyActorClass, *args, **kwargs)
     >>> await service.__initialize__()
@@ -40,7 +38,6 @@ import contextvars
 import logging
 import pprint
 import time
-import traceback
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -52,12 +49,7 @@ from monarch.actor import ActorError, ProcMesh
 from forge.controller import RecoverableProcMesh
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Global context variable for session state
-_session_context: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
-    "session_context", default=None
-)
+logger.setLevel(logging.DEBUG)
 
 
 # TODO - tie this into metric logger when it exists
@@ -196,63 +188,14 @@ class ServiceMetrics:
 
 
 @dataclass
-class AutoscalingConfig:
-    """Configuration for autoscaling behavior."""
-
-    # Autoscaling control
-    enabled: bool = False  # Whether autoscaling is enabled (disabled by default)
-
-    # Scale up thresholds
-    scale_up_queue_depth_threshold: float = (
-        5.0  # Average queue depth to trigger scale up
-    )
-    scale_up_capacity_threshold: float = 0.8  # Capacity utilization to trigger scale up
-    scale_up_request_rate_threshold: float = 10.0  # Requests/sec to trigger scale up
-
-    # Scale down thresholds
-    scale_down_capacity_threshold: float = (
-        0.3  # Capacity utilization to trigger scale down
-    )
-    scale_down_queue_depth_threshold: float = (
-        1.0  # Average queue depth to trigger scale down
-    )
-    scale_down_idle_time_threshold: float = (
-        300.0  # Seconds of low utilization before scale down
-    )
-
-    # Timing controls
-    min_time_between_scale_events: float = (
-        60.0  # Minimum seconds between scaling events
-    )
-    scale_up_cooldown: float = 30.0  # Cooldown after scale up
-    scale_down_cooldown: float = 120.0  # Cooldown after scale down
-
-    # Scaling behavior
-    scale_up_step_size: int = 1  # How many replicas to add at once
-    scale_down_step_size: int = 1  # How many replicas to remove at once
-
-    # Safety limits
-    max_queue_depth_emergency: float = 20.0  # Emergency scale up threshold
-    min_healthy_replicas_ratio: float = 0.5  # Minimum ratio of healthy replicas
-
-
-@dataclass
 class ServiceConfig:
     procs_per_replica: int
-    min_replicas: int
-    max_replicas: int
-    default_replicas: int
-    autoscaling: AutoscalingConfig = field(default_factory=AutoscalingConfig)
+    num_replicas: int
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
     return_first_rank_result: bool = (
         True  # Auto-unwrap ValueMesh to first rank's result
     )
-
-    def validate(self):
-        assert self.min_replicas <= self.max_replicas
-        assert self.min_replicas <= self.default_replicas
-        assert self.default_replicas <= self.max_replicas
 
 
 @dataclass
@@ -270,6 +213,13 @@ class Replica:
 @dataclass
 class Session:
     session_id: str
+
+
+# Global context variable for session state
+# This is used to propagate session state across async tasks
+_session_context: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "session_context", default=None
+)
 
 
 class SessionContext:
@@ -307,13 +257,12 @@ class Service:
 
     The Service acts as a unified interface for distributed workloads, automatically handling:
     - **Fault Tolerance**: Health monitoring, automatic replica recovery, request migration
-    - **Autoscaling**: Dynamic scaling based on queue depth, capacity, and request rate
     - **Load Balancing**: Round-robin, least-loaded, and session-affinity routing
     - **Session Management**: Stateful session handling with context propagation
     - **Metrics Collection**: Comprehensive performance and health monitoring
 
     Args:
-        cfg: Service configuration including scaling limits and autoscaling parameters
+        cfg: Service configuration including number of replicas, GPUs per replica, and health polling rate
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
@@ -323,13 +272,7 @@ class Service:
 
         >>> config = ServiceConfig(
         ...     gpus_per_replica=1,
-        ...     min_replicas=2,
-        ...     max_replicas=10,
-        ...     default_replicas=3,
-        ...     autoscaling=AutoscalingConfig(
-        ...         scale_up_capacity_threshold=0.8,
-        ...         scale_down_capacity_threshold=0.3
-        ...     )
+        ...     num_replicas=3,
         ... )
         >>> service = Service(config, MyActorClass, model_path="/path/to/model")
         >>> await service.__initialize__()
@@ -354,8 +297,6 @@ class Service:
 
     def __init__(self, cfg: ServiceConfig, actor_def, *actor_args, **actor_kwargs):
         self._cfg = cfg
-        self._cfg.validate()
-
         self._replicas = []
         self._actor_def = actor_def
         self._actor_args = actor_args
@@ -390,14 +331,41 @@ class Service:
                 self._add_endpoint_method(func_name)
 
     async def __initialize__(self):
-        await self._scale_up(self._cfg.default_replicas)
+        logger.debug("Starting service up with %d replicas.", self._cfg.num_replicas)
+        replicas = []
+        num_replicas = self._cfg.num_replicas
+        for i in range(num_replicas):
+            mesh = RecoverableProcMesh(
+                self._cfg.procs_per_replica,
+            )
+            replica = Replica(
+                proc_mesh=mesh,
+                actor=None,
+                idx=len(self._replicas) + i,
+                max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
+            )
+            replicas.append(replica)
+
+        # Initializing should only happen in the health_loop
+        # and during the first initialization.
+        # If multiple parts of the code try to initialize replicas at
+        # the same time, it can cause nasty race conditions
+        # (e.g., double initialization, inconsistent state, or resource conflicts).
+        # By funneling all replica initialization through a single queue and the
+        # health loop, we ensure safe, serialized initialization.
+        logger.debug(
+            "Queued %d replicas for initialization. Total replicas: %d",
+            num_replicas,
+            len(self._replicas),
+        )
+        self._replicas_to_init.extend(replicas)
         await self._maybe_init_replicas()
+        self._replicas.extend(replicas)
 
         # Start the health loop in the background
         self._health_task = asyncio.create_task(
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
-        # call setup on all replicas, if it exists
 
     def _add_endpoint_method(self, endpoint_name: str):
         """Dynamically adds an endpoint method to this Service instance."""
@@ -748,173 +716,6 @@ class Service:
 
         return summary
 
-    def _should_scale_up(self) -> tuple[bool, str]:
-        """Determines if the service should scale up and why."""
-        # Skip if shutdown is requested
-        if self._shutdown_requested:
-            return False, "Service shutdown requested"
-
-        now = time.time()
-        cfg = self._cfg.autoscaling
-
-        # Check cooldown periods
-        if now - self._last_scale_up_time < cfg.scale_up_cooldown:
-            return False, f"Scale up cooldown active ({cfg.scale_up_cooldown}s)"
-
-        if (
-            now - max(self._last_scale_up_time, self._last_scale_down_time)
-            < cfg.min_time_between_scale_events
-        ):
-            return (
-                False,
-                f"Minimum time between scale events not met ({cfg.min_time_between_scale_events}s)",
-            )
-
-        # Check if we're already at max replicas
-        if len(self._replicas) >= self._cfg.max_replicas:
-            return False, f"Already at max replicas ({self._cfg.max_replicas})"
-
-        # Get current metrics
-        self._update_service_metrics()
-        avg_queue_depth = self._metrics.get_avg_queue_depth()
-        avg_capacity = self._metrics.get_avg_capacity_utilization(self._replicas)
-        request_rate = self._metrics.get_total_request_rate()
-
-        # Emergency scale up - very high queue depth
-        if avg_queue_depth >= cfg.max_queue_depth_emergency:
-            return (
-                True,
-                f"Emergency scale up: queue depth {avg_queue_depth:.1f} >= {cfg.max_queue_depth_emergency}",
-            )
-
-        # Scale up conditions
-        reasons = []
-
-        if avg_queue_depth >= cfg.scale_up_queue_depth_threshold:
-            reasons.append(
-                f"queue depth {avg_queue_depth:.1f} >= {cfg.scale_up_queue_depth_threshold}"
-            )
-
-        if avg_capacity >= cfg.scale_up_capacity_threshold:
-            reasons.append(
-                f"capacity utilization {avg_capacity:.2f} >= {cfg.scale_up_capacity_threshold}"
-            )
-
-        if request_rate >= cfg.scale_up_request_rate_threshold and avg_queue_depth > 0:
-            reasons.append(
-                f"high request rate {request_rate:.1f} req/s with queued requests"
-            )
-
-        # Need at least one strong signal to scale up
-        if reasons:
-            return True, f"Scale up triggered: {', '.join(reasons)}"
-
-        return False, "No scale up conditions met"
-
-    def _should_scale_down(self) -> tuple[bool, str]:
-        """Determines if the service should scale down and why."""
-        now = time.time()
-        cfg = self._cfg.autoscaling
-
-        # Check cooldown periods
-        if now - self._last_scale_down_time < cfg.scale_down_cooldown:
-            return False, f"Scale down cooldown active ({cfg.scale_down_cooldown}s)"
-
-        if (
-            now - max(self._last_scale_up_time, self._last_scale_down_time)
-            < cfg.min_time_between_scale_events
-        ):
-            return (
-                False,
-                f"Minimum time between scale events not met ({cfg.min_time_between_scale_events}s)",
-            )
-
-        # Check if we're already at min replicas
-        if len(self._replicas) <= self._cfg.min_replicas:
-            return False, f"Already at min replicas ({self._cfg.min_replicas})"
-
-        # Check minimum healthy replicas ratio
-        healthy_replicas = [r for r in self._replicas if r.proc_mesh.healthy]
-        healthy_count = len(healthy_replicas)
-        if healthy_count <= len(self._replicas) * cfg.min_healthy_replicas_ratio:
-            return (
-                False,
-                f"Too few healthy replicas ({healthy_count}/{len(self._replicas)})",
-            )
-
-        # Get current metrics
-        self._update_service_metrics()
-        avg_queue_depth = self._metrics.get_avg_queue_depth()
-        avg_capacity = self._metrics.get_avg_capacity_utilization(healthy_replicas)
-
-        # Check if conditions are met for scale down
-        low_utilization = (
-            avg_capacity <= cfg.scale_down_capacity_threshold
-            and avg_queue_depth <= cfg.scale_down_queue_depth_threshold
-        )
-
-        if low_utilization:
-            # Track how long we've been in low utilization
-            if self._low_utilization_start_time is None:
-                self._low_utilization_start_time = now
-                return False, "Low utilization detected, starting timer"
-
-            # Check if we've been in low utilization long enough
-            low_util_duration = now - self._low_utilization_start_time
-            if low_util_duration >= cfg.scale_down_idle_time_threshold:
-                return (
-                    True,
-                    f"Scale down: low utilization for {low_util_duration:.1f}s "
-                    f"(capacity: {avg_capacity:.2f}, queue: {avg_queue_depth:.1f})",
-                )
-            else:
-                return (
-                    False,
-                    f"Low utilization for {low_util_duration:.1f}s, need {cfg.scale_down_idle_time_threshold}s",
-                )
-        else:
-            # Reset low utilization timer
-            self._low_utilization_start_time = None
-            return (
-                False,
-                f"Utilization too high for scale down (capacity: {avg_capacity:.2f}, queue: {avg_queue_depth:.1f})",
-            )
-
-    async def _execute_autoscaling(self):
-        """Executes autoscaling decisions based on current metrics."""
-        # Skip autoscaling if shutdown is requested
-        if self._shutdown_requested:
-            return
-
-        # Skip autoscaling if disabled
-        if not self._cfg.autoscaling.enabled:
-            return
-
-        # Check scale up first (higher priority)
-        should_scale_up, scale_up_reason = self._should_scale_up()
-        if should_scale_up:
-            logger.debug("🔼 AUTOSCALING: %s", scale_up_reason)
-            await self._scale_up(self._cfg.autoscaling.scale_up_step_size)
-            self._last_scale_up_time = time.time()
-            self._metrics.last_scale_event = self._last_scale_up_time
-            return
-
-        # Check scale down
-        should_scale_down, scale_down_reason = self._should_scale_down()
-        if should_scale_down:
-            logger.debug("🔽 AUTOSCALING: %s", scale_down_reason)
-            await self._scale_down_replicas(self._cfg.autoscaling.scale_down_step_size)
-            self._last_scale_down_time = time.time()
-            self._metrics.last_scale_event = self._last_scale_down_time
-            return
-
-        # Log why we're not scaling (for debugging)
-        logger.debug(
-            "No autoscaling action: Scale up - %s, Scale down - %s",
-            scale_up_reason,
-            scale_down_reason,
-        )
-
     async def terminate_session(self, sess_id: str):
         """
         Terminates an active session and cleans up associated resources.
@@ -946,6 +747,13 @@ class Service:
         self._update_service_metrics()
 
     async def _health_loop(self, poll_rate_s: float):
+        """Runs the health loop to monitor and recover replicas.
+
+        This loop continuously checks the health of replicas and recovers
+        failed replicas by reinitializing their proc_meshes. It also
+        periodically updates service metrics to reflect the current state.
+
+        """
         while not self._shutdown_requested:
             # Process any replicas that need initialization
             await self._maybe_init_replicas()
@@ -963,16 +771,6 @@ class Service:
                     pprint.pformat(failed_replicas),
                 )
                 self._replicas_to_init.extend(failed_replicas)
-
-            # Execute autoscaling logic
-            try:
-                await self._execute_autoscaling()
-            except Exception as e:
-                logger.error(
-                    "Error in autoscaling: %s\nTraceback:\n%s",
-                    e,
-                    traceback.format_exc(),
-                )
 
             await asyncio.sleep(poll_rate_s)
 

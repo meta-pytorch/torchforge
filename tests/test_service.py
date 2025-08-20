@@ -12,7 +12,7 @@ import asyncio
 import logging
 
 import pytest
-from forge.controller.service import AutoscalingConfig, ServiceConfig
+from forge.controller.service import ServiceConfig
 from forge.controller.spawn import spawn_service
 from monarch.actor import Actor, endpoint
 
@@ -43,7 +43,7 @@ class Counter(Actor):
 
     @endpoint
     async def slow_incr(self):
-        """Slow increment to test queueing and autoscaling."""
+        """Slow increment to test queueing."""
         await asyncio.sleep(1.0)
         self.v += 1
 
@@ -55,9 +55,7 @@ class Counter(Actor):
 @pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -87,9 +85,7 @@ async def test_basic_service_operations():
 @pytest.mark.asyncio
 async def test_sessionless_calls():
     """Test sessionless calls with round-robin load balancing."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -119,9 +115,7 @@ async def test_sessionless_calls():
 @pytest.mark.asyncio
 async def test_session_context_manager():
     """Test session context manager functionality."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=1, max_replicas=1, default_replicas=1
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -162,9 +156,7 @@ async def test_session_context_manager():
 @pytest.mark.asyncio
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -197,157 +189,6 @@ async def test_replica_failure_and_recovery():
         await service.stop()
 
 
-# Autoscaling Tests
-
-
-@pytest.mark.timeout(20)
-@pytest.mark.asyncio
-async def test_autoscaling_scale_up():
-    """Test automatic scale up under high load."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_up_capacity_threshold=0.5,
-        scale_up_queue_depth_threshold=2.0,
-        scale_up_cooldown=0.5,
-        min_time_between_scale_events=0.5,
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=3,
-        default_replicas=1,
-        autoscaling=autoscaling_cfg,
-        replica_max_concurrent_requests=1,  # Force queueing
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        initial_replica_count = len(service._replicas)
-        assert initial_replica_count == 1
-
-        # Create high load with slow operations
-        sessions = [await service.start_session() for _ in range(3)]
-        tasks = [service.slow_incr(session) for session in sessions for _ in range(2)]
-
-        # Start tasks and wait for scaling
-        await asyncio.gather(*tasks)
-
-        # Check if scaling occurred
-        scaled_up = False
-        for _ in range(10):
-            await asyncio.sleep(0.5)
-            if len(service._replicas) > initial_replica_count:
-                scaled_up = True
-                break
-
-        assert (
-            scaled_up
-        ), f"Expected scale up, but replicas remained at {len(service._replicas)}"
-
-    finally:
-        await service.stop()
-
-
-@pytest.mark.timeout(25)
-@pytest.mark.asyncio
-async def test_autoscaling_scale_down():
-    """Test automatic scale down when idle."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_down_capacity_threshold=0.2,
-        scale_down_queue_depth_threshold=0.5,
-        scale_down_idle_time_threshold=3.0,
-        scale_down_cooldown=1.0,
-        min_time_between_scale_events=1.0,
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=3,
-        default_replicas=2,  # Start with 2 replicas
-        autoscaling=autoscaling_cfg,
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        initial_replica_count = len(service._replicas)
-        assert initial_replica_count == 2
-
-        # Make minimal requests to establish baseline
-        session = await service.start_session()
-        await service.incr(session)
-
-        # Wait for scale down
-        max_wait = 10.0
-        waited = 0.0
-        scaled_down = False
-
-        while waited < max_wait:
-            await asyncio.sleep(1.0)
-            waited += 1.0
-            if len(service._replicas) < initial_replica_count:
-                scaled_down = True
-                break
-
-        assert (
-            scaled_down
-        ), f"Expected scale down, but replicas remained at {len(service._replicas)}"
-        assert len(service._replicas) >= cfg.min_replicas
-
-    finally:
-        await service.stop()
-
-
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_autoscaling_limits():
-    """Test that autoscaling respects min/max limits."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_up_queue_depth_threshold=1.0,
-        scale_down_capacity_threshold=0.9,  # High threshold to prevent scale down
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=2,  # Tight limit
-        default_replicas=1,
-        autoscaling=autoscaling_cfg,
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        # Test max limit
-        should_scale_up, reason = service._should_scale_up()
-
-        # Manually scale to max
-        await service._scale_up(1)
-        assert len(service._replicas) == 2
-
-        # Should not scale beyond max
-        should_scale_up, reason = service._should_scale_up()
-        assert not should_scale_up
-        assert "max replicas" in reason.lower()
-
-        # Test min limit
-        should_scale_down, reason = service._should_scale_down()
-
-        # Scale down to min
-        await service._scale_down_replicas(1)
-        assert len(service._replicas) == 1
-
-        # Should not scale below min
-        should_scale_down, reason = service._should_scale_down()
-        assert not should_scale_down
-        assert "min replicas" in reason.lower()
-
-    finally:
-        await service.stop()
-
-
 # Metrics and Monitoring Tests
 
 
@@ -355,9 +196,7 @@ async def test_autoscaling_limits():
 @pytest.mark.asyncio
 async def test_metrics_collection():
     """Test comprehensive metrics collection."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -410,9 +249,7 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -441,9 +278,7 @@ async def test_session_stickiness():
 @pytest.mark.asyncio
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -487,9 +322,7 @@ async def test_load_balancing_multiple_sessions():
 @pytest.mark.asyncio
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(
         service_cfg=cfg, actor_def=Counter, name="counter", v=0
     )
