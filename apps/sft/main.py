@@ -186,7 +186,7 @@ class ForgeSFTRecipe(ForgeEngine):
         loss = self.forward_backward(batch, labels)
         self.pbar.update(1)
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
-        self.metric_logger.log("loss", loss, self.current_step)
+        self.metric_logger.log("loss", loss.item(), self.current_step)
 
         self.optimizers.step()
         self.lr_schedulers.step()

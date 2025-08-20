@@ -29,7 +29,6 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
-from forge.util import get_metric_logger
 
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -75,7 +74,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     def __init__(self, job_config: ForgeJobConfig):
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
-        self.metric_logger = get_metric_logger(**job_config.metrics)
+        self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
@@ -239,8 +238,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
-        self.metric_logger.log("loss", loss, self.current_step)
-
         self.optimizers.step()
         self.lr_schedulers.step()
 
