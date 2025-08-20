@@ -1,20 +1,14 @@
-#!/usr/bin/env python3
-"""
-Test script to:
-1. Initialize Llama 3.1 8B-Instruct model from HuggingFace transformers
-2. Write its state dict to torchstore
-3. Initialize Policy with torchstore
-4. Call update to load model weights into Policy
-5. Verify the model works correctly
-"""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
 
-import argparse
 import asyncio
 import os
-import sys
-import traceback
 
 import numpy as np
+import pytest
 
 import torch
 import torch.distributed as dist
@@ -184,7 +178,7 @@ def _calculate_expected_shard(
     return result
 
 
-async def test_policy_integration(store, original_state_dict, num_gpus=1):
+async def run_policy_integration(store, original_state_dict, num_gpus):
     """
     Common helper function to test Policy integration with different GPU configurations.
 
@@ -344,70 +338,47 @@ async def llama3_torchstore_write():
     return store, converted_state_dict
 
 
-async def test_llama3_torchstore_fsdp():
+@pytest.mark.asyncio
+async def test_llama3_torchstore_single():
     """
-    Test loading a full state dict into a tensor parallel model
+    Test: Single GPU Llama 3.1 8B-Instruct via TorchStore.
+    Complete test: Write to torchstore, then test Policy integration.
     """
-    print("Starting tensor parallel test (load full state dict into sharded model)...")
-
-    # Check if we have enough GPUs
-    if not torch.cuda.is_available():
-        print("No CUDA available for tensor parallel test")
-        return False
-    elif torch.cuda.device_count() < 2:
-        print(
-            f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
-        )
-        return False
-
-    # Phase 1: Write model to torchstore
-    store, original_state_dict = await llama3_torchstore_write()
-
-    # Phase 2: Test Policy integration with 2 GPUs
-    await test_policy_integration(store, original_state_dict, num_gpus=2)
-
-    print(
-        "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
-    )
-
-
-async def test_llama3_torchstore():
-    """
-    Complete test: Write to torchstore, then test Policy integration
-    """
+    print("Starting Llama 3 8B torchstore test (single GPU)...")
 
     # Phase 1: Write model to torchstore
     store, original_state_dict = await llama3_torchstore_write()
 
     # Phase 2: Test Policy integration with 1 GPU
-    await test_policy_integration(store, original_state_dict, num_gpus=1)
+    await run_policy_integration(store, original_state_dict, num_gpus=1)
 
     print(
-        "\nComplete test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
+        "\nSingle GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Test Llama 3 8B with TorchStore and Policy integration"
+@pytest.mark.asyncio
+async def test_llama3_torchstore_fsdp():
+    """
+    Test: FSDP/Tensor Parallel Llama 3.1 8B-Instruct via TorchStore.
+    Test loading a full state dict into a tensor parallel model.
+    """
+    print("Starting tensor parallel test (load full state dict into sharded model)...")
+
+    # Check if we have enough GPUs
+    if not torch.cuda.is_available():
+        pytest.skip("No CUDA available for tensor parallel test")
+    elif torch.cuda.device_count() < 2:
+        pytest.skip(
+            f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+        )
+
+    # Phase 1: Write model to torchstore
+    store, original_state_dict = await llama3_torchstore_write()
+
+    # Phase 2: Test Policy integration with 2 GPUs
+    await run_policy_integration(store, original_state_dict, num_gpus=2)
+
+    print(
+        "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
     )
-    parser.add_argument(
-        "--test",
-        choices=["single", "fsdp", "both"],
-        default="single",
-        help="Which test to run: single (default), fsdp, or both",
-    )
-    args = parser.parse_args()
-
-    async def run_tests():
-        if args.test in ["single", "both"]:
-            print("Starting Llama 3 8B torchstore test (single GPU)...")
-            await test_llama3_torchstore()
-
-        if args.test in ["fsdp", "both"]:
-            print("Starting Llama 3 8B FSDP torchstore test (world_size=2)...")
-            await test_llama3_torchstore_fsdp()
-
-        print("\n All requested tests completed!")
-
-    asyncio.run(run_tests())

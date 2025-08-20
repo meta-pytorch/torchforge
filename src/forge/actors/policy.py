@@ -420,9 +420,9 @@ class Policy(Actor):
         state_dict = {}
 
         for name, param in model.named_parameters():
-            # only use one layer for testing, otherwise it's too slow
-            if "layers.0" in name:
-                state_dict[name] = param.cpu().detach()
+            if "layers.0" not in name:
+                continue
+            state_dict[name] = param.cpu().detach()
         return state_dict
 
     def setup_worker(self):
