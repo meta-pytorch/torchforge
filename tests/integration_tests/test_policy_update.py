@@ -318,11 +318,7 @@ async def llama3_torchstore_write():
 
 @pytest.mark.asyncio
 @requires_cuda
-async def test_llama3_torchstore_single():
-    """
-    Test: Single GPU Llama 3.1 8B-Instruct via TorchStore.
-    Complete test: Write to torchstore, then test Policy integration.
-    """
+async def test_llama3_policy_update_single():
     print("Starting Llama 3 8B torchstore test (single GPU)...")
 
     # Phase 1: Write model to torchstore
@@ -338,11 +334,7 @@ async def test_llama3_torchstore_single():
 
 @pytest.mark.asyncio
 @requires_cuda
-async def test_llama3_torchstore_tp():
-    """
-    Test: Tensor Parallel Llama 3.1 8B-Instruct via TorchStore.
-    Test loading a full state dict into a tensor parallel model.
-    """
+async def test_llama3_policy_update_tp():
     print("Starting tensor parallel test (load full state dict into sharded model)...")
 
     if torch.cuda.device_count() < 2:
