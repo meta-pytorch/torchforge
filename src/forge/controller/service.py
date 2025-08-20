@@ -1068,8 +1068,13 @@ class Service:
             replica: Replica,
         ) -> Callable[[ProcMesh], Coroutine[Any, Any, None]]:
             async def inner_hook(proc_mesh: ProcMesh) -> None:
+                if "name" in self._actor_kwargs:
+                    actor_name = self._actor_kwargs.pop("name")
+                else:
+                    actor_name = self._actor_def.__name__
+                # TODO - expand support so name can stick within kwargs
                 actor = await proc_mesh.spawn(
-                    self._actor_def.__name__,
+                    actor_name,
                     self._actor_def,
                     *self._actor_args,
                     **self._actor_kwargs,

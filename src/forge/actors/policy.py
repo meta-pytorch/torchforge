@@ -8,10 +8,12 @@ import asyncio
 import logging
 import os
 import sys
+from copy import copy
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 import torch
+
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 
 from vllm.engine.arg_utils import EngineArgs
@@ -19,6 +21,7 @@ from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
+from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
@@ -26,8 +29,9 @@ from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_po
 from vllm.v1.core.kv_cache_utils import get_kv_cache_config
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
-from vllm.v1.engine import EngineCoreOutputs
+from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequest
 from vllm.v1.engine.output_processor import OutputProcessor
+from vllm.v1.engine.parallel_sampling import ParentRequest
 from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
@@ -48,7 +52,7 @@ class PolicyRouter(Actor):
     @endpoint
     async def setup(self):
         self.request_id = 0
-        self.requests = {}
+        self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy.get_vllm_args.choose()
         # Setup processors
         # TODO: move all processing to the Environment
@@ -84,7 +88,7 @@ class PolicyRouter(Actor):
         return self.version
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0):
+    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -115,35 +119,47 @@ class PolicyRouter(Actor):
             data_parallel_rank=None,
         )
 
-        if self.sampling_params.n == 1:
+        # Explicitly keeping the redundant logic to make it easier to pick up
+        # vllm changes
+        # TODO: Clean up before release
+        if (num_samples := self.sampling_params.n) == 1:
             self.output_processor.add_request(request, prompt_str, None, 0)
-
-            if request.mm_hashes is not None:
-                # TODO: Support mm_hash
-                pass
-            request: Request = Request.from_engine_core_request(request)
-            if request.use_structured_output:
-                self.scheduler.structured_output_manager.grammar_init(request)
+            request, _ = self.preprocess_add_request(request)
 
             request_fut = asyncio.Future()
-            self.requests[request_id] = request_fut
+            self.requests[request_id] = (None, request_fut)
+
             self.scheduler.add_request(request)
         else:
-            raise NotImplementedError("Multiple samples not supported yet")
-            # # Fan out child requests (for n>1).
-            # parent_req = ParentRequest(request_id, sampling_params)
-            # for idx in range(sampling_params.n):
-            #     request_id, params = parent_req.get_child_info(idx)
-            #     child_request = request if idx == n - 1 else copy(request)
-            #     child_request.request_id = request_id
-            #     child_request.sampling_params = sampling_params
-            #     # Make a new RequestState and queue.
-            #     output_processor.add_request(child_request, prompt_str,
-            #                                     parent_req, idx)
-            #     child_request = Request.from_engine_core_request(child_request)
-            #     self.scheduler.add_request(chile_request)
+            parent_req = ParentRequest(request_id, self.sampling_params)
+            for idx in range(num_samples):
+                # Note: `get_child_info` mutates ParentRequest to track the
+                # generated child request
+                child_request_id, params = parent_req.get_child_info(idx)
+                child_request = request if idx == num_samples - 1 else copy(request)
+                child_request.request_id = child_request_id
+                child_request.sampling_params = params
+                self.output_processor.add_request(
+                    child_request, prompt_str, parent_req, idx
+                )
+                child_request, _ = self.preprocess_add_request(child_request)
+
+                self.scheduler.add_request(child_request)
+            request_fut = asyncio.Future()
+            self.requests[request_id] = (parent_req, request_fut)
 
         return await request_fut
+
+    # Abstracted to match vllm
+    # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
+    def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
+        if request.mm_hashes is not None:
+            raise NotImplementedError("Support for mm_hash is not implemented yet.")
+        request: Request = Request.from_engine_core_request(request)
+        if request.use_structured_output:
+            self.scheduler.structured_output_manager.grammar_init(request)
+
+        return request, 0  # Unused Arg: Current Wave
 
     @endpoint
     async def run(self):
@@ -159,15 +175,16 @@ class PolicyRouter(Actor):
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
             await asyncio.sleep(0)  # Release control before processing outputs
+
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
                 iteration_stats=None,
             )
-            for output in processed_outputs.request_outputs:
-                if output.finished:
-                    fut = self.requests.pop(output.request_id)
-                    fut.set_result(output)
+            for request_output in processed_outputs.request_outputs:
+                if request_output.finished:
+                    _, fut = self.requests.pop(request_output.request_id)
+                    fut.set_result(request_output.outputs)
 
     @endpoint
     async def shutdown(self):
@@ -318,7 +335,7 @@ def get_default_sampling_params(vllm_config, overrides=None) -> SamplingParams:
     return params
 
 
-async def _test(config, guided_decoding=False):
+async def _test(config, guided_decoding=False, num_samples=1):
     # TODO: Create proper test
     router_mesh = await proc_mesh(gpus=1)
     policy_mesh = await proc_mesh(
@@ -331,14 +348,18 @@ async def _test(config, guided_decoding=False):
 
     policy_actor = await policy_mesh.spawn("policy", Policy, **config)
 
-    sampling_params = None
-    if guided_decoding:
-        # Add config for structured output
-        vllm_args = await policy_actor.get_vllm_args.choose()
-        guided_decoding_params = GuidedDecodingParams(choice=["Positive", "Negative"])
+    # TODO: Make this customizable from the config
+    overrides = {
+        "n": num_samples,
+        "guided_decoding": (
+            GuidedDecodingParams(choice=["Positive", "Negative"])
+            if guided_decoding
+            else None
+        ),
+    }
 
-        sampling_params = get_default_sampling_params(vllm_args)
-        sampling_params.guided_decoding = guided_decoding_params
+    vllm_args = await policy_actor.get_vllm_args.choose()
+    sampling_params = get_default_sampling_params(vllm_args, overrides=overrides)
 
     router = await router_mesh.spawn(
         "policy_router",
@@ -355,8 +376,13 @@ async def _test(config, guided_decoding=False):
     print("Model running")
 
     prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
-    response = await router.generate.call_one(prompt)
-    print(f"User: {prompt}\nAssistant: {response.outputs[0].text}")
+    responses: List[CompletionOutput] = await router.generate.call_one(prompt)
+
+    for batch, response in enumerate(responses):
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        print(f"Batch {batch}:")
+        print(f"User: {prompt}\nAssistant: {response.text}")
+        print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
     await router.shutdown.call()
 
@@ -369,5 +395,7 @@ if __name__ == "__main__":
         "enforce_eager": True,
         "resources": 2,
     }
-    asyncio.run(_test(config))
+    # asyncio.run(_test(config))
     # asyncio.run(_test(config, guided_decoding=True))
+    # asyncio.run(_test(config, num_samples=2))
+    # asyncio.run(_test(config, guided_decoding=True, num_samples=3))
