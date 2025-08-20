@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from forge.actors.policy import Policy
+from forge.data.llama3_sharding import calculate_expected_shard
 from monarch.actor import proc_mesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
@@ -60,7 +61,7 @@ def validate_loaded_tensors_equals_original(
 
             if tensor_parallel_size > 1:
                 # For tensor parallel case, shard the expected tensor to match the loaded shard
-                expected_shard = _calculate_expected_shard(
+                expected_shard = calculate_expected_shard(
                     expected_tensor,
                     param_name,
                     loaded_tensor.shape,
@@ -91,86 +92,6 @@ def validate_loaded_tensors_equals_original(
     print(
         f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original"
     )
-
-
-def _get_tensor_parallel_sharding_strategy(param_name: str) -> tuple[int, bool]:
-    """
-    Determine the sharding strategy for a parameter in tensor parallel setup.
-    This mirrors the logic from Policy._get_tensor_parallel_sharding_strategy.
-    """
-    # Parameters that are not sharded (replicated across all tensor parallel ranks)
-    if any(keyword in param_name for keyword in ["norm", "bias", "rotary_emb"]):
-        return 0, False
-
-    # Embedding layers - shard along vocab dimension (dim 0)
-    if "embed_tokens" in param_name or "lm_head" in param_name:
-        return 0, True
-
-    # Attention projections
-    if "qkv_proj" in param_name:
-        # Input projections: shard output dimension (dim 0)
-        return 0, True
-    elif "o_proj" in param_name:
-        # Output projection: shard input dimension (dim 1)
-        return 1, True
-
-    # MLP projections
-    elif any(proj in param_name for proj in ["gate_proj", "up_proj", "gate_up_proj"]):
-        # Input projections: shard output dimension (dim 0)
-        return 0, True
-    elif "down_proj" in param_name:
-        # Output projection: shard input dimension (dim 1)
-        return 1, True
-
-    # Default: try to infer from tensor shape patterns
-    return 0, True
-
-
-def _calculate_expected_shard(
-    full_tensor: torch.Tensor,
-    param_name: str,
-    expected_shape: torch.Size,
-    tensor_parallel_size: int,
-    rank: int,
-) -> torch.Tensor:
-    """
-    Calculate the expected shard of a full tensor for comparison with loaded tensor.
-    """
-
-    # Get sharding strategy for this parameter
-    shard_dim, is_sharded = _get_tensor_parallel_sharding_strategy(param_name)
-
-    if not is_sharded:
-        # Parameter is replicated - should match exactly
-        return full_tensor
-
-    # Calculate tensor parallel rank (assumes tensor parallel within node)
-    tp_rank = rank % tensor_parallel_size
-    tensor_size = full_tensor.shape[shard_dim]
-
-    if tensor_size % tensor_parallel_size != 0:
-        # If not evenly divisible, the loaded tensor might be the full tensor
-        # (fallback case for testing)
-        if full_tensor.shape == expected_shape:
-            return full_tensor
-        else:
-            raise ValueError(
-                f"Cannot shard tensor dimension {shard_dim} with size {tensor_size} "
-                f"across {tensor_parallel_size} ranks: not evenly divisible"
-            )
-
-    shard_size = tensor_size // tensor_parallel_size
-    start_idx = tp_rank * shard_size
-    end_idx = start_idx + shard_size
-
-    if shard_dim == 0:
-        result = full_tensor[start_idx:end_idx]
-    elif shard_dim == 1:
-        result = full_tensor[:, start_idx:end_idx]
-    else:
-        raise ValueError(f"Unsupported shard dimension: {shard_dim}")
-
-    return result
 
 
 async def run_policy_integration(store, original_state_dict, num_gpus):
@@ -330,7 +251,7 @@ async def llama3_torchstore_write():
     # Write converted state dict to torchstore
     await save_state_dict(store, converted_state_dict, state_dict_key)
     print(
-        f"Successfully wrote converted state dict to torchstore with key: {STATE_DICT_KEY}"
+        f"Successfully wrote converted state dict to torchstore with key: {state_dict_key}"
     )
 
     return store, converted_state_dict
