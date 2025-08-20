@@ -129,8 +129,6 @@ def validate_loaded_tensors_equals_original(
     For tensor parallel cases, instead of gathering sharded tensors, we shard
     the original tensor and compare it with the loaded shard.
     """
-    print("Validating that loaded tensors equal original tensors * 2...")
-
     validation_errors = []
 
     for param_name, loaded_tensor in loaded_state_dict.items():
@@ -180,7 +178,7 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
         num_gpus: Number of GPUs to use (1 for single GPU, 2+ for tensor parallel)
         test_name: Name for test identification in validation messages
     """
-    print(f"\n=== PHASE 2: Testing Policy Integration (GPUs: {num_gpus}) ===")
+    print(f"=== PHASE 2: Testing Policy Integration (GPUs: {num_gpus}) ===")
 
     state_dict_key = "llama3_8b_state_dict"
 
@@ -241,7 +239,7 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
         loaded_state_dict, original_state_dict, tensor_parallel_size=num_gpus, rank=rank
     )
 
-    print("\nTest passed! State dict successfully loaded into Policy!")
+    print("Test passed! State dict successfully loaded into Policy!")
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -291,7 +289,7 @@ async def test_llama3_policy_update_single(llama3_torchstore_setup):
     await run_policy_integration(store, original_state_dict, num_gpus=1)
 
     print(
-        "\nSingle GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
+        "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
 
 
@@ -310,5 +308,5 @@ async def test_llama3_policy_update_tp(llama3_torchstore_setup):
     await run_policy_integration(store, original_state_dict, num_gpus=2)
 
     print(
-        "\nTensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
+        "Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
     )
