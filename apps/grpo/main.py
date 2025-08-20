@@ -8,7 +8,7 @@ from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyRouter
 from forge.controller import ServiceConfig, spawn_service
 from forge.data.replay_buffer import ReplayBuffer
-from monarch.actor import Actor, endpoint
+from monarch.actor import Actor, endpoint, proc_mesh
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import CompletionOutput, SamplingParams
 
@@ -19,18 +19,6 @@ def compute_sequence_logprobs(
     attention_mask: torch.Tensor,
     requires_grad: bool = True,
 ) -> torch.Tensor:
-    """
-    Utility function to compute log probabilities for input sequences.
-
-    Args:
-        model: The model to use for computing logprobs
-        input_ids: Input token IDs [batch_size, seq_len]
-        attention_mask: Attention mask [batch_size, seq_len]
-        requires_grad: Whether gradients are required
-
-    Returns:
-        Tensor of sequence log probabilities [batch_size]
-    """
     context_manager = torch.enable_grad() if requires_grad else torch.no_grad()
 
     with context_manager:
@@ -371,9 +359,9 @@ class RefModel(Actor):
 class DatasetActor(Actor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        self._setup_dataset(**kwargs)
+        self._setup_dataset(*args, **kwargs)
 
     def _setup_dataset(self, **kwargs):
         def gsm8k_to_messages(sample):
@@ -382,7 +370,7 @@ class DatasetActor(Actor):
             answer = full_answer.split("####")[1]
             return (question, answer)
 
-        ds = load_dataset(**kwargs)
+        ds = load_dataset(*args, **kwargs)
         ds.map(gsm8k_to_messages)
         ds.shuffle()
         self._iterator = ds
@@ -400,6 +388,7 @@ async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 5
     model = "Qwen/Qwen3-1.7B"
+    all_gpus = torch.cuda.device_count()
 
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
@@ -408,10 +397,24 @@ async def main():
         max_replicas=1,
         default_replicas=1,
     )
+
+    policy_worker_mesh = await proc_mesh(gpus=2)
+    _policy = await policy_worker_mesh.spawn(
+        "policy_worker",
+        Policy,
+        model=model,
+        tensor_parallel_size=2,
+        pipeline_parallel_size=1,
+        dist_info={"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"},
+    )
+    await _policy.setup.call()
+    await policy_worker_mesh.stop()
+    print("we made it!")
+    exit()
     policy = await spawn_service(
         default_service_cfg,
         PolicyRouter,
-        policy=Policy(model=model),
+        policy=_policy,
         sampling_params=SamplingParams(n=group_size),
     )
 
@@ -433,7 +436,7 @@ async def main():
     dataloader = await spawn_service(
         default_service_cfg,
         DatasetActor,
-        path="openai/gsm8k",
+        "openai/gsm8k",
         split="train",
         streaming=True,
     )

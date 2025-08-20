@@ -198,7 +198,8 @@ class Policy(Actor):
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
-    resources: int = 1
+    # resources: int = 1
+    dist_info: dict | None = None
 
     def __post_init__(self):
         """Build vLLM Arguments
@@ -240,12 +241,13 @@ class Policy(Actor):
                     setattr(self.vllm_args, key, value)
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
-        assert self.vllm_args.parallel_config.world_size == self.resources
+        # assert self.vllm_args.parallel_config.world_size == self.resources
 
     @endpoint
     async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
+        # print(f" RAnk: {self.rank}")
         self.worker = self.setup_worker()
 
     @endpoint
@@ -295,7 +297,7 @@ class Policy(Actor):
         """Build and Instantiate vLLM worker"""
         parallel_config = self.vllm_args.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
-        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
+        ip, port = self.dist_info["MASTER_ADDR"], self.dist_info["MASTER_PORT"]
         distributed_init_method = get_distributed_init_method(ip, port)
         all_kwargs = [{}] * parallel_config.world_size
         local_rank = self.rank % torch.accelerator.device_count()
@@ -307,6 +309,7 @@ class Policy(Actor):
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
+        print(all_kwargs)
         worker = WorkerWrapperBase(self.vllm_args, self.rank)
         worker.init_worker(all_kwargs)
         worker.init_device()
