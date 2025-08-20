@@ -266,18 +266,14 @@ class Policy(Actor):
             f"Starting model update from torchstore with key: {self.state_dict_key}"
         )
 
-        # Get the current model from the worker
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
         logger.info(f"Current state dict has {len(current_state_dict)} parameters")
         logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
 
-        # Tensor parallel model - use deterministic sharding strategy
-        logger.info("Loading state dict with tensor parallel sharding...")
         await self._load_tensor_parallel_state_dict(current_state_dict)
 
-        # Load the updated state dict into the model
         model.load_state_dict(current_state_dict, strict=True)
 
         logger.info("Successfully updated model weights from torchstore")

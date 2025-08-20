@@ -75,9 +75,6 @@ def convert_state_dict(saved_sd):
 async def save_state_dict(
     store: MultiProcessStore, state_dict: dict[str, torch.Tensor], key_prefix: str
 ):
-    """
-    Custom function to save state dict by iterating key by key
-    """
     print(f"Saving {len(state_dict)} tensors")
 
     await push_state_dict(store, state_dict, key_prefix)
@@ -108,11 +105,9 @@ def calculate_expected_shard(
     """
 
     sharding = Llama3vLLMSharding(tensor_parallel_size, rank)
-    # Get sharding strategy for this parameter
     shard_dim, is_sharded = sharding._get_tensor_parallel_sharding_strategy(param_name)
 
     if not is_sharded:
-        # Parameter is replicated - should match exactly
         return full_tensor
 
     sharded_tensor = sharding._calculate_tensor_shard(
@@ -143,7 +138,6 @@ def validate_loaded_tensors_equals_original(
             expected_tensor = original_state_dict[param_name]
 
             if tensor_parallel_size > 1:
-                # For tensor parallel case, shard the expected tensor to match the loaded shard
                 expected_shard = calculate_expected_shard(
                     expected_tensor,
                     param_name,
@@ -153,7 +147,6 @@ def validate_loaded_tensors_equals_original(
                 )
                 tensor_to_compare = expected_shard.cpu().float()
             else:
-                # Single GPU case - compare directly
                 tensor_to_compare = expected_tensor.cpu().float()
 
             if not torch.allclose(
@@ -234,19 +227,16 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
     await policy.setup.call()
     print("Setup completed successfully!")
 
-    # Call update to load weights from torchstore
     print("Calling Policy.update() to load weights from torchstore...")
     await policy.update.call()
     print("Successfully called Policy.update() to load weights from torchstore!")
 
-    # Get model info including state dict after update
     model_params = await policy.get_model_params.call()
     loaded_state_dict = (
         model_params._values[0] if hasattr(model_params, "_values") else model_params
     )
     print("Successfully got model state dict after update")
 
-    # Validate that every tensor loaded by the policy equals the original tensor
     validate_loaded_tensors_equals_original(
         loaded_state_dict, original_state_dict, tensor_parallel_size=num_gpus, rank=rank
     )
@@ -262,10 +252,8 @@ async def llama3_torchstore_setup():
     """
     print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
 
-    # Use the class method create_store() which properly spawns the actors
     store = await MultiProcessStore.create_store()
 
-    # Load from local directory instead of HuggingFace download
     model_path = "/tmp/Meta-Llama-3.1-8B-Instruct"
 
     # Load the model from local path - using device_map="auto" for efficient loading
@@ -277,17 +265,14 @@ async def llama3_torchstore_setup():
         local_files_only=True,  # Ensure we don't try to download
     )
 
-    # Get the model's state dict
     original_state_dict = model.state_dict()
     print(f"Original state dict has {len(original_state_dict)} parameters")
 
-    # Convert transformers state dict to vLLM format
     print("Converting transformers state dict to vLLM format...")
     converted_state_dict = convert_state_dict(original_state_dict)
     print(f"Converted state dict has {len(converted_state_dict)} parameters")
 
     state_dict_key = "llama3_8b_state_dict"
-    # Write converted state dict to torchstore
     await save_state_dict(store, converted_state_dict, state_dict_key)
     print(
         f"Successfully wrote converted state dict to torchstore with key: {state_dict_key}"
@@ -301,10 +286,8 @@ async def llama3_torchstore_setup():
 async def test_llama3_policy_update_single(llama3_torchstore_setup):
     print("Starting Llama 3 8B torchstore test (single GPU)...")
 
-    # Get store and original state dict from fixture
     store, original_state_dict = llama3_torchstore_setup
 
-    # Phase 2: Test Policy integration with 1 GPU
     await run_policy_integration(store, original_state_dict, num_gpus=1)
 
     print(
@@ -322,10 +305,8 @@ async def test_llama3_policy_update_tp(llama3_torchstore_setup):
             f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
         )
 
-    # Get store and original state dict from fixture
     store, original_state_dict = llama3_torchstore_setup
 
-    # Phase 2: Test Policy integration with 2 GPUs
     await run_policy_integration(store, original_state_dict, num_gpus=2)
 
     print(
