@@ -34,7 +34,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.data.sharding import Llama3vLLMSharding
+from forge.data.sharding import VLLMSharding
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ class Policy(Actor):
 
         updated_count = 0
         # setting explictly to llama3 for now as its our only use case
-        sharding = Llama3vLLMSharding(self.tensor_parallel_size, self.rank)
+        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]

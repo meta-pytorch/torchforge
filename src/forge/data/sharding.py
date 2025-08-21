@@ -4,42 +4,17 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from abc import ABC, abstractmethod
-
 import torch
 
 
-class BaseSharding(ABC):
+class VLLMSharding:
     """
-    Abstract base class for tensor parallel sharding strategies.
+    vLLM specific tensor parallel sharding strategy.
     """
 
     def __init__(self, tensor_parallel_size: int, rank: int):
         self.tensor_parallel_size = tensor_parallel_size
         self.rank = rank
-
-    @abstractmethod
-    def load_from_source_to_target(
-        self,
-        param_name: str,
-        source_tensor: torch.Tensor,
-        target_tensor: torch.Tensor,
-    ) -> None:
-        """
-        Copy a source tensor to a target tensor, handling sharding and replication.
-
-        Args:
-            param_name: Name of the parameter being loaded
-            source_tensor: Source tensor to load from
-            target_tensor: Target tensor to load into
-        """
-        pass
-
-
-class Llama3vLLMSharding(BaseSharding):
-    """
-    Llama3 vLLM specific tensor parallel sharding strategy.
-    """
 
     def load_from_source_to_target(
         self,

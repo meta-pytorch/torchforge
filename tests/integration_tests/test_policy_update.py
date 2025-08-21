@@ -12,7 +12,7 @@ import pytest_asyncio
 import torch
 
 from forge.actors.policy import Policy
-from forge.data.sharding import Llama3vLLMSharding
+from forge.data.sharding import VLLMSharding
 from monarch.actor import proc_mesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
@@ -104,7 +104,7 @@ def calculate_expected_shard(
         torch.Tensor: The expected sharded tensor for this rank
     """
 
-    sharding = Llama3vLLMSharding(tensor_parallel_size, rank)
+    sharding = VLLMSharding(tensor_parallel_size, rank)
     shard_dim, is_sharded = sharding._get_tensor_parallel_sharding_strategy(param_name)
 
     if not is_sharded:
