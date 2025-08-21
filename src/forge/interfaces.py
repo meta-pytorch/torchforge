@@ -87,19 +87,21 @@ class Policy(Actor, ABC):
         """Update the policy weights."""
         pass
 
-    @abstractmethod
-    def should_spawn_workers(self) -> bool:
-        """Whether the policy needs to separately spawrn child workers."""
-        pass
+    # TODO: Update Based on Service Refactor
 
-    @abstractmethod
-    def spawn_workers(self):
-        """
-        Spawn child workers used by this actor
+    # @abstractmethod
+    # def should_spawn_workers(self) -> bool:
+    #     """Whether the policy needs to separately spawrn child workers."""
+    #     pass
 
-        No-op when should_spawn_workers() is False.
-        """
-        pass
+    # @abstractmethod
+    # def spawn_workers(self):
+    #     """
+    #     Spawn child workers used by this actor
+
+    #     No-op when should_spawn_workers() is False.
+    #     """
+    #     pass
 
 
 class BaseTokenizer(ABC):
