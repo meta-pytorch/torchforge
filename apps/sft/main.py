@@ -65,7 +65,6 @@ class ForgeSFTRecipe(ForgeEngine):
         self._run_val_every_n_steps = job_config.get("run_val_every_n_steps", None)
         super().__init__(job_config)
         self.metric_logger = None  # TODO: fix this
-        self.model = nn.ModuleList(self.model_parts)
 
     def setup(self):
         self.train_dataloader = self.setup_data(
@@ -243,7 +242,8 @@ class ForgeSFTRecipe(ForgeEngine):
                 self.validate()
 
     def validate(self) -> None:
-        self.model.eval()
+        for m in self.model_parts:
+            m.eval()
         total_val_loss = torch.tensor(0.0, device=self.device)
         total_val_tokens = torch.tensor(0.0, device=self.device)
         with torch.no_grad():
@@ -274,7 +274,8 @@ class ForgeSFTRecipe(ForgeEngine):
             if total_val_tokens > 0
             else float("inf")
         )
-        self.model.train()
+        for m in self.model_parts:
+            m.train()
         print(f"\nValidation loss: {avg_val_loss}")
 
     def cleanup(self) -> None:
