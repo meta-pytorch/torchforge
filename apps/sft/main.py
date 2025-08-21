@@ -164,14 +164,16 @@ class ForgeSFTRecipe(ForgeEngine):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
                 )
+                if do_backward:
+                    pp_schedule_fn = self.pp_schedule.step
+                else:
+                    pp_schedule_fn = self.pp_schedule.eval
                 if self.pp_has_first_stage:
-                    self.pp_schedule.step(
+                    pp_schedule_fn(
                         inputs, target=targets, losses=losses, input_batch=inputs
                     )
                 else:
-                    self.pp_schedule.step(
-                        target=targets, losses=losses, input_batch=inputs
-                    )
+                    pp_schedule_fn(target=targets, losses=losses, input_batch=inputs)
 
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
