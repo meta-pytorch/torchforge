@@ -13,9 +13,16 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 import torch
+from forge.controller import spawn_actors
+from forge.controller.service import ServiceConfig
+from forge.controller.spawn import spawn_service
 
+from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
+
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from omegaconf import DictConfig, OmegaConf
 from torchstore import MultiProcessStore
 
 from torchstore._state_dict_utils import DELIM
@@ -40,27 +47,43 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.data.sharding import VLLMSharding
-
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class Policy(PolicyInterface):
     # TODO: Add dp support
+    config: DictConfig
+    # Gets set up by setup worker
     policy_worker: Actor = None
+
     sampling_params: SamplingParams = None
     lora_request: LoRARequest = None
     tokenization_kwargs: dict = None
 
     @endpoint
-    async def setup(self, config, guided_decoding=False, num_samples=1):
-        # Set up workers
-        await self.setupWorker(config, guided_decoding, num_samples)
+    async def setup(self):
+        # Set up policy_worker
+        await self.spawn_workers()
 
         self.request_id = 0
         self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
+
+        # Setup sampling params
+        sampling_overrides = self.config.sampling_params
+        overrides = {
+            "n": sampling_overrides.num_samples,
+            "guided_decoding": (
+                GuidedDecodingParams(choice=["Positive", "Negative"])
+                if sampling_overrides.guided_decoding
+                else None
+            ),
+        }
+        self.sampling_params = get_default_sampling_params(
+            self.vllm_args, overrides=overrides
+        )
+
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
@@ -74,7 +97,7 @@ class Policy(PolicyInterface):
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
-        # Setup schduuler
+        # Setup scheduler
         # TODO: Add support for `log_stats`
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         kv_cache_config = kv_cache_configs._values[0]
@@ -90,32 +113,20 @@ class Policy(PolicyInterface):
             log_stats=None,
         )
 
-    async def setupWorker(self, config, guided_decoding, num_samples):
+    def should_spawn_workers(self) -> bool:
+        return True
+
+    async def spawn_workers(self):
         self.worker_mesh = await proc_mesh(
-            gpus=config["resources"],
+            gpus=self.config.num_workers,
             env={
                 "MASTER_ADDR": str(get_loopback_ip()),
                 "MASTER_PORT": str(get_open_port()),
             },
         )
         self.policy_worker = await self.worker_mesh.spawn(
-            "policy_worker", PolicyWorker, **config
+            "policy_worker", PolicyWorker, **self.config.worker_params
         )
-
-        # TODO: Make this customizable from the config
-        vllm_args = await self.policy_worker.get_vllm_args.choose()
-        overrides = {
-            "n": num_samples,
-            "guided_decoding": (
-                GuidedDecodingParams(choice=["Positive", "Negative"])
-                if guided_decoding
-                else None
-            ),
-        }
-        self.sampling_params = get_default_sampling_params(
-            vllm_args, overrides=overrides
-        )
-
         await self.policy_worker.setup.call()
 
     @endpoint
@@ -125,8 +136,6 @@ class Policy(PolicyInterface):
 
         # Wraps prompt into a dict
         prompt: Dict[str, str] = convert_input(prompt)
-        if self.sampling_params is None:
-            self.sampling_params = get_default_sampling_params(self.vllm_args)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
@@ -236,7 +245,6 @@ class PolicyWorker(Actor):
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
-    resources: int = 1
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -279,7 +287,6 @@ class PolicyWorker(Actor):
                     setattr(self.vllm_args, key, value)
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
-        assert self.vllm_args.parallel_config.world_size == self.resources
 
     @endpoint
     async def setup(self, store: MultiProcessStore = None):
@@ -426,19 +433,32 @@ def get_default_sampling_params(vllm_config, overrides=None) -> SamplingParams:
     return params
 
 
-async def _test(config, guided_decoding=False, num_samples=1):
-    # TODO: Create proper test
-    policy_mesh = await proc_mesh(gpus=1)
-    policy = await policy_mesh.spawn("policy", Policy)
+# TODO: Create proper test
+async def _test(config: DictConfig):
+    prompt = (
+        "What is 3+5?" if config.sampling_params.guided_decoding else "Tell me a joke"
+    )
 
-    print("Model setup")
-    await policy.setup.call(config, guided_decoding, num_samples)
+    with_service = False
+    if with_service:
+        service_config = ServiceConfig(
+            procs_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
+        )
+        print("spawning service")
+        service = await spawn_service(service_config, Policy, config=config)
+        service.run()
+        responses: List[CompletionOutput] = await service.generate(prompt)
 
-    print("Model running")
-    policy.run.call()
-
-    prompt = "What is 3+5?" if guided_decoding else "Tell me a joke"
-    responses: List[CompletionOutput] = await policy.generate.call_one(prompt)
+    else:
+        process_config = ProcessConfig()
+        policy = await spawn_actors(
+            name="policy", actor_cls=Policy, cfg=config, processes=process_config
+        )
+        print("Model setup")
+        await policy.setup.call()
+        print("Model running")
+        policy.run.call()
+        responses: List[CompletionOutput] = await policy.generate.call_one(prompt)
 
     for batch, response in enumerate(responses):
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -446,18 +466,27 @@ async def _test(config, guided_decoding=False, num_samples=1):
         print(f"User: {prompt}\nAssistant: {response.text}")
         print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
-    await policy.shutdown.call()
+    if with_service:
+        await service.stop()
+    else:
+        await policy.shutdown.call()
 
 
 if __name__ == "__main__":
-    config = {
-        "model": "meta-llama/Llama-3.1-8B-Instruct",
-        "tensor_parallel_size": 2,
-        "pipeline_parallel_size": 1,
-        "enforce_eager": True,
-        "resources": 2,
-    }
-    # asyncio.run(_test(config))
-    # asyncio.run(_test(config, guided_decoding=True))
-    # asyncio.run(_test(config, num_samples=2))
-    asyncio.run(_test(config, guided_decoding=True, num_samples=3))
+    config = OmegaConf.create(
+        {
+            "num_workers": 2,
+            "worker_params": {
+                "model": "meta-llama/Llama-3.1-8B-Instruct",
+                "tensor_parallel_size": 2,
+                "pipeline_parallel_size": 1,
+                "enforce_eager": True,
+                "vllm_args": None,
+            },
+            "sampling_params": {
+                "guided_decoding": True,
+                "num_samples": 2,
+            },
+        }
+    )
+    asyncio.run(_test(config))
