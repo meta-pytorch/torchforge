@@ -251,7 +251,7 @@ async def llama3_torchstore_setup():
 
     store = await MultiProcessStore.create_store()
 
-    model_path = "/tmp/Meta-Llama-3.1-8B-Instruct"
+    model_path = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
     # Load the model from local path - using device_map="auto" for efficient loading
     model = AutoModelForCausalLM.from_pretrained(
@@ -259,7 +259,6 @@ async def llama3_torchstore_setup():
         torch_dtype=torch.float16,  # Use half precision to save memory
         device_map="auto",
         trust_remote_code=True,
-        local_files_only=True,  # Ensure we don't try to download
     )
 
     original_state_dict = model.state_dict()
