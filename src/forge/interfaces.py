@@ -7,9 +7,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from monarch.actor import Actor, endpoint
-
 from forge.types import Action, Message, Observation, State
+
+from monarch.actor import Actor, endpoint
 
 
 class Transform(ABC):
@@ -149,4 +149,13 @@ class ModelTokenizer(ABC):
         Returns:
             tuple[list[int], list[bool]]: The list of token ids and the list of masks.
         """
+        pass
+
+
+class Reward(ABC):
+    """Abstract base class for reward models."""
+
+    @abstractmethod
+    def __call__(self, observation: Observation) -> float:
+        """Compute a reward for an observation."""
         pass
