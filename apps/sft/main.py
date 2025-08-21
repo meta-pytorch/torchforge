@@ -248,7 +248,6 @@ class ForgeSFTRecipe(ForgeEngine):
                 self._run_val_every_n_steps is not None
                 and self.current_step % self._run_val_every_n_steps == 0
             ):
-                # pbar.refresh()
                 self.validate()
 
     def validate(self) -> None:
