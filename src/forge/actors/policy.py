@@ -24,7 +24,6 @@ from forge.types import ProcessConfig
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 from omegaconf import DictConfig, OmegaConf
 from torchstore import MultiProcessStore
-
 from torchstore._state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
@@ -441,9 +440,8 @@ async def _test(config: DictConfig):
 
     with_service = False
     if with_service:
-        service_config = ServiceConfig(
-            procs_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
-        )
+        # Update this condition path once Service has been refactored
+        service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
         print("spawning service")
         service = await spawn_service(service_config, Policy, config=config)
         service.run()
