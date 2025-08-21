@@ -32,12 +32,15 @@ training:
   steps: 1000
   compile: false
 
+validation:
+  local_batch_size: 1
+  freq: -1  # Change to a positive number to enable validation
+  steps: 200  # Max steps to run validation. Validation disabled if negative.
+
 dataset:
   path: yahma/alpaca-cleaned
   split: train[:95%]
 
-# Validation
-run_val_every_n_steps: null  # Change to an integer to enable validation every N steps
 dataset_val:
   path: yahma/alpaca-cleaned
   split: train[95%:]

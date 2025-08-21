@@ -62,7 +62,6 @@ class ForgeSFTRecipe(ForgeEngine):
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
-        self._run_val_every_n_steps = job_config.get("run_val_every_n_steps", None)
         super().__init__(job_config)
         self.metric_logger = None  # TODO: fix this
 
@@ -74,8 +73,7 @@ class ForgeSFTRecipe(ForgeEngine):
 
         self.val_dataloader = self.setup_data(
             self.job_config.dataset_val,
-            batch_size=self.job_config.training.local_batch_size,
-            infinite=False,
+            batch_size=self.job_config.validation.local_batch_size,
         )
 
         # self.train_dataloader = self.setup_data(
@@ -236,12 +234,13 @@ class ForgeSFTRecipe(ForgeEngine):
             )
 
             if (
-                self._run_val_every_n_steps is not None
-                and self.current_step % self._run_val_every_n_steps == 0
+                self.job_config.validation.freq > 0
+                and self.job_config.validation.steps > 0
+                and self.current_step % self.job_config.validation.freq == 0
             ):
-                self.validate()
+                self.validate(self.job_config.validation.steps)
 
-    def validate(self) -> None:
+    def validate(self, max_steps: int) -> None:
         for m in self.model_parts:
             m.eval()
         total_val_loss = torch.tensor(0.0, device=self.device)
@@ -249,6 +248,8 @@ class ForgeSFTRecipe(ForgeEngine):
         with torch.no_grad():
             val_pbar = tqdm(self.val_dataloader, desc="Validation", leave=False)
             for batch_idx, batch in enumerate(val_pbar):
+                if batch_idx >= max_steps:
+                    break
                 batch_to_device(batch, self.device)
                 current_num_tokens = (batch["labels"] != CROSS_ENTROPY_IGNORE_IDX).sum()
                 # Compute loss
