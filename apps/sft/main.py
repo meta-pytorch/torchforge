@@ -84,7 +84,7 @@ class ForgeSFTRecipe(ForgeEngine):
         self.val_dataloader = self.setup_data(
             self.job_config.dataset_val,
             batch_size=self.job_config.training.local_batch_size,
-            single_pass=True,
+            infinite=False,
         )
 
         # self.train_dataloader = self.setup_data(
@@ -102,7 +102,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self, dataset_config, batch_size, single_pass=False):
+    def setup_data(self, dataset_config, batch_size, infinite=True):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -120,7 +120,7 @@ class ForgeSFTRecipe(ForgeEngine):
             message_transform=AlpacaToMessages(),
             path=dataset_config.path,
             split=dataset_config.split,
-            single_pass=single_pass,
+            infinite=infinite,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -270,7 +270,9 @@ class ForgeSFTRecipe(ForgeEngine):
                     if total_val_tokens > 0
                     else float("inf")
                 )
-                val_pbar.set_description(f"Validation Loss: {avg_loss_so_far:.4f}")
+                val_pbar.set_description(
+                    f"Running validation Loss: {avg_loss_so_far:.4f}"
+                )
         # Aggregate validation metrics across all ranks
         torch.distributed.all_reduce(total_val_loss)
         torch.distributed.all_reduce(total_val_tokens)
@@ -280,7 +282,7 @@ class ForgeSFTRecipe(ForgeEngine):
             else float("inf")
         )
         self.model.train()
-        print(f"Validation loss: {avg_val_loss}")
+        print(f"\nValidation loss: {avg_val_loss}")
 
     def cleanup(self) -> None:
         if self.checkpointer:
