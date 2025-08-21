@@ -218,11 +218,10 @@ async def run_policy_integration(store, original_state_dict, num_gpus):
         pipeline_parallel_size=1,
         enforce_eager=True,
         resources=num_gpus,
-        torchstore=store,
         state_dict_key=state_dict_key,
     )
 
-    await policy.setup.call()
+    await policy.setup.call(store)
     print("Setup completed successfully!")
 
     print("Calling Policy.update() to load weights from torchstore...")

@@ -173,7 +173,6 @@ class Policy(Actor):
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
     resources: int = 1
-    torchstore: MultiProcessStore = None
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -219,7 +218,8 @@ class Policy(Actor):
         assert self.vllm_args.parallel_config.world_size == self.resources
 
     @endpoint
-    async def setup(self):
+    async def setup(self, store: MultiProcessStore = None):
+        self.torchstore = store
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -253,8 +253,6 @@ class Policy(Actor):
 
             updated_count += 1
 
-        logger.info(f"Successfully updated {updated_count} parameters")
-
     @endpoint
     async def update(self):
         """Update model weights by reading state dict from torchstore"""
@@ -262,19 +260,18 @@ class Policy(Actor):
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
-        logger.info(
+        logger.debug(
             f"Starting model update from torchstore with key: {self.state_dict_key}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        logger.info(f"Current state dict has {len(current_state_dict)} parameters")
-        logger.info(f"Tensor parallel size: {self.tensor_parallel_size}")
+        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
 
         await self._load_tensor_parallel_state_dict(current_state_dict)
 
-        logger.info("Successfully updated model weights from torchstore")
+        logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint
     async def setup_kv_cache(self):
