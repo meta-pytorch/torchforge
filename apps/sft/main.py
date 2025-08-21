@@ -63,7 +63,16 @@ class ForgeSFTRecipe(ForgeEngine):
         self.metric_logger = None  # TODO: fix this
 
     def setup(self):
-        self.train_dataloader = self.setup_data()
+        self.train_dataloader = self.setup_data(
+            self.job_config.dataset,
+            batch_size=self.job_config.training.local_batch_size,
+        )
+
+        self.val_dataloader = self.setup_data(
+            self.job_config.dataset_val,
+            batch_size=self.job_config.training.local_batch_size,
+        )
+
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -79,7 +88,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self):
+    def setup_data(self, dataset_config, batch_size):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -95,8 +104,8 @@ class ForgeSFTRecipe(ForgeEngine):
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
+            path=dataset_config.path,
+            split=dataset_config.split,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -106,7 +115,7 @@ class ForgeSFTRecipe(ForgeEngine):
         )
         dataloader = StatefulDataLoader(
             dataset=dataset,
-            batch_size=self.job_config.training.local_batch_size,
+            batch_size=batch_size,
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
