@@ -7,9 +7,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from monarch.actor import Actor, endpoint
-
 from forge.types import Action, Message, Observation, State
+
+from monarch.actor import Actor, endpoint
 
 
 class Transform(ABC):
@@ -85,6 +85,20 @@ class Policy(Actor, ABC):
     @abstractmethod
     async def update_weights(self):
         """Update the policy weights."""
+        pass
+
+    @abstractmethod
+    def should_spawn_workers(self) -> bool:
+        """Whether the policy needs to separately spawrn child workers."""
+        pass
+
+    @abstractmethod
+    def spawn_workers(self):
+        """
+        Spawn child workers used by this actor
+
+        No-op when should_spawn_workers() is False.
+        """
         pass
 
 
