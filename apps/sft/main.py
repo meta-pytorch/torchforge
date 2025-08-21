@@ -41,16 +41,6 @@ Profiler = Any
 Tokenizer = Any
 
 
-# _SUPPORTS_FLEX_ATTENTION = (
-#     torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5)
-# )
-
-# if _SUPPORTS_FLEX_ATTENTION:
-#     from torch.nn.attention.flex_attention import BlockMask
-# else:
-#     BlockMask = torch.Tensor
-
-
 class ForgeSFTRecipe(ForgeEngine):
     job_config: ForgeJobConfig
     train_spec: forge_train_spec.ForgeTrainSpec
