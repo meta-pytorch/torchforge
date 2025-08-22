@@ -92,7 +92,7 @@ class Replica:
     """
     A distributed replica that serves as the fundamental unit of work within a service.
 
-    Handles process lifecycle, async request queuing, fault recovery, and load balancing.
+    Handles process lifecycle, async request queuing and fault recovery.
     Each replica runs independently and can be deployed across multiple hosts via Monarch
 
     """
