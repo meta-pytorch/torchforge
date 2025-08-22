@@ -90,7 +90,6 @@ async def test_sessionless_calls():
 
     try:
         # Test sessionless calls
-        logger.info("Starting requests")
         await service.incr()
         await service.incr()
         result = await service.value()
