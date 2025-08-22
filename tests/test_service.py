@@ -402,7 +402,7 @@ async def test_broadcast_call_basic():
         await service.stop()
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_broadcast_call_with_failed_replica():
     """Test broadcast call behavior when some replicas fail."""

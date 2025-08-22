@@ -59,16 +59,16 @@ class ServiceInterface:
     A lightweight interface to a Service Actor running on a single-node mesh.
 
     This interface holds references to the proc_mesh and actor_mesh (both of size 1)
-    and exposes user actor endpoints as ServiceEndpoint objects that route through
-    the Service Actor's _call and _call_all endpoints.
+    and exposes its user-defined actor endpoints as ServiceEndpoint objects that
+    route through the Service Actor's _call and _call_all endpoints.
 
     The ServiceInterface acts as the handle that is returned to end clients,
     providing a simple interface that makes actual calls to the Service Actor.
     """
 
-    def __init__(self, proc_mesh, actor_mesh, actor_def):
-        self.proc_mesh = proc_mesh
-        self.actor_mesh = actor_mesh
+    def __init__(self, _proc_mesh, _service, actor_def):
+        self._proc_mesh = _proc_mesh
+        self._service = _service
         self.actor_def = actor_def
 
         # Dynamically create ServiceEndpoint objects for user's actor endpoints
@@ -77,17 +77,17 @@ class ServiceInterface:
             attr_value = getattr(actor_def, attr_name)
             if isinstance(attr_value, EndpointProperty):
                 # Create a ServiceEndpoint that will route through the Service Actor
-                endpoint = ServiceEndpoint(self.actor_mesh, attr_name)
+                endpoint = ServiceEndpoint(self._service, attr_name)
                 setattr(self, attr_name, endpoint)
 
     # Session management methods - handled by ServiceInterface
     async def start_session(self) -> str:
         """Starts a new session for stateful request handling."""
-        return await self.actor_mesh.start_session.call_one()
+        return await self._service.start_session.call_one()
 
     async def terminate_session(self, sess_id: str):
         """Terminates an active session and cleans up associated resources."""
-        return await self.actor_mesh.terminate_session.call_one(sess_id)
+        return await self._service.terminate_session.call_one(sess_id)
 
     def session(self) -> "SessionContext":
         """Returns a context manager for session-based calls."""
@@ -96,16 +96,19 @@ class ServiceInterface:
     # Service control methods - forwarded to Service Actor
     async def stop(self):
         """Stops the service gracefully."""
-        return await self.actor_mesh.stop.call_one()
+        # First stop the service
+        await self._service.stop.call_one()
+        # Then stop its underlying proc
+        await self._proc_mesh.stop()
 
     # Metrics methods - forwarded to Service Actor
     async def get_metrics(self):
         """Get comprehensive service metrics for monitoring and analysis."""
-        return await self.actor_mesh.get_metrics.call_one()
+        return await self._service.get_metrics.call_one()
 
     async def get_metrics_summary(self):
         """Get a summary of key metrics for monitoring and debugging."""
-        return await self.actor_mesh.get_metrics_summary.call_one()
+        return await self._service.get_metrics_summary.call_one()
 
     # Testing method - forwarded to Service Actor
     def _get_internal_state(self):
@@ -115,13 +118,13 @@ class ServiceInterface:
         Returns:
             dict: Complete internal state including sessions, replicas, and metrics
         """
-        return self.actor_mesh._get_internal_state.call_one()
+        return self._service._get_internal_state.call_one()
 
     def __getattr__(self, name: str):
         """Forward all other attribute access to the underlying Service Actor."""
-        # Forward everything else to the actor_mesh
-        if hasattr(self.actor_mesh, name):
-            return getattr(self.actor_mesh, name)
+        # Forward everything else to the _service
+        if hasattr(self._service, name):
+            return getattr(self._service, name)
 
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
