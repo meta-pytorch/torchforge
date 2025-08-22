@@ -11,7 +11,7 @@ from typing import Type
 from monarch.actor import Actor, proc_mesh
 
 from forge.controller import Service, ServiceConfig
-from forge.controller.service import ServiceInterface
+from forge.controller.interface import ServiceInterface
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
