@@ -32,7 +32,6 @@ Example:
     ...     result = await service.my_endpoint(arg1, arg2)
 """
 
-
 import asyncio
 import contextvars
 import logging
@@ -96,43 +95,54 @@ class ServiceMetrics:
         healthy_replicas = [r for r in replicas if r.healthy]
         if not healthy_replicas:
             return 0.0
-
         total_utilization = sum(r.capacity_utilization for r in healthy_replicas)
         return total_utilization / len(healthy_replicas)
 
     def get_sessions_per_replica(self) -> float:
-        """Get average sessions per healthy replica."""
-        if self.healthy_replicas == 0:
+        """Get average sessions per replica."""
+        if self.total_replicas == 0:
             return 0.0
-        return self.total_sessions / self.healthy_replicas
+        return self.total_sessions / self.total_replicas
+
+
+# Context variable for session state
+_session_context = contextvars.ContextVar("session_context")
 
 
 @dataclass
 class Session:
+    """Simple session data holder."""
+
     session_id: str
 
 
-# Global context variable for session state
-# This is used to propagate session state across async tasks
-_session_context: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
-    "session_context", default=None
-)
-
-
 class SessionContext:
-    """Context manager for service sessions using context variables."""
+    """
+    Async context manager for stateful service sessions with automatic lifecycle management.
 
-    def __init__(self, service: "Service", **session_kwargs):
+    Provides a convenient way to maintain stateful connections to replicas across multiple
+    requests. Sessions ensure that all requests within the context are routed to the same
+    replica, enabling stateful interactions while handling session lifecycle automatically.
+
+    Example:
+
+        >>> async with service.session() as session:
+        ...     # All calls within this block use the same replica
+        ...     result1 = await service.my_endpoint(arg1)
+        ...     result2 = await service.another_endpoint(result1)
+
+    """
+
+    def __init__(self, service: "Service"):
         self.service = service
         self.session_id: str | None = None
-        self.session_kwargs = session_kwargs
         self._token = None
 
     async def __aenter__(self):
         """Start a session and set context variables."""
         self.session_id = await self.service.start_session()
         # Set context for this async task
-        context_value = {"session_id": self.session_id, "kwargs": self.session_kwargs}
+        context_value = {"session_id": self.session_id}
         self._token = _session_context.set(context_value)
         return self
 
@@ -228,8 +238,8 @@ class Service:
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
             replica = Replica(
-                proc_config=self._cfg.to_process_config(),
                 idx=len(self._replicas) + i,
+                proc_config=self._cfg.to_process_config(),
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
                 return_first_rank_result=self._cfg.return_first_rank_result,
             )
@@ -294,13 +304,8 @@ class Service:
             ctx = _session_context.get()
             if ctx:
                 sess_id = ctx["session_id"]
-                routing_hints = ctx["kwargs"]
-            else:
-                routing_hints = {}
-        else:
-            routing_hints = {}
 
-        replica = await self._get_replica(sess_id, **routing_hints)
+        replica = await self._get_replica(sess_id)
 
         # Create a ServiceRequest object to queue
         request = ServiceRequest(
@@ -412,9 +417,9 @@ class Service:
 
         return sess_id
 
-    def session(self, **kwargs) -> SessionContext:
+    def session(self) -> SessionContext:
         """Returns a context manager for session-based calls."""
-        return SessionContext(self, **kwargs)
+        return SessionContext(self)
 
     def _update_service_metrics(self):
         """Updates service-level metrics."""
@@ -582,8 +587,8 @@ class Service:
 
         return min(healthy_replicas, key=get_load)
 
-    async def _get_replica(self, sess_id: str | None, **kwargs) -> "Replica":
-        """Get a replica for the given session ID, with optional custom routing hints."""
+    async def _get_replica(self, sess_id: str | None) -> "Replica":
+        """Get a replica for the given session ID."""
         if sess_id is None:
             # No session, use round-robin load balancing
             replica = self._get_next_replica()
