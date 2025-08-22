@@ -38,7 +38,7 @@ import logging
 import pprint
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
@@ -47,6 +47,9 @@ from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 # TODO - tie this into metrics logger when it exists.
@@ -153,6 +156,34 @@ class SessionContext:
         if self.session_id:
             await self.service.terminate_session(self.session_id)
             self.session_id = None
+
+
+class ServiceEndpoint(Generic[P, R]):
+    """An endpoint object specific to services.
+
+    This loosely mimics the Endpoint APIs exposed in Monarch, with
+    a few key differences:
+    - Only choose and call are retained (dropping stream and call_one)
+    - Call returns a list directly rather than a ValueMesh.
+
+    These changes are made with Forge use cases in mind, but can
+    certainly be expanded/adapted in the future.
+
+    """
+
+    def __init__(self, service: "Service", endpoint_name: str):
+        self.service = service
+        self.endpoint_name = endpoint_name
+
+    async def choose(
+        self, sess_id: str | None = None, *args: P.args, **kwargs: P.kwargs
+    ) -> R:
+        """Chooses a replica to call based on context and load balancing strategy."""
+        return await self.service._call(sess_id, self.endpoint_name, *args, **kwargs)
+
+    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+        """Broadcasts a request to all healthy replicas and returns the results as a list."""
+        return await self.service._call_all(self.endpoint_name, *args, **kwargs)
 
 
 class Service:
@@ -267,13 +298,9 @@ class Service:
         )
 
     def _add_endpoint_method(self, endpoint_name: str):
-        """Dynamically adds an endpoint method to this Service instance."""
-
-        async def endpoint_method(sess_id: str | None = None, *args, **kwargs):
-            return await self._call(sess_id, endpoint_name, *args, **kwargs)
-
-        # Set the method on this instance
-        setattr(self, endpoint_name, endpoint_method)
+        """Dynamically adds a ServiceEndpoint instance to this Service instance."""
+        endpoint = ServiceEndpoint(self, endpoint_name)
+        setattr(self, endpoint_name, endpoint)
 
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
@@ -301,7 +328,7 @@ class Service:
         """
         # Check context variables for session state if no explicit sess_id
         if sess_id is None:
-            ctx = _session_context.get()
+            ctx = _session_context.get(None)
             if ctx:
                 sess_id = ctx["session_id"]
 
@@ -333,6 +360,57 @@ class Service:
                     sess_id, function, *args, **kwargs
                 )
             raise
+
+    async def _call_all(self, function: str, *args, **kwargs) -> List:
+        """
+        Broadcasts a function call to all healthy replicas and returns results as a list.
+
+        Args:
+            function: Name of the actor endpoint to call
+            *args: Positional arguments to pass to the endpoint
+            **kwargs: Keyword arguments to pass to the endpoint
+
+        Returns:
+            List of results from all healthy replicas
+
+        Raises:
+            RuntimeError: If no healthy replicas are available
+        """
+        healthy_replicas = [r for r in self._replicas if r.healthy]
+
+        if not healthy_replicas:
+            raise RuntimeError("No healthy replicas available for broadcast call")
+
+        # Create requests for all healthy replicas
+        requests = []
+        for replica in healthy_replicas:
+            request = ServiceRequest(
+                session_id=None,  # Broadcast calls don't use sessions
+                function=function,
+                args=args,
+                kwargs=kwargs,
+                future=asyncio.Future(),
+            )
+            requests.append((replica, request))
+
+        # Enqueue all requests
+        for replica, request in requests:
+            await replica.enqueue_request(request)
+
+        # Wait for all results
+        results = []
+        for replica, request in requests:
+            try:
+                result = await request.future
+                results.append(result)
+            except Exception as e:
+                logger.warning(
+                    "Request to replica %d failed during broadcast: %s", replica.idx, e
+                )
+                # Add None for failed replicas to maintain indexing
+                results.append(None)
+
+        return results
 
     async def _retry_request_on_healthy_replica(
         self, sess_id: str | None, function: str, *args, **kwargs
