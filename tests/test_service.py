@@ -12,8 +12,8 @@ import asyncio
 import logging
 
 import pytest
-from forge.controller.service_v2 import ServiceConfig
-from forge.controller.spawn import spawn_service_v2 as spawn_service
+from forge.controller.service import ServiceConfig
+from forge.controller.spawn import spawn_service
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
