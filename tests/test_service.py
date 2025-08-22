@@ -90,6 +90,7 @@ async def test_sessionless_calls():
 
     try:
         # Test sessionless calls
+        logger.info("Starting requests")
         await service.incr()
         await service.incr()
         result = await service.value()
@@ -172,7 +173,7 @@ async def test_replica_failure_and_recovery():
 
         # Replica should be marked as failed
         failed_replica = service._replicas[original_replica_idx]
-        assert not failed_replica.proc_mesh.healthy
+        assert not failed_replica.healthy
 
         # Session should be reassigned on next call
         await service.incr(session)
@@ -183,7 +184,7 @@ async def test_replica_failure_and_recovery():
         new_session = await service.start_session()
         await service.incr(new_session)
         assigned_replica = service._replicas[service._session_replica_map[new_session]]
-        assert assigned_replica.proc_mesh.healthy
+        assert assigned_replica.healthy
 
     finally:
         await service.stop()

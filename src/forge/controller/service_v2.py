@@ -37,91 +37,20 @@ import asyncio
 import contextvars
 import logging
 import pprint
-import time
 import uuid
-from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Dict, List
 
 from monarch._src.actor.endpoint import EndpointProperty
-from monarch.actor import ProcMesh
 
-from forge.controller import RecoverableProcMesh
-from forge.controller.replica import Replica, ServiceRequest
+from forge.controller.replica import Replica, ReplicaMetrics, ServiceRequest
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# TODO - tie this into metric logger when it exists
-@dataclass
-class ReplicaMetrics:
-    """
-    Metrics collection for a single replica instance.
-
-    Tracks request counts, timing metrics, current state, and session assignments
-    for performance monitoring and autoscaling decisions.
-
-    Attributes:
-        replica_idx: Unique identifier for this replica
-        total_requests: Total number of requests processed
-        successful_requests: Number of successfully completed requests
-        failed_requests: Number of failed requests
-        request_times: Sliding window of request start timestamps
-        request_latencies: Sliding window of request completion latencies
-        active_requests: Currently processing requests
-        queue_depth: Number of pending requests in queue
-        assigned_sessions: Number of sessions assigned to this replica
-    """
-
-    replica_idx: int
-    # Request metrics
-    total_requests: int = 0
-    successful_requests: int = 0
-    failed_requests: int = 0
-    # Timing metrics (sliding window)
-    request_times: deque = field(default_factory=lambda: deque(maxlen=100))
-    request_latencies: deque = field(default_factory=lambda: deque(maxlen=100))
-    # Current state
-    active_requests: int = 0
-    queue_depth: int = 0
-    # Session metrics
-    assigned_sessions: int = 0
-
-    def add_request_start(self, timestamp: float):
-        """Record when a request starts processing."""
-        self.request_times.append(timestamp)
-        self.total_requests += 1
-
-    def add_request_completion(self, start_time: float, success: bool):
-        """Record when a request completes."""
-        latency = time.time() - start_time
-        self.request_latencies.append(latency)
-        if success:
-            self.successful_requests += 1
-        else:
-            self.failed_requests += 1
-
-    def get_request_rate(self, window_seconds: float = 60.0) -> float:
-        """Get requests per second over the last window_seconds."""
-        now = time.time()
-        cutoff = now - window_seconds
-        recent_requests = [t for t in self.request_times if t >= cutoff]
-        return len(recent_requests) / window_seconds if window_seconds > 0 else 0.0
-
-    def get_avg_latency(self, window_requests: int = 50) -> float:
-        """Get average latency over the last N requests."""
-        if not self.request_latencies:
-            return 0.0
-        recent_latencies = list(self.request_latencies)[-window_requests:]
-        return sum(recent_latencies) / len(recent_latencies)
-
-    def get_capacity_utilization(self, max_concurrent: int) -> float:
-        """Get current capacity utilization (0.0 to 1.0)."""
-        return self.active_requests / max_concurrent if max_concurrent > 0 else 0.0
-
-
+# TODO - tie this into metrics logger when it exists.
 @dataclass
 class ServiceMetrics:
     """
@@ -154,16 +83,13 @@ class ServiceMetrics:
             for metrics in self.replica_metrics.values()
         )
 
-    def get_avg_queue_depth(self) -> float:
+    def get_avg_queue_depth(self, replicas: List) -> float:
         """Get average queue depth across all healthy replicas."""
-        healthy_metrics = [
-            m
-            for m in self.replica_metrics.values()
-            if m.replica_idx < self.healthy_replicas
-        ]
-        if not healthy_metrics:
+        healthy_replicas = [r for r in replicas if r.healthy]
+        if not healthy_replicas:
             return 0.0
-        return sum(m.queue_depth for m in healthy_metrics) / len(healthy_metrics)
+        total_queue_depth = sum(r.request_queue.qsize() for r in healthy_replicas)
+        return total_queue_depth / len(healthy_replicas)
 
     def get_avg_capacity_utilization(self, replicas: List) -> float:
         """Get average capacity utilization across all healthy replicas."""
@@ -171,16 +97,8 @@ class ServiceMetrics:
         if not healthy_replicas:
             return 0.0
 
-        utilizations = []
-        for replica in healthy_replicas:
-            if replica.idx in self.replica_metrics:
-                metrics = self.replica_metrics[replica.idx]
-                utilization = metrics.get_capacity_utilization(
-                    replica.max_concurrent_requests
-                )
-                utilizations.append(utilization)
-
-        return sum(utilizations) / len(utilizations) if utilizations else 0.0
+        total_utilization = sum(r.capacity_utilization for r in healthy_replicas)
+        return total_utilization / len(healthy_replicas)
 
     def get_sessions_per_replica(self) -> float:
         """Get average sessions per healthy replica."""
@@ -309,10 +227,8 @@ class Service:
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
-            mesh = RecoverableProcMesh(proc_config=self._cfg.to_process_config())
             replica = Replica(
-                proc_mesh=mesh,
-                actor=None,
+                proc_config=self._cfg.to_process_config(),
                 idx=len(self._replicas) + i,
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
                 return_first_rank_result=self._cfg.return_first_rank_result,
@@ -398,10 +314,6 @@ class Service:
         # Queue the request using replica's method
         await replica.enqueue_request(request)
 
-        # Start the replica processing loop if not already running
-        if not replica._running:
-            asyncio.create_task(replica.run())
-
         # Wait for the result
         try:
             return await request.future
@@ -467,10 +379,6 @@ class Service:
             target_replica = healthy_replicas[i % len(healthy_replicas)]
             await target_replica.enqueue_request(request)
 
-            # Start replica processing if not running
-            if not target_replica._running:
-                asyncio.create_task(target_replica.run())
-
             # Update session mapping if needed
             sess_id = request.session_id
             if (
@@ -513,24 +421,11 @@ class Service:
         self._metrics.total_sessions = len(self._active_sessions)
         self._metrics.total_replicas = len(self._replicas)
         self._metrics.healthy_replicas = sum(1 for r in self._replicas if r.healthy)
-
-        # Update queue depths for all replicas
+        # Store direct references to replica metrics for aggregation
+        self._metrics.replica_metrics = {}
         for replica in self._replicas:
-            if replica.idx not in self._metrics.replica_metrics:
-                self._metrics.replica_metrics[replica.idx] = ReplicaMetrics(replica.idx)
-
-            replica_metrics = self._metrics.replica_metrics[replica.idx]
-            replica_metrics.queue_depth = replica.request_queue.qsize()
-            replica_metrics.active_requests = replica.active_requests
-
-        # Update session assignments per replica
-        session_counts = defaultdict(int)
-        for sess_id, replica_idx in self._session_replica_map.items():
-            session_counts[replica_idx] += 1
-
-        for replica_idx, count in session_counts.items():
-            if replica_idx in self._metrics.replica_metrics:
-                self._metrics.replica_metrics[replica_idx].assigned_sessions = count
+            # Use the replica's own metrics directly
+            self._metrics.replica_metrics[replica.idx] = replica.metrics
 
     def get_metrics(self) -> ServiceMetrics:
         """
@@ -574,7 +469,7 @@ class Service:
                 "healthy_replicas": self._metrics.healthy_replicas,
                 "total_replicas": self._metrics.total_replicas,
                 "total_request_rate": self._metrics.get_total_request_rate(),
-                "avg_queue_depth": self._metrics.get_avg_queue_depth(),
+                "avg_queue_depth": self._metrics.get_avg_queue_depth(self._replicas),
                 "avg_capacity_utilization": self._metrics.get_avg_capacity_utilization(
                     self._replicas
                 ),
@@ -583,17 +478,26 @@ class Service:
             "replicas": {},
         }
 
-        for replica_idx, metrics in self._metrics.replica_metrics.items():
-            summary["replicas"][replica_idx] = {
+        for replica in self._replicas:
+            metrics = replica.metrics
+
+            # Count sessions assigned to this replica
+            assigned_sessions = sum(
+                1
+                for replica_idx in self._session_replica_map.values()
+                if replica_idx == replica.idx
+            )
+
+            summary["replicas"][replica.idx] = {
                 "total_requests": metrics.total_requests,
                 "successful_requests": metrics.successful_requests,
                 "failed_requests": metrics.failed_requests,
                 "request_rate": metrics.get_request_rate(),
                 "avg_latency": metrics.get_avg_latency(),
-                "active_requests": metrics.active_requests,
-                "queue_depth": metrics.queue_depth,
-                "assigned_sessions": metrics.assigned_sessions,
-                "capacity_utilization": metrics.get_capacity_utilization(10),
+                "active_requests": replica.active_requests,  # Get from replica
+                "queue_depth": replica.request_queue.qsize(),  # Get from replica
+                "assigned_sessions": assigned_sessions,  # Calculate from session map
+                "capacity_utilization": replica.capacity_utilization,  # Get from replica
             }
 
         return summary
@@ -643,7 +547,7 @@ class Service:
             # Check for failed replicas and recover them
             failed_replicas = []
             for replica in self._replicas:
-                if replica.proc_mesh.failed:
+                if replica.failed:
                     failed_replicas.append(replica)
 
             if any(failed_replicas):
@@ -655,12 +559,6 @@ class Service:
                 self._replicas_to_init.extend(failed_replicas)
 
             await asyncio.sleep(poll_rate_s)
-
-    async def _custom_replica_routing(
-        self, sess_id: str | None, **kwargs
-    ) -> Optional[Replica]:
-        """Hook for custom routing logic. Override in subclasses to implement custom routing."""
-        return None
 
     def _get_next_replica(self) -> "Replica":
         """Get the next replica using round-robin selection."""
@@ -686,13 +584,6 @@ class Service:
 
     async def _get_replica(self, sess_id: str | None, **kwargs) -> "Replica":
         """Get a replica for the given session ID, with optional custom routing hints."""
-        # Try custom routing first if hints are provided
-        if kwargs:
-            custom_result = await self._custom_replica_routing(sess_id, **kwargs)
-            if custom_result is not None:
-                return custom_result
-
-        # Default routing logic
         if sess_id is None:
             # No session, use round-robin load balancing
             replica = self._get_next_replica()
@@ -745,34 +636,32 @@ class Service:
 
         logger.debug("Init replicas: %s", pprint.pformat(self._replicas_to_init))
 
-        def _recover_hook(
-            replica: Replica,
-        ) -> Callable[[ProcMesh], Coroutine[Any, Any, None]]:
-            async def inner_hook(proc_mesh: ProcMesh) -> None:
-                if "name" in self._actor_kwargs:
-                    actor_name = self._actor_kwargs.pop("name")
-                else:
-                    actor_name = self._actor_def.__name__
-                # TODO - expand support so name can stick within kwargs
-                actor = await proc_mesh.spawn(
-                    actor_name,
-                    self._actor_def,
-                    *self._actor_args,
-                    **self._actor_kwargs,
-                )
-                replica.actor = actor
-                # Use replica's setup method instead of inline setup
-                await replica.setup()
+        # Initialize each replica (proc_mesh and actor spawning)
+        initialization_tasks = []
+        for replica in self._replicas_to_init:
+            task = asyncio.create_task(self._init_single_replica(replica))
+            initialization_tasks.append(task)
 
-            return inner_hook
-
-        await asyncio.gather(
-            *[
-                replica.proc_mesh.spawn(_recover_hook(replica))
-                for replica in self._replicas_to_init
-            ]
-        )
+        await asyncio.gather(*initialization_tasks, return_exceptions=True)
         self._replicas_to_init.clear()
+
+    async def _init_single_replica(self, replica: Replica):
+        """Initialize a single replica with proc_mesh and actor."""
+        try:
+            # Initialize the proc_mesh
+            await replica.init_proc_mesh()
+
+            # Spawn the actor using replica's method
+            await replica.spawn_actor(
+                self._actor_def, *self._actor_args, **self._actor_kwargs
+            )
+
+            logger.debug("Successfully initialized replica %d", replica.idx)
+
+        except Exception as e:
+            logger.error("Failed to initialize replica %d: %s", replica.idx, e)
+            # Mark as failed so it can be retried later
+            replica.mark_failed()
 
     async def _migrate_replica_workload(self, replica_to_remove: Replica):
         """Migrates all workload from a replica that's being removed."""
