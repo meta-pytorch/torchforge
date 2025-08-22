@@ -42,6 +42,8 @@ from typing import Dict, Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
+from monarch.actor import Actor, endpoint
+
 from forge.controller.replica import Replica, ReplicaMetrics, ServiceRequest
 from forge.types import ServiceConfig
 
@@ -50,6 +52,80 @@ logger.setLevel(logging.DEBUG)
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+class ServiceInterface:
+    """
+    A lightweight interface to a Service Actor running on a single-node mesh.
+
+    This interface holds references to the proc_mesh and actor_mesh (both of size 1)
+    and exposes user actor endpoints as ServiceEndpoint objects that route through
+    the Service Actor's _call and _call_all endpoints.
+
+    The ServiceInterface acts as the handle that is returned to end clients,
+    providing a simple interface that makes actual calls to the Service Actor.
+    """
+
+    def __init__(self, proc_mesh, actor_mesh, actor_def):
+        self.proc_mesh = proc_mesh
+        self.actor_mesh = actor_mesh
+        self.actor_def = actor_def
+
+        # Dynamically create ServiceEndpoint objects for user's actor endpoints
+        # Inspect the actor_def directly to find endpoints
+        for attr_name in dir(actor_def):
+            attr_value = getattr(actor_def, attr_name)
+            if isinstance(attr_value, EndpointProperty):
+                # Create a ServiceEndpoint that will route through the Service Actor
+                endpoint = ServiceEndpoint(self.actor_mesh, attr_name)
+                setattr(self, attr_name, endpoint)
+
+    # Session management methods - handled by ServiceInterface
+    async def start_session(self) -> str:
+        """Starts a new session for stateful request handling."""
+        return await self.actor_mesh.start_session.call_one()
+
+    async def terminate_session(self, sess_id: str):
+        """Terminates an active session and cleans up associated resources."""
+        return await self.actor_mesh.terminate_session.call_one(sess_id)
+
+    def session(self) -> "SessionContext":
+        """Returns a context manager for session-based calls."""
+        return SessionContext(self)
+
+    # Service control methods - forwarded to Service Actor
+    async def stop(self):
+        """Stops the service gracefully."""
+        return await self.actor_mesh.stop.call_one()
+
+    # Metrics methods - forwarded to Service Actor
+    async def get_metrics(self):
+        """Get comprehensive service metrics for monitoring and analysis."""
+        return await self.actor_mesh.get_metrics.call_one()
+
+    async def get_metrics_summary(self):
+        """Get a summary of key metrics for monitoring and debugging."""
+        return await self.actor_mesh.get_metrics_summary.call_one()
+
+    # Testing method - forwarded to Service Actor
+    def _get_internal_state(self):
+        """
+        Get comprehensive internal state for testing purposes.
+
+        Returns:
+            dict: Complete internal state including sessions, replicas, and metrics
+        """
+        return self.actor_mesh._get_internal_state.call_one()
+
+    def __getattr__(self, name: str):
+        """Forward all other attribute access to the underlying Service Actor."""
+        # Forward everything else to the actor_mesh
+        if hasattr(self.actor_mesh, name):
+            return getattr(self.actor_mesh, name)
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        )
 
 
 # TODO - tie this into metrics logger when it exists.
@@ -136,7 +212,7 @@ class SessionContext:
 
     """
 
-    def __init__(self, service: "Service"):
+    def __init__(self, service: "ServiceInterface"):
         self.service = service
         self.session_id: str | None = None
         self._token = None
@@ -171,22 +247,27 @@ class ServiceEndpoint(Generic[P, R]):
 
     """
 
-    def __init__(self, service: "Service", endpoint_name: str):
-        self.service = service
+    def __init__(self, actor_mesh, endpoint_name: str):
+        self.actor_mesh = actor_mesh
         self.endpoint_name = endpoint_name
 
     async def choose(
         self, sess_id: str | None = None, *args: P.args, **kwargs: P.kwargs
     ) -> R:
         """Chooses a replica to call based on context and load balancing strategy."""
-        return await self.service._call(sess_id, self.endpoint_name, *args, **kwargs)
+        return await self.actor_mesh._call.call_one(
+            sess_id, self.endpoint_name, *args, **kwargs
+        )
 
     async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
         """Broadcasts a request to all healthy replicas and returns the results as a list."""
-        return await self.service._call_all(self.endpoint_name, *args, **kwargs)
+        result = await self.actor_mesh._call_all.call_one(
+            self.endpoint_name, *args, **kwargs
+        )
+        return result
 
 
-class Service:
+class Service(Actor):
     """
     Distributed Actor Service Controller
 
@@ -233,7 +314,9 @@ class Service:
         _endpoints: Dynamically registered actor endpoints
     """
 
-    def __init__(self, cfg: ServiceConfig, actor_def, *actor_args, **actor_kwargs):
+    def __init__(
+        self, cfg: ServiceConfig, actor_def, actor_args: tuple, actor_kwargs: dict
+    ):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
@@ -253,16 +336,15 @@ class Service:
         # Replica initialization queue
         self._replicas_to_init = []
 
-        # For all endpoints within the actor_def, create an interface from it
+        # Store the endpoints for ServiceInterface to discover
         self._endpoints = []
         for func_name in dir(actor_def):
             func = getattr(actor_def, func_name)
             if isinstance(func, EndpointProperty):
-                logger.debug("Registering endpoint %s", func_name)
+                logger.debug("Found user actor endpoint %s", func_name)
                 self._endpoints.append(func_name)
-                # Dynamically add this endpoint method to the Service class
-                self._add_endpoint_method(func_name)
 
+    @endpoint
     async def __initialize__(self):
         logger.debug("Starting service up with %d replicas.", self._cfg.num_replicas)
         replicas = []
@@ -299,9 +381,12 @@ class Service:
 
     def _add_endpoint_method(self, endpoint_name: str):
         """Dynamically adds a ServiceEndpoint instance to this Service instance."""
-        endpoint = ServiceEndpoint(self, endpoint_name)
-        setattr(self, endpoint_name, endpoint)
+        # In the Actor-based architecture, endpoints are automatically exposed
+        # through the @endpoint decorator, so this method is kept for compatibility
+        # but doesn't need to create ServiceEndpoint objects
+        pass
 
+    @endpoint
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
         Routes a function call to the appropriate replica with load balancing and fault tolerance.
@@ -361,6 +446,7 @@ class Service:
                 )
             raise
 
+    @endpoint
     async def _call_all(self, function: str, *args, **kwargs) -> List:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
@@ -421,7 +507,17 @@ class Service:
             del self._session_replica_map[sess_id]
 
         # Retry the call (this will assign to a new healthy replica)
-        return await self._call(sess_id, function, *args, **kwargs)
+        # We recreate the request logic directly to avoid recursion
+        replica = await self._get_replica(sess_id)
+        request = ServiceRequest(
+            session_id=sess_id,
+            function=function,
+            args=args,
+            kwargs=kwargs,
+            future=asyncio.Future(),
+        )
+        await replica.enqueue_request(request)
+        return await request.future
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
@@ -470,6 +566,7 @@ class Service:
             ):
                 self._session_replica_map[sess_id] = target_replica.idx
 
+    @endpoint
     async def start_session(self) -> str:
         """
         Starts a new session for stateful request handling.
@@ -495,10 +592,6 @@ class Service:
 
         return sess_id
 
-    def session(self) -> SessionContext:
-        """Returns a context manager for session-based calls."""
-        return SessionContext(self)
-
     def _update_service_metrics(self):
         """Updates service-level metrics."""
         self._metrics.total_sessions = len(self._active_sessions)
@@ -510,6 +603,7 @@ class Service:
             # Use the replica's own metrics directly
             self._metrics.replica_metrics[replica.idx] = replica.metrics
 
+    @endpoint
     def get_metrics(self) -> ServiceMetrics:
         """
         Get comprehensive service metrics for monitoring and analysis.
@@ -528,6 +622,7 @@ class Service:
         self._update_service_metrics()
         return self._metrics
 
+    @endpoint
     def get_metrics_summary(self) -> dict:
         """
         Get a summary of key metrics for monitoring and debugging.
@@ -585,6 +680,7 @@ class Service:
 
         return summary
 
+    @endpoint
     async def terminate_session(self, sess_id: str):
         """
         Terminates an active session and cleans up associated resources.
@@ -688,6 +784,7 @@ class Service:
         logger.debug("Assigning session %s to replica %d", sess_id, replica.idx)
         return replica
 
+    @endpoint
     async def stop(self):
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
@@ -761,6 +858,46 @@ class Service:
         for sess_id in sessions_to_reassign:
             del self._session_replica_map[sess_id]
             logger.debug("Session %s will be reassigned on next request", sess_id)
+
+    @endpoint
+    def _get_internal_state(self) -> dict:
+        """
+        Get comprehensive internal state for testing purposes.
+
+        This is intended for testing/debugging only, it should not
+        be relied upon in actual production code.
+        """
+        # Ensure metrics are up to date
+        self._update_service_metrics()
+
+        return {
+            # Session management state
+            "session_replica_map": dict(self._session_replica_map),  # Copy for safety
+            "active_sessions": [s.session_id for s in self._active_sessions],
+            "id_session_map": dict(self._id_session_map),  # Copy for safety
+            # Replica state
+            "replicas": [
+                {
+                    "idx": replica.idx,
+                    "healthy": replica.healthy,
+                    "failed": replica.failed,
+                    "active_requests": replica.active_requests,
+                    "queue_size": replica.request_queue.qsize(),
+                    "capacity_utilization": replica.capacity_utilization,
+                }
+                for replica in self._replicas
+            ],
+            # Load balancing state
+            "next_replica_idx": self._next_replica_idx,
+            # Service-level state
+            "total_replicas": len(self._replicas),
+            "healthy_replica_count": sum(1 for r in self._replicas if r.healthy),
+            "shutdown_requested": self._shutdown_requested,
+            # Metrics summary
+            "total_sessions": len(self._active_sessions),
+            "replica_count": len(self._replicas),
+            "endpoints": list(self._endpoints),  # List of user actor endpoints
+        }
 
     def __repr__(self):
         return f"Service(actor={self._actor_def.__name__})"

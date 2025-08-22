@@ -8,9 +8,10 @@
 import logging
 from typing import Type
 
-from monarch.actor import Actor
+from monarch.actor import Actor, proc_mesh
 
 from forge.controller import Service, ServiceConfig
+from forge.controller.service import ServiceInterface
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -18,7 +19,7 @@ logger.setLevel(logging.DEBUG)
 
 async def spawn_service(
     service_cfg: ServiceConfig, actor_def: Type[Actor], *actor_args, **actor_kwargs
-) -> Service:
+) -> ServiceInterface:
     """Spawns a service based on the actor class.
 
     Args:
@@ -28,10 +29,15 @@ async def spawn_service(
         **actor_kwargs: Keyword arguments to pass to actor constructor
 
     Returns:
-        The appropriate service type based on the actor class
+        A ServiceInterface that provides access to the Service Actor
     """
-    # Default to base Service
-    logger.info("Spawning base Service for %s", actor_def.__name__)
-    service = Service(service_cfg, actor_def, *actor_args, **actor_kwargs)
-    await service.__initialize__()
-    return service
+    # Create a single-node proc_mesh and actor_mesh for the Service Actor
+    logger.info("Spawning Service Actor for %s", actor_def.__name__)
+    m = await proc_mesh(gpus=1)
+    service_actor = await m.spawn(
+        "service", Service, service_cfg, actor_def, actor_args, actor_kwargs
+    )
+    await service_actor.__initialize__.call_one()
+
+    # Return the ServiceInterface that wraps the proc_mesh, actor_mesh, and actor_def
+    return ServiceInterface(m, service_actor, actor_def)

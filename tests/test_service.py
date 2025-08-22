@@ -71,11 +71,13 @@ async def test_basic_service_operations():
         assert result == 1
 
         # Test session mapping
-        assert session1 in service._session_replica_map
+        state = await service._get_internal_state()
+        assert session1 in state["session_replica_map"]
 
         # Test session termination
         await service.terminate_session(session1)
-        assert session1 not in service._session_replica_map
+        state = await service._get_internal_state()
+        assert session1 not in state["session_replica_map"]
 
     finally:
         await service.stop()
@@ -96,11 +98,12 @@ async def test_sessionless_calls():
         assert result is not None
 
         # No sessions should be created
-        assert len(service._active_sessions) == 0
-        assert len(service._session_replica_map) == 0
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 0
+        assert len(state["session_replica_map"]) == 0
 
         # Verify load distribution
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
@@ -142,8 +145,9 @@ async def test_session_context_manager():
         assert sorted(results) == [2, 3]
 
         # Test that context manager properly manages session lifecycle
-        assert len(service._active_sessions) == 0
-        assert len(service._session_replica_map) == 0
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 0
+        assert len(state["session_replica_map"]) == 0
 
     finally:
         await service.stop()
@@ -164,26 +168,30 @@ async def test_replica_failure_and_recovery():
         session = await service.start_session()
         await service.incr.choose(session)
 
-        original_replica_idx = service._session_replica_map[session]
+        state = await service._get_internal_state()
+        original_replica_idx = state["session_replica_map"][session]
 
         # Cause failure
         error_result = await service.fail_me.choose(session)
         assert isinstance(error_result, RuntimeError)
 
         # Replica should be marked as failed
-        failed_replica = service._replicas[original_replica_idx]
-        assert not failed_replica.healthy
+        state = await service._get_internal_state()
+        failed_replica = state["replicas"][original_replica_idx]
+        assert not failed_replica["healthy"]
 
         # Session should be reassigned on next call
         await service.incr.choose(session)
-        new_replica_idx = service._session_replica_map[session]
+        state = await service._get_internal_state()
+        new_replica_idx = state["session_replica_map"][session]
         assert new_replica_idx != original_replica_idx
 
         # New sessions should avoid failed replica
         new_session = await service.start_session()
         await service.incr.choose(new_session)
-        assigned_replica = service._replicas[service._session_replica_map[new_session]]
-        assert assigned_replica.healthy
+        state = await service._get_internal_state()
+        assigned_replica = state["replicas"][state["session_replica_map"][new_session]]
+        assert assigned_replica["healthy"]
 
     finally:
         await service.stop()
@@ -213,8 +221,8 @@ async def test_metrics_collection():
         assert isinstance(error_result, RuntimeError)
 
         # Get metrics
-        metrics = service.get_metrics()
-        summary = service.get_metrics_summary()
+        metrics = await service.get_metrics()
+        summary = await service.get_metrics_summary()
 
         # Test service-level metrics
         assert metrics.total_sessions == 2
@@ -261,10 +269,12 @@ async def test_session_stickiness():
         await service.incr.choose(session)
 
         # Should always route to same replica
-        replica_idx = service._session_replica_map[session]
+        state = await service._get_internal_state()
+        replica_idx = state["session_replica_map"][session]
 
         await service.incr.choose(session)
-        assert service._session_replica_map[session] == replica_idx
+        state = await service._get_internal_state()
+        assert state["session_replica_map"][session] == replica_idx
 
         # Verify counter was incremented correctly
         result = await service.value.choose(session)
@@ -296,8 +306,9 @@ async def test_load_balancing_multiple_sessions():
         await service.incr.choose(session4)  # Should balance the load
 
         # Check that sessions are distributed (may not be perfectly even due to least-loaded logic)
+        state = await service._get_internal_state()
         replica_assignments = [
-            service._session_replica_map[s]
+            state["session_replica_map"][s]
             for s in [session1, session2, session3, session4]
         ]
         unique_replicas = set(replica_assignments)
@@ -307,7 +318,7 @@ async def test_load_balancing_multiple_sessions():
         assert len(unique_replicas) >= 1  # At least one replica used
 
         # Verify that load balancing is working by checking request distribution
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
@@ -342,11 +353,12 @@ async def test_concurrent_operations():
         await asyncio.gather(*tasks)
 
         # Verify session tracking
-        assert len(service._active_sessions) == 1
-        assert session in service._session_replica_map
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 1
+        assert session in state["session_replica_map"]
 
         # Verify total requests
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
@@ -414,7 +426,8 @@ async def test_broadcast_call_with_failed_replica():
         # Should get results from healthy replicas only
         assert isinstance(results, list)
         # Results length should match number of healthy replicas (2 out of 3)
-        healthy_count = len([r for r in service._replicas if r.healthy])
+        state = await service._get_internal_state()
+        healthy_count = sum(1 for r in state["replicas"] if r["healthy"])
         assert len(results) == healthy_count
 
         # Get values from all healthy replicas
@@ -453,7 +466,7 @@ async def test_broadcast_call_vs_choose():
         assert sorted(values_after_choose) == [1, 1, 2]  # One replica incremented twice
 
         # Verify metrics show the correct number of requests
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
