@@ -56,10 +56,11 @@ class ReplicaMetrics:
 
     def get_request_rate(self, window_seconds: float = 60.0) -> float:
         """Gets requests per second over the last window_seconds."""
+        assert window_seconds > 0, "Window must be positive"
         now = time.time()
         cutoff = now - window_seconds
         recent_requests = [t for t in self.request_times if t >= cutoff]
-        return len(recent_requests) / window_seconds if window_seconds > 0 else 0.0
+        return len(recent_requests) / window_seconds
 
     def get_avg_latency(self, window_requests: int = 50) -> float:
         """Gets average latency over the last N requests."""
@@ -132,22 +133,78 @@ class Replica:
 
     # Initialization related functionalities
 
-    async def init_proc_mesh(self):
-        """Initializes the proc_mesh using the stored proc_config."""
+    async def create_proc_mesh(self):
+        """Creates the proc_mesh using the stored proc_config."""
         # TODO - for policy replica, we would override this method to
         # include multiple proc_meshes
         if self.proc_mesh is not None:
             logger.warning("Proc mesh already initialized for replica %d", self.idx)
             return
 
-        logger.debug("Initializing proc_mesh for replica %d", self.idx)
+        logger.debug("Creating proc_mesh for replica %d", self.idx)
         try:
             self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
-            logger.debug("Proc mesh initialized successfully for replica %d", self.idx)
+            logger.debug("Proc mesh created successfully for replica %d", self.idx)
         except Exception as e:
-            logger.error(
-                "Failed to initialize proc_mesh for replica %d: %s", self.idx, e
+            logger.error("Failed to create proc_mesh for replica %d: %s", self.idx, e)
+            self.state = ReplicaState.UNHEALTHY
+            raise
+
+    async def initialize(self, actor_def, *actor_args, **actor_kwargs):
+        """
+        Initializes the replica completely from proc_mesh creation to ready state.
+
+        This method handles the complete replica initialization process:
+        - Creates the proc_mesh
+        - Spawns the actor
+        - Configures the actor
+        - Transitions to healthy state
+        - Starts the processing loop
+        """
+        if self.state != ReplicaState.UNINITIALIZED:
+            logger.warning(
+                "Attempting to init replica %d that's already initialized", self.idx
             )
+            return
+
+        try:
+            # Create proc_mesh
+            await self.create_proc_mesh()
+
+            # Ensure we have a healthy proc_mesh
+            if not self.proc_mesh:
+                raise RuntimeError(
+                    f"Replica {self.idx}: proc_mesh is None after creation"
+                )
+
+            # Determine actor name
+            if "name" in actor_kwargs:
+                actor_name = actor_kwargs.pop("name")
+            else:
+                actor_name = actor_def.__name__
+
+            # Spawn the actor
+            self.actor = await self.proc_mesh.spawn(
+                actor_name,
+                actor_def,
+                *actor_args,
+                **actor_kwargs,
+            )
+
+            # Call actor setup if it exists
+            if hasattr(self.actor, "setup") and self.actor is not None:
+                setup_method = getattr(self.actor, "setup", None)
+                if setup_method is not None:
+                    await setup_method.call()
+
+            # Transition to healthy state and start processing
+            self.state = ReplicaState.HEALTHY
+            self.start_processing()
+
+            logger.debug("Replica %d initialization complete", self.idx)
+
+        except Exception as e:
+            logger.error("Failed to initialize replica %d: %s", self.idx, e)
             self.state = ReplicaState.UNHEALTHY
             raise
 
@@ -181,46 +238,11 @@ class Replica:
                 **actor_kwargs,
             )
 
-            # Call setup if it exists
-            await self.setup()
-
             logger.debug("Actor spawned successfully on replica %d", self.idx)
 
         except Exception as e:
             logger.error("Failed to spawn actor on replica %d: %s", self.idx, e)
             self.mark_failed()
-            raise
-
-    async def setup(self):
-        """
-        Sets up the replica and transitions to healthy state.
-
-        This should be called after the proc_mesh has been initialized
-        and the actor has been spawned on it.
-        """
-        if self.state != ReplicaState.UNINITIALIZED:
-            logger.warning(
-                "Attempting to setup replica %d that's already initialized", self.idx
-            )
-            return
-
-        if self.actor is None:
-            raise RuntimeError(f"Cannot setup replica {self.idx}: actor is None")
-
-        try:
-            # Call actor setup if it exists
-            if hasattr(self.actor, "setup"):
-                # TODO - should this be a standard in our Forge Actor(s)?
-                await self.actor.setup.call()
-
-            # Transition to healthy state and start processing
-            self.state = ReplicaState.HEALTHY
-            self.start_processing()
-            logger.debug("Replica %d setup complete", self.idx)
-
-        except Exception as e:
-            logger.error("Failed to setup replica %d: %s", self.idx, e)
-            self.state = ReplicaState.UNHEALTHY
             raise
 
     # Request handling / processing related functionality
@@ -409,10 +431,10 @@ class Replica:
                     "Error stopping old proc_mesh for replica %d: %s", self.idx, e
                 )
 
-        # Create new proc_mesh
+        # Create new proc_mesh using the same method as initialization
         try:
             logger.debug("Creating new proc_mesh for replica %d", self.idx)
-            self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
+            await self.create_proc_mesh()
             self.state = ReplicaState.HEALTHY
             logger.debug("Recovery completed successfully for replica %d", self.idx)
 
