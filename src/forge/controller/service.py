@@ -301,7 +301,7 @@ class Service:
         """
         # Check context variables for session state if no explicit sess_id
         if sess_id is None:
-            ctx = _session_context.get()
+            ctx = _session_context.get(None)
             if ctx:
                 sess_id = ctx["session_id"]
 
@@ -641,32 +641,25 @@ class Service:
 
         logger.debug("Init replicas: %s", pprint.pformat(self._replicas_to_init))
 
+        async def init_replica(replica):
+            """Initialize a single replica with error handling."""
+            try:
+                await replica.initialize(
+                    self._actor_def, *self._actor_args, **self._actor_kwargs
+                )
+                logger.debug("Successfully initialized replica %d", replica.idx)
+            except Exception as e:
+                logger.error("Failed to initialize replica %d: %s", replica.idx, e)
+                replica.mark_failed()
+
         # Initialize each replica (proc_mesh and actor spawning)
-        initialization_tasks = []
-        for replica in self._replicas_to_init:
-            task = asyncio.create_task(self._init_single_replica(replica))
-            initialization_tasks.append(task)
+        initialization_tasks = [
+            asyncio.create_task(init_replica(replica))
+            for replica in self._replicas_to_init
+        ]
 
         await asyncio.gather(*initialization_tasks, return_exceptions=True)
         self._replicas_to_init.clear()
-
-    async def _init_single_replica(self, replica: Replica):
-        """Initialize a single replica with proc_mesh and actor."""
-        try:
-            # Initialize the proc_mesh
-            await replica.init_proc_mesh()
-
-            # Spawn the actor using replica's method
-            await replica.spawn_actor(
-                self._actor_def, *self._actor_args, **self._actor_kwargs
-            )
-
-            logger.debug("Successfully initialized replica %d", replica.idx)
-
-        except Exception as e:
-            logger.error("Failed to initialize replica %d: %s", replica.idx, e)
-            # Mark as failed so it can be retried later
-            replica.mark_failed()
 
     async def _migrate_replica_workload(self, replica_to_remove: Replica):
         """Migrates all workload from a replica that's being removed."""
