@@ -31,7 +31,19 @@ training:
   max_norm: 1.0
   steps: 1000
   compile: false
-  dataset: "c4"
+
+validation:
+  local_batch_size: 1
+  freq: -1  # Change to a positive number to enable validation
+  steps: 200  # Max steps to run validation. Validation disabled if negative.
+
+dataset:
+  path: yahma/alpaca-cleaned
+  split: train[:95%]
+
+dataset_val:
+  path: yahma/alpaca-cleaned
+  split: train[95%:]
 
 parallelism:
   data_parallel_replicate_degree: 1
