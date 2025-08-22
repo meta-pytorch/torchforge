@@ -91,7 +91,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self, dataset_config, batch_size, infinite=True):
+    def setup_data(self, dataset_config, batch_size):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -109,7 +109,6 @@ class ForgeSFTRecipe(ForgeEngine):
             message_transform=AlpacaToMessages(),
             path=dataset_config.path,
             split=dataset_config.split,
-            infinite=infinite,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(

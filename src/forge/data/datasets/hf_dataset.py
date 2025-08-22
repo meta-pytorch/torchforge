@@ -75,7 +75,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         dataset_name: Optional[str] = None,
         filter_fn: Optional[Callable] = None,
         filter_kwargs: Optional[dict[str, Any]] = None,
-        infinite: bool = True,
         **load_dataset_kwargs,
     ):
         # Store configuration
@@ -114,7 +113,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._setup_hf_dataset(
             load_dataset_kwargs, num_shards_per_rank, filter_fn, filter_kwargs
         )
-        self.infinite = infinite
 
     @property
     def info(self) -> DatasetInfo:
@@ -254,9 +252,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
 
                     samples_yielded += 1
                     yield sample
-
-                if not self.infinite:
-                    break
 
             except StopIteration:
                 # Expected when dataset is exhausted
