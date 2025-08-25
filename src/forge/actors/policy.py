@@ -111,9 +111,6 @@ class Policy(PolicyInterface):
             log_stats=None,
         )
 
-    def should_spawn_workers(self) -> bool:
-        return True
-
     async def spawn_workers(self):
         self.worker_mesh = await proc_mesh(
             gpus=self.config.num_workers,
@@ -186,6 +183,7 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
+        print("Awaiting in Generate")
         return await request_fut
 
     # Abstracted to match vllm
@@ -200,9 +198,10 @@ class Policy(PolicyInterface):
         return request, 0  # Unused Arg: Current Wave
 
     @endpoint
-    async def run(self):
+    async def run_2(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
+        print("Policy Run: starting")
         parallel_config = self.vllm_args.parallel_config
         output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
@@ -292,6 +291,7 @@ class PolicyWorker(Actor):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
+        print("PolicyWorker setup complete, with rank: ", self.rank)
 
     @endpoint
     async def execute_model(self, schedule: SchedulerOutput):
@@ -437,14 +437,22 @@ async def _test(config: DictConfig):
         "What is 3+5?" if config.sampling_params.guided_decoding else "Tell me a joke"
     )
 
-    with_service = False
+    with_service = True
     if with_service:
         # Update this condition path once Service has been refactored
         service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
-        print("spawning service")
-        service = await spawn_service(service_config, Policy, config=config)
-        service.run()
-        responses: List[CompletionOutput] = await service.generate(prompt)
+        print("Spawning service")
+
+        # ServiceInterface is a wrapper around the Policy
+        policy = await spawn_service(service_config, Policy, config=config)
+        session_id = await policy.start_session()
+
+        print("Kick off background processing")
+        policy.run_2.choose()
+
+        print("Request Generation")
+        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+        await policy.terminate_session(session_id)
 
     else:
         process_config = ProcessConfig()
