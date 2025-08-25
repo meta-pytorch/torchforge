@@ -176,10 +176,10 @@ class Replica:
             self.state = ReplicaState.HEALTHY
             self.start_processing()
 
-            logger.debug("Replica %d initialization complete", self.idx)
+            logger.debug(f"Replica {self.idx} initialization complete")
 
         except Exception as e:
-            logger.error("Failed to initialize replica %d: %s", self.idx, e)
+            logger.error(f"Failed to initialize replica {self.idx}: {e}")
             self.state = ReplicaState.UNHEALTHY
             raise
 
@@ -199,23 +199,22 @@ class Replica:
             if old_proc_mesh is not None:
                 try:
                     await old_proc_mesh.stop()
-                    logger.debug("Old proc_mesh stopped for replica %d", self.idx)
+                    logger.debug(f"Old proc_mesh stopped for replica {self.idx}")
                 except Exception as e:
                     logger.warning(
-                        "Error stopping old proc_mesh for replica %d: %s", self.idx, e
+                        f"Error stopping old proc_mesh for replica {self.idx}: {e}"
                     )
 
             try:
-                logger.debug("Creating new proc_mesh for replica %d", self.idx)
+                logger.debug(f"Creating new proc_mesh for replica {self.idx}")
                 await self.initialize()
-                self.state = ReplicaState.HEALTHY
-                logger.debug("Recovery completed successfully for replica %d", self.idx)
+                logger.debug(f"Recovery completed successfully for replica {self.idx}")
             except Exception as e:
-                logger.error("Recovery failed for replica %d: %s", self.idx, e)
+                logger.error(f"Recovery failed for replica {self.idx}: {e}")
                 self.state = ReplicaState.UNHEALTHY
                 raise
 
-        logger.debug("Starting recovery for replica %d", self.idx)
+        logger.debug(f"Starting recovery for replica {self.idx}")
         self.state = ReplicaState.RECOVERING
         self._recovery_task = asyncio.create_task(_do_recovery())
         await self._recovery_task
@@ -225,15 +224,15 @@ class Replica:
         # TODO - for policy replica, we would override this method to
         # include multiple proc_meshes
         if self.proc_mesh is not None:
-            logger.warning("Proc mesh already initialized for replica %d", self.idx)
+            logger.warning(f"Proc mesh already initialized for replica {self.idx}")
             return
 
-        logger.debug("Creating proc_mesh for replica %d", self.idx)
+        logger.debug(f"Creating proc_mesh for replica {self.idx}")
         try:
             self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
-            logger.debug("Proc mesh created successfully for replica %d", self.idx)
+            logger.debug(f"Proc mesh created successfully for replica {self.idx}")
         except Exception as e:
-            logger.error("Failed to create proc_mesh for replica %d: %s", self.idx, e)
+            logger.error(f"Failed to create proc_mesh for replica {self.idx}: {e}")
             self.state = ReplicaState.UNHEALTHY
             raise
 
