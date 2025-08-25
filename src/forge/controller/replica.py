@@ -116,6 +116,8 @@ class Replica:
     active_requests: int = 0
     # Maximum number of simultaneous requests
     max_concurrent_requests: int = 10
+    # Semaphore to control request capacity
+    _capacity_semaphore: asyncio.Semaphore = field(init=False)
     # Whether the processing loop is currently running
     _running: bool = False
     # How often to check for new requests when idle
@@ -133,6 +135,12 @@ class Replica:
 
     # Metrics tracking
     metrics: ReplicaMetrics = field(default_factory=ReplicaMetrics)
+
+    def __post_init__(self):
+        # This semaphore is used to enforce max_concurrent_requests
+        # Once it is acquired max_concurrent_requests times, future
+        # requests are blocked until standing requests complete.
+        self._capacity_semaphore = asyncio.Semaphore(self.max_concurrent_requests)
 
     # Initialization related functionalities
 
@@ -341,6 +349,8 @@ class Replica:
 
         finally:
             self.active_requests -= 1
+            # Release the capacity semaphore to allow new requests
+            self._capacity_semaphore.release()
 
     async def run(self):
         """Runs the main processing loop for the replica.
@@ -358,14 +368,10 @@ class Replica:
                         self.request_queue.get(), timeout=self._run_poll_rate_s
                     )
 
-                    # Check if we have capacity - if we have too many ongoing,
-                    # we will put the request back and wait.
-                    if self.active_requests >= self.max_concurrent_requests:
-                        await self.request_queue.put(request)
-                        await asyncio.sleep(0.1)
-                        continue
+                    # Acquire capacity semaphore - this blocks until capacity is available
+                    await self._capacity_semaphore.acquire()
 
-                    # Process the request
+                    # Process the request (semaphore will be released in _process_single_request)
                     asyncio.create_task(self._process_single_request(request))
 
                 except asyncio.TimeoutError:
