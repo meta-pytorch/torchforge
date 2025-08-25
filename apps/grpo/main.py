@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import torch
-from datasets import load_dataset
+from datasets import IterableDataset, load_dataset
 from forge.actors.policy import Policy, PolicyRouter
 from forge.controller import ServiceConfig, spawn_service
+from forge.controller.actor import ForgeActor
 from forge.data.replay_buffer import ReplayBuffer
-from monarch.actor import Actor, endpoint, proc_mesh
+from monarch.actor import endpoint, proc_mesh
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm import CompletionOutput, SamplingParams
 
@@ -65,7 +66,7 @@ class Episode:
         self.groups.append(group)
 
 
-class Trainer(Actor):
+class Trainer(ForgeActor):
     """GRPO Trainer implementation for policy optimization."""
 
     def __init__(
@@ -73,6 +74,7 @@ class Trainer(Actor):
         learning_rate: float = 1e-5,
         beta: float = 0.1,
         model_name: str = "",
+        device: torch.device | None = None,
     ):
         super().__init__()
         self.learning_rate = learning_rate
@@ -80,12 +82,15 @@ class Trainer(Actor):
         self.model_name = model_name
 
         # Set device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
 
         # Initialize model and tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
         self.model.train()
@@ -99,7 +104,7 @@ class Trainer(Actor):
             self.model.parameters(), lr=self.learning_rate
         )
 
-        print(f"Trainer initialized on device: {self.device}")
+        self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
@@ -169,7 +174,7 @@ class Trainer(Actor):
             self.optimizer.step()
 
         avg_loss = total_loss / len(batch) if batch else 0.0
-        print(
+        self.logger.info(
             f"Training step completed. Average loss: {avg_loss:.4f}, Groups processed: {num_groups_processed}"
         )
 
@@ -200,7 +205,7 @@ class Trainer(Actor):
 
         # Log the time taken
         end_time = time.time()
-        print(f"Updating weights took {end_time - start_time:.2f} seconds")
+        self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
 def math_scoring_function(prompt: str, response: str, target: str) -> float:
@@ -251,7 +256,7 @@ def thinking_scoring_function(prompt: str, response: str, target: str) -> float:
         return 0.0
 
 
-class RewardActor(Actor):
+class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
 
     def __init__(self, scoring_functions: list[Callable]):
@@ -267,7 +272,7 @@ class RewardActor(Actor):
         return total_reward
 
 
-class ComputeAdvantages(Actor):
+class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
     def __init__(self, gamma: float = 0.99, lambda_: float = 0.95):
@@ -308,13 +313,16 @@ class ComputeAdvantages(Actor):
         return advantages
 
 
-class RefModel(Actor):
-    def __init__(self, model_name):
+class RefModel(ForgeActor):
+    def __init__(self, model_name, device: torch.device | None = None):
         super().__init__()
         self.model_name = model_name
 
         # Set device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
 
         # Initialize model and tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -330,7 +338,7 @@ class RefModel(Actor):
         # Set model to eval mode for reference computations
         self.model.eval()
 
-        print(f"RefModel initialized on device: {self.device}")
+        self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
     async def forward(self, response_text: str) -> torch.Tensor:
@@ -338,7 +346,7 @@ class RefModel(Actor):
         tokenized = self.tokenizer(
             response_text,
             return_tensors="pt",
-            max_length=512,  # Adjust based on your needs
+            max_length=512,
             truncation=True,
             padding=False,
         )
@@ -356,30 +364,33 @@ class RefModel(Actor):
         )  # Remove batch dimension for single response
 
 
-class DatasetActor(Actor):
+class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
     def __init__(self, *args, **kwargs):
         super().__init__()
         self._setup_dataset(*args, **kwargs)
 
-    def _setup_dataset(self, **kwargs):
+    def _setup_dataset(self, *args, **kwargs):
         def gsm8k_to_messages(sample):
             question = sample["question"]
             full_answer: str = sample["answer"]
-            answer = full_answer.split("####")[1]
-            return (question, answer)
+            answer = full_answer.split("#### ")[1]
+            return {"question": question, "answer": answer}
 
         ds = load_dataset(*args, **kwargs)
-        ds.map(gsm8k_to_messages)
-        ds.shuffle()
-        self._iterator = ds
+        ds = ds.map(gsm8k_to_messages)
+        ds = ds.shuffle()
+        self._iterator = iter(ds)
 
     @endpoint
     async def __next__(self) -> tuple[str, str] | None:
         try:
             sample = next(self._iterator)
-            return sample  # Return full sample with question and answer
+            return (
+                sample["question"],
+                sample["answer"],
+            )  # Return full sample with question and answer
         except StopIteration:
             return None
 
@@ -388,7 +399,7 @@ async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 5
     model = "Qwen/Qwen3-1.7B"
-    all_gpus = torch.cuda.device_count()
+    # all_gpus = torch.cuda.device_count()
 
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
@@ -398,25 +409,26 @@ async def main():
         default_replicas=1,
     )
 
-    policy_worker_mesh = await proc_mesh(gpus=2)
-    _policy = await policy_worker_mesh.spawn(
-        "policy_worker",
-        Policy,
-        model=model,
-        tensor_parallel_size=2,
-        pipeline_parallel_size=1,
-        dist_info={"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"},
-    )
-    await _policy.setup.call()
-    await policy_worker_mesh.stop()
-    print("we made it!")
-    exit()
-    policy = await spawn_service(
-        default_service_cfg,
-        PolicyRouter,
-        policy=_policy,
-        sampling_params=SamplingParams(n=group_size),
-    )
+    # policy_worker_mesh = await proc_mesh(gpus=2)
+    # _policy = await policy_worker_mesh.spawn(
+    #     "policy_worker",
+    #     Policy,
+    #     model=model,
+    #     tensor_parallel_size=2,
+    #     pipeline_parallel_size=1,
+    #     dist_info={"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"},
+    # )
+    # await _policy.setup.call()
+    # await policy_worker_mesh.stop()
+    # print("we made it!")
+    # exit()
+    # policy = await spawn_service(
+    #     default_service_cfg,
+    #     PolicyRouter,
+    #     policy=_policy,
+    #     sampling_params=SamplingParams(n=group_size),
+    # )
+    # Define stub policy that just returns a fixed set of responses
 
     trainer = await spawn_service(
         default_service_cfg,
@@ -424,6 +436,7 @@ async def main():
         learning_rate=1e-5,
         beta=0.1,
         model_name=model,
+        device=torch.device("cuda:0"),
     )
 
     replay_buffer = await spawn_service(
@@ -437,6 +450,7 @@ async def main():
         default_service_cfg,
         DatasetActor,
         "openai/gsm8k",
+        "main",
         split="train",
         streaming=True,
     )
@@ -452,6 +466,7 @@ async def main():
         default_service_cfg,
         RefModel,
         model_name=model,
+        device=torch.device("cuda:1"),
     )
 
     reward_actor = await spawn_service(
@@ -460,13 +475,14 @@ async def main():
         scoring_functions=[math_scoring_function, thinking_scoring_function],
     )
 
-    print("All services initialized successfully")
+    print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
         while True:
-            sample = await dataloader.__next__.call()
+            sample = await dataloader.__next__()
+            print(sample)
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -474,13 +490,36 @@ async def main():
             prompt, target = sample
             episode = Episode(episode_id=rollout_count, prompt=prompt, target=target)
 
-            version = await policy.get_current_version.choose()
-            async with policy.session(version=version):
-                actions: list[CompletionOutput] = await policy.generate.call(prompt)
+            version = 0  # await policy.get_current_version.choose()
+            # async with policy.session(version=version):
+            #     actions: list[CompletionOutput] = await policy.generate(prompt)
+            actions = [
+                CompletionOutput(
+                    index=0,
+                    text="1",
+                    token_ids=[1],
+                    cumulative_logprob=None,
+                    logprobs=None,
+                ),
+                CompletionOutput(
+                    index=1,
+                    text="2",
+                    token_ids=[2],
+                    cumulative_logprob=None,
+                    logprobs=None,
+                ),
+                CompletionOutput(
+                    index=2,
+                    text="3",
+                    token_ids=[3],
+                    cumulative_logprob=None,
+                    logprobs=None,
+                ),
+            ]
 
             for action in actions:
-                ref_logprobs = await ref_model.forward.call(action.tokens)
-                reward = await reward_actor.evaluate_response.call(
+                ref_logprobs = await ref_model.forward(action.token_ids)
+                reward = await reward_actor.evaluate_response(
                     prompt, action.text, target
                 )
                 episode.add_group(
@@ -491,11 +530,11 @@ async def main():
                     )
                 )
 
-            advantages = await compute_advantages.__call__.call(episode.groups)
+            advantages = await compute_advantages.__call__(episode.groups)
             for advantage, group in zip(advantages, episode.groups):
                 group.advantage = advantage
 
-            await replay_buffer.add.call(episode)
+            await replay_buffer.add(episode)
 
             rollout_count += 1
             if rollout_count % 10 == 0:
@@ -503,18 +542,19 @@ async def main():
 
     async def continuous_training():
         training_step = 0
+        await asyncio.sleep(15)
         while True:
-            batch = await replay_buffer.sample.call()
+            batch = await replay_buffer.sample()
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                training_result = await trainer.train_step.call(batch)
+                training_result = await trainer.train_step(batch)
                 training_step += 1
                 if training_step % 10 == 0:
                     print(f"Completed {training_step} training steps")
                     if training_result:
                         print(f"Latest loss: {training_result.get('loss', 'N/A')}")
-                await trainer.update_weights.call(policy)
+                # await trainer.update_weights(policy)
 
     print("Starting GRPO training loops...")
     rollout_task = asyncio.create_task(continuous_rollouts())
