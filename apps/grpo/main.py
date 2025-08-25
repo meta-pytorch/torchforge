@@ -196,7 +196,7 @@ class Trainer(ForgeActor):
             cpu_state_dict[key] = tensor.cpu() if tensor.is_cuda else tensor
 
         # Update the policy actor's model weights
-        await policy_actor.update_model_weights.call(cpu_state_dict)
+        await policy_actor.update_model_weights.choose(cpu_state_dict)
 
         # Set model back to training mode
         self.model.train()
@@ -475,11 +475,11 @@ async def main():
     async def continuous_rollouts():
         rollout_count = 0
         while True:
-            sample = await dataloader.__next__()
+            sample = await dataloader.__next__.choose()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
-
+            print(sample)
             prompt, target = sample
             version = 0  # await policy.get_current_version.choose()
             episode = Episode(
@@ -516,11 +516,9 @@ async def main():
             ]
 
             for action in actions:
-                ref_logprobs = await ref_model.forward(
-                    sess_id=None, token_ids=action.token_ids
-                )
-                reward = await reward_actor.evaluate_response(
-                    sess_id=None, prompt=prompt, response=action.text, target=target
+                ref_logprobs = await ref_model.forward.choose(action.token_ids)
+                reward = await reward_actor.evaluate_response.choose(
+                    prompt=prompt, response=action.text, target=target
                 )
                 episode.add_group(
                     Group(
@@ -530,13 +528,11 @@ async def main():
                     )
                 )
 
-            advantages = await compute_advantages.__call__(
-                sess_id=None, groups=episode.groups
-            )
+            advantages = await compute_advantages.__call__.choose(episode.groups)
             for advantage, group in zip(advantages, episode.groups):
                 group.advantage = advantage
 
-            await replay_buffer.add(sess_id=None, episode=episode)
+            await replay_buffer.add.choose(episode)
 
             rollout_count += 1
             if rollout_count % 10 == 0:
@@ -551,11 +547,11 @@ async def main():
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample(sess_id=None, curr_policy_version=0)
+            batch = await replay_buffer.sample.choose(curr_policy_version=0)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                training_result = await trainer.train_step(sess_id=None, batch=batch)
+                training_result = await trainer.train_step.choose(batch)
                 training_step += 1
                 if training_step % 10 == 0:
                     # print(f"Completed {training_step} training steps")
