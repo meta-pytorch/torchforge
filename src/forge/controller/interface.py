@@ -117,6 +117,10 @@ class ServiceInterface:
 
     The ServiceInterface acts as the handle that is returned to end clients,
     providing a simple interface that makes actual calls to the Service Actor.
+
+    This is also needed to simplify serializing a handle to the service, in case
+    we want to pass this to other actors in the future.
+
     """
 
     def __init__(self, _proc_mesh, _service, actor_def):
