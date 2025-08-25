@@ -168,7 +168,7 @@ class Replica:
 
             # Spawn the actor
             await self.spawn_actor(
-                actor_def=self.actor_def,
+                self.actor_def,
                 *self.actor_args,
                 **self.actor_kwargs,
             )

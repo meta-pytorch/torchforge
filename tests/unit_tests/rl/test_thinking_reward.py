@@ -6,7 +6,7 @@
 
 import unittest
 
-from forge.data.rewards.thinking import ThinkingReward
+from forge.data.rewards import ThinkingReward
 
 
 class TestThinkingReward(unittest.TestCase):
