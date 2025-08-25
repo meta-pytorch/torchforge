@@ -165,10 +165,11 @@ async def test_recovery_state_transitions():
 
     try:
         # Initially replica should be healthy
-        replica = service._replicas[0]
-        assert replica.state.value == "HEALTHY"
-        assert replica.healthy is True
-        assert replica.failed is False
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] == "HEALTHY"
+        assert replica_state["healthy"] is True
+        assert replica_state["failed"] is False
 
         # Create session and make a successful call
         session = await service.start_session()
@@ -181,9 +182,11 @@ async def test_recovery_state_transitions():
         assert isinstance(error_result, RuntimeError)
 
         # Replica should now be in RECOVERING state
-        assert replica.state.value == "RECOVERING"
-        assert replica.healthy is False
-        assert replica.failed is True
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] == "RECOVERING"
+        assert replica_state["healthy"] is False
+        assert replica_state["failed"] is True
 
         # Wait for health loop to detect and attempt recovery
         # The health loop runs every 0.1s, so give it some time
@@ -196,17 +199,21 @@ async def test_recovery_state_transitions():
             await asyncio.sleep(wait_interval)
             elapsed += wait_interval
 
-            if replica.state.value in ["HEALTHY", "UNHEALTHY"]:
+            state = await service._get_internal_state()
+            replica_state = state["replicas"][0]
+            if replica_state["state"] in ["HEALTHY", "UNHEALTHY"]:
                 break
 
         # After recovery, replica should be healthy again
         # (unless recovery failed, in which case it would be UNHEALTHY)
-        assert replica.state.value in ["HEALTHY", "UNHEALTHY"]
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] in ["HEALTHY", "UNHEALTHY"]
 
-        if replica.state.value == "HEALTHY":
+        if replica_state["state"] == "HEALTHY":
             # If recovery succeeded, verify we can make calls again
-            assert replica.healthy is True
-            assert replica.failed is False
+            assert replica_state["healthy"] is True
+            assert replica_state["failed"] is False
 
             # Test that we can make new calls after recovery
             new_session = await service.start_session()
@@ -216,15 +223,15 @@ async def test_recovery_state_transitions():
                 result is not None
             )  # Should get a result (counter starts at 0 in new actor)
 
-        elif replica.state.value == "UNHEALTHY":
+        elif replica_state["state"] == "UNHEALTHY":
             # If recovery failed, verify failed state
-            assert replica.healthy is False
-            assert replica.failed is True
+            assert replica_state["healthy"] is False
+            assert replica_state["failed"] is True
 
         # Verify that the state transition path was correct
         # (We can't guarantee the exact end state due to potential flakiness in test environments,
         # but we can verify the replica went through the expected transition)
-        logger.info(f"Final replica state: {replica.state.value}")
+        logger.info(f"Final replica state: {replica_state['state']}")
 
     finally:
         await service.stop()

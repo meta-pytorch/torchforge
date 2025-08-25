@@ -625,6 +625,7 @@ class Service(Actor):
             "replicas": [
                 {
                     "idx": replica.idx,
+                    "state": replica.state.value,
                     "healthy": replica.healthy,
                     "failed": replica.failed,
                     "active_requests": replica.active_requests,
