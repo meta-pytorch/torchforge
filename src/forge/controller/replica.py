@@ -208,7 +208,6 @@ class Replica:
             try:
                 logger.debug("Creating new proc_mesh for replica %d", self.idx)
                 await self.initialize()
-                self.state = ReplicaState.HEALTHY
                 logger.debug("Recovery completed successfully for replica %d", self.idx)
             except Exception as e:
                 logger.error("Recovery failed for replica %d: %s", self.idx, e)
@@ -216,7 +215,6 @@ class Replica:
                 raise
 
         logger.debug("Starting recovery for replica %d", self.idx)
-        self.state = ReplicaState.RECOVERING
         self._recovery_task = asyncio.create_task(_do_recovery())
         await self._recovery_task
 
