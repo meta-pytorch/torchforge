@@ -404,9 +404,7 @@ async def main():
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
         procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=1,
-        default_replicas=1,
+        num_replicas=1,
     )
 
     # policy_worker_mesh = await proc_mesh(gpus=2)
