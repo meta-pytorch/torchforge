@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import torch
+import wandb
 from datasets import IterableDataset, load_dataset
 from forge.actors.policy import Policy, PolicyRouter
 from forge.controller import ServiceConfig, spawn_service
@@ -56,10 +57,11 @@ class Group:
 class Episode:
     """Episode container for GRPO rollouts."""
 
-    def __init__(self, episode_id: int, prompt: str, target: str):
+    def __init__(self, episode_id: int, prompt: str, target: str, policy_version: int):
         self.episode_id = episode_id
         self.prompt = prompt
         self.target = target
+        self.policy_version = policy_version
         self.groups: list[Group] = []
 
     def add_group(self, group: Group):
@@ -164,7 +166,6 @@ class Trainer(ForgeActor):
             total_loss += loss.item()
             num_groups_processed += len(groups)
 
-            # Backward pass and optimization with FSDP
             self.optimizer.zero_grad()
             loss.backward()
 
@@ -174,9 +175,6 @@ class Trainer(ForgeActor):
             self.optimizer.step()
 
         avg_loss = total_loss / len(batch) if batch else 0.0
-        self.logger.info(
-            f"Training step completed. Average loss: {avg_loss:.4f}, Groups processed: {num_groups_processed}"
-        )
 
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
@@ -341,18 +339,13 @@ class RefModel(ForgeActor):
         self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
-    async def forward(self, response_text: str) -> torch.Tensor:
-        # Tokenize the response text
-        tokenized = self.tokenizer(
-            response_text,
-            return_tensors="pt",
-            max_length=512,
-            truncation=True,
-            padding=False,
+    async def forward(self, token_ids: list[int]) -> torch.Tensor:
+        # Use provided token_ids directly
+        input_ids = (
+            torch.tensor(token_ids, dtype=torch.long).unsqueeze(0).to(self.device)
         )
-
-        input_ids = tokenized["input_ids"].to(self.device)
-        attention_mask = tokenized["attention_mask"].to(self.device)
+        # Create attention mask of all 1s since we have actual tokens (no padding)
+        attention_mask = torch.ones_like(input_ids).to(self.device)
 
         # Compute log probabilities using shared utility function
         sequence_log_probs = compute_sequence_logprobs(
@@ -475,20 +468,27 @@ async def main():
 
     print("All services initialized successfully!")
 
+    # Intialize logging
+    wandb.init(project="forge", name="grpo_test")
+
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
         while True:
             sample = await dataloader.__next__()
-            print(sample)
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
 
             prompt, target = sample
-            episode = Episode(episode_id=rollout_count, prompt=prompt, target=target)
-
             version = 0  # await policy.get_current_version.choose()
+            episode = Episode(
+                episode_id=rollout_count,
+                prompt=prompt,
+                target=target,
+                policy_version=version,
+            )
+
             # async with policy.session(version=version):
             #     actions: list[CompletionOutput] = await policy.generate(prompt)
             actions = [
@@ -516,9 +516,11 @@ async def main():
             ]
 
             for action in actions:
-                ref_logprobs = await ref_model.forward(action.token_ids)
+                ref_logprobs = await ref_model.forward(
+                    sess_id=None, token_ids=action.token_ids
+                )
                 reward = await reward_actor.evaluate_response(
-                    prompt, action.text, target
+                    sess_id=None, prompt=prompt, response=action.text, target=target
                 )
                 episode.add_group(
                     Group(
@@ -528,30 +530,43 @@ async def main():
                     )
                 )
 
-            advantages = await compute_advantages.__call__(episode.groups)
+            advantages = await compute_advantages.__call__(
+                sess_id=None, groups=episode.groups
+            )
             for advantage, group in zip(advantages, episode.groups):
                 group.advantage = advantage
 
-            await replay_buffer.add(episode)
+            await replay_buffer.add(sess_id=None, episode=episode)
 
             rollout_count += 1
             if rollout_count % 10 == 0:
-                print(f"Generated {rollout_count} rollouts")
+                avg_reward = sum(group.reward for group in episode.groups) / len(
+                    episode.groups
+                )
+                wandb.log({"rollout_count": rollout_count, "avg_reward": avg_reward})
+                # print(
+                #     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
+                # )
 
     async def continuous_training():
         training_step = 0
-        await asyncio.sleep(15)
         while True:
-            batch = await replay_buffer.sample()
+            batch = await replay_buffer.sample(sess_id=None, curr_policy_version=0)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                training_result = await trainer.train_step(batch)
+                training_result = await trainer.train_step(sess_id=None, batch=batch)
                 training_step += 1
                 if training_step % 10 == 0:
-                    print(f"Completed {training_step} training steps")
+                    # print(f"Completed {training_step} training steps")
                     if training_result:
-                        print(f"Latest loss: {training_result.get('loss', 'N/A')}")
+                        # print(f"Latest loss: {training_result.get('loss', 'N/A')}")
+                        wandb.log(
+                            {
+                                "training_step": training_step,
+                                "loss": training_result.get("loss", "N/A"),
+                            }
+                        )
                 # await trainer.update_weights(policy)
 
     print("Starting GRPO training loops...")
