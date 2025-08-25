@@ -33,166 +33,34 @@ Example:
 """
 
 import asyncio
-import contextvars
 import logging
 import pprint
 import uuid
-from dataclasses import dataclass, field
 from typing import Dict, List
 
-from monarch._src.actor.endpoint import EndpointProperty
+from monarch.actor import Actor, endpoint
 
-from forge.controller.replica import Replica, ReplicaMetrics, ServiceRequest
+from forge.controller.interface import _session_context, Session
+from forge.controller.metrics import ServiceMetrics
+from forge.controller.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# TODO - tie this into metrics logger when it exists.
-@dataclass
-class ServiceMetrics:
-    """
-    Aggregated metrics collection for the entire service.
-
-    Provides service-wide visibility into performance, health, and scaling metrics
-    by aggregating data from all replica instances.
-
-    Attributes:
-        replica_metrics: Per-replica metrics indexed by replica ID
-        total_sessions: Number of active sessions across all replicas
-        healthy_replicas: Number of currently healthy replicas
-        total_replicas: Total number of replicas (healthy + unhealthy)
-        last_scale_event: Timestamp of the last scaling operation
-    """
-
-    # Replica metrics
-    replica_metrics: Dict[int, ReplicaMetrics] = field(default_factory=dict)
-    # Service-level metrics
-    total_sessions: int = 0
-    healthy_replicas: int = 0
-    total_replicas: int = 0
-    # Time-based metrics
-    last_scale_event: float = 0.0
-
-    def get_total_request_rate(self, window_seconds: float = 60.0) -> float:
-        """Get total requests per second across all replicas."""
-        return sum(
-            metrics.get_request_rate(window_seconds)
-            for metrics in self.replica_metrics.values()
-        )
-
-    def get_avg_queue_depth(self, replicas: List) -> float:
-        """Get average queue depth across all healthy replicas."""
-        healthy_replicas = [r for r in replicas if r.healthy]
-        if not healthy_replicas:
-            return 0.0
-        total_queue_depth = sum(r.qsize() for r in healthy_replicas)
-        return total_queue_depth / len(healthy_replicas)
-
-    def get_avg_capacity_utilization(self, replicas: List) -> float:
-        """Get average capacity utilization across all healthy replicas."""
-        healthy_replicas = [r for r in replicas if r.healthy]
-        if not healthy_replicas:
-            return 0.0
-        total_utilization = sum(r.capacity_utilization for r in healthy_replicas)
-        return total_utilization / len(healthy_replicas)
-
-    def get_sessions_per_replica(self) -> float:
-        """Get average sessions per replica."""
-        if self.total_replicas == 0:
-            return 0.0
-        return self.total_sessions / self.total_replicas
-
-
-# Context variable for session state
-_session_context = contextvars.ContextVar("session_context")
-
-
-@dataclass
-class Session:
-    """Simple session data holder."""
-
-    session_id: str
-
-
-class SessionContext:
-    """
-    Async context manager for stateful service sessions with automatic lifecycle management.
-
-    Provides a convenient way to maintain stateful connections to replicas across multiple
-    requests. Sessions ensure that all requests within the context are routed to the same
-    replica, enabling stateful interactions while handling session lifecycle automatically.
-
-    Example:
-
-        >>> async with service.session() as session:
-        ...     # All calls within this block use the same replica
-        ...     result1 = await service.my_endpoint(arg1)
-        ...     result2 = await service.another_endpoint(result1)
-
-    """
-
-    def __init__(self, service: "Service"):
-        self.service = service
-        self.session_id: str | None = None
-        self._token = None
-
-    async def __aenter__(self):
-        """Start a session and set context variables."""
-        self.session_id = await self.service.start_session()
-        # Set context for this async task
-        context_value = {"session_id": self.session_id}
-        self._token = _session_context.set(context_value)
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Terminate the session and restore context."""
-        if self._token:
-            _session_context.reset(self._token)
-        if self.session_id:
-            await self.service.terminate_session(self.session_id)
-            self.session_id = None
-
-
-class Service:
+class Service(Actor):
     """
     Distributed Actor Service Controller
 
-    A sophisticated service orchestration system that manages multiple replicas of actor-based
-    services with automatic scaling, fault tolerance, and intelligent load balancing.
-
-    The Service acts as a unified interface for distributed workloads, automatically handling:
-    - **Fault Tolerance**: Health monitoring, automatic replica recovery, request migration
-    - **Load Balancing**: Round-robin, least-loaded, and session-affinity routing
-    - **Session Management**: Stateful session handling with context propagation
-    - **Metrics Collection**: Comprehensive performance and health monitoring
+    A service orchestration system that manages multiple replicas of actor-based
+    services with fault tolerance and load balancing.
 
     Args:
         cfg: Service configuration including number of replicas, GPUs per replica, and health polling rate
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-    Example:
-        Basic setup with autoscaling:
-
-        >>> config = ServiceConfig(
-        ...     gpus_per_replica=1,
-        ...     num_replicas=3,
-        ... )
-        >>> service = Service(config, MyActorClass, model_path="/path/to/model")
-        >>> await service.__initialize__()
-
-        Session-based usage:
-
-        >>> async with service.session():
-        ...     result1 = await service.my_endpoint(arg1, arg2)
-        ...     result2 = await service.another_endpoint(arg3)
-
-        Stateless usage:
-
-        >>> result = await service.my_endpoint(arg1, arg2)  # Uses round-robin
 
     Attributes:
         _cfg: Service configuration
@@ -202,7 +70,9 @@ class Service:
         _endpoints: Dynamically registered actor endpoints
     """
 
-    def __init__(self, cfg: ServiceConfig, actor_def, *actor_args, **actor_kwargs):
+    def __init__(
+        self, cfg: ServiceConfig, actor_def, actor_args: tuple, actor_kwargs: dict
+    ):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
@@ -222,16 +92,7 @@ class Service:
         # Replica initialization queue
         self._replicas_to_recover = []
 
-        # For all endpoints within the actor_def, create an interface from it
-        self._endpoints = []
-        for func_name in dir(actor_def):
-            func = getattr(actor_def, func_name)
-            if isinstance(func, EndpointProperty):
-                logger.debug(f"Registering endpoint {func_name}")
-                self._endpoints.append(func_name)
-                # Dynamically add this endpoint method to the Service class
-                self._add_endpoint_method(func_name)
-
+    @endpoint
     async def __initialize__(self):
         """Initializes the service and starts the health loop."""
         logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
@@ -262,14 +123,9 @@ class Service:
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
 
-    def _add_endpoint_method(self, endpoint_name: str):
-        """Dynamically adds an endpoint method to this Service instance."""
-
-        async def endpoint_method(sess_id: str | None = None, *args, **kwargs):
-            return await self._call(sess_id, endpoint_name, *args, **kwargs)
-
-        # Set the method on this instance
-        setattr(self, endpoint_name, endpoint_method)
+    @endpoint
+    async def call(self, sess_id: str | None, function: str, *args, **kwargs):
+        return await self._call(sess_id, function, *args, **kwargs)
 
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
@@ -322,14 +178,64 @@ class Service:
             # If the replica failed, try to retry once
             if not replica.healthy:
                 logger.debug(
-                    "Replica %d failed during request, retrying on healthy replica. Exception: %s",
-                    replica.idx,
-                    e,
+                    f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
                 )
                 return await self._retry_request_on_healthy_replica(
                     sess_id, function, *args, **kwargs
                 )
             raise
+
+    @endpoint
+    async def call_all(self, function: str, *args, **kwargs) -> List:
+        """
+        Broadcasts a function call to all healthy replicas and returns results as a list.
+
+        Args:
+            function: Name of the actor endpoint to call
+            *args: Positional arguments to pass to the endpoint
+            **kwargs: Keyword arguments to pass to the endpoint
+
+        Returns:
+            List of results from all healthy replicas
+
+        Raises:
+            RuntimeError: If no healthy replicas are available
+        """
+        healthy_replicas = [r for r in self._replicas if r.healthy]
+
+        if not healthy_replicas:
+            raise RuntimeError("No healthy replicas available for broadcast call")
+
+        # Create requests for all healthy replicas
+        requests = []
+        for replica in healthy_replicas:
+            request = ServiceRequest(
+                session_id=None,  # Broadcast calls don't use sessions
+                function=function,
+                args=args,
+                kwargs=kwargs,
+                future=asyncio.Future(),
+            )
+            requests.append((replica, request))
+
+        # Enqueue all requests
+        for replica, request in requests:
+            await replica.enqueue_request(request)
+
+        # Wait for all results
+        results = []
+        for replica, request in requests:
+            try:
+                result = await request.future
+                results.append(result)
+            except Exception as e:
+                logger.warning(
+                    f"Request to replica {replica.idx} failed during broadcast: {e}"
+                )
+                # Add None for failed replicas to maintain indexing
+                results.append(None)
+
+        return results
 
     async def _retry_request_on_healthy_replica(
         self, sess_id: str | None, function: str, *args, **kwargs
@@ -389,6 +295,7 @@ class Service:
             ):
                 self._session_replica_map[sess_id] = target_replica.idx
 
+    @endpoint
     async def start_session(self) -> str:
         """
         Starts a new session for stateful request handling.
@@ -414,10 +321,6 @@ class Service:
 
         return sess_id
 
-    def session(self) -> SessionContext:
-        """Returns a context manager for session-based calls."""
-        return SessionContext(self)
-
     def _update_service_metrics(self):
         """Updates service-level metrics."""
         self._metrics.total_sessions = len(self._active_sessions)
@@ -429,6 +332,7 @@ class Service:
             # Use the replica's own metrics directly
             self._metrics.replica_metrics[replica.idx] = replica.metrics
 
+    @endpoint
     def get_metrics(self) -> ServiceMetrics:
         """
         Get comprehensive service metrics for monitoring and analysis.
@@ -447,6 +351,7 @@ class Service:
         self._update_service_metrics()
         return self._metrics
 
+    @endpoint
     def get_metrics_summary(self) -> dict:
         """
         Get a summary of key metrics for monitoring and debugging.
@@ -504,6 +409,7 @@ class Service:
 
         return summary
 
+    @endpoint
     async def terminate_session(self, sess_id: str):
         """
         Terminates an active session and cleans up associated resources.
@@ -604,6 +510,7 @@ class Service:
         logger.debug("Assigning session %s to replica %d", sess_id, replica.idx)
         return replica
 
+    @endpoint
     async def stop(self):
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
@@ -669,6 +576,46 @@ class Service:
         for sess_id in sessions_to_reassign:
             del self._session_replica_map[sess_id]
             logger.debug("Session %s will be reassigned on next request", sess_id)
+
+    @endpoint
+    def _get_internal_state(self) -> dict:
+        """
+        Gets comprehensive internal state for testing purposes.
+
+        This is intended for testing/debugging only, it should not
+        be relied upon in actual production code.
+        """
+        # Ensure metrics are up to date
+        self._update_service_metrics()
+
+        return {
+            # Session management state
+            "session_replica_map": dict(self._session_replica_map),  # Copy for safety
+            "active_sessions": [s.session_id for s in self._active_sessions],
+            "id_session_map": dict(self._id_session_map),  # Copy for safety
+            # Replica state
+            "replicas": [
+                {
+                    "idx": replica.idx,
+                    "state": replica.state.value,
+                    "healthy": replica.healthy,
+                    "failed": replica.failed,
+                    "active_requests": replica.active_requests,
+                    "queue_size": replica.request_queue.qsize(),
+                    "capacity_utilization": replica.capacity_utilization,
+                }
+                for replica in self._replicas
+            ],
+            # Load balancing state
+            "next_replica_idx": self._next_replica_idx,
+            # Service-level state
+            "total_replicas": len(self._replicas),
+            "healthy_replica_count": sum(1 for r in self._replicas if r.healthy),
+            "shutdown_requested": self._shutdown_requested,
+            # Metrics summary
+            "total_sessions": len(self._active_sessions),
+            "replica_count": len(self._replicas),
+        }
 
     def __repr__(self):
         return f"Service(actor={self._actor_def.__name__})"

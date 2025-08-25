@@ -168,7 +168,7 @@ class Replica:
 
             # Spawn the actor
             await self.spawn_actor(
-                actor_def=self.actor_def,
+                self.actor_def,
                 *self.actor_args,
                 **self.actor_kwargs,
             )
@@ -199,22 +199,23 @@ class Replica:
             if old_proc_mesh is not None:
                 try:
                     await old_proc_mesh.stop()
-                    logger.debug("Old proc_mesh stopped for replica %d", self.idx)
+                    logger.debug(f"Old proc_mesh stopped for replica {self.idx}")
                 except Exception as e:
                     logger.warning(
-                        "Error stopping old proc_mesh for replica %d: %s", self.idx, e
+                        f"Error stopping old proc_mesh for replica {self.idx}: {e}"
                     )
 
             try:
-                logger.debug("Creating new proc_mesh for replica %d", self.idx)
+                logger.debug(f"Creating new proc_mesh for replica {self.idx}")
                 await self.initialize()
-                logger.debug("Recovery completed successfully for replica %d", self.idx)
+                logger.debug(f"Recovery completed successfully for replica {self.idx}")
             except Exception as e:
-                logger.error("Recovery failed for replica %d: %s", self.idx, e)
+                logger.error(f"Recovery failed for replica {self.idx}: {e}")
                 self.state = ReplicaState.UNHEALTHY
                 raise
 
-        logger.debug("Starting recovery for replica %d", self.idx)
+        logger.debug(f"Starting recovery for replica {self.idx}")
+        self.state = ReplicaState.RECOVERING
         self._recovery_task = asyncio.create_task(_do_recovery())
         await self._recovery_task
 
@@ -223,15 +224,15 @@ class Replica:
         # TODO - for policy replica, we would override this method to
         # include multiple proc_meshes
         if self.proc_mesh is not None:
-            logger.warning("Proc mesh already initialized for replica %d", self.idx)
+            logger.warning(f"Proc mesh already initialized for replica {self.idx}")
             return
 
-        logger.debug("Creating proc_mesh for replica %d", self.idx)
+        logger.debug(f"Creating proc_mesh for replica {self.idx}")
         try:
             self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
-            logger.debug("Proc mesh created successfully for replica %d", self.idx)
+            logger.debug(f"Proc mesh created successfully for replica {self.idx}")
         except Exception as e:
-            logger.error("Failed to create proc_mesh for replica %d: %s", self.idx, e)
+            logger.error(f"Failed to create proc_mesh for replica {self.idx}: {e}")
             self.state = ReplicaState.UNHEALTHY
             raise
 
@@ -262,10 +263,10 @@ class Replica:
             if setup_method := getattr(self.actor, "setup", None):
                 await setup_method.call()
 
-            logger.debug("Actor spawned successfully on replica %d", self.idx)
+            logger.debug(f"Actor spawned successfully on replica {self.idx}")
 
         except Exception as e:
-            logger.error("Failed to spawn actor on replica %d: %s", self.idx, e)
+            logger.error(f"Failed to spawn actor on replica {self.idx}: {e}")
             self.mark_failed()
             raise
 
@@ -275,7 +276,7 @@ class Replica:
         """Start the replica's processing loop if not already running."""
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
-            logger.debug("Started processing loop for replica %d", self.idx)
+            logger.debug(f"Started processing loop for replica {self.idx}")
 
     async def enqueue_request(self, request: ServiceRequest):
         """Enqueues a request for processing by this replica."""
@@ -317,7 +318,7 @@ class Replica:
                     result = result._values[0]
                 request.future.set_result(result)
             except ActorError as e:
-                logger.warning("Got failure on replica %d. Error:\n%s", self.idx, e)
+                logger.warning(f"Got failure on replica {self.idx}. Error:\n{e}")
                 # The exception came from the actor. It itself is
                 # returned to be propagated through the services
                 # back to the caller.
@@ -329,9 +330,7 @@ class Replica:
                 self.mark_failed()
                 success = False
             except Exception as e:
-                logger.debug(
-                    "Got unexpected error on replica %d. Error:\n%s", self.idx, e
-                )
+                logger.debug(f"Got unexpected error on replica {self.idx}. Error:\n{e}")
                 self.mark_failed()
 
                 # The exception was not from the actor - in this case
@@ -377,17 +376,13 @@ class Replica:
                     continue
 
                 except Exception as e:
-                    logger.error(
-                        "Error in replica %d processing loop: %s",
-                        self.idx,
-                        e,
-                    )
+                    logger.error(f"Error in replica {self.idx} processing loop: {e}")
                     self.state = ReplicaState.UNHEALTHY
                     break
 
         finally:
             self._running = False
-            logger.debug("Replica %d stopped processing", self.idx)
+            logger.debug(f"Replica {self.idx} stopped processing")
 
     # Replica state management
 
@@ -418,7 +413,7 @@ class Replica:
 
     def mark_failed(self):
         """Mark the replica as failed, triggering recovery."""
-        logger.debug("Marking replica %d as failed", self.idx)
+        logger.debug(f"Marking replica {self.idx} as failed")
         self.state = ReplicaState.RECOVERING
 
     async def stop(self):

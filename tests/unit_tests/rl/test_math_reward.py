@@ -7,7 +7,7 @@
 import unittest
 from unittest import mock
 
-from forge.data.rewards.math import MathReward
+from forge.data.rewards import MathReward
 
 
 class TestMathReward(unittest.TestCase):
