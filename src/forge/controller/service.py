@@ -32,95 +32,24 @@ Example:
     ...     result = await service.my_endpoint(arg1, arg2)
 """
 
-
 import asyncio
 import contextvars
 import logging
 import pprint
-import time
 import uuid
-from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Dict, List
 
 from monarch._src.actor.endpoint import EndpointProperty
-from monarch.actor import ActorError, ProcMesh
 
-from forge.controller import RecoverableProcMesh
+from forge.controller.replica import Replica, ReplicaMetrics, ServiceRequest
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# TODO - tie this into metric logger when it exists
-@dataclass
-class ReplicaMetrics:
-    """
-    Metrics collection for a single replica instance.
-
-    Tracks request counts, timing metrics, current state, and session assignments
-    for performance monitoring and autoscaling decisions.
-
-    Attributes:
-        replica_idx: Unique identifier for this replica
-        total_requests: Total number of requests processed
-        successful_requests: Number of successfully completed requests
-        failed_requests: Number of failed requests
-        request_times: Sliding window of request start timestamps
-        request_latencies: Sliding window of request completion latencies
-        active_requests: Currently processing requests
-        queue_depth: Number of pending requests in queue
-        assigned_sessions: Number of sessions assigned to this replica
-    """
-
-    replica_idx: int
-    # Request metrics
-    total_requests: int = 0
-    successful_requests: int = 0
-    failed_requests: int = 0
-    # Timing metrics (sliding window)
-    request_times: deque = field(default_factory=lambda: deque(maxlen=100))
-    request_latencies: deque = field(default_factory=lambda: deque(maxlen=100))
-    # Current state
-    active_requests: int = 0
-    queue_depth: int = 0
-    # Session metrics
-    assigned_sessions: int = 0
-
-    def add_request_start(self, timestamp: float):
-        """Record when a request starts processing."""
-        self.request_times.append(timestamp)
-        self.total_requests += 1
-
-    def add_request_completion(self, start_time: float, success: bool):
-        """Record when a request completes."""
-        latency = time.time() - start_time
-        self.request_latencies.append(latency)
-        if success:
-            self.successful_requests += 1
-        else:
-            self.failed_requests += 1
-
-    def get_request_rate(self, window_seconds: float = 60.0) -> float:
-        """Get requests per second over the last window_seconds."""
-        now = time.time()
-        cutoff = now - window_seconds
-        recent_requests = [t for t in self.request_times if t >= cutoff]
-        return len(recent_requests) / window_seconds if window_seconds > 0 else 0.0
-
-    def get_avg_latency(self, window_requests: int = 50) -> float:
-        """Get average latency over the last N requests."""
-        if not self.request_latencies:
-            return 0.0
-        recent_latencies = list(self.request_latencies)[-window_requests:]
-        return sum(recent_latencies) / len(recent_latencies)
-
-    def get_capacity_utilization(self, max_concurrent: int) -> float:
-        """Get current capacity utilization (0.0 to 1.0)."""
-        return self.active_requests / max_concurrent if max_concurrent > 0 else 0.0
-
-
+# TODO - tie this into metrics logger when it exists.
 @dataclass
 class ServiceMetrics:
     """
@@ -153,79 +82,67 @@ class ServiceMetrics:
             for metrics in self.replica_metrics.values()
         )
 
-    def get_avg_queue_depth(self) -> float:
+    def get_avg_queue_depth(self, replicas: List) -> float:
         """Get average queue depth across all healthy replicas."""
-        healthy_metrics = [
-            m
-            for m in self.replica_metrics.values()
-            if m.replica_idx < self.healthy_replicas
-        ]
-        if not healthy_metrics:
+        healthy_replicas = [r for r in replicas if r.healthy]
+        if not healthy_replicas:
             return 0.0
-        return sum(m.queue_depth for m in healthy_metrics) / len(healthy_metrics)
+        total_queue_depth = sum(r.qsize() for r in healthy_replicas)
+        return total_queue_depth / len(healthy_replicas)
 
     def get_avg_capacity_utilization(self, replicas: List) -> float:
         """Get average capacity utilization across all healthy replicas."""
-        healthy_replicas = [r for r in replicas if r.proc_mesh.healthy]
+        healthy_replicas = [r for r in replicas if r.healthy]
         if not healthy_replicas:
             return 0.0
-
-        utilizations = []
-        for replica in healthy_replicas:
-            if replica.idx in self.replica_metrics:
-                metrics = self.replica_metrics[replica.idx]
-                utilization = metrics.get_capacity_utilization(
-                    replica.max_concurrent_requests
-                )
-                utilizations.append(utilization)
-
-        return sum(utilizations) / len(utilizations) if utilizations else 0.0
+        total_utilization = sum(r.capacity_utilization for r in healthy_replicas)
+        return total_utilization / len(healthy_replicas)
 
     def get_sessions_per_replica(self) -> float:
-        """Get average sessions per healthy replica."""
-        if self.healthy_replicas == 0:
+        """Get average sessions per replica."""
+        if self.total_replicas == 0:
             return 0.0
-        return self.total_sessions / self.healthy_replicas
+        return self.total_sessions / self.total_replicas
 
 
-@dataclass
-class Replica:
-    proc_mesh: RecoverableProcMesh
-    actor: Any
-    idx: int
-    request_queue: asyncio.Queue[dict] = field(default_factory=asyncio.Queue)
-    active_requests: int = 0
-    max_concurrent_requests: int = 10
-    _processor_running: bool = False
-    metadata: dict = field(default_factory=dict)
+# Context variable for session state
+_session_context = contextvars.ContextVar("session_context")
 
 
 @dataclass
 class Session:
+    """Simple session data holder."""
+
     session_id: str
 
 
-# Global context variable for session state
-# This is used to propagate session state across async tasks
-_session_context: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
-    "session_context", default=None
-)
-
-
 class SessionContext:
-    """Context manager for service sessions using context variables."""
+    """
+    Async context manager for stateful service sessions with automatic lifecycle management.
 
-    def __init__(self, service: "Service", **session_kwargs):
+    Provides a convenient way to maintain stateful connections to replicas across multiple
+    requests. Sessions ensure that all requests within the context are routed to the same
+    replica, enabling stateful interactions while handling session lifecycle automatically.
+
+    Example:
+
+        >>> async with service.session() as session:
+        ...     # All calls within this block use the same replica
+        ...     result1 = await service.my_endpoint(arg1)
+        ...     result2 = await service.another_endpoint(result1)
+
+    """
+
+    def __init__(self, service: "Service"):
         self.service = service
         self.session_id: str | None = None
-        self.session_kwargs = session_kwargs
         self._token = None
 
     async def __aenter__(self):
         """Start a session and set context variables."""
         self.session_id = await self.service.start_session()
         # Set context for this async task
-        context_value = {"session_id": self.session_id, "kwargs": self.session_kwargs}
+        context_value = {"session_id": self.session_id}
         self._token = _session_context.set(context_value)
         return self
 
@@ -299,56 +216,46 @@ class Service:
 
         # Initialize metrics collection
         self._metrics = ServiceMetrics()
-
-        # Autoscaling state
-        self._last_scale_up_time = 0.0
-        self._last_scale_down_time = 0.0
-        self._low_utilization_start_time = None
         self._health_task = None
         self._shutdown_requested = False
 
         # Replica initialization queue
-        self._replicas_to_init = []
+        self._replicas_to_recover = []
 
         # For all endpoints within the actor_def, create an interface from it
         self._endpoints = []
         for func_name in dir(actor_def):
             func = getattr(actor_def, func_name)
             if isinstance(func, EndpointProperty):
-                logger.debug("Registering endpoint %s", func_name)
+                logger.debug(f"Registering endpoint {func_name}")
                 self._endpoints.append(func_name)
                 # Dynamically add this endpoint method to the Service class
                 self._add_endpoint_method(func_name)
 
     async def __initialize__(self):
-        logger.debug("Starting service up with %d replicas.", self._cfg.num_replicas)
+        """Initializes the service and starts the health loop."""
+        logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
-            mesh = RecoverableProcMesh(proc_config=self._cfg.to_process_config())
             replica = Replica(
-                proc_mesh=mesh,
-                actor=None,
                 idx=len(self._replicas) + i,
+                proc_config=self._cfg.to_process_config(),
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
+                return_first_rank_result=self._cfg.return_first_rank_result,
+                actor_def=self._actor_def,
+                actor_args=self._actor_args,
+                actor_kwargs=self._actor_kwargs,
             )
             replicas.append(replica)
 
-        # Initializing should only happen in the health_loop
-        # and during the first initialization.
-        # If multiple parts of the code try to initialize replicas at
-        # the same time, it can cause nasty race conditions
-        # (e.g., double initialization, inconsistent state, or resource conflicts).
-        # By funneling all replica initialization through a single queue and the
-        # health loop, we ensure safe, serialized initialization.
         logger.debug(
-            "Queued %d replicas for initialization. Total replicas: %d",
-            num_replicas,
-            len(self._replicas),
+            f"Queued {num_replicas} replicas for initialization. Total replicas: {len(self._replicas)}"
         )
-        self._replicas_to_init.extend(replicas)
-        await self._maybe_init_replicas()
-        self._replicas.extend(replicas)
+
+        # Initialize all replicas in parallel
+        await asyncio.gather(*[r.initialize() for r in replicas])
+        self._replicas = replicas
 
         # Start the health loop in the background
         self._health_task = asyncio.create_task(
@@ -390,139 +297,39 @@ class Service:
         """
         # Check context variables for session state if no explicit sess_id
         if sess_id is None:
-            ctx = _session_context.get()
+            ctx = _session_context.get(None)
             if ctx:
                 sess_id = ctx["session_id"]
-                routing_hints = ctx["kwargs"]
-            else:
-                routing_hints = {}
-        else:
-            routing_hints = {}
 
-        replica = await self._get_replica(sess_id, **routing_hints)
+        replica = await self._get_replica(sess_id)
 
-        # Create a request object to queue
-        request = {
-            "sess_id": sess_id,
-            "function": function,
-            "args": args,
-            "kwargs": kwargs,
-            "future": asyncio.Future(),
-        }
-        # Queue the request
-        await replica.request_queue.put(request)
+        # Create a ServiceRequest object to queue
+        request = ServiceRequest(
+            session_id=sess_id,
+            function=function,
+            args=args,
+            kwargs=kwargs,
+            future=asyncio.Future(),
+        )
 
-        # Ensure the replica has a processor running
-        self._ensure_processor_running(replica)
+        # Queue the request using replica's method
+        await replica.enqueue_request(request)
 
         # Wait for the result
         try:
-            return await request["future"]
+            return await request.future
         except Exception as e:
             # If the replica failed, try to retry once
-            if not replica.proc_mesh.healthy:
+            if not replica.healthy:
                 logger.debug(
-                    "Replica %d failed during request, retrying on healthy replica",
+                    "Replica %d failed during request, retrying on healthy replica. Exception: %s",
                     replica.idx,
+                    e,
                 )
                 return await self._retry_request_on_healthy_replica(
                     sess_id, function, *args, **kwargs
                 )
             raise
-
-    def _ensure_processor_running(self, replica: Replica):
-        """Ensures a persistent processor is running for this replica."""
-        if not replica._processor_running:
-            replica._processor_running = True
-            asyncio.create_task(self._persistent_processor(replica))
-
-    async def _persistent_processor(self, replica: Replica):
-        """Persistent processor that continuously handles requests for a replica."""
-        try:
-            while replica.proc_mesh.healthy:
-                try:
-                    # Wait for a request with timeout to check health periodically
-                    request = await asyncio.wait_for(
-                        replica.request_queue.get(), timeout=1.0
-                    )
-
-                    # Check if we have capacity
-                    if replica.active_requests >= replica.max_concurrent_requests:
-                        # Put the request back and wait
-                        await replica.request_queue.put(request)
-                        await asyncio.sleep(0.1)
-                        continue
-
-                    # Process the request
-                    asyncio.create_task(self._process_single_request(replica, request))
-
-                except asyncio.TimeoutError:
-                    # No requests, continue to check health
-                    continue
-                except Exception as e:
-                    logger.error(
-                        "Error in persistent processor for replica %d: %s",
-                        replica.idx,
-                        e,
-                    )
-                    break
-        finally:
-            replica._processor_running = False
-            # Migrate any remaining requests to healthy replicas
-            await self._migrate_remaining_requests(replica)
-
-    async def _process_single_request(self, replica: Replica, request: dict):
-        """Processes a single request."""
-        start_time = time.time()
-        replica.active_requests += 1
-
-        # Get or create metrics for this replica
-        if replica.idx not in self._metrics.replica_metrics:
-            self._metrics.replica_metrics[replica.idx] = ReplicaMetrics(replica.idx)
-
-        replica_metrics = self._metrics.replica_metrics[replica.idx]
-        replica_metrics.add_request_start(start_time)
-        replica_metrics.active_requests = replica.active_requests
-
-        try:
-            # Get the actor and endpoint
-            actor = replica.actor
-            endpoint_func = getattr(actor, request["function"])
-
-            # Execute the request
-            success = True
-            try:
-                result = await endpoint_func.call(*request["args"], **request["kwargs"])
-                if (
-                    self._cfg.return_first_rank_result
-                    and hasattr(result, "_values")
-                    and result._values
-                ):
-                    result = result._values[0]
-                request["future"].set_result(result)
-            except ActorError as e:
-                logger.debug("Got failure on replica %d. Error:\n%s", replica.idx, e)
-                replica.proc_mesh.mark_failed()
-                # Unwrap the ActorError into its raw exception.
-                request["future"].set_result(e.exception)
-                success = False
-            except Exception as e:
-                logger.debug(
-                    "Got unexpected error on replica %d. Error:\n%s", replica.idx, e
-                )
-                replica.proc_mesh.mark_failed()
-                request["future"].set_result(e)
-                success = False
-
-            # Record completion metrics
-            replica_metrics.add_request_completion(start_time, success)
-
-            # Mark task as done
-            replica.request_queue.task_done()
-
-        finally:
-            replica.active_requests -= 1
-            replica_metrics.active_requests = replica.active_requests
 
     async def _retry_request_on_healthy_replica(
         self, sess_id: str | None, function: str, *args, **kwargs
@@ -558,13 +365,13 @@ class Service:
 
         # Find healthy replicas
         healthy_replicas = [
-            r for r in self._replicas if r.proc_mesh.healthy and r != failed_replica
+            r for r in self._replicas if r.healthy and r != failed_replica
         ]
 
         if not healthy_replicas:
             # No healthy replicas, fail all requests
             for request in migrated_requests:
-                request["future"].set_exception(
+                request.future.set_exception(
                     RuntimeError("No healthy replicas available")
                 )
             return
@@ -572,11 +379,10 @@ class Service:
         # Distribute requests among healthy replicas
         for i, request in enumerate(migrated_requests):
             target_replica = healthy_replicas[i % len(healthy_replicas)]
-            await target_replica.request_queue.put(request)
-            self._ensure_processor_running(target_replica)
+            await target_replica.enqueue_request(request)
 
             # Update session mapping if needed
-            sess_id = request["sess_id"]
+            sess_id = request.session_id
             if (
                 sess_id in self._session_replica_map
                 and self._session_replica_map[sess_id] == failed_replica.idx
@@ -608,35 +414,20 @@ class Service:
 
         return sess_id
 
-    def session(self, **kwargs) -> SessionContext:
+    def session(self) -> SessionContext:
         """Returns a context manager for session-based calls."""
-        return SessionContext(self, **kwargs)
+        return SessionContext(self)
 
     def _update_service_metrics(self):
         """Updates service-level metrics."""
         self._metrics.total_sessions = len(self._active_sessions)
         self._metrics.total_replicas = len(self._replicas)
-        self._metrics.healthy_replicas = sum(
-            1 for r in self._replicas if r.proc_mesh.healthy
-        )
-
-        # Update queue depths for all replicas
+        self._metrics.healthy_replicas = sum(1 for r in self._replicas if r.healthy)
+        # Store direct references to replica metrics for aggregation
+        self._metrics.replica_metrics = {}
         for replica in self._replicas:
-            if replica.idx not in self._metrics.replica_metrics:
-                self._metrics.replica_metrics[replica.idx] = ReplicaMetrics(replica.idx)
-
-            replica_metrics = self._metrics.replica_metrics[replica.idx]
-            replica_metrics.queue_depth = replica.request_queue.qsize()
-            replica_metrics.active_requests = replica.active_requests
-
-        # Update session assignments per replica
-        session_counts = defaultdict(int)
-        for sess_id, replica_idx in self._session_replica_map.items():
-            session_counts[replica_idx] += 1
-
-        for replica_idx, count in session_counts.items():
-            if replica_idx in self._metrics.replica_metrics:
-                self._metrics.replica_metrics[replica_idx].assigned_sessions = count
+            # Use the replica's own metrics directly
+            self._metrics.replica_metrics[replica.idx] = replica.metrics
 
     def get_metrics(self) -> ServiceMetrics:
         """
@@ -680,7 +471,7 @@ class Service:
                 "healthy_replicas": self._metrics.healthy_replicas,
                 "total_replicas": self._metrics.total_replicas,
                 "total_request_rate": self._metrics.get_total_request_rate(),
-                "avg_queue_depth": self._metrics.get_avg_queue_depth(),
+                "avg_queue_depth": self._metrics.get_avg_queue_depth(self._replicas),
                 "avg_capacity_utilization": self._metrics.get_avg_capacity_utilization(
                     self._replicas
                 ),
@@ -689,17 +480,26 @@ class Service:
             "replicas": {},
         }
 
-        for replica_idx, metrics in self._metrics.replica_metrics.items():
-            summary["replicas"][replica_idx] = {
+        for replica in self._replicas:
+            metrics = replica.metrics
+
+            # Count sessions assigned to this replica
+            assigned_sessions = sum(
+                1
+                for replica_idx in self._session_replica_map.values()
+                if replica_idx == replica.idx
+            )
+
+            summary["replicas"][replica.idx] = {
                 "total_requests": metrics.total_requests,
                 "successful_requests": metrics.successful_requests,
                 "failed_requests": metrics.failed_requests,
                 "request_rate": metrics.get_request_rate(),
                 "avg_latency": metrics.get_avg_latency(),
-                "active_requests": metrics.active_requests,
-                "queue_depth": metrics.queue_depth,
-                "assigned_sessions": metrics.assigned_sessions,
-                "capacity_utilization": metrics.get_capacity_utilization(10),
+                "active_requests": replica.active_requests,  # Get from replica
+                "queue_depth": replica.qsize(),
+                "assigned_sessions": assigned_sessions,  # Calculate from session map
+                "capacity_utilization": replica.capacity_utilization,  # Get from replica
             }
 
         return summary
@@ -743,13 +543,13 @@ class Service:
 
         """
         while not self._shutdown_requested:
-            # Process any replicas that need initialization
-            await self._maybe_init_replicas()
+            # Process any replicas that need recovery
+            await self._recover_replicas()
 
             # Check for failed replicas and recover them
             failed_replicas = []
             for replica in self._replicas:
-                if replica.proc_mesh.failed:
+                if replica.failed:
                     failed_replicas.append(replica)
 
             if any(failed_replicas):
@@ -758,19 +558,13 @@ class Service:
                     len(failed_replicas),
                     pprint.pformat(failed_replicas),
                 )
-                self._replicas_to_init.extend(failed_replicas)
+                self._replicas_to_recover.extend(failed_replicas)
 
             await asyncio.sleep(poll_rate_s)
 
-    async def _custom_replica_routing(
-        self, sess_id: str | None, **kwargs
-    ) -> Optional[Replica]:
-        """Hook for custom routing logic. Override in subclasses to implement custom routing."""
-        return None
-
     def _get_next_replica(self) -> "Replica":
         """Get the next replica using round-robin selection."""
-        healthy_replicas = [r for r in self._replicas if r.proc_mesh.healthy]
+        healthy_replicas = [r for r in self._replicas if r.healthy]
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for load balancing")
 
@@ -780,25 +574,15 @@ class Service:
 
     def _get_least_loaded_replica(self) -> "Replica":
         """Get the replica with the lowest load."""
-        healthy_replicas = [r for r in self._replicas if r.proc_mesh.healthy]
+        healthy_replicas = [r for r in self._replicas if r.healthy]
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for session assignment")
 
-        # Load = active_requests + queue_depth
-        def get_load(replica: "Replica") -> int:
-            return replica.active_requests + replica.request_queue.qsize()
+        # Use the replica's current_load property
+        return min(healthy_replicas, key=lambda replica: replica.current_load)
 
-        return min(healthy_replicas, key=get_load)
-
-    async def _get_replica(self, sess_id: str | None, **kwargs) -> "Replica":
-        """Get a replica for the given session ID, with optional custom routing hints."""
-        # Try custom routing first if hints are provided
-        if kwargs:
-            custom_result = await self._custom_replica_routing(sess_id, **kwargs)
-            if custom_result is not None:
-                return custom_result
-
-        # Default routing logic
+    async def _get_replica(self, sess_id: str | None) -> "Replica":
+        """Get a replica for the given session ID."""
         if sess_id is None:
             # No session, use round-robin load balancing
             replica = self._get_next_replica()
@@ -809,7 +593,7 @@ class Service:
             replica_idx = self._session_replica_map[sess_id]
             # Find the replica with this index
             for replica in self._replicas:
-                if replica.idx == replica_idx and replica.proc_mesh.healthy:
+                if replica.idx == replica_idx and replica.healthy:
                     return replica
             # If the replica is no longer healthy, remove from session map and reassign
             del self._session_replica_map[sess_id]
@@ -838,151 +622,37 @@ class Service:
                 except asyncio.CancelledError:
                     logger.info("Health loop task cancelled.")
 
+        # Stop all replicas using their stop method
         await asyncio.gather(
-            *[replica.proc_mesh.stop() for replica in self._replicas],
+            *[replica.stop() for replica in self._replicas],
             return_exceptions=True,
         )
 
-    async def _maybe_init_replicas(self):
-        """Initializes replicas that are queued for initialization."""
-        if not self._replicas_to_init:
+    async def _recover_replicas(self):
+        """Recovers unhealthy queued replicas."""
+        if not self._replicas_to_recover:
             return
 
-        logger.debug("Init replicas: %s", pprint.pformat(self._replicas_to_init))
-
-        def _recover_hook(
-            replica: Replica,
-        ) -> Callable[[ProcMesh], Coroutine[Any, Any, None]]:
-            async def inner_hook(proc_mesh: ProcMesh) -> None:
-                if "name" in self._actor_kwargs:
-                    actor_name = self._actor_kwargs.pop("name")
-                else:
-                    actor_name = self._actor_def.__name__
-                # TODO - expand support so name can stick within kwargs
-                actor = await proc_mesh.spawn(
-                    actor_name,
-                    self._actor_def,
-                    *self._actor_args,
-                    **self._actor_kwargs,
-                )
-                replica.actor = actor
-                if hasattr(actor, "setup"):
-                    await actor.setup.call()
-
-            return inner_hook
-
-        await asyncio.gather(
-            *[
-                replica.proc_mesh.spawn(_recover_hook(replica))
-                for replica in self._replicas_to_init
-            ]
-        )
-        self._replicas_to_init.clear()
-
-    async def _scale_up(self, num_replicas: int = 1):
-        """
-        Scales up the service by adding new replicas.
-
-        Creates new replica instances with their own process meshes and queues them
-        for initialization. The replicas will be initialized asynchronously by the
-        health loop to avoid blocking the scaling operation.
-
-        Args:
-            num_replicas: Number of replicas to add (default: 1)
-
-        Note:
-            Replicas are queued for initialization rather than initialized immediately
-            to prevent blocking during scaling operations.
-        """
-        logger.debug("Scaling up with %d replicas.", num_replicas)
-        new_replicas = []
-        for i in range(num_replicas):
-            mesh = RecoverableProcMesh(
-                self._cfg.procs_per_replica,
-            )
-            replica = Replica(
-                proc_mesh=mesh,
-                actor=None,
-                idx=len(self._replicas) + i,
-                max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
-            )
-            new_replicas.append(replica)
-
-        # Add to the initialization queue instead of initializing immediately
-        self._replicas_to_init.extend(new_replicas)
-        self._replicas.extend(new_replicas)
         logger.debug(
-            "Queued %d replicas for initialization. Total replicas: %d",
-            num_replicas,
-            len(self._replicas),
+            "Recovering replicas: %s", pprint.pformat(self._replicas_to_recover)
         )
 
-    async def _scale_down_replicas(self, num_replicas: int = 1):
-        """
-        Scales down the service by intelligently removing replicas.
-
-        Prioritizes removal of unhealthy replicas first, then selects healthy replicas
-        with the lowest load. Migrates all workload (sessions and queued requests)
-        from removed replicas to remaining healthy replicas.
-
-        Args:
-            num_replicas: Number of replicas to remove (default: 1)
-
-        Note:
-         # Test context manager usage
-        async with service.session():
-            await service.incr()
-            await service.incr()
-            result = await service.value()
-            assert result == 2
-
-           Sessions are reassigned on their next request rather than immediately
-            to avoid disrupting active workloads.
-        """
-        logger.debug("Scaling down by %d replicas.", num_replicas)
-
-        # Find replicas to remove (prefer unhealthy ones first, then least loaded)
-        replicas_to_remove = []
-
-        # First, try to remove unhealthy replicas
-        unhealthy_replicas = [r for r in self._replicas if not r.proc_mesh.healthy]
-        for replica in unhealthy_replicas[:num_replicas]:
-            replicas_to_remove.append(replica)
-
-        # If we need more, remove healthy replicas with least load
-        remaining_to_remove = num_replicas - len(replicas_to_remove)
-        if remaining_to_remove > 0:
-            healthy_replicas = [
-                r
-                for r in self._replicas
-                if r.proc_mesh.healthy and r not in replicas_to_remove
-            ]
-            # Sort by load (queue depth + active requests)
-            healthy_replicas.sort(
-                key=lambda r: r.request_queue.qsize() + r.active_requests
-            )
-
-            for replica in healthy_replicas[:remaining_to_remove]:
-                replicas_to_remove.append(replica)
-
-        # Migrate sessions and requests from replicas being removed
-        for replica in replicas_to_remove:
-            await self._migrate_replica_workload(replica)
-
-            # Stop the replica
+        async def _recover(replica):
+            """Recover a single replica."""
             try:
-                await replica.proc_mesh.stop()
+                await replica.recover()
+                logger.debug("Successfully recovered replica %d", replica.idx)
             except Exception as e:
-                logger.warning("Error stopping replica %d: %s", replica.idx, e)
+                logger.error("Failed to recover replica %d: %s", replica.idx, e)
+                replica.mark_failed()
 
-            # Remove from replicas list
-            self._replicas.remove(replica)
+        recovery_tasks = [
+            asyncio.create_task(_recover(replica))
+            for replica in self._replicas_to_recover
+        ]
 
-        # Update replica indices
-        for i, replica in enumerate(self._replicas):
-            replica.idx = i
-
-        logger.debug("Scale down complete. Remaining replicas: %d", len(self._replicas))
+        await asyncio.gather(*recovery_tasks, return_exceptions=True)
+        self._replicas_to_recover.clear()
 
     async def _migrate_replica_workload(self, replica_to_remove: Replica):
         """Migrates all workload from a replica that's being removed."""
