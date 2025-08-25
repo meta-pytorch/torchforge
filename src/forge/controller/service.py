@@ -38,8 +38,6 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from monarch._src.actor.endpoint import EndpointProperty
-
 from monarch.actor import Actor, endpoint
 
 from forge.controller.interface import _session_context, Session
@@ -94,14 +92,6 @@ class Service(Actor):
         # Replica initialization queue
         self._replicas_to_recover = []
 
-        # Store the endpoints for ServiceInterface to discover
-        self._endpoints = []
-        for func_name in dir(actor_def):
-            func = getattr(actor_def, func_name)
-            if isinstance(func, EndpointProperty):
-                logger.debug(f"Registering endpoint {func_name}")
-                self._endpoints.append(func_name)
-
     @endpoint
     async def __initialize__(self):
         """Initializes the service and starts the health loop."""
@@ -133,14 +123,10 @@ class Service(Actor):
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
 
-    def _add_endpoint_method(self, endpoint_name: str):
-        """Dynamically adds a ServiceEndpoint instance to this Service instance."""
-        # In the Actor-based architecture, endpoints are automatically exposed
-        # through the @endpoint decorator, so this method is kept for compatibility
-        # but doesn't need to create ServiceEndpoint objects
-        pass
-
     @endpoint
+    async def call(self, sess_id: str | None, function: str, *args, **kwargs):
+        return await self._call(sess_id, function, *args, **kwargs)
+
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
         Routes a function call to the appropriate replica with load balancing and fault tolerance.
@@ -200,7 +186,7 @@ class Service(Actor):
             raise
 
     @endpoint
-    async def _call_all(self, function: str, *args, **kwargs) -> List:
+    async def call_all(self, function: str, *args, **kwargs) -> List:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 
@@ -260,17 +246,7 @@ class Service(Actor):
             del self._session_replica_map[sess_id]
 
         # Retry the call (this will assign to a new healthy replica)
-        # We recreate the request logic directly to avoid recursion
-        replica = await self._get_replica(sess_id)
-        request = ServiceRequest(
-            session_id=sess_id,
-            function=function,
-            args=args,
-            kwargs=kwargs,
-            future=asyncio.Future(),
-        )
-        await replica.enqueue_request(request)
-        return await request.future
+        return await self._call(sess_id, function, *args, **kwargs)
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
@@ -639,7 +615,6 @@ class Service(Actor):
             # Metrics summary
             "total_sessions": len(self._active_sessions),
             "replica_count": len(self._replicas),
-            "endpoints": list(self._endpoints),  # List of user actor endpoints
         }
 
     def __repr__(self):
