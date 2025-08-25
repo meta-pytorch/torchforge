@@ -47,6 +47,13 @@ class Counter(Actor):
         await asyncio.sleep(1.0)
         self.v += 1
 
+    @endpoint
+    async def add_to_value(self, amount: int, multiplier: int = 1) -> int:
+        """Add an amount (optionally multiplied) to the current value."""
+        logger.info(f"adding {amount} with {multiplier}")
+        self.v += amount * multiplier
+        return self.v
+
 
 # Core Functionality Tests
 
@@ -86,7 +93,7 @@ async def test_basic_service_operations():
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_sessionless_calls():
-    """Test sessionless calls with round-robin load balancing."""
+    """Test sessionless calls with round robin load balancing."""
     cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
@@ -109,6 +116,10 @@ async def test_sessionless_calls():
             for replica_metrics in metrics["replicas"].values()
         )
         assert total_requests == 3
+
+        # Users should be able to call endpoint with just args
+        result = await service.add_to_value.choose(5, multiplier=2)
+        assert result == 11  # 1 + 10
 
     finally:
         await service.stop()
@@ -173,12 +184,12 @@ async def test_recovery_state_transitions():
 
         # Create session and make a successful call
         session = await service.start_session()
-        await service.incr.choose(session)
-        result = await service.value.choose(session)
+        await service.incr.choose(sess_id=session)
+        result = await service.value.choose(sess_id=session)
         assert result == 1
 
         # Cause failure - this should transition to RECOVERING
-        error_result = await service.fail_me.choose(session)
+        error_result = await service.fail_me.choose(sess_id=session)
         assert isinstance(error_result, RuntimeError)
 
         # Replica should now be in RECOVERING state
@@ -217,8 +228,8 @@ async def test_recovery_state_transitions():
 
             # Test that we can make new calls after recovery
             new_session = await service.start_session()
-            await service.incr.choose(new_session)
-            result = await service.value.choose(new_session)
+            await service.incr.choose(sess_id=new_session)
+            result = await service.value.choose(sess_id=new_session)
             assert (
                 result is not None
             )  # Should get a result (counter starts at 0 in new actor)
@@ -247,13 +258,13 @@ async def test_replica_failure_and_recovery():
     try:
         # Create session and cause failure
         session = await service.start_session()
-        await service.incr.choose(session)
+        await service.incr.choose(sess_id=session)
 
         state = await service._get_internal_state()
         original_replica_idx = state["session_replica_map"][session]
 
         # Cause failure
-        error_result = await service.fail_me.choose(session)
+        error_result = await service.fail_me.choose(sess_id=session)
         assert isinstance(error_result, RuntimeError)
 
         # Replica should be marked as failed
@@ -262,14 +273,14 @@ async def test_replica_failure_and_recovery():
         assert not failed_replica["healthy"]
 
         # Session should be reassigned on next call
-        await service.incr.choose(session)
+        await service.incr.choose(sess_id=session)
         state = await service._get_internal_state()
         new_replica_idx = state["session_replica_map"][session]
         assert new_replica_idx != original_replica_idx
 
         # New sessions should avoid failed replica
         new_session = await service.start_session()
-        await service.incr.choose(new_session)
+        await service.incr.choose(sess_id=new_session)
         state = await service._get_internal_state()
         assigned_replica = state["replicas"][state["session_replica_map"][new_session]]
         assert assigned_replica["healthy"]
@@ -293,12 +304,12 @@ async def test_metrics_collection():
         session1 = await service.start_session()
         session2 = await service.start_session()
 
-        await service.incr.choose(session1)
-        await service.incr.choose(session1)
-        await service.incr.choose(session2)
+        await service.incr.choose(sess_id=session1)
+        await service.incr.choose(sess_id=session1)
+        await service.incr.choose(sess_id=session2)
 
         # Test failure metrics
-        error_result = await service.fail_me.choose(session1)
+        error_result = await service.fail_me.choose(sess_id=session1)
         assert isinstance(error_result, RuntimeError)
 
         # Get metrics
@@ -345,20 +356,20 @@ async def test_session_stickiness():
         session = await service.start_session()
 
         # Make multiple calls
-        await service.incr.choose(session)
-        await service.incr.choose(session)
-        await service.incr.choose(session)
+        await service.incr.choose(sess_id=session)
+        await service.incr.choose(sess_id=session)
+        await service.incr.choose(sess_id=session)
 
         # Should always route to same replica
         state = await service._get_internal_state()
         replica_idx = state["session_replica_map"][session]
 
-        await service.incr.choose(session)
+        await service.incr.choose(sess_id=session)
         state = await service._get_internal_state()
         assert state["session_replica_map"][session] == replica_idx
 
         # Verify counter was incremented correctly
-        result = await service.value.choose(session)
+        result = await service.value.choose(sess_id=session)
         assert result == 4
 
     finally:
@@ -375,16 +386,20 @@ async def test_load_balancing_multiple_sessions():
     try:
         # Create sessions with some load to trigger distribution
         session1 = await service.start_session()
-        await service.incr.choose(session1)  # Load replica 0
+        await service.incr.choose(sess_id=session1)  # Load replica 0
 
         session2 = await service.start_session()
-        await service.incr.choose(session2)  # Should go to replica 1 (least loaded)
+        await service.incr.choose(
+            sess_id=session2
+        )  # Should go to replica 1 (least loaded)
 
         session3 = await service.start_session()
-        await service.incr.choose(session3)  # Should go to replica 0 or 1 based on load
+        await service.incr.choose(
+            sess_id=session3
+        )  # Should go to replica 0 or 1 based on load
 
         session4 = await service.start_session()
-        await service.incr.choose(session4)  # Should balance the load
+        await service.incr.choose(sess_id=session4)  # Should balance the load
 
         # Check that sessions are distributed (may not be perfectly even due to least-loaded logic)
         state = await service._get_internal_state()
@@ -425,8 +440,8 @@ async def test_concurrent_operations():
 
         # Concurrent operations
         tasks = [
-            service.incr.choose(session),  # Session call
-            service.incr.choose(session),  # Session call
+            service.incr.choose(sess_id=session),  # Session call
+            service.incr.choose(sess_id=session),  # Session call
             service.incr.choose(),  # Sessionless call
             service.incr.choose(),  # Sessionless call
         ]
@@ -494,7 +509,7 @@ async def test_broadcast_call_with_failed_replica():
         # First, cause one replica to fail by calling fail_me on a specific session
         session = await service.start_session()
         try:
-            await service.fail_me.choose(session)
+            await service.fail_me.choose(sess_id=session)
         except RuntimeError:
             pass  # Expected failure
 

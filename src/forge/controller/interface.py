@@ -92,7 +92,7 @@ class ServiceEndpoint(Generic[P, R]):
         self.endpoint_name = endpoint_name
 
     async def choose(
-        self, sess_id: str | None = None, *args: P.args, **kwargs: P.kwargs
+        self, *args: P.args, sess_id: str | None = None, **kwargs: P.kwargs
     ) -> R:
         """Chooses a replica to call based on context and load balancing strategy."""
         return await self.actor_mesh._call.call_one(
