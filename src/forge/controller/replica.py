@@ -133,23 +133,6 @@ class Replica:
 
     # Initialization related functionalities
 
-    async def create_proc_mesh(self):
-        """Creates the proc_mesh using the stored proc_config."""
-        # TODO - for policy replica, we would override this method to
-        # include multiple proc_meshes
-        if self.proc_mesh is not None:
-            logger.warning("Proc mesh already initialized for replica %d", self.idx)
-            return
-
-        logger.debug("Creating proc_mesh for replica %d", self.idx)
-        try:
-            self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
-            logger.debug("Proc mesh created successfully for replica %d", self.idx)
-        except Exception as e:
-            logger.error("Failed to create proc_mesh for replica %d: %s", self.idx, e)
-            self.state = ReplicaState.UNHEALTHY
-            raise
-
     async def initialize(self, actor_def, *actor_args, **actor_kwargs):
         """
         Initializes the replica completely from proc_mesh creation to ready state.
@@ -177,26 +160,12 @@ class Replica:
                     f"Replica {self.idx}: proc_mesh is None after creation"
                 )
 
-            # Determine actor name
-            if "name" in actor_kwargs:
-                actor_name = actor_kwargs.pop("name")
-            else:
-                actor_name = actor_def.__name__
-
             # Spawn the actor
-            self.actor = await self.proc_mesh.spawn(
-                actor_name,
-                actor_def,
+            await self.spawn_actor(
+                actor_def=actor_def,
                 *actor_args,
                 **actor_kwargs,
             )
-
-            # Call actor setup if it exists
-            if hasattr(self.actor, "setup") and self.actor is not None:
-                setup_method = getattr(self.actor, "setup", None)
-                if setup_method is not None:
-                    await setup_method.call()
-
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()
@@ -205,6 +174,23 @@ class Replica:
 
         except Exception as e:
             logger.error("Failed to initialize replica %d: %s", self.idx, e)
+            self.state = ReplicaState.UNHEALTHY
+            raise
+
+    async def create_proc_mesh(self):
+        """Creates the proc_mesh using the stored proc_config."""
+        # TODO - for policy replica, we would override this method to
+        # include multiple proc_meshes
+        if self.proc_mesh is not None:
+            logger.warning("Proc mesh already initialized for replica %d", self.idx)
+            return
+
+        logger.debug("Creating proc_mesh for replica %d", self.idx)
+        try:
+            self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
+            logger.debug("Proc mesh created successfully for replica %d", self.idx)
+        except Exception as e:
+            logger.error("Failed to create proc_mesh for replica %d: %s", self.idx, e)
             self.state = ReplicaState.UNHEALTHY
             raise
 
@@ -224,11 +210,7 @@ class Replica:
             )
 
         try:
-            # Determine actor name
-            if "name" in actor_kwargs:
-                actor_name = actor_kwargs.pop("name")
-            else:
-                actor_name = actor_def.__name__
+            actor_name = actor_kwargs.pop("name", actor_def.__name__)
 
             # Spawn the actor
             self.actor = await self.proc_mesh.spawn(
@@ -237,6 +219,9 @@ class Replica:
                 *actor_args,
                 **actor_kwargs,
             )
+            # Call actor setup if it exists
+            if setup_method := getattr(self.actor, "setup", None):
+                await setup_method.call()
 
             logger.debug("Actor spawned successfully on replica %d", self.idx)
 
