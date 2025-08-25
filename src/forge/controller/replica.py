@@ -102,6 +102,9 @@ class Replica:
 
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
+    actor_def: type[Actor]
+    actor_args: tuple
+    actor_kwargs: dict
 
     # The proc_mesh and actor_mesh that this replica is running
     proc_mesh: Optional[ProcMesh] = None
@@ -113,6 +116,8 @@ class Replica:
     active_requests: int = 0
     # Maximum number of simultaneous requests
     max_concurrent_requests: int = 10
+    # Semaphore to control request capacity
+    _capacity_semaphore: asyncio.Semaphore = field(init=False)
     # Whether the processing loop is currently running
     _running: bool = False
     # How often to check for new requests when idle
@@ -131,7 +136,89 @@ class Replica:
     # Metrics tracking
     metrics: ReplicaMetrics = field(default_factory=ReplicaMetrics)
 
+    def __post_init__(self):
+        # This semaphore is used to enforce max_concurrent_requests
+        # Once it is acquired max_concurrent_requests times, future
+        # requests are blocked until standing requests complete.
+        self._capacity_semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+
     # Initialization related functionalities
+
+    async def initialize(self):
+        """
+        Initializes the replica completely from proc_mesh creation to ready state.
+
+        This method handles the complete replica initialization process:
+        - Creates the proc_mesh
+        - Spawns the actor
+        - Configures the actor
+        - Transitions to healthy state
+        - Starts the processing loop
+        """
+        assert self.proc_mesh is None, "Proc mesh should not be set yet"
+        try:
+            # Create proc_mesh
+            await self.create_proc_mesh()
+
+            # Ensure we have a healthy proc_mesh
+            if not self.proc_mesh:
+                raise RuntimeError(
+                    f"Replica {self.idx}: proc_mesh is None after creation"
+                )
+
+            # Spawn the actor
+            await self.spawn_actor(
+                actor_def=self.actor_def,
+                *self.actor_args,
+                **self.actor_kwargs,
+            )
+            # Transition to healthy state and start processing
+            self.state = ReplicaState.HEALTHY
+            self.start_processing()
+
+            logger.debug("Replica %d initialization complete", self.idx)
+
+        except Exception as e:
+            logger.error("Failed to initialize replica %d: %s", self.idx, e)
+            self.state = ReplicaState.UNHEALTHY
+            raise
+
+    async def recover(self):
+        """Recovers the replica by recreating the proc_mesh and respawning actors."""
+        if self._recovery_task and not self._recovery_task.done():
+            # Recovery already in progress, wait for it
+            await self._recovery_task
+            return
+
+        async def _do_recovery():
+            old_proc_mesh = self.proc_mesh
+            self.proc_mesh = None
+            self.actor = None
+
+            # Stop old proc_mesh if it exists
+            if old_proc_mesh is not None:
+                try:
+                    await old_proc_mesh.stop()
+                    logger.debug("Old proc_mesh stopped for replica %d", self.idx)
+                except Exception as e:
+                    logger.warning(
+                        "Error stopping old proc_mesh for replica %d: %s", self.idx, e
+                    )
+
+            try:
+                logger.debug("Creating new proc_mesh for replica %d", self.idx)
+                await self.initialize()
+                self.state = ReplicaState.HEALTHY
+                logger.debug("Recovery completed successfully for replica %d", self.idx)
+            except Exception as e:
+                logger.error("Recovery failed for replica %d: %s", self.idx, e)
+                self.state = ReplicaState.UNHEALTHY
+                raise
+
+        logger.debug("Starting recovery for replica %d", self.idx)
+        self.state = ReplicaState.RECOVERING
+        self._recovery_task = asyncio.create_task(_do_recovery())
+        await self._recovery_task
 
     async def create_proc_mesh(self):
         """Creates the proc_mesh using the stored proc_config."""
@@ -150,64 +237,6 @@ class Replica:
             self.state = ReplicaState.UNHEALTHY
             raise
 
-    async def initialize(self, actor_def, *actor_args, **actor_kwargs):
-        """
-        Initializes the replica completely from proc_mesh creation to ready state.
-
-        This method handles the complete replica initialization process:
-        - Creates the proc_mesh
-        - Spawns the actor
-        - Configures the actor
-        - Transitions to healthy state
-        - Starts the processing loop
-        """
-        if self.state != ReplicaState.UNINITIALIZED:
-            logger.warning(
-                "Attempting to init replica %d that's already initialized", self.idx
-            )
-            return
-
-        try:
-            # Create proc_mesh
-            await self.create_proc_mesh()
-
-            # Ensure we have a healthy proc_mesh
-            if not self.proc_mesh:
-                raise RuntimeError(
-                    f"Replica {self.idx}: proc_mesh is None after creation"
-                )
-
-            # Determine actor name
-            if "name" in actor_kwargs:
-                actor_name = actor_kwargs.pop("name")
-            else:
-                actor_name = actor_def.__name__
-
-            # Spawn the actor
-            self.actor = await self.proc_mesh.spawn(
-                actor_name,
-                actor_def,
-                *actor_args,
-                **actor_kwargs,
-            )
-
-            # Call actor setup if it exists
-            if hasattr(self.actor, "setup") and self.actor is not None:
-                setup_method = getattr(self.actor, "setup", None)
-                if setup_method is not None:
-                    await setup_method.call()
-
-            # Transition to healthy state and start processing
-            self.state = ReplicaState.HEALTHY
-            self.start_processing()
-
-            logger.debug("Replica %d initialization complete", self.idx)
-
-        except Exception as e:
-            logger.error("Failed to initialize replica %d: %s", self.idx, e)
-            self.state = ReplicaState.UNHEALTHY
-            raise
-
     async def spawn_actor(self, actor_def, *actor_args, **actor_kwargs):
         """
         Spawn an actor on this replica's proc_mesh.
@@ -215,20 +244,14 @@ class Replica:
         This method handles the complete actor spawning process including
         recovery if the proc_mesh has failed.
         """
-        # Ensure we have a healthy proc_mesh
-        await self._ensure_healthy_proc_mesh()
-
         if not self.proc_mesh:
             raise RuntimeError(
                 f"Replica {self.idx}: proc_mesh is None after recovery attempt"
             )
 
         try:
-            # Determine actor name
-            if "name" in actor_kwargs:
-                actor_name = actor_kwargs.pop("name")
-            else:
-                actor_name = actor_def.__name__
+            # TODO - expand support so name can stick within kwargs
+            actor_name = actor_kwargs.pop("name", actor_def.__name__)
 
             # Spawn the actor
             self.actor = await self.proc_mesh.spawn(
@@ -237,6 +260,9 @@ class Replica:
                 *actor_args,
                 **actor_kwargs,
             )
+            # Call actor setup if it exists
+            if setup_method := getattr(self.actor, "setup", None):
+                await setup_method.call()
 
             logger.debug("Actor spawned successfully on replica %d", self.idx)
 
@@ -255,7 +281,7 @@ class Replica:
 
     async def enqueue_request(self, request: ServiceRequest):
         """Enqueues a request for processing by this replica."""
-        if self.state == ReplicaState.STOPPED:
+        if self.stopped:
             raise RuntimeError(
                 f"Replica {self.idx} is stopped and therefore will not accept requests."
             )
@@ -323,6 +349,8 @@ class Replica:
 
         finally:
             self.active_requests -= 1
+            # Release the capacity semaphore to allow new requests
+            self._capacity_semaphore.release()
 
     async def run(self):
         """Runs the main processing loop for the replica.
@@ -333,30 +361,17 @@ class Replica:
         self._running = True
 
         try:
-            while self.state in (ReplicaState.HEALTHY, ReplicaState.RECOVERING):
+            while self.healthy:
                 try:
                     # Wait for a request with timeout to check health periodically
                     request = await asyncio.wait_for(
                         self.request_queue.get(), timeout=self._run_poll_rate_s
                     )
 
-                    # Check if we have capacity - if we have too many ongoing,
-                    # we will put the request back and wait.
-                    if self.active_requests >= self.max_concurrent_requests:
-                        await self.request_queue.put(request)
-                        await asyncio.sleep(0.1)
-                        continue
+                    # Acquire capacity semaphore - this blocks until capacity is available
+                    await self._capacity_semaphore.acquire()
 
-                    # If we're recovering, reject the request
-                    if self.state == ReplicaState.RECOVERING:
-                        # This signals to the service to retry on another replica
-                        request.future.set_exception(
-                            RuntimeError(f"Replica {self.idx} is still recovering")
-                        )
-                        self.request_queue.task_done()
-                        continue
-
-                    # Process the request
+                    # Process the request (semaphore will be released in _process_single_request)
                     asyncio.create_task(self._process_single_request(request))
 
                 except asyncio.TimeoutError:
@@ -383,6 +398,22 @@ class Replica:
         return self.state == ReplicaState.HEALTHY
 
     @property
+    def uninitialized(self) -> bool:
+        return self.state == ReplicaState.UNINITIALIZED
+
+    @property
+    def recovering(self) -> bool:
+        return self.state == ReplicaState.RECOVERING
+
+    @property
+    def unhealthy(self) -> bool:
+        return self.state == ReplicaState.UNHEALTHY
+
+    @property
+    def stopped(self) -> bool:
+        return self.state == ReplicaState.STOPPED
+
+    @property
     def failed(self) -> bool:
         """Check if the replica has failed and needs recovery."""
         return self.state in (ReplicaState.RECOVERING, ReplicaState.UNHEALTHY)
@@ -391,57 +422,6 @@ class Replica:
         """Mark the replica as failed, triggering recovery."""
         logger.debug("Marking replica %d as failed", self.idx)
         self.state = ReplicaState.RECOVERING
-
-    async def _ensure_healthy_proc_mesh(self):
-        """Ensure we have a healthy proc_mesh, recovering if necessary."""
-        if self.failed:
-            await self._recover()
-
-    async def _recover(self):
-        """
-        Recover the replica by recreating the proc_mesh and respawning actors.
-
-        This is the core recovery logic moved from RecoverableProcMesh.
-        """
-        if self._recovery_task and not self._recovery_task.done():
-            # Recovery already in progress, wait for it
-            await self._recovery_task
-            return
-
-        logger.debug("Starting recovery for replica %d", self.idx)
-        self.state = ReplicaState.RECOVERING
-
-        # Create the recovery task
-        self._recovery_task = asyncio.create_task(self._do_recovery())
-        await self._recovery_task
-
-    async def _do_recovery(self):
-        """Internal method that performs the actual recovery work."""
-        old_proc_mesh = self.proc_mesh
-        self.proc_mesh = None
-        self.actor = None
-
-        # Stop old proc_mesh if it exists
-        if old_proc_mesh is not None:
-            try:
-                await old_proc_mesh.stop()
-                logger.debug("Old proc_mesh stopped for replica %d", self.idx)
-            except Exception as e:
-                logger.warning(
-                    "Error stopping old proc_mesh for replica %d: %s", self.idx, e
-                )
-
-        # Create new proc_mesh using the same method as initialization
-        try:
-            logger.debug("Creating new proc_mesh for replica %d", self.idx)
-            await self.create_proc_mesh()
-            self.state = ReplicaState.HEALTHY
-            logger.debug("Recovery completed successfully for replica %d", self.idx)
-
-        except Exception as e:
-            logger.error("Recovery failed for replica %d: %s", self.idx, e)
-            self.state = ReplicaState.UNHEALTHY
-            raise
 
     async def stop(self):
         """
@@ -455,16 +435,17 @@ class Replica:
         # Transition to stopped state to signal the run loop to exit
         self.state = ReplicaState.STOPPED
 
-        # Wait for processor to finish if it's running
-        if self._running:
-            # Give it a moment to finish current request and exit gracefully
-            for _ in range(50):  # Wait up to 5 seconds
-                if not self._running:
-                    break
-                await asyncio.sleep(0.1)
-
-            if self._running:
-                logger.warning("Replica %d processor didn't stop gracefully", self.idx)
+        if self._run_task and not self._run_task.done():
+            self._run_task.cancel()
+            try:
+                await asyncio.wait_for(
+                    self._run_task, timeout=2 * self._run_poll_rate_s
+                )
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                # Expected - task was cancelled or timed out
+                pass
+            except Exception as e:
+                logger.warning("Unexpected error while stopping run task: %s", e)
 
         # Fail any remaining requests in the queue
         failed_requests = []
@@ -474,6 +455,8 @@ class Replica:
                 failed_requests.append(request)
                 self.request_queue.task_done()
             except asyncio.QueueEmpty:
+                # catching in case the queue became empty
+                # between check and get
                 break
 
         # Fail all the collected requests
@@ -501,9 +484,13 @@ class Replica:
     # Metric-related getters
 
     @property
-    def load(self) -> int:
+    def current_load(self) -> int:
         """Get current load (active requests + queue depth)"""
         return self.active_requests + self.request_queue.qsize()
+
+    def qsize(self) -> int:
+        """Get current queue size"""
+        return self.request_queue.qsize()
 
     @property
     def capacity_utilization(self) -> float:

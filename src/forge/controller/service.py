@@ -92,7 +92,7 @@ class Service(Actor):
         self._shutdown_requested = False
 
         # Replica initialization queue
-        self._replicas_to_init = []
+        self._replicas_to_recover = []
 
         # Store the endpoints for ServiceInterface to discover
         self._endpoints = []
@@ -104,6 +104,7 @@ class Service(Actor):
 
     @endpoint
     async def __initialize__(self):
+        """Initializes the service and starts the health loop."""
         logger.debug("Starting service up with %d replicas.", self._cfg.num_replicas)
         replicas = []
         num_replicas = self._cfg.num_replicas
@@ -113,24 +114,21 @@ class Service(Actor):
                 proc_config=self._cfg.to_process_config(),
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
                 return_first_rank_result=self._cfg.return_first_rank_result,
+                actor_def=self._actor_def,
+                actor_args=self._actor_args,
+                actor_kwargs=self._actor_kwargs,
             )
             replicas.append(replica)
 
-        # Initializing should only happen in the health_loop
-        # and during the first initialization.
-        # If multiple parts of the code try to initialize replicas at
-        # the same time, it can cause nasty race conditions
-        # (e.g., double initialization, inconsistent state, or resource conflicts).
-        # By funneling all replica initialization through a single queue and the
-        # health loop, we ensure safe, serialized initialization.
         logger.debug(
             "Queued %d replicas for initialization. Total replicas: %d",
             num_replicas,
             len(self._replicas),
         )
-        self._replicas_to_init.extend(replicas)
-        await self._maybe_init_replicas()
-        self._replicas.extend(replicas)
+
+        # Initialize all replicas in parallel
+        await asyncio.gather(*[r.initialize() for r in replicas])
+        self._replicas = replicas
 
         # Start the health loop in the background
         self._health_task = asyncio.create_task(
@@ -196,8 +194,9 @@ class Service(Actor):
             # If the replica failed, try to retry once
             if not replica.healthy:
                 logger.debug(
-                    "Replica %d failed during request, retrying on healthy replica",
+                    "Replica %d failed during request, retrying on healthy replica. Exception: %s",
                     replica.idx,
+                    e,
                 )
                 return await self._retry_request_on_healthy_replica(
                     sess_id, function, *args, **kwargs
@@ -431,7 +430,7 @@ class Service(Actor):
                 "request_rate": metrics.get_request_rate(),
                 "avg_latency": metrics.get_avg_latency(),
                 "active_requests": replica.active_requests,  # Get from replica
-                "queue_depth": replica.request_queue.qsize(),  # Get from replica
+                "queue_depth": replica.qsize(),
                 "assigned_sessions": assigned_sessions,  # Calculate from session map
                 "capacity_utilization": replica.capacity_utilization,  # Get from replica
             }
@@ -478,8 +477,8 @@ class Service(Actor):
 
         """
         while not self._shutdown_requested:
-            # Process any replicas that need initialization
-            await self._maybe_init_replicas()
+            # Process any replicas that need recovery
+            await self._recover_replicas()
 
             # Check for failed replicas and recover them
             failed_replicas = []
@@ -493,7 +492,7 @@ class Service(Actor):
                     len(failed_replicas),
                     pprint.pformat(failed_replicas),
                 )
-                self._replicas_to_init.extend(failed_replicas)
+                self._replicas_to_recover.extend(failed_replicas)
 
             await asyncio.sleep(poll_rate_s)
 
@@ -513,11 +512,8 @@ class Service(Actor):
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for session assignment")
 
-        # Load = active_requests + queue_depth
-        def get_load(replica: "Replica") -> int:
-            return replica.active_requests + replica.request_queue.qsize()
-
-        return min(healthy_replicas, key=get_load)
+        # Use the replica's current_load property
+        return min(healthy_replicas, key=lambda replica: replica.current_load)
 
     async def _get_replica(self, sess_id: str | None) -> "Replica":
         """Get a replica for the given session ID."""
@@ -567,32 +563,31 @@ class Service(Actor):
             return_exceptions=True,
         )
 
-    async def _maybe_init_replicas(self):
-        """Initializes replicas that are queued for initialization."""
-        if not self._replicas_to_init:
+    async def _recover_replicas(self):
+        """Recovers unhealthy queued replicas."""
+        if not self._replicas_to_recover:
             return
 
-        logger.debug("Init replicas: %s", pprint.pformat(self._replicas_to_init))
+        logger.debug(
+            "Recovering replicas: %s", pprint.pformat(self._replicas_to_recover)
+        )
 
-        async def init_replica(replica):
-            """Initialize a single replica with error handling."""
+        async def _recover(replica):
+            """Recover a single replica."""
             try:
-                await replica.initialize(
-                    self._actor_def, *self._actor_args, **self._actor_kwargs
-                )
-                logger.debug("Successfully initialized replica %d", replica.idx)
+                await replica.recover()
+                logger.debug("Successfully recovered replica %d", replica.idx)
             except Exception as e:
-                logger.error("Failed to initialize replica %d: %s", replica.idx, e)
+                logger.error("Failed to recover replica %d: %s", replica.idx, e)
                 replica.mark_failed()
 
-        # Initialize each replica (proc_mesh and actor spawning)
-        initialization_tasks = [
-            asyncio.create_task(init_replica(replica))
-            for replica in self._replicas_to_init
+        recovery_tasks = [
+            asyncio.create_task(_recover(replica))
+            for replica in self._replicas_to_recover
         ]
 
-        await asyncio.gather(*initialization_tasks, return_exceptions=True)
-        self._replicas_to_init.clear()
+        await asyncio.gather(*recovery_tasks, return_exceptions=True)
+        self._replicas_to_recover.clear()
 
     async def _migrate_replica_workload(self, replica_to_remove: Replica):
         """Migrates all workload from a replica that's being removed."""
