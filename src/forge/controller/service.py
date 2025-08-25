@@ -227,14 +227,14 @@ class Service:
         for func_name in dir(actor_def):
             func = getattr(actor_def, func_name)
             if isinstance(func, EndpointProperty):
-                logger.debug("Registering endpoint %s", func_name)
+                logger.debug(f"Registering endpoint {func_name}")
                 self._endpoints.append(func_name)
                 # Dynamically add this endpoint method to the Service class
                 self._add_endpoint_method(func_name)
 
     async def __initialize__(self):
         """Initializes the service and starts the health loop."""
-        logger.debug("Starting service up with %d replicas.", self._cfg.num_replicas)
+        logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
@@ -250,9 +250,7 @@ class Service:
             replicas.append(replica)
 
         logger.debug(
-            "Queued %d replicas for initialization. Total replicas: %d",
-            num_replicas,
-            len(self._replicas),
+            f"Queued {num_replicas} replicas for initialization. Total replicas: {len(self._replicas)}"
         )
 
         # Initialize all replicas in parallel

@@ -176,10 +176,10 @@ class Replica:
             self.state = ReplicaState.HEALTHY
             self.start_processing()
 
-            logger.debug("Replica %d initialization complete", self.idx)
+            logger.debug(f"Replica {self.idx} initialization complete")
 
         except Exception as e:
-            logger.error("Failed to initialize replica %d: %s", self.idx, e)
+            logger.error(f"Failed to initialize replica {self.idx}: {e}")
             self.state = ReplicaState.UNHEALTHY
             raise
 
