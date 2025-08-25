@@ -173,12 +173,12 @@ async def test_recovery_state_transitions():
 
         # Create session and make a successful call
         session = await service.start_session()
-        await service.incr(session)
-        result = await service.value(session)
+        await service.incr.choose(session)
+        result = await service.value.choose(session)
         assert result == 1
 
         # Cause failure - this should transition to RECOVERING
-        error_result = await service.fail_me(session)
+        error_result = await service.fail_me.choose(session)
         assert isinstance(error_result, RuntimeError)
 
         # Replica should now be in RECOVERING state
@@ -217,8 +217,8 @@ async def test_recovery_state_transitions():
 
             # Test that we can make new calls after recovery
             new_session = await service.start_session()
-            await service.incr(new_session)
-            result = await service.value(new_session)
+            await service.incr.choose(new_session)
+            result = await service.value.choose(new_session)
             assert (
                 result is not None
             )  # Should get a result (counter starts at 0 in new actor)
