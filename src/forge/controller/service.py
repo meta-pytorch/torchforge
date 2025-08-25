@@ -192,9 +192,7 @@ class Service(Actor):
             # If the replica failed, try to retry once
             if not replica.healthy:
                 logger.debug(
-                    "Replica %d failed during request, retrying on healthy replica. Exception: %s",
-                    replica.idx,
-                    e,
+                    f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
                 )
                 return await self._retry_request_on_healthy_replica(
                     sess_id, function, *args, **kwargs
@@ -246,7 +244,7 @@ class Service(Actor):
                 results.append(result)
             except Exception as e:
                 logger.warning(
-                    "Request to replica %d failed during broadcast: %s", replica.idx, e
+                    f"Request to replica {replica.idx} failed during broadcast: {e}"
                 )
                 # Add None for failed replicas to maintain indexing
                 results.append(None)

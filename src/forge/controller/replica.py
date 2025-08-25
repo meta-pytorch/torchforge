@@ -263,10 +263,10 @@ class Replica:
             if setup_method := getattr(self.actor, "setup", None):
                 await setup_method.call()
 
-            logger.debug("Actor spawned successfully on replica %d", self.idx)
+            logger.debug(f"Actor spawned successfully on replica {self.idx}")
 
         except Exception as e:
-            logger.error("Failed to spawn actor on replica %d: %s", self.idx, e)
+            logger.error(f"Failed to spawn actor on replica {self.idx}: {e}")
             self.mark_failed()
             raise
 
@@ -276,7 +276,7 @@ class Replica:
         """Start the replica's processing loop if not already running."""
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
-            logger.debug("Started processing loop for replica %d", self.idx)
+            logger.debug(f"Started processing loop for replica {self.idx}")
 
     async def enqueue_request(self, request: ServiceRequest):
         """Enqueues a request for processing by this replica."""
@@ -318,7 +318,7 @@ class Replica:
                     result = result._values[0]
                 request.future.set_result(result)
             except ActorError as e:
-                logger.warning("Got failure on replica %d. Error:\n%s", self.idx, e)
+                logger.warning(f"Got failure on replica {self.idx}. Error:\n{e}")
                 # The exception came from the actor. It itself is
                 # returned to be propagated through the services
                 # back to the caller.
@@ -330,9 +330,7 @@ class Replica:
                 self.mark_failed()
                 success = False
             except Exception as e:
-                logger.debug(
-                    "Got unexpected error on replica %d. Error:\n%s", self.idx, e
-                )
+                logger.debug(f"Got unexpected error on replica {self.idx}. Error:\n{e}")
                 self.mark_failed()
 
                 # The exception was not from the actor - in this case
@@ -378,17 +376,13 @@ class Replica:
                     continue
 
                 except Exception as e:
-                    logger.error(
-                        "Error in replica %d processing loop: %s",
-                        self.idx,
-                        e,
-                    )
+                    logger.error(f"Error in replica {self.idx} processing loop: {e}")
                     self.state = ReplicaState.UNHEALTHY
                     break
 
         finally:
             self._running = False
-            logger.debug("Replica %d stopped processing", self.idx)
+            logger.debug(f"Replica {self.idx} stopped processing")
 
     # Replica state management
 
@@ -419,7 +413,7 @@ class Replica:
 
     def mark_failed(self):
         """Mark the replica as failed, triggering recovery."""
-        logger.debug("Marking replica %d as failed", self.idx)
+        logger.debug(f"Marking replica {self.idx} as failed")
         self.state = ReplicaState.RECOVERING
 
     async def stop(self):
