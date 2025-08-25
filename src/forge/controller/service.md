@@ -1,18 +1,12 @@
 # Service - Distributed Actor Service Controller
 
-A robust service orchestration system for managing distributed actor-based workloads with automatic scaling, fault tolerance, and intelligent load balancing.
+A robust service orchestration system for managing distributed actor-based workloads with fault tolerance and intelligent load balancing.
 
 ## Overview
 
-The Service class provides a unified interface for deploying and managing multiple replicas of actor-based services across distributed compute resources. It automatically handles replica lifecycle, request routing, session management, and resource scaling based on real-time metrics.
+The Service class provides a unified interface for deploying and managing multiple replicas of actor-based services across distributed compute resources. It automatically handles replica lifecycle, request routing, and session management.
 
 ## Key Features
-
-### **Automatic Scaling**
-- **Scale Up**: Automatically adds replicas based on queue depth, capacity utilization, and request rate
-- **Scale Down**: Intelligently removes underutilized replicas while preserving workload
-- **Emergency Scaling**: Rapid scale-up during traffic spikes
-- **Configurable Thresholds**: Customizable scaling triggers and cooldown periods
 
 ### **Fault Tolerance**
 - **Health Monitoring**: Continuous health checks with automatic replica recovery
@@ -61,7 +55,7 @@ The Service class provides a unified interface for deploying and managing multip
 ### Basic Service Setup
 
 ```python
-from forge.controller.service import Service, ServiceConfig, AutoscalingConfig
+from forge.controller.service import Service, ServiceConfig
 
 # Configure service parameters
 config = ServiceConfig(
@@ -70,11 +64,6 @@ config = ServiceConfig(
     max_replicas=10,
     default_replicas=3,
     replica_max_concurrent_requests=10,
-    autoscaling=AutoscalingConfig(
-        scale_up_queue_depth_threshold=5.0,
-        scale_up_capacity_threshold=0.8,
-        scale_down_capacity_threshold=0.3
-    )
 )
 
 # Create service with your actor definition

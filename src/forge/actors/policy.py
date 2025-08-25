@@ -14,12 +14,16 @@ from typing import Dict, List
 
 import torch
 
+from forge.data.sharding import VLLMSharding
+
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from torchstore import MultiProcessStore
+
+from torchstore._state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
-from vllm.inputs import TextPrompt, TokensPrompt
 from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
@@ -198,8 +202,8 @@ class Policy(Actor):
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
-    # resources: int = 1
-    dist_info: dict | None = None
+    resources: int = 1
+    state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
         """Build vLLM Arguments
@@ -244,7 +248,8 @@ class Policy(Actor):
         # assert self.vllm_args.parallel_config.world_size == self.resources
 
     @endpoint
-    async def setup(self):
+    async def setup(self, store: MultiProcessStore = None):
+        self.torchstore = store
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         # print(f" RAnk: {self.rank}")
@@ -254,10 +259,50 @@ class Policy(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
+    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+        """
+        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
+        """
+
+        updated_count = 0
+        # setting explictly to llama3 for now as its our only use case
+        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
+
+        for param_name in current_state_dict.keys():
+            current_tensor = current_state_dict[param_name]
+
+            # Load the full tensor from torchstore
+            # TODO: only get the part of the tensor that is needed
+            stored_tensor = await self.torchstore.get(
+                f"{self.state_dict_key}{DELIM}{param_name}"
+            )
+            sharding.load_from_source_to_target(
+                param_name,
+                stored_tensor,
+                current_tensor,
+            )
+
+            updated_count += 1
+
     @endpoint
     async def update(self):
-        # TODO: add TorchStore support
-        pass
+        """Update model weights by reading state dict from torchstore"""
+
+        if self.torchstore is None:
+            raise Exception("No torchstore configured, skipping model update")
+
+        logger.debug(
+            f"Starting model update from torchstore with key: {self.state_dict_key}"
+        )
+
+        model = self.worker.model_runner.model
+        current_state_dict = model.state_dict()
+
+        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
+
+        await self._load_tensor_parallel_state_dict(current_state_dict)
+
+        logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint
     async def setup_kv_cache(self):
@@ -292,6 +337,17 @@ class Policy(Actor):
     @endpoint
     async def get_vllm_args(self):
         return self.vllm_args
+
+    @endpoint
+    async def get_model_params(self):
+        model = self.worker.model_runner.model
+        state_dict = {}
+
+        for name, param in model.named_parameters():
+            if "layers.0" not in name:
+                continue
+            state_dict[name] = param.cpu().detach()
+        return state_dict
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
