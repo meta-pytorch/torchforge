@@ -580,7 +580,7 @@ class Service(Actor):
     @endpoint
     def _get_internal_state(self) -> dict:
         """
-        Get comprehensive internal state for testing purposes.
+        Gets comprehensive internal state for testing purposes.
 
         This is intended for testing/debugging only, it should not
         be relied upon in actual production code.
