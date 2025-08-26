@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 import torch
@@ -49,10 +49,54 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class SamplingOverrides:
+    """
+    Overrides for vLLMs sampling params.
+
+    Note: We'll want to tie this closer to or directly use vllm's
+            SamplingParams. It is currently used to track a supported
+            subset
+
+    Args:
+        num_samples: Number of samples to generate.
+        guided_decoding: Whether to use guided decoding.
+    """
+
+    num_samples: int
+    guided_decoding: bool = False
+
+
+@dataclass
+class WorkerConfig:
+    """
+    Config args used for setting up the policy worker.
+
+    Args:
+        model: Model name.
+        tensor_parallel_size: Number of tensor parallel workers.
+        pipeline_parallel_size: Number of pipeline parallel workers.
+        enforce_eager: Whether to enforce eager mode.
+        vllm_args: vLLM engine args.
+    """
+
+    model: str
+    tensor_parallel_size: int = 1
+    pipeline_parallel_size: int = 1
+    enforce_eager: bool = False
+    vllm_args: EngineArgs = None
+
+
+@dataclass
+class PolicyConfig:
+    num_workers: int
+    worker_params: WorkerConfig
+    sampling_params: SamplingOverrides
+
+
+@dataclass
 class Policy(PolicyInterface):
-    # TODO: Add dp support
-    config: DictConfig
-    # Gets set up by setup worker
+    config: PolicyConfig
+    # Gets set up by setup
     policy_worker: Actor = None
 
     sampling_params: SamplingParams = None
@@ -120,7 +164,7 @@ class Policy(PolicyInterface):
             },
         )
         self.policy_worker = await self.worker_mesh.spawn(
-            "policy_worker", PolicyWorker, **self.config.worker_params
+            "policy_worker", PolicyWorker, **asdict(self.config.worker_params)
         )
         await self.policy_worker.setup.call()
 
@@ -457,20 +501,18 @@ async def _test(config: DictConfig):
 
 
 if __name__ == "__main__":
-    config = OmegaConf.create(
-        {
-            "num_workers": 2,
-            "worker_params": {
-                "model": "meta-llama/Llama-3.1-8B-Instruct",
-                "tensor_parallel_size": 2,
-                "pipeline_parallel_size": 1,
-                "enforce_eager": True,
-                "vllm_args": None,
-            },
-            "sampling_params": {
-                "guided_decoding": True,
-                "num_samples": 2,
-            },
-        }
+    config = PolicyConfig(
+        num_workers=2,
+        worker_params=WorkerConfig(
+            model="meta-llama/Llama-3.1-8B-Instruct",
+            tensor_parallel_size=2,
+            pipeline_parallel_size=1,
+            enforce_eager=True,
+            vllm_args=None,
+        ),
+        sampling_params=SamplingOverrides(
+            num_samples=2,
+            guided_decoding=True,
+        ),
     )
     asyncio.run(_test(config))
