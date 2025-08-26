@@ -205,12 +205,12 @@ class ForgeSFTRecipe(ForgeEngine):
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
         self.optimizers.step()
-        self.optimizers.zero_grad()
         self.lr_schedulers.step()
+        self.optimizers.zero_grad()
 
     def train(self) -> None:
-        self.optimizers.zero_grad()
         dataloader = iter(self.train_dataloader)
+        self.optimizers.zero_grad()
 
         self.pbar = tqdm(
             initial=0,
