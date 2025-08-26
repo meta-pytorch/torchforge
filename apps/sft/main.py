@@ -199,16 +199,17 @@ class ForgeSFTRecipe(ForgeEngine):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        self.optimizers.zero_grad()
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
         self.pbar.update(1)
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
         self.optimizers.step()
+        self.optimizers.zero_grad()
         self.lr_schedulers.step()
 
     def train(self) -> None:
+        self.optimizers.zero_grad()
         dataloader = iter(self.train_dataloader)
 
         self.pbar = tqdm(
