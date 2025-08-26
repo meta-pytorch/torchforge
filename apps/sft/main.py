@@ -205,6 +205,7 @@ class ForgeSFTRecipe(ForgeEngine):
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
         self.optimizers.step()
+        self.optimizers.zero_grad()
         self.lr_schedulers.step()
 
     def train(self) -> None:
