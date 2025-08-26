@@ -7,7 +7,7 @@
 from typing import Any, Optional
 
 import torch
-from forge.data.metrics import MetricsAggregator
+from forge.data.dataset_metrics import MetricsAggregator
 
 from torch.utils.data import DataLoader
 

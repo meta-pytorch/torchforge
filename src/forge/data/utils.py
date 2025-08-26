@@ -7,6 +7,10 @@
 from enum import Enum
 from typing import Any, Literal, Optional, Union
 
+import torch
+
+from torch.nn.attention.flex_attention import BlockMask
+
 CROSS_ENTROPY_IGNORE_IDX = -100
 
 Role = Literal[
@@ -182,3 +186,30 @@ def mask_messages(
                 message.masked = True
         elif masking_strategy == MaskingStrategy.TRAIN_ON_ASSISTANT:
             message.masked = message.role != "assistant"
+
+
+def batch_to_device(batch: dict, device: torch.device) -> None:
+    """Function that takes a dictionary (or nested dictionary) of tensors and sets them
+    all to the same device. This utility is intended to be used for batches of data to be
+    moved to device, the update is inplace.
+
+    Args:
+        batch (dict): dict of Tensors or more nested dicts of tensors.
+        device (torch.device): torch device to move the tensors to.
+
+    Raises:
+        ValueError: if batch dict contains anything other than ``torch.Tensor``.
+
+    """
+    for k, v in batch.items():
+        if isinstance(v, dict):
+            batch_to_device(v, device)
+        elif isinstance(v, torch.Tensor):
+            batch[k] = v.to(device)
+        elif isinstance(v, BlockMask):
+            batch[k] = v.to(device)
+        else:
+            raise ValueError(
+                f"""To use batch_to_device, all elements in the batch must be a dict, Tensor, or BlockMask with flexattention enabled.
+Got key "{k}" with value of type {type(v)}"""
+            )

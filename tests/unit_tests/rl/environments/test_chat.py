@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import torch
 
-from forge.rl.environments.chat import (
+from forge.envs.chat import (
     ChatAction,
     ChatEnvironment,
     ChatObservation,

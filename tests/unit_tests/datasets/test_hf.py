@@ -26,8 +26,8 @@ from pathlib import Path
 import pytest
 import torch.distributed as dist
 
-from forge.data.metrics import DefaultTrainingMetricTransform, MetricsAggregator
-from forge.datasets import HfIterableDataset
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricsAggregator
+from forge.data.datasets import HfIterableDataset
 from torch.testing._internal.common_fsdp import FSDPTest
 
 from torchdata.stateful_dataloader import StatefulDataLoader

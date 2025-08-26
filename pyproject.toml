@@ -13,6 +13,7 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
+    "torchao",
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
@@ -36,6 +37,7 @@ dev = [
     "pytest-cov",
     "pytest-timeout",
     "tensorboard",
+    "expecttest",
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
@@ -45,13 +47,14 @@ oss = [
     "torchmonarch-nightly==2025.8.1",
     "torchstore",
 ]
+cpu = [
+    "torch==2.9.0.dev20250815",
+    "monarch-no-torch==0.1.0.dev20250815",
+]
 
 
 [project.scripts]
 forge = "forge.cli.forge:main"
-
-[tool.setuptools.dynamic]
-version = {file = "assets/version.txt"}
 
 
 # ---- Explicit project build information ---- #

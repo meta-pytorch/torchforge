@@ -14,10 +14,15 @@ import pytest
 import torch
 
 from forge.data.collate import collate_packed
-from forge.data.metrics import MetricsAggregator
-from forge.datasets.hf import HfIterableDataset
-from forge.datasets.packed import DPOPacker, PackedDataset, Packer, TextPacker
-from forge.tools._import_guard import _SUPPORTS_FLEX_ATTENTION
+from forge.data.dataset_metrics import MetricsAggregator
+from forge.data.datasets import HfIterableDataset
+from forge.data.datasets.packed import (
+    _SUPPORTS_FLEX_ATTENTION,
+    DPOPacker,
+    PackedDataset,
+    Packer,
+    TextPacker,
+)
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from .test_iterable_utils import generate_ckpt

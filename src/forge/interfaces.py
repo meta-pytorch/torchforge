@@ -152,6 +152,16 @@ class ModelTokenizer(ABC):
         pass
 
 
+class Reward(ABC):
+    """Abstract base class for reward models."""
+
+    @abstractmethod
+    def __call__(self, observation: Observation) -> float:
+        """Compute a reward for an observation."""
+        pass
+
+
+# TODO
 # class RLLoss(ABC):
 
 # class SFTLoss(ABC): # inherit from titan loss

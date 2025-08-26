@@ -14,7 +14,7 @@ Tests cover:
 
 import pytest
 
-from forge.data.metrics import AggregationType, DefaultTrainingMetricTransform
+from forge.data.dataset_metrics import AggregationType, DefaultTrainingMetricTransform
 
 
 class TestDefaultTrainingMetricTransform:
