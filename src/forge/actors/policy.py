@@ -183,7 +183,6 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        print("Awaiting in Generate")
         return await request_fut
 
     # Abstracted to match vllm
@@ -201,7 +200,6 @@ class Policy(PolicyInterface):
     async def run_processing(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
-        print("Policy Run: starting")
         parallel_config = self.vllm_args.parallel_config
         output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
@@ -435,38 +433,21 @@ async def _test(config: DictConfig):
     prompt = (
         "What is 3+5?" if config.sampling_params.guided_decoding else "Tell me a joke"
     )
+    service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
 
-    with_service = True
-    if with_service:
-        # Update this condition path once Service has been refactored
-        service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
-        print("Spawning service")
+    print("Spawning service")
+    policy = await spawn_service(service_config, Policy, config=config)
+    session_id = await policy.start_session()
 
-        # ServiceInterface is a wrapper around the Policy
-        policy = await spawn_service(service_config, Policy, config=config)
-        session_id = await policy.start_session()
+    print("Kick off background processing")
+    asyncio.create_task(policy.run_processing.call())
 
-        print("Kick off background processing")
-        policy.run_processing.choose()
+    print("Request Generation")
+    responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
 
-        print("Request Generation")
-        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
-
-        print("Terminating session")
-        await policy.shutdown.call()
-        await policy.terminate_session(session_id)
-
-    else:
-        process_config = ProcessConfig()
-        policy = await spawn_actors(
-            name="policy", actor_cls=Policy, cfg=config, processes=process_config
-        )
-        print("Model setup")
-        await policy.setup.call()
-        print("Model running")
-        policy.run_processing.call()
-        responses: List[CompletionOutput] = await policy.generate.call_one(prompt)
-        await policy.shutdown.call()
+    print("Terminating session")
+    await policy.shutdown.call()
+    await policy.terminate_session(session_id)
 
     for batch, response in enumerate(responses):
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
