@@ -47,7 +47,7 @@ async def run(cfg: DictConfig):
     # Initialize everything
     await asyncio.gather(
         buffer.setup.call(),
-        trainer.setup.call(buffer),
+        trainer.setup.call(),
     )
     print("Setup done")
 

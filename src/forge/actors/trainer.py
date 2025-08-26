@@ -99,11 +99,18 @@ class RLTrainer(ForgeActor, ForgeEngine):
         logger.info("env: {}".format(env))
 
     @endpoint
-    async def setup(self, replay_buffer: "ReplayBuffer"):
-        self.replay_buffer = replay_buffer
+    async def setup(self):
         self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
+        self.optimizers.zero_grad()
+
+        # self.pbar = tqdm(
+        #     initial=0,
+        #     total=self.num_training_steps,
+        #     desc=f"{self.current_step}",
+        # )
+        #
 
     def forward_backward(
         self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
@@ -163,58 +170,47 @@ class RLTrainer(ForgeActor, ForgeEngine):
 
         return loss
 
+    @endpoint
     def train_step(self, batch) -> None:
+        # Move tensors to the appropriate device
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                batch[k] = v.to("cuda")  # TODO: hardcoded for now
+        self.train_step(batch)
+
         # TODO implement gradient accumulation
         # with GradientAccumulation(
         #     self.gradient_accumulation_steps,
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
+        # TODO: convert to GRPO Loss
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
         # self.pbar.update(1)
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
 
         self.optimizers.step()
+        self.optimizers.zero_grad()
         self.lr_schedulers.step()
 
+        # self.profiler.step()
+        self.current_step += 1
+
+        # if self.current_step % self.train_config.val_every_n_steps == 0:
+        #     self.validate()
+        self.checkpointer.save(
+            curr_step=self.current_step,
+            last_step=self.current_step == self.num_training_steps,
+        )
+
+    @endpoint
     def push_weights(self) -> None:
         pass
 
     @endpoint
-    async def train(self, batch) -> None:
-        # dataloader = iter(self.train_dataloader)
-        self.optimizers.zero_grad()
-
-        # self.pbar = tqdm(
-        #     initial=0,
-        #     total=self.num_training_steps,
-        #     desc=f"{self.current_step}",
-        # )
-
-        while self.current_step < self.num_training_steps:
-            logger.info(f"step: {self.current_step}/{self.num_training_steps}")
-            batch = self.replay_buffer.sample()
-
-            # Move tensors to the appropriate device
-            for k, v in batch.items():
-                if isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")  # TODO: hardcoded for now
-            self.train_step(batch)
-            # self.profiler.step()
-            self.current_step += 1
-
-            # if self.current_step % self.train_config.val_every_n_steps == 0:
-            #     self.validate()
-            self.checkpointer.save(
-                curr_step=self.current_step,
-                last_step=self.current_step == self.num_training_steps,
-            )
-
-        # self.pbar.close()
-
-    @endpoint
     async def cleanup(self) -> None:
+        # self.pbar.close()
         if self.checkpointer:
             self.checkpointer.close()
         if self.metric_logger:
