@@ -14,103 +14,49 @@ import asyncio
 import logging
 import sys
 
-from dataclasses import asdict
-
-# from forge.actors import Collector, Policy, PolicyRouter, Reference, Trainer
-from forge.actors import Policy, PolicyRouter, PostProcessor, Trainer
+# from forge.actors import Policy, PolicyRouter, RLTrainer, ReplayBuffer
+from forge.actors import ReplayBuffer, RLTrainer
 
 from forge.cli.config import parse
-from forge.controller import get_proc_mesh
-from omegaconf import DictConfig, OmegaConf
-from torchtitan.experiments.forge.job_config import ForgeJobConfig
+from forge.controller import spawn_actors
+from omegaconf import DictConfig
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-async def setup_entity(entity: str, scheduler_cfg: DictConfig, *args, **kwargs):
-    """Initialize an entity and return the proc_mesh and actor."""
-    logging.info("Initializing %s...", entity)
-    logging.info("Creating proc_mesh for %s, with config %s", entity, scheduler_cfg)
-    p = await get_proc_mesh(scheduler_cfg)
-    logging.info("Proc mesh created for %s: %s", entity, p)
-
-    actor_type = None
-
-    match entity:
-        case "trainer":
-            actor_type = Trainer
-        case "policy":
-            actor_type = Policy
-        case "policy_router":
-            actor_type = PolicyRouter
-        case "postprocessor":
-            actor_type = PostProcessor
-        case _:
-            raise ValueError(f"Unknown entity {entity}")
-
-    actor = await p.spawn(entity, actor_type, *args, **kwargs)
-    return p, actor
-
-
 async def run(cfg: DictConfig):
-    results = await asyncio.gather(
-        setup_entity(
-            entity="trainer",
-            scheduler_cfg=cfg.trainer.scheduler,
-            job_config=cfg.trainer,
+    trainer, buffer = await asyncio.gather(
+        spawn_actors(
+            name="trainer",
+            actor_cls=RLTrainer,
+            cfg={"config": cfg.trainer},
+            processes=cfg.trainer.pop("processes"),
+            set_address=True,
         ),
-        setup_entity(
-            entity="policy",
-            scheduler_cfg=cfg.policy.scheduler,
-            model=cfg.policy.model,
-            tensor_parallel_size=cfg.policy.tensor_parallel_size,
-            pipeline_parallel_size=cfg.policy.pipeline_parallel_size,
-            enforce_eager=cfg.policy.enforce_eager,
-        ),
-        setup_entity(entity="policy_router", scheduler_cfg=cfg.policy.scheduler),
-        setup_entity(
-            entity="postprocessor",
-            scheduler_cfg=cfg.postprocessor.scheduler,
-            job_config=cfg.postprocessor,
+        spawn_actors(
+            name="replay_buffer",
+            actor_cls=ReplayBuffer,
+            cfg=cfg.replay_buffer,
+            processes=cfg.replay_buffer.pop("processes"),
         ),
     )
+    print("Actors spawned")
 
-    # Unzip results into individual proc and actor variables
-    (
-        (trainer_proc, trainer_actor),
-        (policy_proc, policy_actor),
-        (policy_router_proc, policy_router_actor),
-        (postprocess_proc, postprocess_actor),
-    ) = results
-
-    print(f"Trainer proc: {trainer_proc}, actor: {trainer_actor}")
-    print(f"Policy proc: {policy_proc}, actor: {policy_actor}")
-    print(f"Policy router proc: {policy_router_proc}, actor: {policy_router_actor}")
-    print(f"Postprocessor proc: {postprocess_proc}, actor: {postprocess_actor}")
     # Initialize everything
     await asyncio.gather(
-        policy_actor.setup.call(),
-        trainer_actor.setup.call(),
-        policy_router_actor.setup.call(policy_actor),
-        postprocess_actor.setup.call(),
+        buffer.setup.call(),
+        trainer.setup.call(buffer),
     )
-    print("Done initializing")
+    print("Setup done")
 
     print("shutting down...")
-    # await asyncio.gather(
-    #     *[p.stop() for p in [trainer_proc, policy_proc, policy_router_proc]]
-    # )
+    await asyncio.gather(*[a.mesh.stop() for a in [trainer]])
 
 
 @parse
 def recipe_main(cfg: DictConfig) -> None:
-    # TODO: this is a hack to get the defaults from ForgeJobConfig
-    default_cfg = ForgeJobConfig()
-    # Hack to deal with literal types from titan
-    default_cfg = asdict(default_cfg)
-    cfg = OmegaConf.merge(default_cfg, cfg)
     asyncio.run(run(cfg))
 
 
