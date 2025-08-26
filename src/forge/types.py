@@ -100,4 +100,36 @@ class ProcessConfig:
     image: str = "forge_workspace:latest"
 
 
+@dataclass
+class ServiceConfig:
+    """A service config."""
+
+    procs_per_replica: int
+    num_replicas: int
+    num_hosts: int = 1
+    scheduler: Literal["mast", "local"] = "local"
+    oncall: str = "torchtune"
+    identity: str = "pytorch_distributed"
+    image: str = "forge_workspace:latest"
+    # ServiceConfig-specific fields
+    health_poll_rate: float = 0.2
+    replica_max_concurrent_requests: int = 10
+    return_first_rank_result: bool = (
+        True  # Whether or not to auto-unwrap ValueMesh to first rank's result
+    )
+
+    def to_process_config(self) -> ProcessConfig:
+        """Extract ProcessConfig from this ServiceConfig.
+        Maps procs_per_replica to num_procs for ProcessConfig.
+        """
+        return ProcessConfig(
+            scheduler=self.scheduler,
+            num_procs=self.procs_per_replica,
+            num_hosts=self.num_hosts,
+            oncall=self.oncall,
+            identity=self.identity,
+            image=self.image,
+        )
+
+
 Scalar = Union[int, float]

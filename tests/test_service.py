@@ -12,7 +12,7 @@ import asyncio
 import logging
 
 import pytest
-from forge.controller.service import AutoscalingConfig, ServiceConfig
+from forge.controller.service import ServiceConfig
 from forge.controller.spawn import spawn_service
 from monarch.actor import Actor, endpoint
 
@@ -43,9 +43,16 @@ class Counter(Actor):
 
     @endpoint
     async def slow_incr(self):
-        """Slow increment to test queueing and autoscaling."""
+        """Slow increment to test queueing."""
         await asyncio.sleep(1.0)
         self.v += 1
+
+    @endpoint
+    async def add_to_value(self, amount: int, multiplier: int = 1) -> int:
+        """Add an amount (optionally multiplied) to the current value."""
+        logger.info(f"adding {amount} with {multiplier}")
+        self.v += amount * multiplier
+        return self.v
 
 
 # Core Functionality Tests
@@ -55,9 +62,7 @@ class Counter(Actor):
 @pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=1, max_replicas=2, default_replicas=1
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -68,16 +73,18 @@ async def test_basic_service_operations():
         assert isinstance(session1, str)
 
         # Test endpoint calls
-        await service.incr(session1)
-        result = await service.value(session1)
+        await service.incr.choose(sess_id=session1)
+        result = await service.value.choose(sess_id=session1)
         assert result == 1
 
         # Test session mapping
-        assert session1 in service._session_replica_map
+        state = await service._get_internal_state()
+        assert session1 in state["session_replica_map"]
 
         # Test session termination
         await service.terminate_session(session1)
-        assert session1 not in service._session_replica_map
+        state = await service._get_internal_state()
+        assert session1 not in state["session_replica_map"]
 
     finally:
         await service.stop()
@@ -86,30 +93,33 @@ async def test_basic_service_operations():
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_sessionless_calls():
-    """Test sessionless calls with round-robin load balancing."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    """Test sessionless calls with round robin load balancing."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         # Test sessionless calls
-        await service.incr()
-        await service.incr()
-        result = await service.value()
+        await service.incr.choose()
+        await service.incr.choose()
+        result = await service.value.choose()
         assert result is not None
 
         # No sessions should be created
-        assert len(service._active_sessions) == 0
-        assert len(service._session_replica_map) == 0
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 0
+        assert len(state["session_replica_map"]) == 0
 
         # Verify load distribution
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
         )
         assert total_requests == 3
+
+        # Users should be able to call endpoint with just args
+        result = await service.add_to_value.choose(5, multiplier=2)
+        assert result == 11  # 1 + 10
 
     finally:
         await service.stop()
@@ -119,26 +129,24 @@ async def test_sessionless_calls():
 @pytest.mark.asyncio
 async def test_session_context_manager():
     """Test session context manager functionality."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=1, max_replicas=1, default_replicas=1
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         # Test context manager usage
         async with service.session():
-            await service.incr()
-            await service.incr()
-            result = await service.value()
+            await service.incr.choose()
+            await service.incr.choose()
+            result = await service.value.choose()
             assert result == 2
 
         # Test sequential context managers to avoid interference
         async def worker(increments: int):
             async with service.session():
-                initial = await service.value()
+                initial = await service.value.choose()
                 for _ in range(increments):
-                    await service.incr()
-                final = await service.value()
+                    await service.incr.choose()
+                final = await service.value.choose()
                 return final - initial
 
         # Run sessions sequentially to avoid concurrent modification
@@ -148,8 +156,9 @@ async def test_session_context_manager():
         assert sorted(results) == [2, 3]
 
         # Test that context manager properly manages session lifecycle
-        assert len(service._active_sessions) == 0
-        assert len(service._session_replica_map) == 0
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 0
+        assert len(state["session_replica_map"]) == 0
 
     finally:
         await service.stop()
@@ -158,191 +167,123 @@ async def test_session_context_manager():
 # Fault Tolerance Tests
 
 
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+async def test_recovery_state_transitions():
+    """Test replica state transitions during failure and recovery."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1, health_poll_rate=0.1)
+    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+
+    try:
+        # Initially replica should be healthy
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] == "HEALTHY"
+        assert replica_state["healthy"] is True
+        assert replica_state["failed"] is False
+
+        # Create session and make a successful call
+        session = await service.start_session()
+        await service.incr.choose(sess_id=session)
+        result = await service.value.choose(sess_id=session)
+        assert result == 1
+
+        # Cause failure - this should transition to RECOVERING
+        error_result = await service.fail_me.choose(sess_id=session)
+        assert isinstance(error_result, RuntimeError)
+
+        # Replica should now be in RECOVERING state
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] == "RECOVERING"
+        assert replica_state["healthy"] is False
+        assert replica_state["failed"] is True
+
+        # Wait for health loop to detect and attempt recovery
+        # The health loop runs every 0.1s, so give it some time
+        max_wait_time = 5.0  # 5 seconds max wait
+        wait_interval = 0.1
+        elapsed = 0.0
+
+        # Wait for replica to either recover (HEALTHY) or fail completely (UNHEALTHY)
+        while elapsed < max_wait_time:
+            await asyncio.sleep(wait_interval)
+            elapsed += wait_interval
+
+            state = await service._get_internal_state()
+            replica_state = state["replicas"][0]
+            if replica_state["state"] in ["HEALTHY", "UNHEALTHY"]:
+                break
+
+        # After recovery, replica should be healthy again
+        # (unless recovery failed, in which case it would be UNHEALTHY)
+        state = await service._get_internal_state()
+        replica_state = state["replicas"][0]
+        assert replica_state["state"] in ["HEALTHY", "UNHEALTHY"]
+
+        if replica_state["state"] == "HEALTHY":
+            # If recovery succeeded, verify we can make calls again
+            assert replica_state["healthy"] is True
+            assert replica_state["failed"] is False
+
+            # Test that we can make new calls after recovery
+            new_session = await service.start_session()
+            await service.incr.choose(sess_id=new_session)
+            result = await service.value.choose(sess_id=new_session)
+            assert (
+                result is not None
+            )  # Should get a result (counter starts at 0 in new actor)
+
+        elif replica_state["state"] == "UNHEALTHY":
+            # If recovery failed, verify failed state
+            assert replica_state["healthy"] is False
+            assert replica_state["failed"] is True
+
+        # Verify that the state transition path was correct
+        # (We can't guarantee the exact end state due to potential flakiness in test environments,
+        # but we can verify the replica went through the expected transition)
+        logger.info(f"Final replica state: {replica_state['state']}")
+
+    finally:
+        await service.stop()
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         # Create session and cause failure
         session = await service.start_session()
-        await service.incr(session)
+        await service.incr.choose(sess_id=session)
 
-        original_replica_idx = service._session_replica_map[session]
+        state = await service._get_internal_state()
+        original_replica_idx = state["session_replica_map"][session]
 
         # Cause failure
-        error_result = await service.fail_me(session)
+        error_result = await service.fail_me.choose(sess_id=session)
         assert isinstance(error_result, RuntimeError)
 
         # Replica should be marked as failed
-        failed_replica = service._replicas[original_replica_idx]
-        assert not failed_replica.proc_mesh.healthy
+        state = await service._get_internal_state()
+        failed_replica = state["replicas"][original_replica_idx]
+        assert not failed_replica["healthy"]
 
         # Session should be reassigned on next call
-        await service.incr(session)
-        new_replica_idx = service._session_replica_map[session]
+        await service.incr.choose(sess_id=session)
+        state = await service._get_internal_state()
+        new_replica_idx = state["session_replica_map"][session]
         assert new_replica_idx != original_replica_idx
 
         # New sessions should avoid failed replica
         new_session = await service.start_session()
-        await service.incr(new_session)
-        assigned_replica = service._replicas[service._session_replica_map[new_session]]
-        assert assigned_replica.proc_mesh.healthy
-
-    finally:
-        await service.stop()
-
-
-# Autoscaling Tests
-
-
-@pytest.mark.timeout(20)
-@pytest.mark.asyncio
-async def test_autoscaling_scale_up():
-    """Test automatic scale up under high load."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_up_capacity_threshold=0.5,
-        scale_up_queue_depth_threshold=2.0,
-        scale_up_cooldown=0.5,
-        min_time_between_scale_events=0.5,
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=3,
-        default_replicas=1,
-        autoscaling=autoscaling_cfg,
-        replica_max_concurrent_requests=1,  # Force queueing
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        initial_replica_count = len(service._replicas)
-        assert initial_replica_count == 1
-
-        # Create high load with slow operations
-        sessions = [await service.start_session() for _ in range(3)]
-        tasks = [service.slow_incr(session) for session in sessions for _ in range(2)]
-
-        # Start tasks and wait for scaling
-        await asyncio.gather(*tasks)
-
-        # Check if scaling occurred
-        scaled_up = False
-        for _ in range(10):
-            await asyncio.sleep(0.5)
-            if len(service._replicas) > initial_replica_count:
-                scaled_up = True
-                break
-
-        assert (
-            scaled_up
-        ), f"Expected scale up, but replicas remained at {len(service._replicas)}"
-
-    finally:
-        await service.stop()
-
-
-@pytest.mark.timeout(25)
-@pytest.mark.asyncio
-async def test_autoscaling_scale_down():
-    """Test automatic scale down when idle."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_down_capacity_threshold=0.2,
-        scale_down_queue_depth_threshold=0.5,
-        scale_down_idle_time_threshold=3.0,
-        scale_down_cooldown=1.0,
-        min_time_between_scale_events=1.0,
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=3,
-        default_replicas=2,  # Start with 2 replicas
-        autoscaling=autoscaling_cfg,
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        initial_replica_count = len(service._replicas)
-        assert initial_replica_count == 2
-
-        # Make minimal requests to establish baseline
-        session = await service.start_session()
-        await service.incr(session)
-
-        # Wait for scale down
-        max_wait = 10.0
-        waited = 0.0
-        scaled_down = False
-
-        while waited < max_wait:
-            await asyncio.sleep(1.0)
-            waited += 1.0
-            if len(service._replicas) < initial_replica_count:
-                scaled_down = True
-                break
-
-        assert (
-            scaled_down
-        ), f"Expected scale down, but replicas remained at {len(service._replicas)}"
-        assert len(service._replicas) >= cfg.min_replicas
-
-    finally:
-        await service.stop()
-
-
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_autoscaling_limits():
-    """Test that autoscaling respects min/max limits."""
-    autoscaling_cfg = AutoscalingConfig(
-        enabled=True,
-        scale_up_queue_depth_threshold=1.0,
-        scale_down_capacity_threshold=0.9,  # High threshold to prevent scale down
-    )
-
-    cfg = ServiceConfig(
-        procs_per_replica=1,
-        min_replicas=1,
-        max_replicas=2,  # Tight limit
-        default_replicas=1,
-        autoscaling=autoscaling_cfg,
-    )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
-    try:
-        # Test max limit
-        should_scale_up, reason = service._should_scale_up()
-
-        # Manually scale to max
-        await service._scale_up(1)
-        assert len(service._replicas) == 2
-
-        # Should not scale beyond max
-        should_scale_up, reason = service._should_scale_up()
-        assert not should_scale_up
-        assert "max replicas" in reason.lower()
-
-        # Test min limit
-        should_scale_down, reason = service._should_scale_down()
-
-        # Scale down to min
-        await service._scale_down_replicas(1)
-        assert len(service._replicas) == 1
-
-        # Should not scale below min
-        should_scale_down, reason = service._should_scale_down()
-        assert not should_scale_down
-        assert "min replicas" in reason.lower()
+        await service.incr.choose(sess_id=new_session)
+        state = await service._get_internal_state()
+        assigned_replica = state["replicas"][state["session_replica_map"][new_session]]
+        assert assigned_replica["healthy"]
 
     finally:
         await service.stop()
@@ -354,10 +295,8 @@ async def test_autoscaling_limits():
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_metrics_collection():
-    """Test comprehensive metrics collection."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    """Test metrics collection."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -365,17 +304,17 @@ async def test_metrics_collection():
         session1 = await service.start_session()
         session2 = await service.start_session()
 
-        await service.incr(session1)
-        await service.incr(session1)
-        await service.incr(session2)
+        await service.incr.choose(sess_id=session1)
+        await service.incr.choose(sess_id=session1)
+        await service.incr.choose(sess_id=session2)
 
         # Test failure metrics
-        error_result = await service.fail_me(session1)
+        error_result = await service.fail_me.choose(sess_id=session1)
         assert isinstance(error_result, RuntimeError)
 
         # Get metrics
-        metrics = service.get_metrics()
-        summary = service.get_metrics_summary()
+        metrics = await service.get_metrics()
+        summary = await service.get_metrics_summary()
 
         # Test service-level metrics
         assert metrics.total_sessions == 2
@@ -410,27 +349,27 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         session = await service.start_session()
 
         # Make multiple calls
-        await service.incr(session)
-        await service.incr(session)
-        await service.incr(session)
+        await service.incr.choose(sess_id=session)
+        await service.incr.choose(sess_id=session)
+        await service.incr.choose(sess_id=session)
 
         # Should always route to same replica
-        replica_idx = service._session_replica_map[session]
+        state = await service._get_internal_state()
+        replica_idx = state["session_replica_map"][session]
 
-        await service.incr(session)
-        assert service._session_replica_map[session] == replica_idx
+        await service.incr.choose(sess_id=session)
+        state = await service._get_internal_state()
+        assert state["session_replica_map"][session] == replica_idx
 
         # Verify counter was incremented correctly
-        result = await service.value(session)
+        result = await service.value.choose(sess_id=session)
         assert result == 4
 
     finally:
@@ -441,28 +380,31 @@ async def test_session_stickiness():
 @pytest.mark.asyncio
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         # Create sessions with some load to trigger distribution
         session1 = await service.start_session()
-        await service.incr(session1)  # Load replica 0
+        await service.incr.choose(sess_id=session1)  # Load replica 0
 
         session2 = await service.start_session()
-        await service.incr(session2)  # Should go to replica 1 (least loaded)
+        await service.incr.choose(
+            sess_id=session2
+        )  # Should go to replica 1 (least loaded)
 
         session3 = await service.start_session()
-        await service.incr(session3)  # Should go to replica 0 or 1 based on load
+        await service.incr.choose(
+            sess_id=session3
+        )  # Should go to replica 0 or 1 based on load
 
         session4 = await service.start_session()
-        await service.incr(session4)  # Should balance the load
+        await service.incr.choose(sess_id=session4)  # Should balance the load
 
         # Check that sessions are distributed (may not be perfectly even due to least-loaded logic)
+        state = await service._get_internal_state()
         replica_assignments = [
-            service._session_replica_map[s]
+            state["session_replica_map"][s]
             for s in [session1, session2, session3, session4]
         ]
         unique_replicas = set(replica_assignments)
@@ -472,7 +414,7 @@ async def test_load_balancing_multiple_sessions():
         assert len(unique_replicas) >= 1  # At least one replica used
 
         # Verify that load balancing is working by checking request distribution
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
@@ -487,10 +429,10 @@ async def test_load_balancing_multiple_sessions():
 @pytest.mark.asyncio
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, min_replicas=2, max_replicas=2, default_replicas=2
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
+    service = await spawn_service(
+        service_cfg=cfg, actor_def=Counter, name="counter", v=0
     )
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
         # Mix of session and sessionless calls
@@ -498,25 +440,135 @@ async def test_concurrent_operations():
 
         # Concurrent operations
         tasks = [
-            service.incr(session),  # Session call
-            service.incr(session),  # Session call
-            service.incr(),  # Sessionless call
-            service.incr(),  # Sessionless call
+            service.incr.choose(sess_id=session),  # Session call
+            service.incr.choose(sess_id=session),  # Session call
+            service.incr.choose(),  # Sessionless call
+            service.incr.choose(),  # Sessionless call
         ]
 
         await asyncio.gather(*tasks)
 
         # Verify session tracking
-        assert len(service._active_sessions) == 1
-        assert session in service._session_replica_map
+        state = await service._get_internal_state()
+        assert len(state["active_sessions"]) == 1
+        assert session in state["session_replica_map"]
 
         # Verify total requests
-        metrics = service.get_metrics_summary()
+        metrics = await service.get_metrics_summary()
         total_requests = sum(
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
         )
         assert total_requests == 4
+
+    finally:
+        await service.stop()
+
+
+# `call` endpoint tests
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_broadcast_call_basic():
+    """Test basic broadcast call functionality."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
+    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=10)
+
+    try:
+        # Test broadcast call to all replicas
+        results = await service.incr.call()
+
+        # Should get results from all healthy replicas
+        assert isinstance(results, list)
+        assert len(results) == 3  # All 3 replicas should respond
+
+        # All results should be None (incr doesn't return anything)
+        assert all(result is None for result in results)
+
+        # Test getting values from all replicas
+        values = await service.value.call()
+        assert isinstance(values, list)
+        assert len(values) == 3
+
+        # All replicas should have incremented from 10 to 11
+        assert all(value == 11 for value in values)
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.asyncio
+async def test_broadcast_call_with_failed_replica():
+    """Test broadcast call behavior when some replicas fail."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
+    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+
+    try:
+        # First, cause one replica to fail by calling fail_me on a specific session
+        session = await service.start_session()
+        try:
+            await service.fail_me.choose(sess_id=session)
+        except RuntimeError:
+            pass  # Expected failure
+
+        # Wait briefly for replica to be marked as failed
+        await asyncio.sleep(0.1)
+
+        # Now test broadcast call - should only hit healthy replicas
+        results = await service.incr.call()
+
+        # Should get results from healthy replicas only
+        assert isinstance(results, list)
+        # Results length should match number of healthy replicas (2 out of 3)
+        state = await service._get_internal_state()
+        healthy_count = sum(1 for r in state["replicas"] if r["healthy"])
+        assert len(results) == healthy_count
+
+        # Get values from all healthy replicas
+        values = await service.value.call()
+        assert len(values) == healthy_count
+
+        # All healthy replicas should have incremented to 1
+        assert all(value == 1 for value in values)
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_broadcast_call_vs_choose():
+    """Test that broadcast call hits all replicas while choose hits only one."""
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
+    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+
+    try:
+        # Use broadcast call to increment all replicas
+        await service.incr.call()
+
+        # Get values from all replicas
+        values_after_broadcast = await service.value.call()
+        assert len(values_after_broadcast) == 3
+        assert all(value == 1 for value in values_after_broadcast)
+
+        # Use choose to increment only one replica
+        await service.incr.choose()
+
+        # Get values again - one replica should be at 2, others at 1
+        values_after_choose = await service.value.call()
+        assert len(values_after_choose) == 3
+        assert sorted(values_after_choose) == [1, 1, 2]  # One replica incremented twice
+
+        # Verify metrics show the correct number of requests
+        metrics = await service.get_metrics_summary()
+        total_requests = sum(
+            replica_metrics["total_requests"]
+            for replica_metrics in metrics["replicas"].values()
+        )
+        # incr.call() (3 requests) + value.call() (3 requests) + incr.choose() (1 request) + value.call() (3 requests) = 10 total
+        assert total_requests == 10
 
     finally:
         await service.stop()

@@ -195,4 +195,12 @@ class MetricLogger(ABC):
         This will automatically be called via __del__ when the instance goes out of scope.
         Logs should not be written after `close` is called.
         """
+
+
+class Reward(ABC):
+    """Abstract base class for reward models."""
+
+    @abstractmethod
+    def __call__(self, observation: Observation) -> float:
+        """Compute a reward for an observation."""
         pass

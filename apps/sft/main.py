@@ -18,10 +18,12 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.data.utils import batch_to_device, CROSS_ENTROPY_IGNORE_IDX
 from forge.util import get_metric_logger
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
+
 from torchdata.stateful_dataloader import StatefulDataLoader
 from torchtitan.components.loss import LossFunction
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
@@ -30,6 +32,7 @@ from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from tqdm import tqdm
+
 
 # stubs for now
 Checkpointer = Any
@@ -64,7 +67,16 @@ class ForgeSFTRecipe(ForgeEngine):
         self.metric_logger = get_metric_logger(**job_config.metrics)
 
     def setup(self):
-        self.train_dataloader = self.setup_data()
+        self.train_dataloader = self.setup_data(
+            self.job_config.dataset,
+            batch_size=self.job_config.training.local_batch_size,
+        )
+
+        self.val_dataloader = self.setup_data(
+            self.job_config.dataset_val,
+            batch_size=self.job_config.validation.local_batch_size,
+        )
+
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -80,7 +92,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self):
+    def setup_data(self, dataset_config, batch_size):
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -96,8 +108,8 @@ class ForgeSFTRecipe(ForgeEngine):
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
+            path=dataset_config.path,
+            split=dataset_config.split,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -107,7 +119,7 @@ class ForgeSFTRecipe(ForgeEngine):
         )
         dataloader = StatefulDataLoader(
             dataset=dataset,
-            batch_size=self.job_config.training.local_batch_size,
+            batch_size=batch_size,
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
@@ -120,7 +132,10 @@ class ForgeSFTRecipe(ForgeEngine):
         return dataloader
 
     def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
+        self,
+        input_dict: dict[str, torch.Tensor],
+        labels: torch.Tensor,
+        do_backward: bool = True,
     ) -> torch.Tensor:
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
@@ -146,14 +161,16 @@ class ForgeSFTRecipe(ForgeEngine):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
                 )
+                if do_backward:
+                    pp_schedule_fn = self.pp_schedule.step
+                else:
+                    pp_schedule_fn = self.pp_schedule.eval
                 if self.pp_has_first_stage:
-                    self.pp_schedule.step(
+                    pp_schedule_fn(
                         inputs, target=targets, losses=losses, input_batch=inputs
                     )
                 else:
-                    self.pp_schedule.step(
-                        target=targets, losses=losses, input_batch=inputs
-                    )
+                    pp_schedule_fn(target=targets, losses=losses, input_batch=inputs)
 
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
@@ -171,7 +188,8 @@ class ForgeSFTRecipe(ForgeEngine):
                     loss = self.loss_fn(pred, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                loss.backward()
+                if do_backward:
+                    loss.backward()
 
         return loss
 
@@ -215,6 +233,52 @@ class ForgeSFTRecipe(ForgeEngine):
                 curr_step=self.current_step,
                 last_step=self.current_step == self.num_training_steps,
             )
+
+            if (
+                self.job_config.validation.freq > 0
+                and self.job_config.validation.steps > 0
+                and self.current_step % self.job_config.validation.freq == 0
+            ):
+                self.validate(self.job_config.validation.steps)
+
+    def validate(self, max_steps: int) -> None:
+        for m in self.model_parts:
+            m.eval()
+        total_val_loss = torch.tensor(0.0, device=self.device)
+        total_val_tokens = torch.tensor(0.0, device=self.device)
+        with torch.no_grad():
+            val_pbar = tqdm(self.val_dataloader, desc="Validation", leave=False)
+            for batch_idx, batch in enumerate(val_pbar):
+                if batch_idx >= max_steps:
+                    break
+                batch_to_device(batch, self.device)
+                current_num_tokens = (batch["labels"] != CROSS_ENTROPY_IGNORE_IDX).sum()
+                # Compute loss
+                labels = batch.pop("labels")
+                loss = self.forward_backward(batch, labels, do_backward=False)
+                val_loss = loss * current_num_tokens
+                total_val_loss += val_loss
+                total_val_tokens += current_num_tokens
+                # Update progress bar description with current average loss
+                avg_loss_so_far = (
+                    (total_val_loss / total_val_tokens).item()
+                    if total_val_tokens > 0
+                    else float("inf")
+                )
+                val_pbar.set_description(
+                    f"Running validation Loss: {avg_loss_so_far:.4f}"
+                )
+        # Aggregate validation metrics across all ranks
+        torch.distributed.all_reduce(total_val_loss)
+        torch.distributed.all_reduce(total_val_tokens)
+        avg_val_loss = (
+            (total_val_loss / total_val_tokens).item()
+            if total_val_tokens > 0
+            else float("inf")
+        )
+        for m in self.model_parts:
+            m.train()
+        print(f"\nValidation loss: {avg_val_loss}")
 
     def cleanup(self) -> None:
         if self.checkpointer:
