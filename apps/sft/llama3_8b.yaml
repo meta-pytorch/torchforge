@@ -3,8 +3,7 @@
 #   enable_profiling: false
 
 metrics:
-  logger: wandb
-  project: dsafjkdsafjlskdjf
+  logger: tensorboard
   freq:
     loss: 10
 

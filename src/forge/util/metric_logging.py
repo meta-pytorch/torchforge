@@ -38,11 +38,24 @@ class StdoutLogger(MetricLogger):
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:
+        """Log the metric if it is a logging step.
+
+        Args:
+            name (str): metric name
+            data (Scalar): metric value
+            step (int): current step
+        """
         if not self.is_log_step(name, step):
             return
         print(f"Step {step} | {name}:{data}")
 
     def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        """Log the metrics for which this is currently a logging step.
+
+        Args:
+            metrics (Mapping[str, Scalar]): dict of metric names and values
+            step (int): current step
+        """
         log_step_metrics = {
             name: value
             for name, value in metrics.items()
@@ -76,8 +89,8 @@ class TensorBoardLogger(MetricLogger):
         **kwargs: additional arguments
 
     Example:
-        >>> from torchtune.training.metric_logging import TensorBoardLogger
-        >>> logger = TensorBoardLogger(log_dir="my_log_dir")
+        >>> from forge.util.metric_logging import TensorBoardLogger
+        >>> logger = TensorBoardLogger(freq={"loss": 10}, log_dir="my_log_dir")
         >>> logger.log("my_metric", 1.0, 1)
         >>> logger.log_dict({"my_metric": 1.0}, 1)
         >>> logger.close()
@@ -123,10 +136,23 @@ class TensorBoardLogger(MetricLogger):
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:
+        """Log the metric if it is a logging step.
+
+        Args:
+            name (str): metric name
+            data (Scalar): metric value
+            step (int): current step
+        """
         if self._writer:
             self._writer.add_scalar(name, data, global_step=step, new_style=True)
 
     def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        """Log the metrics for which this is currently a logging step.
+
+        Args:
+            metrics (Mapping[str, Scalar]): dict of metric names and values
+            step (int): current step
+        """
         for name, data in metrics.items():
             if self.is_log_step(name, step):
                 self.log(name, data, step)
@@ -153,8 +179,8 @@ class WandBLogger(MetricLogger):
         **kwargs: additional arguments to pass to wandb.init
 
     Example:
-        >>> from torchtune.training.metric_logging import WandBLogger
-        >>> logger = WandBLogger(log_dir="wandb", project="my_project", entity="my_entity", group="my_group")
+        >>> from forge.util.metric_logging import WandBLogger
+        >>> logger = WandBLogger(freq={"loss": 10}, log_dir="wandb", project="my_project")
         >>> logger.log("my_metric", 1.0, 1)
         >>> logger.log_dict({"my_metric": 1.0}, 1)
         >>> logger.close()
@@ -218,10 +244,23 @@ class WandBLogger(MetricLogger):
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:
+        """Log the metric if it is a logging step.
+
+        Args:
+            name (str): metric name
+            data (Scalar): metric value
+            step (int): current step
+        """
         if self._wandb.run and self.is_log_step(name, step):
             self._wandb.log({name: data, "step": step})
 
     def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        """Log the metrics for which this is currently a logging step.
+
+        Args:
+            metrics (Mapping[str, Scalar]): dict of metric names and values
+            step (int): current step
+        """
         log_step_metrics = {
             name: value
             for name, value in metrics.items()
