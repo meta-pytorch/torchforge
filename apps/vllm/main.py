@@ -4,6 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""To run:
+
+python -m apps.vllm.main --guided-decoding --num-samples 3
+
+"""
+
 import argparse
 import asyncio
 from argparse import Namespace
