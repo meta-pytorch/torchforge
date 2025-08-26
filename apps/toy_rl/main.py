@@ -171,7 +171,7 @@ async def main():
             try:
                 print(f"🎮 Running episode {episode_count + 1}...")
                 results = await collectors.run_episode.call()
-                num_trajectories = sum([len(r._values) for r in results])
+                num_trajectories = len([r for r in results])
                 episode_count += 1
                 print(
                     f"✅ Episode {episode_count} completed! Generated {num_trajectories} trajectories."
