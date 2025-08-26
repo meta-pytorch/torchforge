@@ -48,8 +48,8 @@ oss = [
     "torchstore",
 ]
 cpu = [
-    "torch==2.9.0.dev20250815",
-    "monarch-no-torch==0.1.0.dev20250815",
+    "torch==2.9.0.dev20250826",
+    "monarch-no-torch==0.1.0.dev20250826",
 ]
 
 
