@@ -54,7 +54,6 @@ class RLTrainer(ForgeActor, ForgeEngine):
     tokenizer: Tokenizer
     train_dataloader: Dataloader
     # val_dataloader: Dataloader
-    metric_logger: MetricLogger
     profiler: Profiler
     device: torch.device
     step: int
@@ -66,7 +65,6 @@ class RLTrainer(ForgeActor, ForgeEngine):
 
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
-        self.metric_logger = None
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
@@ -121,6 +119,13 @@ class RLTrainer(ForgeActor, ForgeEngine):
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
         inputs = input_dict["tokens"]
+
+        if getattr(self.model_args, "use_flex_attn", False):
+            cp_mesh = (
+                parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
+            )
+            init_attention_mask(inputs, self.tokenizer.base_tokenizer.eos_id, cp_mesh)
+
         optional_context_parallel_ctx = (
             dist_utils.create_context_parallel_ctx(
                 cp_mesh=parallel_dims.world_mesh["cp"],
@@ -176,7 +181,6 @@ class RLTrainer(ForgeActor, ForgeEngine):
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
                 batch[k] = v.to("cuda")  # TODO: hardcoded for now
-        self.train_step(batch)
 
         # TODO implement gradient accumulation
         # with GradientAccumulation(
@@ -213,8 +217,6 @@ class RLTrainer(ForgeActor, ForgeEngine):
         # self.pbar.close()
         if self.checkpointer:
             self.checkpointer.close()
-        if self.metric_logger:
-            self.metric_logger.close()
 
     def __repr__(self) -> str:
         return "Trainer"

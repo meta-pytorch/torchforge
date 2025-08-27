@@ -6,7 +6,7 @@
 """A working example showcasing a practical example of forge with RL.
 
 Run this with:
-    HF_HUB_DISABLE_XET=1 python -m apps.rl.main --config apps/rl/llama3_8b.yaml
+    python -m apps.rl.main --config apps/rl/llama3_8b.yaml
 
 """
 
@@ -14,7 +14,6 @@ import asyncio
 import logging
 import sys
 
-# from forge.actors import Policy, PolicyRouter, RLTrainer, ReplayBuffer
 from forge.actors import ReplayBuffer, RLTrainer
 
 from forge.cli.config import parse
