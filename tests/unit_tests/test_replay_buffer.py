@@ -8,7 +8,7 @@
 
 import pytest
 import pytest_asyncio
-from forge.data.replay_buffer import ReplayBuffer
+from forge.actors.replay_buffer import ReplayBuffer
 from forge.types import Trajectory
 
 from monarch.actor import proc_mesh
@@ -21,6 +21,7 @@ class TestReplayBuffer:
         replay_buffer = await mesh.spawn(
             "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
         )
+        await replay_buffer.setup.call()
         return replay_buffer
 
     @pytest.mark.asyncio

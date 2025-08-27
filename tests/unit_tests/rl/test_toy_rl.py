@@ -20,7 +20,7 @@ import torch
 
 from apps.toy_rl.main import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
 from forge.actors.collector import Collector
-from forge.data.replay_buffer import ReplayBuffer
+from forge.actors.replay_buffer import ReplayBuffer
 
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh
@@ -214,6 +214,7 @@ class TestIntegration:
             1,  # batch_size
             1,  # max_policy_age
         )
+        await replay_buffer.setup.call()
         collector = await proc.spawn(
             "collector",
             Collector,
