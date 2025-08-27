@@ -10,6 +10,7 @@ import json
 import logging
 
 import os
+import socket
 
 from monarch.actor import proc_mesh, ProcMesh
 from monarch.tools import commands
@@ -40,20 +41,30 @@ except ImportError:
 
 
 async def spawn_actors(
-    name: str, actor_cls: ForgeActor, cfg: DictConfig, processes: ProcessConfig
+    name: str,
+    actor_cls: ForgeActor,
+    cfg: DictConfig,
+    processes: ProcessConfig,
+    set_address: bool = False,
 ):
     """Setup process Mesh and spawn Actors."""
-    mesh = await get_proc_mesh(processes)
-    actors = await mesh.spawn(name, actor_cls, cfg)
+    mesh = await get_proc_mesh(processes, set_address)
+    actors = await mesh.spawn(name, actor_cls, **cfg)
     actors.mesh = mesh
     return actors
 
 
-async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
+async def get_proc_mesh(process_config: ProcessConfig, set_address=False) -> ProcMesh:
+    env = None
+    if set_address:
+        env = {
+            "MASTER_ADDR": str(socket.gethostname()),
+            "MASTER_PORT": str(_find_free_port()),
+        }
     if process_config.scheduler == "local":
         if process_config.num_hosts != 1:
             raise ValueError("Local scheduler only supports 1 host")
-        return await proc_mesh(gpus=process_config.num_procs)
+        return await proc_mesh(gpus=process_config.num_procs, env=env)
     elif process_config.scheduler == "mast":
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
@@ -92,8 +103,24 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
             {MastAllocator.ALLOC_LABEL_TASK_GROUP: mesh_name}
         )
         alloc = await allocator.allocate(AllocSpec(constraints, **mesh_dimensions))
-        p = await ProcMesh.from_alloc(alloc)
+        if env:
+
+            def setup():  # noqa: FB811
+                for k, v in env.items():
+                    os.environ[k] = v
+
+            p = await ProcMesh.from_alloc(alloc, setup=setup)
+        else:
+            p = await ProcMesh.from_alloc(alloc)
         await p.logging_option(stream_to_client=True, aggregate_window_sec=3)
         return p
     else:
         raise ValueError("Unsupported scheduler: {}".format(process_config.scheduler))
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        addr = s.getsockname()
+        port = addr[1]
+        return port

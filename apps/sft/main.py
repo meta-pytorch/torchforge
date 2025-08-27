@@ -19,6 +19,7 @@ from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import batch_to_device, CROSS_ENTROPY_IGNORE_IDX
+from forge.util import get_metric_logger
 
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -30,6 +31,7 @@ from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
+from torchtitan.models.attention import init_attention_mask
 from tqdm import tqdm
 
 
@@ -63,7 +65,7 @@ class ForgeSFTRecipe(ForgeEngine):
         self.num_training_steps = job_config.training.steps
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         super().__init__(job_config)
-        self.metric_logger = None  # TODO: fix this
+        self.metric_logger = get_metric_logger(**job_config.metrics)
 
     def setup(self):
         self.train_dataloader = self.setup_data(
@@ -92,7 +94,7 @@ class ForgeSFTRecipe(ForgeEngine):
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
     def setup_data(self, dataset_config, batch_size):
-        tokenizer = HuggingFaceModelTokenizer(
+        self.tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
             ),
@@ -105,7 +107,7 @@ class ForgeSFTRecipe(ForgeEngine):
         )
 
         dataset = sft_iterable_dataset(
-            model_transform=tokenizer,
+            model_transform=self.tokenizer,
             message_transform=AlpacaToMessages(),
             path=dataset_config.path,
             split=dataset_config.split,
@@ -142,6 +144,13 @@ class ForgeSFTRecipe(ForgeEngine):
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
         inputs = input_dict["tokens"]
+
+        if getattr(self.model_args, "use_flex_attn", False):
+            cp_mesh = (
+                parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
+            )
+            init_attention_mask(inputs, self.tokenizer.base_tokenizer.eos_id, cp_mesh)
+
         optional_context_parallel_ctx = (
             dist_utils.create_context_parallel_ctx(
                 cp_mesh=parallel_dims.world_mesh["cp"],
@@ -203,8 +212,10 @@ class ForgeSFTRecipe(ForgeEngine):
         loss = self.forward_backward(batch, labels)
         self.pbar.update(1)
         self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
+        self.metric_logger.log("loss", loss.item(), self.current_step)
 
         self.optimizers.step()
+        self.optimizers.zero_grad()
         self.lr_schedulers.step()
 
     def train(self) -> None:

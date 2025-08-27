@@ -16,7 +16,7 @@ from functools import partial
 import torch
 from forge.actors.collector import Collector
 
-from forge.data.replay_buffer import ReplayBuffer
+from forge.actors.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
 from forge.types import Action, Observation, State
 from monarch.actor import endpoint, proc_mesh
@@ -171,7 +171,7 @@ async def main():
             try:
                 print(f"🎮 Running episode {episode_count + 1}...")
                 results = await collectors.run_episode.call()
-                num_trajectories = sum([len(r._values) for r in results])
+                num_trajectories = len([r for r in results])
                 episode_count += 1
                 print(
                     f"✅ Episode {episode_count} completed! Generated {num_trajectories} trajectories."
@@ -255,7 +255,7 @@ async def main():
                             )
 
                             print(
-                                f"  Step {i+1:2d}: State={state_value:6.2f} → Action={action_value:6.2f}"
+                                f"  Step {i + 1:2d}: State={state_value:6.2f} → Action={action_value:6.2f}"
                             )
 
                     if idx < len(trajectories):  # Add spacing between trajectories
