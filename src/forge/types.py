@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, Union
 
 
 class Message(TypedDict):
@@ -130,3 +130,6 @@ class ServiceConfig:
             identity=self.identity,
             image=self.image,
         )
+
+
+Scalar = Union[int, float]

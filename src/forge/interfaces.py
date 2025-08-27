@@ -5,11 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any
-
-from forge.types import Action, Message, Observation, State
+from typing import Any, Mapping
 
 from monarch.actor import Actor, endpoint
+
+from forge.types import Action, Message, Observation, Scalar, State
 
 
 class Transform(ABC):
@@ -150,6 +150,51 @@ class ModelTokenizer(ABC):
             tuple[list[int], list[bool]]: The list of token ids and the list of masks.
         """
         pass
+
+
+class MetricLogger(ABC):
+    """Abstract metric logger."""
+
+    @abstractmethod
+    def is_log_step(self, name: str, step: int) -> bool:
+        """Returns true if the current step is a logging step.
+
+        Args:
+            name (str): metric name (for checking the freq for this metric)
+            step (int): current step
+        """
+        pass
+
+    @abstractmethod
+    def log(self, name: str, data: Scalar, step: int) -> None:
+        """Log scalar data if this is a logging step.
+
+        Args:
+            name (str): tag name used to group scalars
+            data (Scalar): scalar data to log
+            step (int): step value to record
+        """
+        pass
+
+    @abstractmethod
+    def log_dict(self, metrics: Mapping[str, Scalar], step: int) -> None:
+        """Log multiple scalar values if this is a logging step.
+
+        Args:
+            metrics (Mapping[str, Scalar]): dictionary of tag name and scalar value
+            step (int): step value to record
+        """
+        pass
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """
+        Close log resource, flushing if necessary.
+        This will automatically be called via __del__ when the instance goes out of scope.
+        Logs should not be written after `close` is called.
+        """
 
 
 class Reward(ABC):
