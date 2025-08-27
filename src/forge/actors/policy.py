@@ -13,13 +13,10 @@ from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 import torch
-from forge.controller.service import ServiceConfig
-from forge.controller.spawn import spawn_service
 
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
-from omegaconf import DictConfig
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -337,7 +334,6 @@ class PolicyWorker(Actor):
         self.torchstore = store
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
-        # print(f" RAnk: {self.rank}")
         self.worker = self.setup_worker()
 
     @endpoint
