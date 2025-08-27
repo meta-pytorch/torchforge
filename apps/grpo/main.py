@@ -1,18 +1,16 @@
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Callable
 
 import torch
-import wandb
-from datasets import IterableDataset, load_dataset
-from forge.actors.policy import Policy, PolicyRouter
+from datasets import load_dataset
+from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
 from forge.data.replay_buffer import ReplayBuffer
-from monarch.actor import endpoint, proc_mesh
+from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from vllm import CompletionOutput, SamplingParams
 
 
 def compute_sequence_logprobs(
@@ -325,13 +323,9 @@ class RefModel(ForgeActor):
         # Initialize model and tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
-
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Set model to eval mode for reference computations
         self.model.eval()
@@ -377,22 +371,17 @@ class DatasetActor(ForgeActor):
         self._iterator = iter(ds)
 
     @endpoint
-    async def __next__(self) -> tuple[str, str] | None:
+    async def __next__(self) -> dict[str, str] | None:
         try:
-            sample = next(self._iterator)
-            return (
-                sample["question"],
-                sample["answer"],
-            )  # Return full sample with question and answer
+            return next(self._iterator)
         except StopIteration:
             return None
 
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 5
+    group_size = 1
     model = "Qwen/Qwen3-1.7B"
-    # all_gpus = torch.cuda.device_count()
 
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
@@ -400,26 +389,16 @@ async def main():
         num_replicas=1,
     )
 
-    # policy_worker_mesh = await proc_mesh(gpus=2)
-    # _policy = await policy_worker_mesh.spawn(
-    #     "policy_worker",
-    #     Policy,
-    #     model=model,
-    #     tensor_parallel_size=2,
-    #     pipeline_parallel_size=1,
-    #     dist_info={"MASTER_ADDR": "localhost", "MASTER_PORT": "12345"},
-    # )
-    # await _policy.setup.call()
-    # await policy_worker_mesh.stop()
-    # print("we made it!")
-    # exit()
-    # policy = await spawn_service(
-    #     default_service_cfg,
-    #     PolicyRouter,
-    #     policy=_policy,
-    #     sampling_params=SamplingParams(n=group_size),
-    # )
-    # Define stub policy that just returns a fixed set of responses
+    policy = await spawn_service(
+        default_service_cfg,
+        Policy,
+        PolicyConfig(
+            num_workers=1,
+            worker_params=WorkerConfig(model=model),
+            sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
+            available_devices="3",
+        ),
+    )
 
     trainer = await spawn_service(
         default_service_cfg,
@@ -427,7 +406,7 @@ async def main():
         learning_rate=1e-5,
         beta=0.1,
         model_name=model,
-        device=torch.device("cuda:0"),
+        device=torch.device("cuda:1"),
     )
 
     replay_buffer = await spawn_service(
@@ -457,7 +436,7 @@ async def main():
         default_service_cfg,
         RefModel,
         model_name=model,
-        device=torch.device("cuda:1"),
+        device=torch.device("cuda:2"),
     )
 
     reward_actor = await spawn_service(
@@ -468,19 +447,17 @@ async def main():
 
     print("All services initialized successfully!")
 
-    # Intialize logging
-    wandb.init(project="forge", name="grpo_test")
-
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
+        # TODO: Move this into setup
+        asyncio.create_task(policy.run_processing.call())
         while True:
             sample = await dataloader.__next__.choose()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
-            print(sample)
-            prompt, target = sample
+            prompt, target = sample["question"], sample["answer"]
             version = 0  # await policy.get_current_version.choose()
             episode = Episode(
                 episode_id=rollout_count,
@@ -488,33 +465,7 @@ async def main():
                 target=target,
                 policy_version=version,
             )
-
-            # async with policy.session(version=version):
-            #     actions: list[CompletionOutput] = await policy.generate(prompt)
-            actions = [
-                CompletionOutput(
-                    index=0,
-                    text="1",
-                    token_ids=[1],
-                    cumulative_logprob=None,
-                    logprobs=None,
-                ),
-                CompletionOutput(
-                    index=1,
-                    text="2",
-                    token_ids=[2],
-                    cumulative_logprob=None,
-                    logprobs=None,
-                ),
-                CompletionOutput(
-                    index=2,
-                    text="3",
-                    token_ids=[3],
-                    cumulative_logprob=None,
-                    logprobs=None,
-                ),
-            ]
-
+            actions = await policy.generate.choose(prompt)
             for action in actions:
                 ref_logprobs = await ref_model.forward.choose(action.token_ids)
                 reward = await reward_actor.evaluate_response.choose(
@@ -539,10 +490,9 @@ async def main():
                 avg_reward = sum(group.reward for group in episode.groups) / len(
                     episode.groups
                 )
-                wandb.log({"rollout_count": rollout_count, "avg_reward": avg_reward})
-                # print(
-                #     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
-                # )
+                print(
+                    f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
+                )
 
     async def continuous_training():
         training_step = 0
@@ -554,15 +504,9 @@ async def main():
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
                 if training_step % 10 == 0:
-                    # print(f"Completed {training_step} training steps")
+                    print(f"Completed {training_step} training steps")
                     if training_result:
-                        # print(f"Latest loss: {training_result.get('loss', 'N/A')}")
-                        wandb.log(
-                            {
-                                "training_step": training_step,
-                                "loss": training_result.get("loss", "N/A"),
-                            }
-                        )
+                        print(f"Latest loss: {training_result.get('loss', 'N/A')}")
                 # await trainer.update_weights(policy)
 
     print("Starting GRPO training loops...")
