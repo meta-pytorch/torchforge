@@ -11,13 +11,13 @@ from .service import Service, ServiceConfig
 from .spawn import spawn_service
 
 __all__ = [
-    "Service",
-    "ServiceConfig",
-    "spawn_service",
-    "ServiceInterface",
-    "Session",
-    "SessionContext",
-    "ServiceMetrics",
     "Replica",
     "ReplicaMetrics",
+    "Service",
+    "ServiceConfig",
+    "ServiceInterface",
+    "ServiceMetrics",
+    "Session",
+    "SessionContext",
+    "spawn_service",
 ]

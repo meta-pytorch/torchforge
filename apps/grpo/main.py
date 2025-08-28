@@ -13,8 +13,8 @@ import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
+from forge.controller.service import ServiceConfig, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
@@ -393,7 +393,7 @@ async def main():
     )
 
     ref_model = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1, gpus_per_replica=1),
         RefModel,
         model_name=model,
     )

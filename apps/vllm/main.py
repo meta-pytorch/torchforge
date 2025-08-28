@@ -16,7 +16,7 @@ from argparse import Namespace
 from typing import List
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.controller import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig, spawn_service
 from vllm.outputs import CompletionOutput
 
 
