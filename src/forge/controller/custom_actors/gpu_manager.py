@@ -8,7 +8,7 @@
 
 import logging
 
-from monarch.actor import endpoint, get_or_spawn_controller
+from monarch.actor import ActorError, endpoint, get_or_spawn_controller
 
 from forge.controller import ForgeActor
 
@@ -22,6 +22,11 @@ class GpuManager(ForgeActor):
     def __init__(self):
         # TODO - extend this to support multiple HostMeshes too
         self.available_gpus = set(range(0, 8))
+
+    @endpoint
+    def get_available_gpus(self) -> list[str]:
+        """Returns a list of available GPU devices."""
+        return [str(gpu) for gpu in self.available_gpus]
 
     @endpoint
     def get_gpus(self, num_gpus: int) -> list[str]:
@@ -43,14 +48,28 @@ class GpuManager(ForgeActor):
 
 
 async def get_gpu_manager() -> GpuManager:
-    return await get_or_spawn_controller("gpu_manager", GpuManager)
+    """Gets the singleton GPU manager actor."""
+    try:
+        return await get_or_spawn_controller("gpu_manager", GpuManager)
+    except ActorError as e:
+        raise e.exception from e
 
 
 async def get_gpu_ids(num_gpus: int) -> list[str]:
-    gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
-    return await gpu_manager.get_gpus.call_one(num_gpus)
+    """Gets GPU IDs for the given number of GPUs."""
+    try:
+        gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
+        return await gpu_manager.get_gpus.call_one(num_gpus)
+    except ActorError as e:
+        # Raise the underlying error instead of the Monarch error
+        raise e.exception from e
 
 
 async def release_gpus(gpu_ids: list[str]) -> None:
-    gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
-    await gpu_manager.release_gpus.call_one(gpu_ids)
+    """Releases the given GPU IDs."""
+    try:
+        gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
+        await gpu_manager.release_gpus.call_one(gpu_ids)
+    except ActorError as e:
+        # Raise the underlying error instead of the Monarch error
+        raise e.exception from e
