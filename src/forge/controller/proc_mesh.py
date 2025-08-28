@@ -20,7 +20,7 @@ from omegaconf import DictConfig
 
 from forge.controller import ForgeActor
 
-from forge.controller.system_controllers.gpu_manager import get_gpu_ids
+from forge.controller.system_controllers.gpu_manager import get_gpu_ids, release_gpus
 from forge.types import ProcessConfig
 
 logger: logging.Logger = logging.getLogger(__name__)
