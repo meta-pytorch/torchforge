@@ -7,7 +7,7 @@
 """Tests for GPU manager functionality."""
 
 import pytest
-from forge.controller.custom_actors.gpu_manager import GpuManager
+from forge.controller.system_controllers.gpu_manager import GpuManager
 from monarch.actor import ActorError, this_host
 
 
