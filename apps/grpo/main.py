@@ -130,6 +130,7 @@ class Trainer(ForgeActor):
         total_ratio_mean = 0.0
         total_ratio_std = 0.0
         total_response_len = 0.0
+        total_advantages = 0.0
         num_groups_processed = 0
 
         for episode in batch:
@@ -194,6 +195,10 @@ class Trainer(ForgeActor):
             ) / len(response_texts)
             total_response_len += episode_response_len
 
+            # Calculate average advantages for this episode
+            episode_advantages = advantages_tensor.detach().float().cpu().numpy().mean()
+            total_advantages += episode_advantages
+
             num_groups_processed += len(groups)
 
             self.optimizer.zero_grad()
@@ -212,10 +217,11 @@ class Trainer(ForgeActor):
             avg_ratio_mean = total_ratio_mean / len(batch)
             avg_ratio_std = total_ratio_std / len(batch)
             avg_response_len = total_response_len / len(batch)
+            avg_advantages = total_advantages / len(batch)
         else:
             avg_loss = avg_kl_loss = avg_pg_loss = avg_ratio_mean = avg_ratio_std = (
                 avg_response_len
-            ) = 0.0
+            ) = avg_advantages = 0.0
 
         # Store averaged metrics for external logging
         self.log_dict = {
@@ -225,6 +231,7 @@ class Trainer(ForgeActor):
             "metrics/ratio_mean": avg_ratio_mean,
             "metrics/ratio_std": avg_ratio_std,
             "metrics/response_len": avg_response_len,
+            "metrics/advantages": avg_advantages,
         }
 
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
@@ -505,7 +512,7 @@ async def main():
                 print(
                     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
                 )
-                logger.log("metrics/reward_per_rollout", avg_reward, rollout_count)
+                logger.log("metrics/reward_per_ten_rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
