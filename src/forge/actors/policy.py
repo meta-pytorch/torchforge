@@ -13,15 +13,7 @@ from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 import torch
-from forge.controller import spawn_actors
-from forge.controller.service import ServiceConfig
-from forge.controller.spawn import spawn_service
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
-from omegaconf import DictConfig, OmegaConf
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -45,6 +37,10 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +60,7 @@ class SamplingOverrides:
 
     num_samples: int
     guided_decoding: bool = False
+    max_tokens: int = 512
 
 
 @dataclass
@@ -91,6 +88,7 @@ class PolicyConfig:
     num_workers: int
     worker_params: WorkerConfig
     sampling_params: SamplingOverrides
+    available_devices: str = None
 
 
 @dataclass
@@ -106,6 +104,11 @@ class Policy(PolicyInterface):
     @endpoint
     async def setup(self):
         # Set up policy_worker
+        self.available_devices = (
+            self.config.available_devices
+            if self.config.available_devices is not None
+            else ",".join(str(i) for i in range(torch.cuda.device_count()))
+        )
         await self.spawn_workers()
 
         self.request_id = 0
@@ -161,6 +164,7 @@ class Policy(PolicyInterface):
             env={
                 "MASTER_ADDR": str(get_loopback_ip()),
                 "MASTER_PORT": str(get_open_port()),
+                "CUDA_VISIBLE_DEVICES": self.available_devices,
             },
         )
         self.policy_worker = await self.worker_mesh.spawn(
@@ -204,7 +208,6 @@ class Policy(PolicyInterface):
         if (num_samples := self.sampling_params.n) == 1:
             self.output_processor.add_request(request, prompt_str, None, 0)
             request, _ = self.preprocess_add_request(request)
-
             request_fut = asyncio.Future()
             self.requests[request_id] = (None, request_fut)
 
@@ -460,7 +463,6 @@ def convert_input(prompt=None, prompt_token_ids=None) -> Dict:
 
 def get_default_sampling_params(vllm_config, overrides=None) -> SamplingParams:
     default_params = vllm_config.model_config.get_diff_sampling_param()
-    default_params["max_tokens"] = 512
     if overrides is not None:
         default_params |= overrides
     if default_params:

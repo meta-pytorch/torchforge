@@ -204,3 +204,10 @@ class Reward(ABC):
     def __call__(self, observation: Observation) -> float:
         """Compute a reward for an observation."""
         pass
+
+
+# TODO
+# class RLLoss(ABC):
+
+# class SFTLoss(ABC): # inherit from titan loss
+# from torchtitan.components.loss import LossFunction
