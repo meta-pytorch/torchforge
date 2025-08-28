@@ -184,6 +184,58 @@ class RawBuffer(BufferView[K, V], ABC):
         pass
 
 
+class StatefulSampler(ABC, Generic[K, V]):
+    """Abstract interface for stateful samplers with deterministic behavior given a state.
+
+    This class defines the interface for samplers that maintain internal state and provide
+    deterministic sampling behavior when the state is fixed.
+    """
+
+    @abstractmethod
+    def sample_keys(self, buffer: BufferView[K, V], num: int) -> list[K]:
+        """Return the keys of selected samples from the buffer.
+
+        This method samples a specified number of keys from the provided buffer
+        according to the sampler's internal sampling strategy. The sampling
+        behavior is deterministic for a given internal state of the sampler.
+
+        Args:
+            buffer (BufferView[K, V]): The buffer to sample from, containing key-value pairs.
+            num (int): Desired number of samples to retrieve from the buffer.
+                      If num is greater than the buffer size, implementation may
+                      return fewer samples or handle it according to the specific
+                      sampling strategy.
+
+        Returns:
+            list[K]: A list of keys corresponding to the selected samples.
+                    The length of this list will typically be equal to num,
+                    unless the buffer contains fewer items.
+        """
+        pass
+
+    @abstractmethod
+    def state_dict(self) -> Mapping[str, Any]:
+        """Return the state dict of the sampler.
+
+        This method should capture all the internal state necessary to reproduce
+        the sampler's behavior, such as random number generator states.
+
+        Returns:
+            dict: A dictionary containing the internal state of the sampler.
+        """
+        pass
+
+    @abstractmethod
+    def set_state_dict(self, state_dict):
+        """Set the state dict of the sampler.
+
+        Args:
+            state_dict (dict): A dictionary containing the internal state to restore
+                               the sampler to a specific configuration.
+        """
+        pass
+
+
 class BaseTokenizer(ABC):
     """
     Abstract token encoding model that implements ``encode`` and ``decode`` methods.
