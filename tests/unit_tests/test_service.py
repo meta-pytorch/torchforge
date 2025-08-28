@@ -61,7 +61,7 @@ class Counter(Actor):
 @pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -93,7 +93,7 @@ async def test_basic_service_operations():
 @pytest.mark.asyncio
 async def test_sessionless_calls():
     """Test sessionless calls with round robin load balancing."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -128,7 +128,7 @@ async def test_sessionless_calls():
 @pytest.mark.asyncio
 async def test_session_context_manager():
     """Test session context manager functionality."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -170,9 +170,7 @@ async def test_session_context_manager():
 @pytest.mark.asyncio
 async def test_recovery_state_transitions():
     """Test replica state transitions during failure and recovery."""
-    cfg = ServiceConfig(
-        procs_per_replica=1, num_replicas=1, health_poll_rate=0.1, gpus_per_replica=0
-    )
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1, health_poll_rate=0.1)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -253,7 +251,7 @@ async def test_recovery_state_transitions():
 @pytest.mark.asyncio
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -297,7 +295,7 @@ async def test_replica_failure_and_recovery():
 @pytest.mark.asyncio
 async def test_metrics_collection():
     """Test metrics collection."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -350,7 +348,7 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -381,7 +379,7 @@ async def test_session_stickiness():
 @pytest.mark.asyncio
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -430,7 +428,7 @@ async def test_load_balancing_multiple_sessions():
 @pytest.mark.asyncio
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
     service = await spawn_service(
         service_cfg=cfg, actor_def=Counter, name="counter", v=0
     )
@@ -473,7 +471,7 @@ async def test_concurrent_operations():
 @pytest.mark.asyncio
 async def test_broadcast_call_basic():
     """Test basic broadcast call functionality."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=10)
 
     try:
@@ -503,7 +501,7 @@ async def test_broadcast_call_basic():
 @pytest.mark.asyncio
 async def test_broadcast_call_with_failed_replica():
     """Test broadcast call behavior when some replicas fail."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:
@@ -542,7 +540,7 @@ async def test_broadcast_call_with_failed_replica():
 @pytest.mark.asyncio
 async def test_broadcast_call_vs_choose():
     """Test that broadcast call hits all replicas while choose hits only one."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3, gpus_per_replica=0)
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
     service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
 
     try:

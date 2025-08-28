@@ -352,7 +352,7 @@ async def main():
 
     # ---- Setup services ---- #
     policy = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=1, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         Policy,
         PolicyConfig(
             num_workers=1,
@@ -362,7 +362,7 @@ async def main():
     )
 
     trainer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=1, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         Trainer,
         learning_rate=1e-5,
         beta=0.1,
@@ -393,7 +393,7 @@ async def main():
     )
 
     ref_model = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1, gpus_per_replica=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
         RefModel,
         model_name=model,
     )
