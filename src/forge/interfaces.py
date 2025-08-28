@@ -5,11 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
+from typing import Any, Generic, Iterable, Mapping, TypeVar
+
+from forge.types import Action, Message, Observation, Scalar, State
 
 from monarch.actor import Actor, endpoint
 
-from forge.types import Action, Message, Observation, Scalar, State
+K = TypeVar("K")
+V = TypeVar("V")
 
 
 class Transform(ABC):
@@ -85,6 +88,99 @@ class Policy(Actor, ABC):
     @abstractmethod
     async def update_weights(self):
         """Update the policy weights."""
+        pass
+
+
+class BufferView(ABC, Generic[K, V]):
+    """Abstract base class for a view into a buffer with key-value pairs.
+
+    This class defines the interface for accessing elements in a buffer
+    through dictionary-like operations. It supports generic key and value types.
+    """
+
+    @abstractmethod
+    def __len__(self) -> int:
+        """Return the number of key-value pairs in the buffer.
+
+        Returns:
+            int: The number of items in the buffer.
+        """
+        pass
+
+    @abstractmethod
+    def __getitem__(self, key: K) -> V:
+        """Retrieve a value from the buffer using the specified key.
+
+        Args:
+            key (K): The key to look up in the buffer.
+
+        Returns:
+            V: The value associated with the key.
+
+        Raises:
+            KeyError: If the key is not found in the buffer.
+        """
+        pass
+
+    @abstractmethod
+    def __iter__(self) -> Iterable[tuple[K, V]]:
+        """Return an iterator over the key-value pairs in the buffer.
+
+        Returns:
+            Iterable[tuple[K, V]]: An iterator yielding (key, value) tuples.
+        """
+        pass
+
+    @abstractmethod
+    def keys(self) -> Iterable[K]:
+        """Return an iterable of all keys in the buffer.
+
+        Returns:
+            Iterable[K]: An iterable containing all keys in the buffer.
+        """
+        pass
+
+
+class RawBuffer(BufferView[K, V], ABC):
+    """Abstract interface for the underlying storage backend (raw buffer) of a ReplayBuffer."""
+
+    @abstractmethod
+    def add(self, key: K, val: V) -> None:
+        """
+        Add a key-value pair to the buffer.
+
+        Args:
+            key (K): The key to store the value under
+            val (V): The value to store in the buffer
+
+        Returns:
+            None
+        """
+        pass
+
+    @abstractmethod
+    def pop(self, key: K) -> V:
+        """
+        Remove and return a value from the buffer using the specified key.
+
+        Args:
+            key (K): The key to look up and remove from the buffer
+
+        Returns:
+            V: The value associated with the key before removal
+        """
+        pass
+
+    @abstractmethod
+    def clear(self) -> None:
+        """
+        Remove all key-value pairs from the buffer, effectively emptying it.
+
+        This method should reset the buffer to its initial empty state.
+
+        Returns:
+            None
+        """
         pass
 
 
