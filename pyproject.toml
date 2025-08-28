@@ -22,6 +22,7 @@ dependencies = [
     "tokenizers",
     # Miscellaneous
     "omegaconf",
+    "wandb",
 ]
 dynamic = ["version"]
 
