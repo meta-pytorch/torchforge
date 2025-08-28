@@ -6,7 +6,7 @@
 import os
 import sys
 import time
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Union
 
 from forge.interfaces import MetricLogger
 from forge.types import Scalar
@@ -21,11 +21,12 @@ class StdoutLogger(MetricLogger):
     """Logger to standard output.
 
     Args:
-        freq (Mapping[str, int]):
-            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
+        freq (Union[int, Mapping[str, int]]):
+            If int, all metrics will be logged at this frequency.
+            If Mapping, calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
     """
 
-    def __init__(self, freq: Mapping[str, int]):
+    def __init__(self, freq: Union[int, Mapping[str, int]]):
         self._freq = freq
 
     def is_log_step(self, name: str, step: int) -> bool:
@@ -35,6 +36,8 @@ class StdoutLogger(MetricLogger):
             name (str): metric name (for checking the freq for this metric)
             step (int): current step
         """
+        if isinstance(self._freq, int):
+            return step % self._freq == 0
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:
@@ -77,8 +80,9 @@ class TensorBoardLogger(MetricLogger):
     """Logger for use w/ PyTorch's implementation of TensorBoard (https://pytorch.org/docs/stable/tensorboard.html).
 
     Args:
-        freq (Mapping[str, int]):
-            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
+        freq (Union[int, Mapping[str, int]]):
+            If int, all metrics will be logged at this frequency.
+            If Mapping, calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
         log_dir (str): torch.TensorBoard log directory
         organize_logs (bool): If `True`, this class will create a subdirectory within `log_dir` for the current
             run. Having sub-directories allows you to compare logs across runs. When TensorBoard is
@@ -103,7 +107,7 @@ class TensorBoardLogger(MetricLogger):
 
     def __init__(
         self,
-        freq: Mapping[str, int],
+        freq: Union[int, Mapping[str, int]],
         log_dir: str = "metrics_log",
         organize_logs: bool = True,
         **kwargs,
@@ -133,6 +137,8 @@ class TensorBoardLogger(MetricLogger):
             name (str): metric name (for checking the freq for this metric)
             step (int): current step
         """
+        if isinstance(self._freq, int):
+            return step % self._freq == 0
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:
@@ -168,8 +174,9 @@ class WandBLogger(MetricLogger):
     For more information about arguments expected by WandB, see https://docs.wandb.ai/ref/python/init.
 
     Args:
-        freq (Mapping[str, int]):
-            calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
+        freq (Union[int, Mapping[str, int]]):
+            If int, all metrics will be logged at this frequency.
+            If Mapping, calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
         log_dir (Optional[str]): WandB log directory.
         project (str): WandB project name. Default is `torchtune`.
         entity (Optional[str]): WandB entity name. If you don't specify an entity,
@@ -197,7 +204,7 @@ class WandBLogger(MetricLogger):
 
     def __init__(
         self,
-        freq: Mapping[str, int],
+        freq: Union[int, Mapping[str, int]],
         project: str,
         log_dir: str = "metrics_log",
         entity: Optional[str] = None,
@@ -241,6 +248,8 @@ class WandBLogger(MetricLogger):
             name (str): metric name (for checking the freq for this metric)
             step (int): current step
         """
+        if isinstance(self._freq, int):
+            return step % self._freq == 0
         return step % self._freq[name] == 0
 
     def log(self, name: str, data: Scalar, step: int) -> None:

@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from monarch.actor import Actor, ActorError, ProcMesh
-
 from forge.controller import get_proc_mesh
 from forge.types import ProcessConfig
+
+from monarch.actor import Actor, ActorError, ProcMesh
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

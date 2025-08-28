@@ -11,7 +11,6 @@ from typing import Any
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
-from forge.types import Trajectory
 
 
 @dataclass
@@ -24,37 +23,34 @@ class ReplayBuffer(ForgeActor):
 
     @endpoint
     async def setup(self) -> None:
-        self.buffer: list[Trajectory] = []
+        self.buffer: list = []
         if self.seed is None:
             self.seed = random.randint(0, 2**32)
         random.seed(self.seed)
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, trajectory: Trajectory) -> None:
-        self.buffer.append(trajectory)
+    async def add(self, episode) -> None:
+        self.buffer.append(episode)
 
     @endpoint
-    async def sample(
-        self, curr_policy_version: int, batch_size: int | None = None
-    ) -> list[Trajectory] | None:
+    async def sample(self, curr_policy_version: int, batch_size: int | None = None):
         """Sample from the replay buffer.
 
         Args:
             curr_policy_version (int): The current policy version.
-            batch_size (int, optional): Number of trajectories to sample. If none, defaults to batch size
+            batch_size (int, optional): Number of episodes to sample. If none, defaults to batch size
                 passed in at initialization.
 
         Returns:
-            A list of sampled trajectories or None if there are not enough trajectories in the buffer.
+            A list of sampled episodes or None if there are not enough episodes in the buffer.
         """
         bsz = batch_size if batch_size is not None else self.batch_size
 
-        # Evict old trajectories
+        # Evict old episodes
         self._evict(curr_policy_version)
 
         if bsz > len(self.buffer):
-            print("Not enough trajectories in the buffer.")
             return None
 
         # TODO: Make this more efficient
@@ -62,12 +58,12 @@ class ReplayBuffer(ForgeActor):
         sorted_idxs = sorted(
             idx_to_sample, reverse=True
         )  # Sort in desc order to avoid shifting idxs
-        sampled_trajectories = [self.buffer.pop(i) for i in sorted_idxs]
-        return sampled_trajectories
+        sampled_episodes = [self.buffer.pop(i) for i in sorted_idxs]
+        return sampled_episodes
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:
-        """Evict trajectories from the replay buffer if they are too old based on the current policy version
+        """Evict episodes from the replay buffer if they are too old based on the current policy version
         and the max policy age allowed.
 
         Args:
@@ -83,17 +79,17 @@ class ReplayBuffer(ForgeActor):
         ]
 
     @endpoint
-    async def _getitem(self, idx: int) -> Trajectory:
+    async def _getitem(self, idx: int):
         return self.buffer[idx]
 
     @endpoint
     async def _numel(self) -> int:
-        """Number of elements (trajectories) in the replay buffer."""
+        """Number of elements (episodes) in the replay buffer."""
         return len(self.buffer)
 
     @endpoint
     async def clear(self) -> None:
-        """Clear the replay buffer immediately - dropping all trajectories."""
+        """Clear the replay buffer immediately - dropping all episodes."""
         self.buffer.clear()
 
     @endpoint
