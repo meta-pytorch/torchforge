@@ -358,7 +358,7 @@ async def main():
     )
 
     policy = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=1, num_replicas=1),
         Policy,
         PolicyConfig(
             num_workers=1,
@@ -368,23 +368,22 @@ async def main():
     )
 
     trainer = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=1, num_replicas=1),
         Trainer,
         learning_rate=1e-5,
         beta=0.1,
         model_name=model,
-        device=torch.device("cuda:1"),
     )
 
     replay_buffer = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
         ReplayBuffer,
         batch_size=4,
         max_policy_age=1,
     )
 
     dataloader = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
         DatasetActor,
         "openai/gsm8k",
         "main",
@@ -393,21 +392,20 @@ async def main():
     )
 
     compute_advantages = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
         ComputeAdvantages,
         gamma=0.99,
         lambda_=0.95,
     )
 
     ref_model = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
         RefModel,
         model_name=model,
-        device=torch.device("cuda:2"),
     )
 
     reward_actor = await spawn_service(
-        default_service_cfg,
+        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
         RewardActor,
         reward_functions=[MathReward(), ThinkingReward()],
     )

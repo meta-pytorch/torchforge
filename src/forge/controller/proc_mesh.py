@@ -20,7 +20,7 @@ from omegaconf import DictConfig
 
 from forge.controller import ForgeActor
 
-from forge.controller.custom_actors.gpu_manager import get_gpu_ids
+from forge.controller.system_controllers.gpu_manager import get_gpu_ids
 from forge.types import ProcessConfig
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -59,12 +59,12 @@ async def spawn_actors(
 
 async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
     """Returns a proc mesh with the given process config."""
-
     # TODO - modify this to work with multi-host
     env = {
         "MASTER_ADDR": str(socket.gethostname()),
         "MASTER_PORT": str(_find_free_port()),
     }
+    gpu_ids = None
 
     def _setup_env(env: dict[str, str]):
         """Sets up the environment on proc mesh creation."""
@@ -87,7 +87,9 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         #     per_host={"procs": process_config.num_procs},
         #     bootstrap=partial(_setup_env, env=env),
         # )
-        return proc_mesh(gpus=process_config.num_procs, env=env)
+        m = proc_mesh(gpus=process_config.num_procs, env=env)
+        m._gpu_ids = gpu_ids
+        return m
     elif process_config.scheduler == "mast":
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
@@ -137,6 +139,15 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         return p
     else:
         raise ValueError("Unsupported scheduler: {}".format(process_config.scheduler))
+
+
+async def stop_proc_mesh(mesh: ProcMesh) -> None:
+    """Stops the given proc mesh."""
+    if hasattr(mesh, "_gpu_ids"):
+        gpu_ids = mesh._gpu_ids
+        logger.debug("Releasing GPUs: %s", gpu_ids)
+        await release_gpus(gpu_ids)
+    await mesh.stop()
 
 
 def _find_free_port() -> int:

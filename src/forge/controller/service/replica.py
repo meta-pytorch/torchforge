@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from forge.controller import get_proc_mesh
-from forge.types import ProcessConfig
-
 from monarch.actor import Actor, ActorError, ProcMesh
+
+from forge.controller import get_proc_mesh, stop_proc_mesh
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -198,7 +198,7 @@ class Replica:
             # Stop old proc_mesh if it exists
             if old_proc_mesh is not None:
                 try:
-                    await old_proc_mesh.stop()
+                    await stop_proc_mesh(old_proc_mesh)
                     logger.debug(f"Old proc_mesh stopped for replica {self.idx}")
                 except Exception as e:
                     logger.warning(
@@ -468,7 +468,7 @@ class Replica:
         # Stop the proc_mesh
         if self.proc_mesh:
             try:
-                await self.proc_mesh.stop()
+                await stop_proc_mesh(self.proc_mesh)
             except Exception as e:
                 logger.warning(
                     "Error stopping proc_mesh for replica %d: %s", self.idx, e
