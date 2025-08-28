@@ -80,7 +80,7 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
             env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_ids))
 
         # TODO - update to use this_host() whenever it supports
-        # being run wihtin actors:
+        # being run within actors:
         # AttributeError: NYI: attempting to get ProcMesh attribute `slice` on object that's
         # actually a ProcMeshRef
         # return this_host().spawn_procs(
