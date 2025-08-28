@@ -457,7 +457,7 @@ async def main():
                 print(
                     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
                 )
-                logger.log("reward/rollout", avg_reward, rollout_count)
+                logger.log("reward_per_rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
