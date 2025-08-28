@@ -47,11 +47,6 @@ oss = [
     "torchmonarch-nightly==2025.8.1",
     "torchstore",
 ]
-# cpu = [
-#     "torch==2.9.0.dev20250826",
-#     "monarch-no-torch==0.1.0.dev20250826",
-# ]
-
 
 [project.scripts]
 forge = "forge.cli.forge:main"
