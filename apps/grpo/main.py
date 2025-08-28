@@ -377,10 +377,7 @@ async def main():
     )
 
     replay_buffer = await spawn_service(
-        default_service_cfg,
-        ReplayBuffer,
-        batch_size=4,
-        max_policy_age=1,
+        default_service_cfg, ReplayBuffer, batch_size=4, max_policy_age=1, dp_size=1
     )
 
     dataloader = await spawn_service(
@@ -469,6 +466,7 @@ async def main():
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
+                batch = batch[0]  # Hard coded because we are not doing data parallel
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
                 if training_step % 10 == 0:
