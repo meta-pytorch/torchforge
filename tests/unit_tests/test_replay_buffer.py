@@ -76,7 +76,7 @@ class TestReplayBuffer:
         # Test a simple sampling w/ no evictions
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is not None
-        assert len(samples) == 2
+        assert len(samples[0]) == 2
 
         # Test sampling with overriding batch size
         await replay_buffer.add.call_one(trajectory_0)
@@ -84,7 +84,7 @@ class TestReplayBuffer:
             curr_policy_version=1, batch_size=1
         )
         assert samples is not None
-        assert len(samples) == 1
+        assert len(samples[0]) == 1
 
         # Test sampling w/ overriding batch size (not enough samples in buffer, returns None)
         await replay_buffer.add.call_one(trajectory_0)
@@ -105,6 +105,11 @@ class TestReplayBuffer:
             curr_policy_version=2, batch_size=1
         )
         assert samples is not None
-        assert len(samples) == 1
-        assert samples[0] == trajectory_1
+        assert len(samples[0]) == 1
+        assert samples[0][0] == trajectory_1
         replay_buffer.clear.call_one().get()
+
+
+if __name__ == "__main__":
+    # Run tests with pytest
+    pytest.main([__file__, "-v"])
