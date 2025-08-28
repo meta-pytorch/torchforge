@@ -8,14 +8,14 @@
 
 import pytest
 from forge.controller.custom_actors.gpu_manager import GpuManager
-from monarch.actor import ActorError, proc_mesh
+from monarch.actor import ActorError, this_host
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_initialization():
     """Test GPU manager initialization."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
     available_gpus = await manager.get_available_gpus.call_one()
 
@@ -28,7 +28,7 @@ async def test_initialization():
 @pytest.mark.asyncio
 async def test_get_gpus_basic():
     """Test basic GPU allocation."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Request 2 GPUs
@@ -55,7 +55,7 @@ async def test_get_gpus_basic():
 @pytest.mark.asyncio
 async def test_get_gpus_all():
     """Test allocating all available GPUs."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Request all 8 GPUs
@@ -76,7 +76,7 @@ async def test_get_gpus_all():
 @pytest.mark.asyncio
 async def test_get_gpus_insufficient():
     """Test error when requesting more GPUs than available."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Request more than 8 GPUs should raise an error
@@ -92,7 +92,7 @@ async def test_get_gpus_insufficient():
 @pytest.mark.asyncio
 async def test_get_gpus_zero():
     """Test requesting zero GPUs."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     result = await manager.get_gpus.call_one(0)
@@ -108,7 +108,7 @@ async def test_get_gpus_zero():
 @pytest.mark.asyncio
 async def test_release_gpus_basic():
     """Test basic GPU release functionality."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Allocate some GPUs
@@ -131,7 +131,7 @@ async def test_release_gpus_basic():
 @pytest.mark.asyncio
 async def test_release_gpus_partial():
     """Test releasing only some of the allocated GPUs."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Allocate 4 GPUs
@@ -159,7 +159,7 @@ async def test_release_gpus_partial():
 @pytest.mark.asyncio
 async def test_release_gpus_empty():
     """Test releasing empty list of GPUs."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     await manager.release_gpus.call_one([])
@@ -173,7 +173,7 @@ async def test_release_gpus_empty():
 @pytest.mark.asyncio
 async def test_allocation_release_cycle():
     """Test multiple allocation and release cycles."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Cycle 1: Allocate 3, release 3
@@ -202,7 +202,7 @@ async def test_allocation_release_cycle():
 @pytest.mark.asyncio
 async def test_incremental_allocation():
     """Test incremental allocation until exhaustion."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
     all_allocated = []
 
@@ -234,7 +234,7 @@ async def test_incremental_allocation():
 @pytest.mark.asyncio
 async def test_concurrent_operations_simulation():
     """Test simulated concurrent operations."""
-    p = proc_mesh(gpus=1)
+    p = this_host().spawn_procs(per_host={"cpus": 1})
     manager = p.spawn("GpuManager", GpuManager)
 
     # Simulate multiple "jobs" allocating and releasing
