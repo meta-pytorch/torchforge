@@ -143,7 +143,7 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
 
 async def stop_proc_mesh(mesh: ProcMesh) -> None:
     """Stops the given proc mesh."""
-    if hasattr(mesh, "_gpu_ids"):
+    if hasattr(mesh, "_gpu_ids") and mesh._gpu_ids is not None:
         gpu_ids = mesh._gpu_ids
         logger.debug("Releasing GPUs: %s", gpu_ids)
         await release_gpus(gpu_ids)
