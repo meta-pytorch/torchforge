@@ -4,12 +4,20 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Test for data/replay_buffer.py"""
+"""Test for actors/replay_buffer.py"""
+
+import threading
+from random import Random
 
 import pytest
 import pytest_asyncio
+
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.types import Trajectory
+from forge.data.stateful_sampler import RandomStatefulSampler
+from forge.interfaces import StatefulSampler
+
+from forge.test_util.udp_trace import add_udp_callback, receive_udp_packet
+from forge.types import State, Trajectory
 
 from monarch.actor import proc_mesh
 
@@ -25,11 +33,42 @@ class TestReplayBuffer:
         return replay_buffer
 
     @pytest.mark.asyncio
+    async def test_setup_accepts_sampler(self) -> None:
+        # This test is flaky and only works if it is run on a single machine.
+        # However, it's impossible to directly mock a function called by monarch
+        # because it is first pickled and then unpickled.
+
+        sampler = RandomStatefulSampler()
+        TEST_PORT = 34958
+        sampler.sample_keys = add_udp_callback(
+            sampler.sample_keys, port=TEST_PORT, message=b"sample_keys"
+        )
+
+        mesh = await proc_mesh(gpus=1)
+        replay_buffer = await mesh.spawn(
+            "replay_buffer", ReplayBuffer, batch_size=1, max_policy_age=1
+        )
+        received = []
+        server_thread = threading.Thread(
+            target=receive_udp_packet,
+            args=(TEST_PORT, received),
+            kwargs={"timeout": 15},
+        )
+        server_thread.start()
+        await replay_buffer.setup.call(sampler=sampler)
+        await replay_buffer.add.call_one(Trajectory(policy_version=0))
+        await replay_buffer.sample.call_one(curr_policy_version=0)
+        server_thread.join()
+        assert b"".join(received) == b"sample_keys"
+
+    @pytest.mark.asyncio
     async def test_add(self, replay_buffer: ReplayBuffer) -> None:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
         assert replay_buffer._numel.call_one().get() == 1
-        assert replay_buffer._getitem.call_one(0).get() == trajectory
+        assert replay_buffer.sample.call_one(
+            curr_policy_version=0, batch_size=1
+        ).get() == [trajectory]
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -39,8 +78,13 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
         assert replay_buffer._numel.call_one().get() == 2
-        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
-        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
+        all_samples = replay_buffer.sample.call_one(
+            curr_policy_version=0, batch_size=2
+        ).get()
+        assert all_samples == [trajectory_0, trajectory_1] or all_samples == [
+            trajectory_1,
+            trajectory_0,
+        ]
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
