@@ -40,6 +40,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+
 logger = logging.getLogger(__name__)
 
 

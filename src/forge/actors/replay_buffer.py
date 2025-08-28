@@ -5,22 +5,28 @@
 # LICENSE file in the root directory of this source tree.
 
 import random
+from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import Actor, endpoint
+from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 
-class ReplayBuffer(Actor):
+@dataclass
+class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
-    def __init__(
-        self, batch_size: int, max_policy_age: int, seed: int | None = None
-    ) -> None:
-        self.buffer = []
-        self.batch_size = batch_size
-        self.max_policy_age = max_policy_age
-        if seed is not None:
-            random.seed(seed)
+    batch_size: int
+    max_policy_age: int
+    seed: int | None = None
+
+    @endpoint
+    async def setup(self) -> None:
+        self.buffer: list = []
+        if self.seed is None:
+            self.seed = random.randint(0, 2**32)
+        random.seed(self.seed)
         self.sampler = random.sample
 
     @endpoint
@@ -91,6 +97,7 @@ class ReplayBuffer(Actor):
         return {
             "buffer": self.buffer,
             "rng_state": random.getstate(),
+            "seed": self.seed,
         }
 
     @endpoint

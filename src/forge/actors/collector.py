@@ -12,13 +12,13 @@ A "collector" in this context refers to the orchestrator that coordinates
 
 from typing import Callable
 
-from forge.data.replay_buffer import ReplayBuffer
+from monarch.actor import Actor, endpoint
+
+from forge.actors.replay_buffer import ReplayBuffer
 
 from forge.interfaces import Policy
 
 from forge.types import Trajectory
-
-from monarch.actor import Actor, endpoint
 
 
 class Collector(Actor):

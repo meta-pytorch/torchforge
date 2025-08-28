@@ -16,7 +16,6 @@ import logging
 import math
 import os
 import sys
-from dataclasses import asdict
 from functools import partial
 from typing import Any
 
@@ -71,7 +70,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     device: torch.device
     step: int
 
-    def __init__(self, job_config: ForgeJobConfig):
+    def __init__(self, config: DictConfig):
+        job_config = ForgeJobConfig().to_dict()
+        # Hack to deal with literal types from titan
+        job_config = OmegaConf.merge(job_config, config)
+
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
         self.metric_logger = None  # TODO: fix this
@@ -92,8 +95,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         """
         env = {
-            "MASTER_ADDR": "localhost",
-            "MASTER_PORT": "12345",
             "RANK": str(self._rank),
             "LOCAL_RANK": str(self._rank),
             "LOCAL_WORLD_SIZE": str(self._size),
@@ -103,7 +104,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             "ROLE_WORLD_SIZE": str(self._size),
             "ROLE_NAME": "rank",
             "WORLD_SIZE": str(self._size),
-            "CUDA_VISIBLE_DEVICES": str(self._rank),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
@@ -280,7 +280,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 async def run(cfg: DictConfig) -> None:
     logging.info("Spawing recipe...")
     process_cfg = cfg.pop("processes")
-    recipe = await spawn_actors("sft", ForgeSFTRecipe, cfg, process_cfg)
+    recipe = await spawn_actors(
+        "sft",
+        ForgeSFTRecipe,
+        {"config": cfg},
+        process_cfg,
+        set_address=True,
+    )
 
     logging.info("Created recipe, running setup.")
     await recipe.setup.call()
@@ -296,11 +302,6 @@ async def run(cfg: DictConfig) -> None:
 
 @parse
 def recipe_main(cfg: DictConfig) -> None:
-    # TODO: this is a hack to get the defaults from ForgeJobConfig
-    default_cfg = ForgeJobConfig()
-    # Hack to deal with literal types from titan
-    default_cfg = asdict(default_cfg)
-    cfg = OmegaConf.merge(default_cfg, cfg)
     asyncio.run(run(cfg))
 
 
