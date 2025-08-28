@@ -51,7 +51,7 @@ async def spawn_actors(
     set_address: bool = False,
 ):
     """Setup process Mesh and spawn Actors."""
-    mesh = await get_proc_mesh(processes, set_address)
+    mesh = await get_proc_mesh(processes)
     actors = await mesh.spawn(name, actor_cls, **cfg)
     actors.mesh = mesh
     return actors
@@ -79,7 +79,11 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
             gpu_ids = await get_gpu_ids(process_config.num_gpus)
             env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_ids))
 
-        # m = this_host().spawn_procs(
+        # TODO - update to use this_host() whenever it supports
+        # being run wihtin actors:
+        # AttributeError: NYI: attempting to get ProcMesh attribute `slice` on object that's
+        # actually a ProcMeshRef
+        # return this_host().spawn_procs(
         #     per_host={"procs": process_config.num_procs},
         #     bootstrap=partial(_setup_env, env=env),
         # )
