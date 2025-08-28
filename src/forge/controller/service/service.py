@@ -40,9 +40,10 @@ from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
-from forge.controller.interface import _session_context, Session
-from forge.controller.metrics import ServiceMetrics
-from forge.controller.replica import Replica, ServiceRequest
+from forge.controller.service.interface import _session_context, Session
+
+from forge.controller.service.metrics import ServiceMetrics
+from forge.controller.service.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)

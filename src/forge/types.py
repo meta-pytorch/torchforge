@@ -93,6 +93,7 @@ class ProcessConfig:
 
     scheduler: Literal["mast", "local"] = "local"
     num_procs: int = 1
+    num_gpus: int = 0
     num_hosts: int = 1
     # The following is mast specific.
     oncall: str = "torchtune"
@@ -105,6 +106,7 @@ class ServiceConfig:
     """A service config."""
 
     procs_per_replica: int
+    gpus_per_replica: int
     num_replicas: int
     num_hosts: int = 1
     scheduler: Literal["mast", "local"] = "local"
@@ -125,6 +127,7 @@ class ServiceConfig:
         return ProcessConfig(
             scheduler=self.scheduler,
             num_procs=self.procs_per_replica,
+            num_gpus=self.gpus_per_replica,
             num_hosts=self.num_hosts,
             oncall=self.oncall,
             identity=self.identity,

@@ -391,6 +391,7 @@ async def main():
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
         procs_per_replica=1,
+        gpus_per_replica=1,
         num_replicas=1,
     )
 
@@ -401,7 +402,6 @@ async def main():
             num_workers=1,
             worker_params=WorkerConfig(model=model),
             sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
-            available_devices="3",
         ),
     )
 

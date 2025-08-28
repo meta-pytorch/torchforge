@@ -11,6 +11,7 @@ import logging
 
 import os
 import socket
+from functools import partial
 
 from monarch.actor import proc_mesh, ProcMesh
 from monarch.tools import commands
@@ -18,6 +19,8 @@ from monarch.tools.config import Config
 from omegaconf import DictConfig
 
 from forge.controller import ForgeActor
+
+from forge.controller.custom_actors.gpu_manager import get_gpu_ids
 from forge.types import ProcessConfig
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -54,20 +57,39 @@ async def spawn_actors(
     return actors
 
 
-async def get_proc_mesh(process_config: ProcessConfig, set_address=False) -> ProcMesh:
-    env = None
-    if set_address:
-        env = {
-            "MASTER_ADDR": str(socket.gethostname()),
-            "MASTER_PORT": str(_find_free_port()),
-        }
+async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
+    """Returns a proc mesh with the given process config."""
+
+    # TODO - modify this to work with multi-host
+    env = {
+        "MASTER_ADDR": str(socket.gethostname()),
+        "MASTER_PORT": str(_find_free_port()),
+    }
+
+    def _setup_env(env: dict[str, str]):
+        """Sets up the environment on proc mesh creation."""
+        for k, v in env.items():
+            os.environ[k] = v
+
     if process_config.scheduler == "local":
         if process_config.num_hosts != 1:
             raise ValueError("Local scheduler only supports 1 host")
-        return await proc_mesh(gpus=process_config.num_procs, env=env)
+
+        if process_config.num_gpus > 0:
+            gpu_ids = await get_gpu_ids(process_config.num_gpus)
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_ids))
+
+        # m = this_host().spawn_procs(
+        #     per_host={"procs": process_config.num_procs},
+        #     bootstrap=partial(_setup_env, env=env),
+        # )
+        return proc_mesh(gpus=process_config.num_procs, env=env)
     elif process_config.scheduler == "mast":
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
+
+        if process_config.num_gpus != 0:
+            raise ValueError("NYI - need to add HostMesh tracking in GpuManager")
 
         logging.info("Scheduling on MAST with: ", process_config)
         jobname = f"monarch-{getpass.getuser()}"
@@ -104,12 +126,7 @@ async def get_proc_mesh(process_config: ProcessConfig, set_address=False) -> Pro
         )
         alloc = await allocator.allocate(AllocSpec(constraints, **mesh_dimensions))
         if env:
-
-            def setup():  # noqa: FB811
-                for k, v in env.items():
-                    os.environ[k] = v
-
-            p = await ProcMesh.from_alloc(alloc, setup=setup)
+            p = await ProcMesh.from_alloc(alloc, setup=partial(_setup_env, env=env))
         else:
             p = await ProcMesh.from_alloc(alloc)
         await p.logging_option(stream_to_client=True, aggregate_window_sec=3)

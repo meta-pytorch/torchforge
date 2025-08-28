@@ -8,7 +8,7 @@
 
 import logging
 
-from monarch.actor import endpoint
+from monarch.actor import endpoint, get_or_spawn_controller
 
 from forge.controller import ForgeActor
 
@@ -42,9 +42,15 @@ class GpuManager(ForgeActor):
         return "GpuManager"
 
 
-def get_gpu_manager() -> GpuManager:
-    pass
+async def get_gpu_manager() -> GpuManager:
+    return await get_or_spawn_controller("gpu_manager", GpuManager)
 
 
-def spawn_gpu_manager() -> GpuManager:
-    pass
+async def get_gpu_ids(num_gpus: int) -> list[str]:
+    gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
+    return await gpu_manager.get_gpus.call_one(num_gpus)
+
+
+async def release_gpus(gpu_ids: list[str]) -> None:
+    gpu_manager = await get_or_spawn_controller("gpu_manager", GpuManager)
+    await gpu_manager.release_gpus.call_one(gpu_ids)
