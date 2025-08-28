@@ -8,7 +8,7 @@
 
 import logging
 
-from monarch.actor import HostMesh
+from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
 
@@ -20,16 +20,31 @@ class GpuManager(ForgeActor):
     """An actor that tracks and assigns GPU devices on given HostMeshes."""
 
     def __init__(self):
-        self._host_resource_map = {}
+        # TODO - extend this to support multiple HostMeshes too
+        self.available_gpus = set(range(0, 8))
 
     @endpoint
-    def get_gpus(self, host_mesh: HostMesh, num_gpus: int):
-        pass
+    def get_gpus(self, num_gpus: int) -> list[str]:
+        """Assigns GPU devices."""
+        if num_gpus > len(self.available_gpus):
+            raise RuntimeError("Not enough GPUs available")
+        gpus = list(self.available_gpus)[:num_gpus]
+        self.available_gpus -= set(gpus)
+        return [str(gpu) for gpu in gpus]
+
+    @endpoint
+    def release_gpus(self, gpu_ids: list[str]) -> None:
+        """Releases the given GPU devices."""
+        for gpu_id in gpu_ids:
+            self.available_gpus.add(int(gpu_id))
+
+    def __repr__(self) -> str:
+        return "GpuManager"
 
 
-def _get_gpu_manager() -> GpuManager:
+def get_gpu_manager() -> GpuManager:
     pass
 
 
-def _spawn_gpu_manager() -> GpuManager:
+def spawn_gpu_manager() -> GpuManager:
     pass
