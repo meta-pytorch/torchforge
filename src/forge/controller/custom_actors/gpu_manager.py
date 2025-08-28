@@ -8,7 +8,7 @@
 
 import logging
 
-# from monarch.actor import proc_mesh
+from monarch.actor import HostMesh
 
 from forge.controller import ForgeActor
 
@@ -17,8 +17,14 @@ logger.setLevel(logging.DEBUG)
 
 
 class GpuManager(ForgeActor):
+    """An actor that tracks and assigns GPU devices on given HostMeshes."""
+
     def __init__(self):
         self._host_resource_map = {}
+
+    @endpoint
+    def get_gpus(self, host_mesh: HostMesh, num_gpus: int):
+        pass
 
 
 def _get_gpu_manager() -> GpuManager:
