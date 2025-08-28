@@ -16,6 +16,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -342,6 +343,13 @@ async def main():
     group_size = 1
     model = "Qwen/Qwen3-1.7B"
 
+    # ---- Setup WandB Logger ---- #
+    logger = get_metric_logger(
+        "wandb",
+        freq=1,
+        project="grpo-training",
+    )
+
     # ---- Setup services ---- #
     default_service_cfg = ServiceConfig(
         procs_per_replica=1,
@@ -452,6 +460,7 @@ async def main():
                 print(
                     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
                 )
+                logger.log("reward/rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
@@ -465,7 +474,9 @@ async def main():
                 if training_step % 10 == 0:
                     print(f"Completed {training_step} training steps")
                     if training_result:
-                        print(f"Latest loss: {training_result.get('loss', 'N/A')}")
+                        loss_value = training_result.get("loss", 0.0)
+                        print(f"Latest loss: {loss_value}")
+                        logger.log("loss/training_step", loss_value, training_step)
                 # await trainer.update_weights(policy)
 
     print("Starting GRPO training loops...")
