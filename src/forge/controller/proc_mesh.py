@@ -75,8 +75,8 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         if process_config.num_hosts != 1:
             raise ValueError("Local scheduler only supports 1 host")
 
-        if process_config.num_gpus > 0:
-            gpu_ids = await get_gpu_ids(process_config.num_gpus)
+        if process_config.with_gpus:
+            gpu_ids = await get_gpu_ids(process_config.num_procs)
             env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_ids))
 
         # TODO - update to use this_host() whenever it supports
@@ -94,7 +94,7 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
 
-        if process_config.num_gpus != 0:
+        if process_config.with_gpus:
             raise ValueError("NYI - need to add HostMesh tracking in GpuManager")
 
         logging.info("Scheduling on MAST with: ", process_config)
