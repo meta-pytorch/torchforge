@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import asyncio
 import time
 from dataclasses import dataclass
@@ -8,7 +14,6 @@ from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
-from forge.data.replay_buffer import ReplayBuffer
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
 

@@ -13,9 +13,6 @@ from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 import torch
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
 from monarch.actor import Actor, current_rank, endpoint, proc_mesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -39,6 +36,9 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
 
 
 logger = logging.getLogger(__name__)
