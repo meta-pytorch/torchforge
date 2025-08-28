@@ -211,54 +211,6 @@ class Trainer(ForgeActor):
         self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
-def math_scoring_function(prompt: str, response: str, target: str) -> float:
-    """Function to score math correctness."""
-    import re
-
-    # Extract expected answer from target
-    expected_answer = (
-        float(target.strip())
-        if target.strip().replace(".", "").replace("-", "").isdigit()
-        else None
-    )
-
-    # Extract model answer from response
-    patterns = [
-        r"####\s*([+-]?\d+(?:\.\d+)?)",  # GSM8K style answer format
-        r"(?:the\s+)?answer\s+is\s*([+-]?\d+(?:\.\d+)?)",
-        r"(?:answer:|result:)\s*([+-]?\d+(?:\.\d+)?)",
-        r"=\s*([+-]?\d+(?:\.\d+)?)\s*(?:\.|$)",  # equals near end
-        r"\b([+-]?\d+(?:\.\d+)?)\s*(?:\.|$)",  # number at end
-        r"([+-]?\d+(?:\.\d+)?)",  # any number (fallback)
-    ]
-
-    model_answer = None
-    response_lower = response.lower().strip()
-    for pattern in patterns:
-        matches = re.findall(pattern, response_lower)
-        if matches:
-            model_answer = float(matches[-1])
-            break
-
-    if expected_answer is None or model_answer is None:
-        return 0.1  # Partial credit for attempting
-
-    # Check if answers match (with some tolerance for floating point)
-    if abs(expected_answer - model_answer) < 1e-6:
-        return 1.0  # Correct answer
-    else:
-        return 0.0  # Incorrect answer
-
-
-def thinking_scoring_function(prompt: str, response: str, target: str) -> float:
-    """Function to score thinking tag usage."""
-    # Check if response contains <think></think> tags
-    if "<think>" in response.lower() and "</think>" in response.lower():
-        return 0.5
-    else:
-        return 0.0
-
-
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
 
