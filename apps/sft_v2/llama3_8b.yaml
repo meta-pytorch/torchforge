@@ -47,7 +47,7 @@ parallelism:
   disable_loss_parallel: false
 
 checkpoint:
-  enable_checkpoint: true
+  enable: true
   folder: /tmp/Meta-Llama-3.1-8B-Instruct/saved_checkpoints
   initial_load_path:  /tmp/Meta-Llama-3.1-8B-Instruct/
   initial_load_in_hf: true
