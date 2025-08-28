@@ -106,8 +106,8 @@ class ServiceConfig:
     """A service config."""
 
     procs_per_replica: int
-    gpus_per_replica: int
     num_replicas: int
+    gpus_per_replica: int = 0
     num_hosts: int = 1
     scheduler: Literal["mast", "local"] = "local"
     oncall: str = "torchtune"

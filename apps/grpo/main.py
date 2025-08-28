@@ -351,12 +351,6 @@ async def main():
     )
 
     # ---- Setup services ---- #
-    default_service_cfg = ServiceConfig(
-        procs_per_replica=1,
-        gpus_per_replica=1,
-        num_replicas=1,
-    )
-
     policy = await spawn_service(
         ServiceConfig(procs_per_replica=1, gpus_per_replica=1, num_replicas=1),
         Policy,
@@ -376,14 +370,14 @@ async def main():
     )
 
     replay_buffer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
         ReplayBuffer,
         batch_size=4,
         max_policy_age=1,
     )
 
     dataloader = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
         DatasetActor,
         "openai/gsm8k",
         "main",
@@ -392,20 +386,20 @@ async def main():
     )
 
     compute_advantages = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
         ComputeAdvantages,
         gamma=0.99,
         lambda_=0.95,
     )
 
     ref_model = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
         RefModel,
         model_name=model,
     )
 
     reward_actor = await spawn_service(
-        ServiceConfig(procs_per_replica=1, gpus_per_replica=0, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
         RewardActor,
         reward_functions=[MathReward(), ThinkingReward()],
     )
