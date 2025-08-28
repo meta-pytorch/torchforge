@@ -12,6 +12,7 @@ from typing import Callable
 import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
 from monarch.actor import endpoint
