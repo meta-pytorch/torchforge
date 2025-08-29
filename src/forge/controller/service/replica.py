@@ -153,7 +153,7 @@ class Replica:
         - Transitions to healthy state
         - Starts the processing loop
         """
-        assert self.actor is None, "Proc mesh should not be set yet"
+        assert self.actor is None, "Actor should not be set yet"
         try:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
