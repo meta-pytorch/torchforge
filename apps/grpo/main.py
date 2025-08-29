@@ -6,6 +6,7 @@
 
 import asyncio
 import copy
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -15,13 +16,16 @@ import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.controller import ServiceConfig, spawn_service
 from forge.controller.actor import ForgeActor
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from vllm.transformers_utils.tokenizer import get_tokenizer
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def compute_sequence_logprobs(
@@ -369,7 +373,7 @@ class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
     path: str
-    name: str
+    dataset_name: str
     split: str
     streaming: bool
     transform: Callable
@@ -377,7 +381,7 @@ class DatasetActor(ForgeActor):
     @endpoint
     def setup(self):
         ds = load_dataset(
-            self.path, self.name, split=self.split, streaming=self.streaming
+            self.path, self.dataset_name, split=self.split, streaming=self.streaming
         )
         ds = ds.map(self.transform)
         ds = ds.shuffle()
@@ -412,66 +416,62 @@ async def main():
     )
 
     # ---- Setup services ---- #
-    default_service_cfg = ServiceConfig(
-        procs_per_replica=1,
-        num_replicas=1,
-    )
-
-    policy = await spawn_service(
-        default_service_cfg,
-        Policy,
-        PolicyConfig(
-            num_workers=1,
-            worker_params=WorkerConfig(model=model),
-            sampling_params=SamplingOverrides(n=group_size, max_tokens=16),
-            available_devices="3",
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        compute_advantages,
+        ref_model,
+        reward_actor,
+    ) = await asyncio.gather(
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            DatasetActor,
+            path="openai/gsm8k",
+            config_name="main",
+            split="train",
+            streaming=True,
         ),
-    )
-
-    trainer = await spawn_service(
-        default_service_cfg,
-        Trainer,
-        learning_rate=1e-5,
-        beta=0.1,
-        model_name=model,
-        device=torch.device("cuda:1"),
-    )
-
-    replay_buffer = await spawn_service(
-        default_service_cfg,
-        ReplayBuffer,
-        batch_size=4,
-        max_policy_age=1,
-    )
-
-    dataloader = await spawn_service(
-        default_service_cfg,
-        DatasetActor,
-        "openai/gsm8k",
-        "main",
-        split="train",
-        streaming=True,
-        transform=gsm8k_to_messages,
-    )
-
-    compute_advantages = await spawn_service(
-        default_service_cfg,
-        ComputeAdvantages,
-        gamma=0.99,
-        lambda_=0.95,
-    )
-
-    ref_model = await spawn_service(
-        default_service_cfg,
-        RefModel,
-        model_name=model,
-        device=torch.device("cuda:2"),
-    )
-
-    reward_actor = await spawn_service(
-        default_service_cfg,
-        RewardActor,
-        reward_functions=[MathReward(), ThinkingReward()],
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+            Policy,
+            config=PolicyConfig(
+                worker_params=WorkerConfig(model=model),
+                sampling_params=SamplingOverrides(
+                    num_samples=group_size, max_tokens=16
+                ),
+            ),
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+            Trainer,
+            learning_rate=1e-5,
+            beta=0.1,
+            model_name=model,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ReplayBuffer,
+            batch_size=4,
+            max_policy_age=1,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ComputeAdvantages,
+            gamma=0.99,
+            lambda_=0.95,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+            RefModel,
+            model_name=model,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            RewardActor,
+            reward_functions=[MathReward(), ThinkingReward()],
+        ),
     )
 
     print("All services initialized successfully!")
@@ -481,8 +481,6 @@ async def main():
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        # TODO: Move this into setup
-        asyncio.create_task(policy.run_processing.call())
         while True:
             sample = await dataloader.sample.choose()
             if sample is None:
@@ -556,6 +554,17 @@ async def main():
         print("Training interrupted by user")
         rollout_task.cancel()
         training_task.cancel()
+    finally:
+        print("Shutting down...")
+        await asyncio.gather(
+            shutdown_service(policy),
+            shutdown_service(trainer),
+            shutdown_service(replay_buffer),
+            shutdown_service(dataloader),
+            shutdown_service(compute_advantages),
+            shutdown_service(ref_model),
+            shutdown_service(reward_actor),
+        )
 
 
 if __name__ == "__main__":
