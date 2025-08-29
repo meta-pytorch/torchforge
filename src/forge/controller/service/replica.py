@@ -103,7 +103,6 @@ class Replica:
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
     actor_def: type[ForgeActor]
-    actor_args: tuple
     actor_kwargs: dict
 
     # The Actor that this replica is running
@@ -160,7 +159,6 @@ class Replica:
             logger.debug(f"Launching actor for replica {self.idx}")
             self.actor = await self.actor_def.launch(
                 process_config=self.proc_config,
-                *self.actor_args,
                 **self.actor_kwargs,
             )
 
@@ -194,7 +192,6 @@ class Replica:
                 logger.debug(f"Re-launching actor for replica {self.idx}")
                 self.actor = await self.actor_def.launch(
                     process_config=self.proc_config,
-                    *self.actor_args,
                     **self.actor_kwargs,
                 )
             except Exception as e:

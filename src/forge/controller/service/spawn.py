@@ -20,14 +20,13 @@ logger.setLevel(logging.INFO)
 
 
 async def spawn_service(
-    service_cfg: ServiceConfig, actor_def: Type[ForgeActor], *actor_args, **actor_kwargs
+    service_cfg: ServiceConfig, actor_def: Type[ForgeActor], **actor_kwargs
 ) -> ServiceInterface:
     """Spawns a service based on the actor class.
 
     Args:
         service_cfg: Service configuration
         actor_def: Actor class definition
-        *actor_args: Arguments to pass to actor constructor
         **actor_kwargs: Keyword arguments to pass to actor constructor
 
     Returns:
@@ -41,7 +40,7 @@ async def spawn_service(
     logger.info("Spawning Service Actor for %s", actor_def.__name__)
     m = await proc_mesh(gpus=1)
     service_actor = await m.spawn(
-        "service", Service, service_cfg, actor_def, actor_args, actor_kwargs
+        "service", Service, service_cfg, actor_def, actor_kwargs
     )
     await service_actor.__initialize__.call_one()
 

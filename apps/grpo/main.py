@@ -490,13 +490,15 @@ async def main():
         training_task.cancel()
     finally:
         print("Shutting down...")
-        await shutdown_service(policy)
-        await shutdown_service(trainer)
-        await shutdown_service(replay_buffer)
-        await shutdown_service(dataloader)
-        await shutdown_service(compute_advantages)
-        await shutdown_service(ref_model)
-        await shutdown_service(reward_actor)
+        await asyncio.gather(
+            shutdown_service(policy),
+            shutdown_service(trainer),
+            shutdown_service(replay_buffer),
+            shutdown_service(dataloader),
+            shutdown_service(compute_advantages),
+            shutdown_service(ref_model),
+            shutdown_service(reward_actor),
+        )
 
 
 if __name__ == "__main__":
