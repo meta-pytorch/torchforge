@@ -183,6 +183,7 @@ class Replica:
         async def _do_recovery():
             try:
                 await self.actor_def.shutdown(self.actor)
+                self.actor = None
             except Exception as e:
                 logger.warning(f"Error shutting down actor for replica {self.idx}: {e}")
                 self.state = ReplicaState.UNHEALTHY
@@ -190,10 +191,7 @@ class Replica:
             # Re-create the actor
             try:
                 logger.debug(f"Re-launching actor for replica {self.idx}")
-                self.actor = await self.actor_def.launch(
-                    process_config=self.proc_config,
-                    **self.actor_kwargs,
-                )
+                await self.initialize()
             except Exception as e:
                 logger.error(f"Recovery failed for replica {self.idx}: {e}")
                 self.state = ReplicaState.UNHEALTHY

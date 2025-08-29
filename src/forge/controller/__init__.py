@@ -8,6 +8,8 @@ from .actor import ForgeActor
 from .proc_mesh import get_proc_mesh, stop_proc_mesh
 
 
+# TODO - remove this once everything has moved to
+# service
 async def spawn_actors(
     name: str,
     actor_cls: ForgeActor,
