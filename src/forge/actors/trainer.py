@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import asyncio
 import logging
 import math
 import os
@@ -12,7 +13,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+import torchtitan.experiments.forge.train_spec as forge_train_spec
+
+# from tqdm import tqdm
+
+
+from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
+from torchstore._state_dict_utils import push_state_dict
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -29,8 +37,6 @@ from torchtitan.config.job_config import (
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -185,6 +191,18 @@ class RLTrainer(ForgeActor):
         self.engine.lr_schedulers.step()
 
         self.current_step += 1
+
+        # save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
+        # TODOs:
+        # 1. Figure out if there is a value in calling state_dict_adatpr.to_hf()
+        # 2. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
+        #    May need to replicate the same in this code path.
+        # 3. Integrate zero-overhead version of push_state_dict.
+        # 4. Figure out a way to notify the generator app that weights are ready. This beyond the initial integration success.
+        # 5. Unify CheckpointManager and TorchStore weights save control path.
+        push_state_dict(self._tstore, self.checkpointer.states, f"v{self.current_step}")
+        # if self.current_step % self.train_config.val_every_n_steps == 0:
+        #     self.validate()
         self.engine.checkpointer.save(
             curr_step=self.current_step,
             last_step=self.current_step == self.num_training_steps,
