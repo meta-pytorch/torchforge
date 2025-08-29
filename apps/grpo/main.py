@@ -5,12 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-import copy
 import logging
 import time
-import uuid
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Literal, Optional
 
 import torch
 from datasets import load_dataset
@@ -87,34 +85,35 @@ class Episode:
     ref_logprobs: Optional[torch.Tensor] = None
     reward: Optional[float] = None
     advantage: Optional[float] = None
-    policy_version: Optional[int] = None
-
-
-@dataclass
-class Group:
-    group_id: str
-    episodes: list[Episode]
-
-    @classmethod
-    def new_group(
-        cls, group_id: int, group_size: int, request: list[Message], policy_version: int
-    ):
-        episodes = []
-        for i in range(group_size):
-            Episode(
-                episode_id=str(uuid.uuid4()),
-                request=copy.deepcopy(messages),
-                policy_version=policy_version,
-            )
-        return cls(group_id, episodes)
 
 
 # @dataclass
 # class Group:
-#     response: str  # The response text for tokenization
-#     ref_logprobs: torch.Tensor
-#     reward: float
-#     advantage: float = 0.0
+#     group_id: str
+#     episodes: list[Episode]
+
+#     @classmethod
+#     def new_group(
+#         cls, group_id: int, group_size: int, request: list[Message], policy_version: int
+#     ):
+#         episodes = []
+#         for i in range(group_size):
+#             Episode(
+#                 episode_id=str(uuid.uuid4()),
+#                 request=copy.deepcopy(messages),
+#                 policy_version=policy_version,
+#             )
+#         return cls(group_id, episodes)
+
+
+@dataclass
+class Group:
+    response: str  # The response text for tokenization
+    ref_logprobs: torch.Tensor
+    reward: float
+    advantage: float = 0.0
+
+
 #
 #
 # class Episode:
@@ -372,16 +371,16 @@ class RefModel(ForgeActor):
 class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    path: str
-    dataset_name: str
-    split: str
-    streaming: bool
-    transform: Callable
+    path: str = ""
+    config_name: str = ""
+    split_name: str = ""
+    streaming: bool = False
+    transform: Callable = None
 
     @endpoint
     def setup(self):
         ds = load_dataset(
-            self.path, self.dataset_name, split=self.split, streaming=self.streaming
+            self.path, self.config_name, split=self.split_name, streaming=self.streaming
         )
         ds = ds.map(self.transform)
         ds = ds.shuffle()
@@ -430,7 +429,7 @@ async def main():
             DatasetActor,
             path="openai/gsm8k",
             config_name="main",
-            split="train",
+            split_name="train",
             streaming=True,
         ),
         spawn_service(
@@ -438,9 +437,7 @@ async def main():
             Policy,
             config=PolicyConfig(
                 worker_params=WorkerConfig(model=model),
-                sampling_params=SamplingOverrides(
-                    num_samples=group_size, max_tokens=16
-                ),
+                sampling_params=SamplingOverrides(n=group_size, max_tokens=16),
             ),
         ),
         spawn_service(

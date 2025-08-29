@@ -17,7 +17,7 @@ from typing import List
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
-from vllm.outputs import CompletionOutput
+from vllm.outputs import CompletionOutput, RequestOutput
 
 
 async def main():
@@ -92,7 +92,14 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
         print("Requesting generation...")
         request_output: RequestOutput = await policy.generate.choose(prompt=prompt)
         responses: List[CompletionOutput] = request_output.outputs
-        print("\nShutting down...")
+        print("\nGeneration Results:")
+        print("=" * 80)
+        for batch, response in enumerate(responses):
+            print(f"Sample {batch + 1}:")
+            print(f"User: {prompt}")
+            print(f"Assistant: {response.text}")
+            print("-" * 80)
+            print("\nShutting down...")
 
     await shutdown_service(policy)
 
