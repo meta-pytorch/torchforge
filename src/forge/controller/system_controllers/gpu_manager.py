@@ -8,15 +8,13 @@
 
 import logging
 
-from monarch.actor import ActorError, endpoint, get_or_spawn_controller
-
-from forge.controller import ForgeActor
+from monarch.actor import Actor, ActorError, endpoint, get_or_spawn_controller
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class GpuManager(ForgeActor):
+class GpuManager(Actor):
     """An actor that tracks and assigns GPU devices on given HostMeshes."""
 
     def __init__(self):

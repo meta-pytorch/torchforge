@@ -8,8 +8,9 @@
 import logging
 from typing import Type
 
-from monarch.actor import Actor, proc_mesh
+from monarch.actor import proc_mesh
 
+from forge.controller import ForgeActor
 from forge.controller.service import Service, ServiceConfig
 
 from forge.controller.service.interface import ServiceInterface
@@ -19,7 +20,7 @@ logger.setLevel(logging.DEBUG)
 
 
 async def spawn_service(
-    service_cfg: ServiceConfig, actor_def: Type[Actor], *actor_args, **actor_kwargs
+    service_cfg: ServiceConfig, actor_def: Type[ForgeActor], *actor_args, **actor_kwargs
 ) -> ServiceInterface:
     """Spawns a service based on the actor class.
 
@@ -32,6 +33,10 @@ async def spawn_service(
     Returns:
         A ServiceInterface that provides access to the Service Actor
     """
+    # Assert that actor_def is a subclass of ForgeActor
+    if not issubclass(actor_def, ForgeActor):
+        raise TypeError(f"actor_def must be a subclass of ForgeActor, got {actor_def}")
+
     # Create a single-node proc_mesh and actor_mesh for the Service Actor
     logger.info("Spawning Service Actor for %s", actor_def.__name__)
     m = await proc_mesh(gpus=1)

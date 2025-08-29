@@ -84,9 +84,6 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
     policy = await spawn_service(service_config, Policy, config=config)
     session_id = await policy.start_session()
 
-    print("Starting background processing...")
-    processing_task = asyncio.create_task(policy.run_processing.call())
-
     print("Requesting generation...")
     responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
 

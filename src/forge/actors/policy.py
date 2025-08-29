@@ -9,11 +9,11 @@ import logging
 import os
 import sys
 from copy import copy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -25,7 +25,7 @@ from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
+from vllm.utils import get_distributed_init_method
 from vllm.v1.core.kv_cache_utils import get_kv_cache_config
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
@@ -37,8 +37,11 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -92,196 +95,7 @@ class PolicyConfig:
 
 
 @dataclass
-class Policy(PolicyInterface):
-    config: PolicyConfig
-    # Gets set up by setup
-    policy_worker: Actor = None
-
-    sampling_params: SamplingParams = None
-    lora_request: LoRARequest = None
-    tokenization_kwargs: dict = None
-
-    @endpoint
-    async def setup(self):
-        # Set up policy_worker
-        self.available_devices = (
-            self.config.available_devices
-            if self.config.available_devices is not None
-            else ",".join(str(i) for i in range(torch.cuda.device_count()))
-        )
-        await self.spawn_workers()
-
-        self.request_id = 0
-        self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
-
-        # Setup sampling params
-        sampling_overrides = self.config.sampling_params
-        overrides = {
-            "n": sampling_overrides.num_samples,
-            "guided_decoding": (
-                GuidedDecodingParams(choice=["Positive", "Negative"])
-                if sampling_overrides.guided_decoding
-                else None
-            ),
-        }
-        self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=overrides
-        )
-
-        # Setup processors
-        # TODO: move all processing to the Environment
-        # TODO: add support for `log_stats` and `mm_registry`
-        tokenizer = init_tokenizer_from_configs(
-            model_config=self.vllm_args.model_config,
-            scheduler_config=self.vllm_args.scheduler_config,
-            lora_config=self.vllm_args.lora_config,
-        )
-        self.processor = Processor(
-            vllm_config=self.vllm_args, tokenizer=tokenizer, mm_registry=None
-        )
-        self.output_processor = OutputProcessor(tokenizer, log_stats=None)
-
-        # Setup scheduler
-        # TODO: Add support for `log_stats`
-        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
-        kv_cache_config = kv_cache_configs._values[0]
-        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_args.cache_config.num_cpu_blocks = 0
-
-        structured_output_manager = StructuredOutputManager(self.vllm_args)
-        self.scheduler = Scheduler(
-            vllm_config=self.vllm_args,
-            kv_cache_config=kv_cache_config,
-            structured_output_manager=structured_output_manager,
-            include_finished_set=False,
-            log_stats=None,
-        )
-
-    async def spawn_workers(self):
-        self.worker_mesh = await proc_mesh(
-            gpus=self.config.num_workers,
-            env={
-                "MASTER_ADDR": str(get_loopback_ip()),
-                "MASTER_PORT": str(get_open_port()),
-                "CUDA_VISIBLE_DEVICES": self.available_devices,
-            },
-        )
-        self.policy_worker = await self.worker_mesh.spawn(
-            "policy_worker", PolicyWorker, **asdict(self.config.worker_params)
-        )
-        await self.policy_worker.setup.call()
-
-    @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
-        self.request_id += 1 % sys.maxsize
-        request_id = str(self.request_id)  # implement from a counter
-
-        # Wraps prompt into a dict
-        prompt: Dict[str, str] = convert_input(prompt)
-
-        # truncate prmpt
-        tokenization_kwargs = self.tokenization_kwargs or {}
-        truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
-        _validate_truncation_size(
-            self.vllm_args.model_config.max_model_len,
-            truncate_prompt_tokens,
-            tokenization_kwargs,
-        )
-
-        # process and tokenize prompt
-        prompt_str, request = self.processor.process_inputs(
-            request_id=request_id,
-            prompt=prompt,
-            params=self.sampling_params,
-            arrival_time=None,
-            lora_request=self.lora_request,
-            tokenization_kwargs=tokenization_kwargs,
-            trace_headers=None,
-            priority=priority,
-            data_parallel_rank=None,
-        )
-
-        # Explicitly keeping the redundant logic to make it easier to pick up
-        # vllm changes
-        # TODO: Clean up before release
-        if (num_samples := self.sampling_params.n) == 1:
-            self.output_processor.add_request(request, prompt_str, None, 0)
-            request, _ = self.preprocess_add_request(request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (None, request_fut)
-
-            self.scheduler.add_request(request)
-        else:
-            parent_req = ParentRequest(request_id, self.sampling_params)
-            for idx in range(num_samples):
-                # Note: `get_child_info` mutates ParentRequest to track the
-                # generated child request
-                child_request_id, params = parent_req.get_child_info(idx)
-                child_request = request if idx == num_samples - 1 else copy(request)
-                child_request.request_id = child_request_id
-                child_request.sampling_params = params
-                self.output_processor.add_request(
-                    child_request, prompt_str, parent_req, idx
-                )
-                child_request, _ = self.preprocess_add_request(child_request)
-
-                self.scheduler.add_request(child_request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (parent_req, request_fut)
-
-        return await request_fut
-
-    # Abstracted to match vllm
-    # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
-    def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
-        if request.mm_hashes is not None:
-            raise NotImplementedError("Support for mm_hash is not implemented yet.")
-        request: Request = Request.from_engine_core_request(request)
-        if request.use_structured_output:
-            self.scheduler.structured_output_manager.grammar_init(request)
-
-        return request, 0  # Unused Arg: Current Wave
-
-    @endpoint
-    async def run_processing(self):
-        # TODO: add support for `iteration_stats`
-        # TODO: move postprocessing out of loop to not block
-        parallel_config = self.vllm_args.parallel_config
-        output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
-        self.running = True
-        while self.running:
-            scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.policy_worker.execute_model.call(
-                scheduler_output
-            )
-            worker_output = worker_outputs._values[output_rank]
-            outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
-            outputs = outputs.get(0) or EngineCoreOutputs()
-            await asyncio.sleep(0)  # Release control before processing outputs
-
-            processed_outputs = self.output_processor.process_outputs(
-                outputs.outputs,
-                engine_core_timestamp=outputs.timestamp,
-                iteration_stats=None,
-            )
-            for request_output in processed_outputs.request_outputs:
-                if request_output.finished:
-                    _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output.outputs)
-
-    @endpoint
-    async def update_weights(self):
-        """Update the policy weights."""
-        pass
-
-    @endpoint
-    async def shutdown(self):
-        self.running = False
-
-
-@dataclass
-class PolicyWorker(Actor):
+class PolicyWorker(ForgeActor):
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
@@ -452,6 +266,233 @@ class PolicyWorker(Actor):
         worker.init_device()
         worker.load_model()
         return worker
+
+
+@dataclass
+class Policy(PolicyInterface):
+    config: PolicyConfig
+    # Gets set up by setup
+    sampling_params: SamplingParams | None = None
+    lora_request: LoRARequest | None = None
+    tokenization_kwargs: dict = field(default_factory=dict)
+
+    _run_task: asyncio.Task | None = None
+    policy_worker: PolicyWorker | None = None
+    _policy_proc: ProcMesh | None = None
+    _worker_procs: ProcMesh | None = None
+
+    @classmethod
+    async def launch(
+        cls: type["Policy"],
+        process_config: ProcessConfig,
+        config: PolicyConfig,
+        *args,
+        **kwargs,
+    ) -> "Policy":
+        # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
+        # automatically.
+        logger.error("====DEBUG==== launching policy")
+        worker_procs = await get_proc_mesh(process_config=process_config)
+        policy_proc_config = copy(process_config)
+        policy_proc_config.num_procs = 1
+        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+        workers = await worker_procs.spawn(
+            "vllm_worker", PolicyWorker, **asdict(config.worker_params)
+        )
+        logger.error("====DEBUG==== spawned workers")
+
+        # TODO - expand support so name can stick within kwargs
+        actor_name = kwargs.pop("name", cls.__name__)
+        policy = await policy_proc.spawn(
+            actor_name, cls, config=config, policy_worker=workers
+        )
+        logger.error("====DEBUG==== spawned policy")
+        policy._policy_proc = policy_proc
+        policy._worker_procs = worker_procs
+        await policy.setup.call()
+        logger.error("====DEBUG==== done with setup")
+        return policy
+
+    @classmethod
+    async def shutdown(cls: type["Policy"], actor: "Policy"):
+        assert (
+            actor._policy_proc is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+        assert (
+            actor._worker_procs is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+
+        # TODO - may want to expand stop to gracefully respond to
+        # ongoing requests.
+        await actor.stop.call()
+        await stop_proc_mesh(actor._worker_procs)
+        await stop_proc_mesh(actor._policy_proc)
+
+    @endpoint
+    async def setup(self):
+        # Set up policy_worker
+        assert self.policy_worker is not None, "Policy worker should not be None"
+        await self.policy_worker.setup.call()
+
+        self.request_id = 0
+        self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
+
+        # Setup sampling params
+        sampling_overrides = self.config.sampling_params
+        overrides = {
+            "n": sampling_overrides.num_samples,
+            "guided_decoding": (
+                GuidedDecodingParams(choice=["Positive", "Negative"])
+                if sampling_overrides.guided_decoding
+                else None
+            ),
+        }
+        self.sampling_params = get_default_sampling_params(
+            self.vllm_args, overrides=overrides
+        )
+
+        # Setup processors
+        # TODO: move all processing to the Environment
+        # TODO: add support for `log_stats` and `mm_registry`
+        tokenizer = init_tokenizer_from_configs(
+            model_config=self.vllm_args.model_config,
+            scheduler_config=self.vllm_args.scheduler_config,
+            lora_config=self.vllm_args.lora_config,
+        )
+        self.processor = Processor(
+            vllm_config=self.vllm_args, tokenizer=tokenizer, mm_registry=None
+        )
+        self.output_processor = OutputProcessor(tokenizer, log_stats=None)
+
+        # Setup scheduler
+        # TODO: Add support for `log_stats`
+        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
+        kv_cache_config = kv_cache_configs._values[0]
+        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_args.cache_config.num_cpu_blocks = 0
+
+        structured_output_manager = StructuredOutputManager(self.vllm_args)
+        self.scheduler = Scheduler(
+            vllm_config=self.vllm_args,
+            kv_cache_config=kv_cache_config,
+            structured_output_manager=structured_output_manager,
+            include_finished_set=False,
+            log_stats=None,
+        )
+        self.start_processing()
+
+    def start_processing(self):
+        """Start the replica's processing loop if not already running."""
+        if self._run_task is None or self._run_task.done():
+            self._run_task = asyncio.create_task(self.run())
+            logger.debug(f"Started processing loop for replica {self.idx}")
+
+    @endpoint
+    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
+        self.request_id += 1 % sys.maxsize
+        request_id = str(self.request_id)  # implement from a counter
+
+        # Wraps prompt into a dict
+        prompt: Dict[str, str] = convert_input(prompt)
+
+        # truncate prmpt
+        tokenization_kwargs = self.tokenization_kwargs or {}
+        truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
+        _validate_truncation_size(
+            self.vllm_args.model_config.max_model_len,
+            truncate_prompt_tokens,
+            tokenization_kwargs,
+        )
+
+        # process and tokenize prompt
+        prompt_str, request = self.processor.process_inputs(
+            request_id=request_id,
+            prompt=prompt,
+            params=self.sampling_params,
+            arrival_time=None,
+            lora_request=self.lora_request,
+            tokenization_kwargs=tokenization_kwargs,
+            trace_headers=None,
+            priority=priority,
+            data_parallel_rank=None,
+        )
+
+        # Explicitly keeping the redundant logic to make it easier to pick up
+        # vllm changes
+        # TODO: Clean up before release
+        if (num_samples := self.sampling_params.n) == 1:
+            self.output_processor.add_request(request, prompt_str, None, 0)
+            request, _ = self.preprocess_add_request(request)
+            request_fut = asyncio.Future()
+            self.requests[request_id] = (None, request_fut)
+
+            self.scheduler.add_request(request)
+        else:
+            parent_req = ParentRequest(request_id, self.sampling_params)
+            for idx in range(num_samples):
+                # Note: `get_child_info` mutates ParentRequest to track the
+                # generated child request
+                child_request_id, params = parent_req.get_child_info(idx)
+                child_request = request if idx == num_samples - 1 else copy(request)
+                child_request.request_id = child_request_id
+                child_request.sampling_params = params
+                self.output_processor.add_request(
+                    child_request, prompt_str, parent_req, idx
+                )
+                child_request, _ = self.preprocess_add_request(child_request)
+
+                self.scheduler.add_request(child_request)
+            request_fut = asyncio.Future()
+            self.requests[request_id] = (parent_req, request_fut)
+
+        return await request_fut
+
+    # Abstracted to match vllm
+    # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
+    def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
+        if request.mm_hashes is not None:
+            raise NotImplementedError("Support for mm_hash is not implemented yet.")
+        request: Request = Request.from_engine_core_request(request)
+        if request.use_structured_output:
+            self.scheduler.structured_output_manager.grammar_init(request)
+
+        return request, 0  # Unused Arg: Current Wave
+
+    async def run(self):
+        # TODO: add support for `iteration_stats`
+        # TODO: move postprocessing out of loop to not block
+        parallel_config = self.vllm_args.parallel_config
+        output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
+        self.running = True
+        while self.running:
+            scheduler_output = self.scheduler.schedule()
+            worker_outputs = await self.policy_worker.execute_model.call(
+                scheduler_output
+            )
+            worker_output = worker_outputs._values[output_rank]
+            outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
+            outputs = outputs.get(0) or EngineCoreOutputs()
+            await asyncio.sleep(0)  # Release control before processing outputs
+
+            processed_outputs = self.output_processor.process_outputs(
+                outputs.outputs,
+                engine_core_timestamp=outputs.timestamp,
+                iteration_stats=None,
+            )
+            for request_output in processed_outputs.request_outputs:
+                if request_output.finished:
+                    _, fut = self.requests.pop(request_output.request_id)
+                    fut.set_result(request_output.outputs)
+
+    @endpoint
+    async def update_weights(self):
+        """Update the policy weights."""
+        pass
+
+    @endpoint
+    async def stop(self):
+        self.running = False
 
 
 def convert_input(prompt=None, prompt_token_ids=None) -> Dict:
