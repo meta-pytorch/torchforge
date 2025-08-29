@@ -16,7 +16,7 @@ from forge.controller.service import Service, ServiceConfig
 from forge.controller.service.interface import ServiceInterface
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 async def spawn_service(
@@ -47,3 +47,13 @@ async def spawn_service(
 
     # Return the ServiceInterface that wraps the proc_mesh, actor_mesh, and actor_def
     return ServiceInterface(m, service_actor, actor_def)
+
+
+async def shutdown_service(service: ServiceInterface) -> None:
+    """Shuts down the service.
+
+    Implemented in this way to avoid actors overriding stop() unintentionally.
+
+    """
+    await service._service.stop.call_one()
+    await service._proc_mesh.stop()

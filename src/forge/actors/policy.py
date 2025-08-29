@@ -88,7 +88,6 @@ class WorkerConfig:
 
 @dataclass
 class PolicyConfig:
-    num_workers: int
     worker_params: WorkerConfig
     sampling_params: SamplingOverrides
     available_devices: str = None
@@ -282,39 +281,41 @@ class Policy(PolicyInterface):
     _worker_procs: ProcMesh | None = None
 
     @classmethod
-    async def launch(
+    async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
+        *,
         process_config: ProcessConfig,
         config: PolicyConfig,
-        *args,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
-        logger.error("====DEBUG==== launching policy")
         worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # TODO - we will want to ensure colocation with workers
         policy_proc_config = copy(process_config)
         policy_proc_config.num_procs = 1
+        policy_proc_config.with_gpus = False
+
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
         workers = await worker_procs.spawn(
             "vllm_worker", PolicyWorker, **asdict(config.worker_params)
         )
-        logger.error("====DEBUG==== spawned workers")
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         policy = await policy_proc.spawn(
             actor_name, cls, config=config, policy_worker=workers
         )
-        logger.error("====DEBUG==== spawned policy")
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
         await policy.setup.call()
-        logger.error("====DEBUG==== done with setup")
         return policy
 
     @classmethod
-    async def shutdown(cls: type["Policy"], actor: "Policy"):
+    async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"], actor: "Policy"
+    ):
         assert (
             actor._policy_proc is not None
         ), "Tried to shutdown a policy that was not initialized correctly"
@@ -386,7 +387,6 @@ class Policy(PolicyInterface):
         """Start the replica's processing loop if not already running."""
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
-            logger.debug(f"Started processing loop for replica {self.idx}")
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:

@@ -150,14 +150,6 @@ class ServiceInterface:
         """Returns a context manager for session-based calls."""
         return SessionContext(self)
 
-    # Service control methods - forwarded to Service Actor
-    async def stop(self):
-        """Stops the service gracefully."""
-        # First stop the service
-        await self._service.stop.call_one()
-        # Then stop its underlying proc
-        await self._proc_mesh.stop()
-
     # Metrics methods - forwarded to Service Actor
     async def get_metrics(self):
         """Get comprehensive service metrics for monitoring and analysis."""

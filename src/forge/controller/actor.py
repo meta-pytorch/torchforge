@@ -57,9 +57,7 @@ class ForgeActor(Actor):
         pass
 
     @classmethod
-    async def launch(
-        cls, process_config: ProcessConfig, *args, **kwargs
-    ) -> "ForgeActor":
+    async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -76,7 +74,7 @@ class ForgeActor(Actor):
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-        actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
+        actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
         actor._proc_mesh = proc_mesh
         return actor
 

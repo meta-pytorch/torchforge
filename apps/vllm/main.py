@@ -16,7 +16,7 @@ from argparse import Namespace
 from typing import List
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from vllm.outputs import CompletionOutput
 
 
@@ -58,9 +58,11 @@ def parse_args() -> Namespace:
 
 
 def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
+
+    worker_size = 2
     worker_params = WorkerConfig(
         model=args.model,
-        tensor_parallel_size=2,
+        tensor_parallel_size=worker_size,
         pipeline_parallel_size=1,
         enforce_eager=True,
         vllm_args=None,
@@ -72,9 +74,11 @@ def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
     )
 
     policy_config = PolicyConfig(
-        num_workers=2, worker_params=worker_params, sampling_params=sampling_params
+        worker_params=worker_params, sampling_params=sampling_params
     )
-    service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
+    service_config = ServiceConfig(
+        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
+    )
 
     return policy_config, service_config
 
@@ -82,22 +86,22 @@ def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
 async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
     print("Spawning service...")
     policy = await spawn_service(service_config, Policy, config=config)
-    session_id = await policy.start_session()
 
-    print("Requesting generation...")
-    responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+    async with policy.session():
+        print("Requesting generation...")
+        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
 
-    print("\nGeneration Results:")
-    print("=" * 80)
-    for batch, response in enumerate(responses):
-        print(f"Sample {batch + 1}:")
-        print(f"User: {prompt}")
-        print(f"Assistant: {response.text}")
-        print("-" * 80)
+        print("\nGeneration Results:")
+        print("=" * 80)
+        for batch, response in enumerate(responses):
+            print(f"Sample {batch + 1}:")
+            print(f"User: {prompt}")
+            print(f"Assistant: {response.text}")
+            print("-" * 80)
 
-    print("\nShutting down...")
-    await policy.shutdown.call()
-    await policy.terminate_session(session_id)
+        print("\nShutting down...")
+
+    await shutdown_service(policy)
 
 
 if __name__ == "__main__":

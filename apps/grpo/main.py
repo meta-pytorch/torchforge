@@ -14,7 +14,7 @@ from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
@@ -354,8 +354,7 @@ async def main():
     policy = await spawn_service(
         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         Policy,
-        PolicyConfig(
-            num_workers=1,
+        config=PolicyConfig(
             worker_params=WorkerConfig(model=model),
             sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
         ),
@@ -379,8 +378,8 @@ async def main():
     dataloader = await spawn_service(
         ServiceConfig(procs_per_replica=1, num_replicas=1),
         DatasetActor,
-        "openai/gsm8k",
-        "main",
+        path="openai/gsm8k",
+        name="main",
         split="train",
         streaming=True,
     )
@@ -481,6 +480,15 @@ async def main():
         print("Training interrupted by user")
         rollout_task.cancel()
         training_task.cancel()
+    finally:
+        print("Shutting down...")
+        await shutdown_service(policy)
+        await shutdown_service(trainer)
+        await shutdown_service(replay_buffer)
+        await shutdown_service(dataloader)
+        await shutdown_service(compute_advantages)
+        await shutdown_service(ref_model)
+        await shutdown_service(reward_actor)
 
 
 if __name__ == "__main__":
