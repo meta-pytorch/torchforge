@@ -54,13 +54,20 @@ class SamplingOverrides:
             subset
 
     Args:
-        num_samples: Number of samples to generate.
+        n: Number of samples to generate.
         guided_decoding: Whether to use guided decoding.
+        max_tokens: Maximum number of tokens to generate.
     """
 
-    num_samples: int
+    n: int
     guided_decoding: bool = False
     max_tokens: int = 512
+
+    def __post_init__(self):
+        gd_params = None
+        if self.guided_decoding:
+            gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
+        self.guided_decoding = gd_params
 
 
 @dataclass
@@ -116,22 +123,14 @@ class Policy(PolicyInterface):
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
-        sampling_overrides = self.config.sampling_params
-        overrides = {
-            "n": sampling_overrides.num_samples,
-            "guided_decoding": (
-                GuidedDecodingParams(choice=["Positive", "Negative"])
-                if sampling_overrides.guided_decoding
-                else None
-            ),
-        }
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=overrides
+            self.vllm_args, overrides=asdict(self.config.sampling_params)
         )
 
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
+        print("philip0:", self.vllm_args.model_config)
         tokenizer = init_tokenizer_from_configs(
             model_config=self.vllm_args.model_config,
             scheduler_config=self.vllm_args.scheduler_config,
@@ -178,10 +177,12 @@ class Policy(PolicyInterface):
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
+        phil_prompt = prompt
         prompt: Dict[str, str] = convert_input(prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
+        # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
             self.vllm_args.model_config.max_model_len,
@@ -201,6 +202,10 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
+        tokenizer = self.processor.input_preprocessor.get_tokenizer_group()
+        print("philip1:", request)
+        print("philip2:", tokenizer.encode("A fake response"))
+        print("philip3:", tokenizer.encode(phil_prompt + "A fake response"))
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -268,7 +273,8 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output.outputs)
+                    print("philip:", request_output)
+                    fut.set_result(request_output)
 
     @endpoint
     async def update_weights(self):

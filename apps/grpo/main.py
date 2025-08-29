@@ -5,7 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+import copy
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Callable
 
@@ -19,6 +21,7 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
 def compute_sequence_logprobs(
@@ -52,26 +55,76 @@ def compute_sequence_logprobs(
         return sequence_log_probs
 
 
+Role = Literal[
+    "system",  # Origin is system prompt
+    "user",  # Origin is user
+    "assistant",  # Origin is the model output
+    "agent",  # Origin is generated
+    "tool",  # Origin is return from a tool call
+]
+
+
+@dataclass
+class Message:
+    role: Role
+    content: str
+
+
+@dataclass
+class Episode:
+    # TODO: add adtional layer for multi-turn
+    episode_id: str
+    request: list[Message]
+    policy_version: int
+    # processed data
+    response: list[Message]
+    request_tokens: Optional[torch.Tensor]
+    response_tokens: Optional[torch.Tensor]
+    ref_logprobs: Optional[torch.Tensor] = None
+    reward: Optional[float] = None
+    advantage: Optional[float] = None
+    policy_version: Optional[int] = None
+
+
 @dataclass
 class Group:
-    response: str  # The response text for tokenization
-    ref_logprobs: torch.Tensor
-    reward: float
-    advantage: float = 0.0
+    group_id: str
+    episodes: list[Episode]
+
+    @classmethod
+    def new_group(
+        cls, group_id: int, group_size: int, request: list[Message], policy_version: int
+    ):
+        episodes = []
+        for i in range(group_size):
+            Episode(
+                episode_id=str(uuid.uuid4()),
+                request=copy.deepcopy(messages),
+                policy_version=policy_version,
+            )
+        return cls(group_id, episodes)
 
 
-class Episode:
-    """Episode container for GRPO rollouts."""
-
-    def __init__(self, episode_id: int, prompt: str, target: str, policy_version: int):
-        self.episode_id = episode_id
-        self.prompt = prompt
-        self.target = target
-        self.policy_version = policy_version
-        self.groups: list[Group] = []
-
-    def add_group(self, group: Group):
-        self.groups.append(group)
+# @dataclass
+# class Group:
+#     response: str  # The response text for tokenization
+#     ref_logprobs: torch.Tensor
+#     reward: float
+#     advantage: float = 0.0
+#
+#
+# class Episode:
+#     """Episode container for GRPO rollouts."""
+#
+#     def __init__(self, episode_id: int, prompt: str, target: str, policy_version: int):
+#         self.episode_id = episode_id
+#         self.prompt = prompt
+#         self.target = target
+#         self.policy_version = policy_version
+#         self.groups: list[Group] = []
+#
+#     def add_group(self, group: Group):
+#         self.groups.append(group)
 
 
 class Trainer(ForgeActor):
@@ -237,7 +290,7 @@ class ComputeAdvantages(ForgeActor):
         self.lambda_ = lambda_  # GAE lambda parameter
 
     @endpoint
-    async def __call__(self, groups: list[Group]) -> list[float]:
+    async def compute(self, groups: list[Group]) -> list[float]:
         # Extract rewards from groups
         rewards = [group.reward for group in groups]
         num_groups = len(groups)
@@ -311,27 +364,27 @@ class RefModel(ForgeActor):
         )  # Remove batch dimension for single response
 
 
+@dataclass
 class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self._setup_dataset(*args, **kwargs)
+    path: str
+    name: str
+    split: str
+    streaming: bool
+    transform: Callable
 
-    def _setup_dataset(self, *args, **kwargs):
-        def gsm8k_to_messages(sample):
-            question = sample["question"]
-            full_answer: str = sample["answer"]
-            answer = full_answer.split("#### ")[1]
-            return {"question": question, "answer": answer}
-
-        ds = load_dataset(*args, **kwargs)
-        ds = ds.map(gsm8k_to_messages)
+    @endpoint
+    def setup(self):
+        ds = load_dataset(
+            self.path, self.name, split=self.split, streaming=self.streaming
+        )
+        ds = ds.map(self.transform)
         ds = ds.shuffle()
         self._iterator = iter(ds)
 
     @endpoint
-    async def __next__(self) -> dict[str, str] | None:
+    async def sample(self) -> dict[str, str] | None:
         try:
             return next(self._iterator)
         except StopIteration:
@@ -342,6 +395,14 @@ async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
     model = "Qwen/Qwen3-1.7B"
+
+    # ---- Setup data transform ---- #
+    def gsm8k_to_messages(sample):
+        question = content = sample["question"]
+        full_answer: str = sample["answer"]
+        answer = full_answer.split("#### ")[1]
+        return
+        return [Message("user", question), Message("assistant", answer)]
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -362,7 +423,7 @@ async def main():
         PolicyConfig(
             num_workers=1,
             worker_params=WorkerConfig(model=model),
-            sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
+            sampling_params=SamplingOverrides(n=group_size, max_tokens=16),
             available_devices="3",
         ),
     )
@@ -390,6 +451,7 @@ async def main():
         "main",
         split="train",
         streaming=True,
+        transform=gsm8k_to_messages,
     )
 
     compute_advantages = await spawn_service(
@@ -413,6 +475,8 @@ async def main():
     )
 
     print("All services initialized successfully!")
+    tokenizer = get_tokenizer(model)
+    print("philip5:", tokenizer.encode("A fake response"))
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -420,21 +484,23 @@ async def main():
         # TODO: Move this into setup
         asyncio.create_task(policy.run_processing.call())
         while True:
-            sample = await dataloader.__next__.choose()
+            sample = await dataloader.sample.choose()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
-            prompt, target = sample["question"], sample["answer"]
+            prompt, target = sample
             version = 0  # await policy.get_current_version.choose()
-            episode = Episode(
-                episode_id=rollout_count,
-                prompt=prompt,
-                target=target,
+            group = Group.new_group(
+                group_id=rollout_count,
+                group_size=group_size,
+                request=sample,
                 policy_version=version,
             )
-            actions = await policy.generate.choose(prompt)
-            for action in actions:
-                ref_logprobs = await ref_model.forward.choose(action.token_ids)
+            responses = await policy.generate.choose(prompt)
+            for episode, response in zip(group.episodes, responses.outputs):
+
+                episode.tokens = response.prompt_token_ids + response.token_ids
+                ref_logprobs = await ref_model.forward.choose(episode.tokens)
                 reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=action.text, target=target
                 )
@@ -446,7 +512,7 @@ async def main():
                     )
                 )
 
-            advantages = await compute_advantages.__call__.choose(episode.groups)
+            advantages = await compute_advantages.compute.choose(episode.groups)
             for advantage, group in zip(advantages, episode.groups):
                 group.advantage = advantage
 
@@ -480,6 +546,7 @@ async def main():
                 # await trainer.update_weights(policy)
 
     print("Starting GRPO training loops...")
+    # TODO: Start multiple rollouts once all serivces support it
     rollout_task = asyncio.create_task(continuous_rollouts())
     training_task = asyncio.create_task(continuous_training())
 

@@ -18,7 +18,7 @@ from typing import List
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig
 from forge.controller.spawn import spawn_service
-from vllm.outputs import CompletionOutput
+from vllm.outputs import CompletionOutput, RequestOutput
 
 
 async def main():
@@ -68,8 +68,9 @@ def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
     )
 
     sampling_params = SamplingOverrides(
-        num_samples=args.num_samples,
+        n=args.num_samples,
         guided_decoding=args.guided_decoding,
+        max_tokens=16,
     )
 
     policy_config = PolicyConfig(
@@ -89,7 +90,8 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
     processing_task = asyncio.create_task(policy.run_processing.call())
 
     print("Requesting generation...")
-    responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+    request_output: RequestOutput = await policy.generate.choose(prompt=prompt)
+    responses: List[CompletionOutput] = request_output.outputs
 
     print("\nGeneration Results:")
     print("=" * 80)
