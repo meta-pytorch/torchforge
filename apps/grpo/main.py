@@ -12,6 +12,7 @@ from typing import Callable
 import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.reference_actor import compute_sequence_logprobs, RefModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, spawn_service
@@ -19,37 +20,6 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-
-def compute_sequence_logprobs(
-    model: torch.nn.Module,
-    input_ids: torch.Tensor,
-    attention_mask: torch.Tensor,
-    requires_grad: bool = True,
-) -> torch.Tensor:
-    context_manager = torch.enable_grad() if requires_grad else torch.no_grad()
-
-    with context_manager:
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        logits = outputs.logits
-
-        # Apply log softmax to get log probabilities
-        log_probs = torch.log_softmax(logits, dim=-1)
-
-        # Extract log probabilities for the actual tokens (excluding the first token for next-token prediction)
-        shifted_input_ids = input_ids[:, 1:]  # Remove first token
-        shifted_log_probs = log_probs[:, :-1, :]  # Remove last logit
-
-        # Gather log probabilities for actual tokens
-        token_log_probs = torch.gather(
-            shifted_log_probs, dim=-1, index=shifted_input_ids.unsqueeze(-1)
-        ).squeeze(-1)
-
-        # Sum log probabilities across sequence (masked by attention)
-        shifted_attention_mask = attention_mask[:, 1:]
-        sequence_log_probs = (token_log_probs * shifted_attention_mask).sum(dim=-1)
-
-        return sequence_log_probs
 
 
 @dataclass
@@ -267,48 +237,6 @@ class ComputeAdvantages(ForgeActor):
             advantages = [(a - mean_adv) / std_adv for a in advantages]
 
         return advantages
-
-
-class RefModel(ForgeActor):
-    def __init__(self, model_name, device: torch.device | None = None):
-        super().__init__()
-        self.model_name = model_name
-
-        # Set device
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
-
-        # Initialize model and tokenizer
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(self.device)
-
-        # Set model to eval mode for reference computations
-        self.model.eval()
-
-        self.logger.info(f"Model initialized on {self.device}")
-
-    @endpoint
-    async def forward(self, token_ids: list[int]) -> torch.Tensor:
-        # Use provided token_ids directly
-        input_ids = (
-            torch.tensor(token_ids, dtype=torch.long).unsqueeze(0).to(self.device)
-        )
-        # Create attention mask of all 1s since we have actual tokens (no padding)
-        attention_mask = torch.ones_like(input_ids).to(self.device)
-
-        # Compute log probabilities using shared utility function
-        sequence_log_probs = compute_sequence_logprobs(
-            self.model, input_ids, attention_mask, requires_grad=False
-        )
-
-        return (
-            sequence_log_probs.squeeze()
-        )  # Remove batch dimension for single response
 
 
 class DatasetActor(ForgeActor):
