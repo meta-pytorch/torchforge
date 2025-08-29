@@ -34,8 +34,10 @@ trainer:
     seq_len: 2048
     max_norm: 1.0
     steps: 5
-    compile: false
     dataset: "c4"
+
+  compile:
+    enable: false
 
   parallelism:
     data_parallel_replicate_degree: 1

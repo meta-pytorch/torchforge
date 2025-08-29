@@ -30,7 +30,7 @@ async def run(cfg: DictConfig):
         spawn_actors(
             name="trainer",
             actor_cls=RLTrainer,
-            cfg={"config": cfg.trainer},
+            cfg=cfg.trainer,
             processes=cfg.trainer.pop("processes"),
             set_address=True,
         ),
