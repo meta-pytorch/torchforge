@@ -94,187 +94,13 @@ class PolicyConfig:
 
 
 @dataclass
-class PolicyWorker(ForgeActor):
-    model: str
-    tensor_parallel_size: int = 1
-    pipeline_parallel_size: int = 1
-    enforce_eager: bool = False
-    vllm_args: EngineArgs = None
-    state_dict_key: str = "model_state_dict"
-
-    def __post_init__(self):
-        """Build vLLM Arguments
-
-        vLLM specific TODOS
-        - output format
-        - check_health
-        - _aggregate workers output
-        - register_failure_callback
-
-        Testing
-        - all LLM generate methods, verify against LLM inputs
-        - all executor methods verify no changes
-        """
-        if self.vllm_args is None:
-            # Use default vllm EngineArgs
-            self.vllm_args = EngineArgs(
-                model=self.model,
-                tensor_parallel_size=self.tensor_parallel_size,
-                pipeline_parallel_size=self.pipeline_parallel_size,
-                enforce_eager=self.enforce_eager,
-            )
-            # Original method returns False when not run in the main thread
-            self.vllm_args._is_v1_supported_oracle = lambda *_: True
-        else:
-            # Check that provided args match Policy args
-            cfg = [
-                "model",
-                "tensor_parallel_size",
-                "pipeline_parallel_size",
-                "data_parallel_size",
-            ]
-            for key in cfg:
-                value = getattr(self, key) if key != "data_parallel_size" else 1
-                if getattr(self.vllm_args, key) != value:
-                    logger.warning(
-                        f"{key} args don't match value in EngineArgs, overriding with {value}"
-                    )
-                    setattr(self.vllm_args, key, value)
-        # Build Config
-        self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
-
-    @endpoint
-    async def setup(self, store: MultiProcessStore = None):
-        self.torchstore = store
-        # TODO: remove ["gpus"] when monarch implements a flat rank
-        self.rank = current_rank()["gpus"]
-        self.worker = self.setup_worker()
-
-    @endpoint
-    async def execute_model(self, schedule: SchedulerOutput):
-        return self.worker.execute_model(schedule)
-
-    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
-        """
-        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
-        """
-
-        updated_count = 0
-        # setting explictly to llama3 for now as its our only use case
-        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
-
-        for param_name in current_state_dict.keys():
-            current_tensor = current_state_dict[param_name]
-
-            # Load the full tensor from torchstore
-            # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{param_name}"
-            )
-            sharding.load_from_source_to_target(
-                param_name,
-                stored_tensor,
-                current_tensor,
-            )
-
-            updated_count += 1
-
-    @endpoint
-    async def update(self):
-        """Update model weights by reading state dict from torchstore"""
-
-        if self.torchstore is None:
-            raise Exception("No torchstore configured, skipping model update")
-
-        logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}"
-        )
-
-        model = self.worker.model_runner.model
-        current_state_dict = model.state_dict()
-
-        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
-
-        await self._load_tensor_parallel_state_dict(current_state_dict)
-
-        logger.debug("Successfully updated model weights from torchstore")
-
-    @endpoint
-    async def setup_kv_cache(self):
-        """Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
-        TODO: test that fails if vllm method updates
-        """
-        kv_cache_spec = self.worker.get_kv_cache_spec()
-        if kv_cache_spec is not None:
-            available_gpu_memory = self.worker.determine_available_memory()
-        else:
-            # Attention free models don't need memory for kv cache
-            available_gpu_memory = 0
-
-        # Get the kv cache tensor size
-        kv_cache_config = get_kv_cache_config(
-            self.vllm_args, kv_cache_spec, available_gpu_memory
-        )
-        # TODO: unify configs across TorchStore
-        # unify_kv_cache_configs(kv_cache_configs)
-        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_args.cache_config.num_cpu_blocks = 0
-
-        # Initialize kv cache and warmup the execution:
-        # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
-        kv_cache_configs = [None] * self.vllm_args.parallel_config.world_size
-        kv_cache_configs[self.rank] = kv_cache_config
-        self.worker.initialize_from_config(kv_cache_configs)
-        self.worker.compile_or_warm_up_model()
-        self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
-        return kv_cache_config
-
-    @endpoint
-    async def get_vllm_args(self):
-        return self.vllm_args
-
-    @endpoint
-    async def get_model_params(self):
-        model = self.worker.model_runner.model
-        state_dict = {}
-
-        for name, param in model.named_parameters():
-            if "layers.0" not in name:
-                continue
-            state_dict[name] = param.cpu().detach()
-        return state_dict
-
-    def setup_worker(self):
-        """Build and Instantiate vLLM worker"""
-        parallel_config = self.vllm_args.parallel_config
-        set_multiprocessing_worker_envs(parallel_config)
-        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
-        distributed_init_method = get_distributed_init_method(ip, port)
-        all_kwargs = [{}] * parallel_config.world_size
-        local_rank = self.rank % torch.accelerator.device_count()
-        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
-        all_kwargs[self.rank] = {
-            "vllm_config": self.vllm_args,
-            "local_rank": local_rank,
-            "rank": self.rank,
-            "distributed_init_method": distributed_init_method,
-            "is_driver_worker": is_driver_worker,
-        }
-        worker = WorkerWrapperBase(self.vllm_args, self.rank)
-        worker.init_worker(all_kwargs)
-        worker.init_device()
-        worker.load_model()
-        return worker
-
-
-@dataclass
 class Policy(PolicyInterface):
     config: PolicyConfig
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
-    policy_worker: PolicyWorker | None = None
+    policy_worker: "PolicyWorker" = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -494,6 +320,180 @@ class Policy(PolicyInterface):
     @endpoint
     async def stop(self):
         self.running = False
+
+
+@dataclass
+class PolicyWorker(ForgeActor):
+    model: str
+    tensor_parallel_size: int = 1
+    pipeline_parallel_size: int = 1
+    enforce_eager: bool = False
+    vllm_args: EngineArgs = None
+    state_dict_key: str = "model_state_dict"
+
+    def __post_init__(self):
+        """Build vLLM Arguments
+
+        vLLM specific TODOS
+        - output format
+        - check_health
+        - _aggregate workers output
+        - register_failure_callback
+
+        Testing
+        - all LLM generate methods, verify against LLM inputs
+        - all executor methods verify no changes
+        """
+        if self.vllm_args is None:
+            # Use default vllm EngineArgs
+            self.vllm_args = EngineArgs(
+                model=self.model,
+                tensor_parallel_size=self.tensor_parallel_size,
+                pipeline_parallel_size=self.pipeline_parallel_size,
+                enforce_eager=self.enforce_eager,
+            )
+            # Original method returns False when not run in the main thread
+            self.vllm_args._is_v1_supported_oracle = lambda *_: True
+        else:
+            # Check that provided args match Policy args
+            cfg = [
+                "model",
+                "tensor_parallel_size",
+                "pipeline_parallel_size",
+                "data_parallel_size",
+            ]
+            for key in cfg:
+                value = getattr(self, key) if key != "data_parallel_size" else 1
+                if getattr(self.vllm_args, key) != value:
+                    logger.warning(
+                        f"{key} args don't match value in EngineArgs, overriding with {value}"
+                    )
+                    setattr(self.vllm_args, key, value)
+        # Build Config
+        self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
+
+    @endpoint
+    async def setup(self, store: MultiProcessStore = None):
+        self.torchstore = store
+        # TODO: remove ["gpus"] when monarch implements a flat rank
+        self.rank = current_rank()["gpus"]
+        self.worker = self.setup_worker()
+
+    @endpoint
+    async def execute_model(self, schedule: SchedulerOutput):
+        return self.worker.execute_model(schedule)
+
+    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+        """
+        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
+        """
+
+        updated_count = 0
+        # setting explictly to llama3 for now as its our only use case
+        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
+
+        for param_name in current_state_dict.keys():
+            current_tensor = current_state_dict[param_name]
+
+            # Load the full tensor from torchstore
+            # TODO: only get the part of the tensor that is needed
+            stored_tensor = await self.torchstore.get(
+                f"{self.state_dict_key}{DELIM}{param_name}"
+            )
+            sharding.load_from_source_to_target(
+                param_name,
+                stored_tensor,
+                current_tensor,
+            )
+
+            updated_count += 1
+
+    @endpoint
+    async def update(self):
+        """Update model weights by reading state dict from torchstore"""
+
+        if self.torchstore is None:
+            raise Exception("No torchstore configured, skipping model update")
+
+        logger.debug(
+            f"Starting model update from torchstore with key: {self.state_dict_key}"
+        )
+
+        model = self.worker.model_runner.model
+        current_state_dict = model.state_dict()
+
+        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
+
+        await self._load_tensor_parallel_state_dict(current_state_dict)
+
+        logger.debug("Successfully updated model weights from torchstore")
+
+    @endpoint
+    async def setup_kv_cache(self):
+        """Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
+        TODO: test that fails if vllm method updates
+        """
+        kv_cache_spec = self.worker.get_kv_cache_spec()
+        if kv_cache_spec is not None:
+            available_gpu_memory = self.worker.determine_available_memory()
+        else:
+            # Attention free models don't need memory for kv cache
+            available_gpu_memory = 0
+
+        # Get the kv cache tensor size
+        kv_cache_config = get_kv_cache_config(
+            self.vllm_args, kv_cache_spec, available_gpu_memory
+        )
+        # TODO: unify configs across TorchStore
+        # unify_kv_cache_configs(kv_cache_configs)
+        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_args.cache_config.num_cpu_blocks = 0
+
+        # Initialize kv cache and warmup the execution:
+        # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
+        kv_cache_configs = [None] * self.vllm_args.parallel_config.world_size
+        kv_cache_configs[self.rank] = kv_cache_config
+        self.worker.initialize_from_config(kv_cache_configs)
+        self.worker.compile_or_warm_up_model()
+        self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
+        return kv_cache_config
+
+    @endpoint
+    async def get_vllm_args(self):
+        return self.vllm_args
+
+    @endpoint
+    async def get_model_params(self):
+        model = self.worker.model_runner.model
+        state_dict = {}
+
+        for name, param in model.named_parameters():
+            if "layers.0" not in name:
+                continue
+            state_dict[name] = param.cpu().detach()
+        return state_dict
+
+    def setup_worker(self):
+        """Build and Instantiate vLLM worker"""
+        parallel_config = self.vllm_args.parallel_config
+        set_multiprocessing_worker_envs(parallel_config)
+        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
+        distributed_init_method = get_distributed_init_method(ip, port)
+        all_kwargs = [{}] * parallel_config.world_size
+        local_rank = self.rank % torch.accelerator.device_count()
+        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
+        all_kwargs[self.rank] = {
+            "vllm_config": self.vllm_args,
+            "local_rank": local_rank,
+            "rank": self.rank,
+            "distributed_init_method": distributed_init_method,
+            "is_driver_worker": is_driver_worker,
+        }
+        worker = WorkerWrapperBase(self.vllm_args, self.rank)
+        worker.init_worker(all_kwargs)
+        worker.init_device()
+        worker.load_model()
+        return worker
 
 
 def convert_input(prompt=None, prompt_token_ids=None) -> Dict:
