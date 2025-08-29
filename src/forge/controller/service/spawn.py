@@ -34,7 +34,9 @@ async def spawn_service(
     """
     # Assert that actor_def is a subclass of ForgeActor
     if not issubclass(actor_def, ForgeActor):
-        raise TypeError(f"actor_def must be a subclass of ForgeActor, got {actor_def}")
+        raise TypeError(
+            f"actor_def must be a subclass of ForgeActor, got {type(actor_def).__name__}"
+        )
 
     # Create a single-node proc_mesh and actor_mesh for the Service Actor
     logger.info("Spawning Service Actor for %s", actor_def.__name__)

@@ -319,7 +319,7 @@ class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
     def __init__(
-        self, path: str, config_name: str, split: str, streaming: bool, *args, **kwargs
+        self, path: str, config_name: str, split: str, streaming: bool, **kwargs
     ):
         super().__init__()
 
@@ -373,7 +373,7 @@ async def main():
             streaming=True,
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=2),
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
             config=PolicyConfig(
                 worker_params=WorkerConfig(model=model),

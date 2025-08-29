@@ -274,11 +274,12 @@ class Policy(PolicyInterface):
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
-
-    _run_task: asyncio.Task | None = None
     policy_worker: PolicyWorker | None = None
-    _policy_proc: ProcMesh | None = None
-    _worker_procs: ProcMesh | None = None
+
+    def __post_init__(self):
+        self._run_task: asyncio.Task | None = None
+        self._policy_proc: ProcMesh | None = None
+        self._worker_procs: ProcMesh | None = None
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
