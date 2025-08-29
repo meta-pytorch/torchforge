@@ -117,7 +117,7 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
 export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
 EOF
 
