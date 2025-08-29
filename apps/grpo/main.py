@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -19,6 +20,9 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def compute_sequence_logprobs(
@@ -314,18 +318,18 @@ class RefModel(ForgeActor):
 class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self, path: str, config_name: str, split: str, streaming: bool, *args, **kwargs
+    ):
         super().__init__()
-        self._setup_dataset(*args, **kwargs)
 
-    def _setup_dataset(self, *args, **kwargs):
         def gsm8k_to_messages(sample):
             question = sample["question"]
             full_answer: str = sample["answer"]
             answer = full_answer.split("#### ")[1]
             return {"question": question, "answer": answer}
 
-        ds = load_dataset(*args, **kwargs)
+        ds = load_dataset(path, config_name, split=split, streaming=streaming)
         ds = ds.map(gsm8k_to_messages)
         ds = ds.shuffle()
         self._iterator = iter(ds)
@@ -351,6 +355,15 @@ async def main():
     )
 
     # ---- Setup services ---- #
+    dataloader = await spawn_service(
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
+        DatasetActor,
+        path="openai/gsm8k",
+        config_name="main",
+        split="train",
+        streaming=True,
+    )
+
     policy = await spawn_service(
         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         Policy,
@@ -374,16 +387,6 @@ async def main():
         batch_size=4,
         max_policy_age=1,
     )
-
-    dataloader = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        DatasetActor,
-        path="openai/gsm8k",
-        name="main",
-        split="train",
-        streaming=True,
-    )
-
     compute_advantages = await spawn_service(
         ServiceConfig(procs_per_replica=1, num_replicas=1),
         ComputeAdvantages,
@@ -408,8 +411,6 @@ async def main():
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        # TODO: Move this into setup
-        asyncio.create_task(policy.run_processing.call())
         while True:
             sample = await dataloader.__next__.choose()
             if sample is None:

@@ -158,6 +158,9 @@ class Replica:
         try:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
+            logger.error(
+                f"===DEBUG=== Launching with args {self.actor_args} and kwargs {self.actor_kwargs}"
+            )
             self.actor = await self.actor_def.launch(
                 process_config=self.proc_config,
                 *self.actor_args,
