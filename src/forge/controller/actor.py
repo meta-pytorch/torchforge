@@ -76,6 +76,8 @@ class ForgeActor(Actor):
         actor_name = kwargs.pop("name", cls.__name__)
         actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
         actor._proc_mesh = proc_mesh
+
+        await actor.setup.call()
         return actor
 
     @classmethod

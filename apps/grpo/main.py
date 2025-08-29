@@ -355,55 +355,62 @@ async def main():
     )
 
     # ---- Setup services ---- #
-    dataloader = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        DatasetActor,
-        path="openai/gsm8k",
-        config_name="main",
-        split="train",
-        streaming=True,
-    )
-
-    policy = await spawn_service(
-        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-        Policy,
-        config=PolicyConfig(
-            worker_params=WorkerConfig(model=model),
-            sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        compute_advantages,
+        ref_model,
+        reward_actor,
+    ) = await asyncio.gather(
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            DatasetActor,
+            path="openai/gsm8k",
+            config_name="main",
+            split="train",
+            streaming=True,
         ),
-    )
-
-    trainer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-        Trainer,
-        learning_rate=1e-5,
-        beta=0.1,
-        model_name=model,
-    )
-
-    replay_buffer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        ReplayBuffer,
-        batch_size=4,
-        max_policy_age=1,
-    )
-    compute_advantages = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        ComputeAdvantages,
-        gamma=0.99,
-        lambda_=0.95,
-    )
-
-    ref_model = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-        RefModel,
-        model_name=model,
-    )
-
-    reward_actor = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        RewardActor,
-        reward_functions=[MathReward(), ThinkingReward()],
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=2),
+            Policy,
+            config=PolicyConfig(
+                worker_params=WorkerConfig(model=model),
+                sampling_params=SamplingOverrides(
+                    num_samples=group_size, max_tokens=16
+                ),
+            ),
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+            Trainer,
+            learning_rate=1e-5,
+            beta=0.1,
+            model_name=model,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ReplayBuffer,
+            batch_size=4,
+            max_policy_age=1,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ComputeAdvantages,
+            gamma=0.99,
+            lambda_=0.95,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+            RefModel,
+            model_name=model,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            RewardActor,
+            reward_functions=[MathReward(), ThinkingReward()],
+        ),
     )
 
     print("All services initialized successfully!")
