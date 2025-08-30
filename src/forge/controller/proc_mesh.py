@@ -16,9 +16,6 @@ from functools import partial
 from monarch.actor import proc_mesh, ProcMesh
 from monarch.tools import commands
 from monarch.tools.config import Config
-from omegaconf import DictConfig
-
-from forge.controller import ForgeActor
 
 from forge.controller.system_controllers.gpu_manager import get_gpu_ids, release_gpus
 from forge.types import ProcessConfig
@@ -41,20 +38,6 @@ except ImportError:
     logger.warning(
         "MAST is not supported on this platform. You can ignore this if you do not work at Meta."
     )
-
-
-async def spawn_actors(
-    name: str,
-    actor_cls: ForgeActor,
-    cfg: DictConfig,
-    processes: ProcessConfig,
-    set_address: bool = False,
-):
-    """Setup process Mesh and spawn Actors."""
-    mesh = await get_proc_mesh(processes)
-    actors = await mesh.spawn(name, actor_cls, **cfg)
-    actors.mesh = mesh
-    return actors
 
 
 async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
