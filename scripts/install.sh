@@ -34,6 +34,22 @@ check_conda_env() {
     log_info "Installing in conda environment: $CONDA_DEFAULT_ENV"
 }
 
+# Check sudo access
+check_sudo() {
+    if ! sudo -n true 2>/dev/null; then
+        log_error "This script requires passwordless sudo access for system packages"
+        log_info "Run 'sudo -v' first, or configure passwordless sudo"
+        exit 1
+    fi
+}
+
+# Install required system packages
+install_system_packages() {
+    log_info "Installing required system packages..."
+    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+    log_info "System packages installed successfully"
+}
+
 # Check wheels exist
 check_wheels() {
     if [ ! -d "$WHEEL_DIR" ]; then
@@ -75,16 +91,24 @@ download_vllm_wheel() {
     fi
 
     log_info "Downloading: $vllm_wheel_name"
+
+    # Save current directory and change to wheel directory
+    local original_dir=$(pwd)
     cd "$WHEEL_DIR"
     gh release download "$RELEASE_TAG" --repo "$GITHUB_REPO" --pattern "*vllm*"
+    local download_result=$?
 
-    if [ $? -eq 0 ]; then
+    # Always return to original directory
+    cd "$original_dir"
+
+    if [ $download_result -eq 0 ]; then
         log_info "Successfully downloaded vLLM wheel"
     else
         log_error "Failed to download vLLM wheel"
         exit 1
     fi
 }
+
 
 main() {
     echo "Forge User Installation"
@@ -95,7 +119,10 @@ main() {
     echo ""
 
     check_conda_env
+    check_sudo
     check_wheels
+
+    install_system_packages
     download_vllm_wheel
 
     log_info "Installing PyTorch nightly..."
