@@ -20,7 +20,7 @@ processes:
   scheduler: local # local | mast (not supported yet)
   num_hosts: 1
   num_procs: 8
-  num_gpus: 8
+  with_gpus: true
 
 optimizer:
   name: AdamW

@@ -134,9 +134,24 @@ main() {
     log_info "Installing Forge from source..."
     pip install .
 
-    # Set up CUDA environment
+    # Set up environment
     log_info "Setting up environment..."
-    cat > ~/.forge_cuda_env << 'EOF'
+
+     # Get conda environment directory
+    local conda_env_dir="${CONDA_PREFIX}"
+
+    if [ -z "$conda_env_dir" ]; then
+        log_error "Could not determine conda environment directory"
+        exit 1
+    fi
+
+    # Create activation directory if it doesn't exist
+    mkdir -p "${conda_env_dir}/etc/conda/activate.d"
+    mkdir -p "${conda_env_dir}/etc/conda/deactivate.d"
+
+    local cuda_activation_script="${conda_env_dir}/etc/conda/activate.d/cuda_env.sh"
+    cat > "$cuda_activation_script" << 'EOF'
+# CUDA environment for Forge
 export CUDA_VERSION=12.9
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
@@ -144,9 +159,25 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
 export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
 EOF
+
+    # Create deactivation script to clean up
+    cat > "${conda_env_dir}/etc/conda/deactivate.d/cuda_env.sh" << 'EOF'
+# Clean up CUDA environment variables when deactivating
+unset CUDA_VERSION
+unset NVCC
+unset CUDA_NVCC_EXECUTABLE
+unset CUDA_HOME
+unset CUDA_INCLUDE_DIRS
+unset CUDA_CUDART_LIBRARY
+# Note: We don't unset PATH and LD_LIBRARY_PATH as they may have other content
+EOF
+
+    # Source the activation script so it works in the current session.
+    log_info "Loading CUDA environment for current session..."
+    source "$cuda_activation_script"
 
     # Test installation
     log_info "Testing installation..."
