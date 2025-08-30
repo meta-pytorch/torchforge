@@ -13,13 +13,18 @@ from typing import Callable
 import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.actors.reference_actor import compute_sequence_logprobs, RefModel
+from forge.actors.reference_actor import (
+    compute_sequence_logprobs,
+    HuggingFaceRefModel,
+    TitanRefModel,
+)
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
+from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -329,10 +334,16 @@ async def main():
             gamma=0.99,
             lambda_=0.95,
         ),
+        # spawn_service(
+        #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+        #     RefModel,
+        #     model_name=model,
+        # ),
+        # GOAL: Swap this in and everything should just "work"
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-            RefModel,
-            model_name=model,
+            TitanRefModel,
+            model=TitanJobModelConfig(name=model),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),

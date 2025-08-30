@@ -37,6 +37,13 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class ReferenceActor(ForgeActor):
+    """
+    Original idea (not updated); On second throught this might be overkill
+    if we can rely on the Service Replicas to handle the queue since there's no
+    real pre/post proc or host management (maybe later for DP?). For now just
+    directly spin up services of the reference models
+    """
+
     model: Model = field(default_factory=Model)
     # parallelism: Parallelism = field(default_factory=Parallelism)
     # comm: Comm = field(default_factory=Comm)
@@ -95,13 +102,18 @@ class ReferenceActor(ForgeActor):
         # Spawn the RefModel
         self.ref_model = await spawn_service(
             default_service_cfg,
-            RefModel,
+            HuggingFaceRefModel,
             model_name=self.model.name,
             device=self.device,
         )
 
         # Kick off background processing
-        asyncio.create_task(self.run_processing.call())
+        self.start_processing()
+
+    def start_processing(self):
+        """Start the replica's processing loop if not already running."""
+        if self._run_task is None or self._run_task.done():
+            self._run_task = asyncio.create_task(self.run())
 
     @endpoint
     async def forward(self, token_ids: list[int]) -> torch.Tensor:
@@ -112,8 +124,7 @@ class ReferenceActor(ForgeActor):
         self.queue.append((token_ids, fut))
         return await fut
 
-    @endpoint
-    async def run_processing(self):
+    async def run(self):
         """
         Simple loop to pass things along to the ref model
         """
@@ -127,11 +138,105 @@ class ReferenceActor(ForgeActor):
             fut.set_result(model_output)
 
     @endpoint
-    async def cleanup(self) -> None:
+    async def stop(self) -> None:
         self.running = False
 
 
-class RefModel(ForgeActor):
+@dataclass
+class TitanRefModel(ForgeActor):
+    """
+    Represents a reference actor leveraging a torchtitan model for execution
+    """
+
+    # Refer to titan JobConfig for enabling more ForgeEngine configuration
+    model: Model = field(default_factory=Model)
+    parallelism: Parallelism = field(default_factory=Parallelism)
+
+    # Populated in setup (commented out for now for engine_config parsing)
+    # engine: ForgeEngine | None = None
+
+    def __post_init__(self):
+        """Initializes config types and env variables."""
+        # Instantiate dict fields
+        for f in fields(self):
+            attr = getattr(self, f.name)
+            if isinstance(attr, Mapping):
+                setattr(self, f.name, f.type(**attr))
+            elif not isinstance(attr, f.type):
+                raise TypeError(
+                    f"{f.name} should be a {f.type} type or a dict like object"
+                )
+
+        """
+        torchrun normally hands env variables, but we need to do it ourselves
+        in monarch for now.
+        """
+        self.rank = current_rank().rank
+        self.size = math.prod(current_size().values())
+
+        env = {
+            "RANK": str(self.rank),
+            "LOCAL_RANK": str(self.rank),
+            "LOCAL_WORLD_SIZE": str(self.size),
+            "GROUP_RANK": str(self.size),
+            "GROUP_WORLD_SIZE": str(self.size),
+            "ROLE_RANK": str(self.rank),
+            "ROLE_WORLD_SIZE": str(self.size),
+            "ROLE_NAME": "rank",
+            "WORLD_SIZE": str(self.size),
+            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        }
+        os.environ.update(env)
+
+    @endpoint
+    async def setup(self):
+        engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
+        self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+
+    @endpoint
+    async def forward(self, token_ids: list[int]) -> torch.Tensor:
+        """
+        Given a return the log_probability of the token_ids
+        (Used as the reference_logprobs for KL Divergence)
+        """
+        model_parts = self.engine.model_parts
+        parallel_dims = self.engine.parallel_dims
+
+        # Use provided token_ids directly
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        input_ids = torch.tensor(token_ids, dtype=torch.long).unsqueeze(0).to(device)
+
+        optional_context_parallel_ctx = (
+            dist_utils.create_context_parallel_ctx(
+                cp_mesh=parallel_dims.world_mesh["cp"],
+                cp_buffers=[inputs, labels] + [m.freqs_cis for m in model_parts],
+                cp_seq_dims=[1, 1] + [0 for _ in model_parts],
+                cp_no_restore_buffers={inputs, labels},
+                cp_rotate_method=self.job_config.parallelism.context_parallel_rotate_method,
+            )
+            if parallel_dims.cp_enabled
+            else None
+        )
+
+        if parallel_dims.pp_enabled:
+            raise NotImplementedError("PP not implemented yet")
+        else:
+            # Non-PP forward / backward
+            with self.engine.train_context(optional_context_parallel_ctx):
+                assert len(model_parts) == 1
+                with self.engine.maybe_enable_amp:
+                    pred = model_parts[0](input_ids)
+
+        # TODO: Update compute_sequence_logprobs to convert probs (logits) to logprobs
+        return pred
+
+
+# Maintained to keep GRPO app prior to migration
+class HuggingFaceRefModel(ForgeActor):
+    """
+    Represents a reference actor leveraging HuggingFace for execution
+    """
+
     def __init__(self, model_name, device: torch.device | None = None):
         super().__init__()
         self.model_name = model_name

@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 
 async def run(cfg: DictConfig):
-    trainer, buffer, reference = await asyncio.gather(
+    trainer, buffer = await asyncio.gather(
         spawn_actors(
             name="trainer",
             actor_cls=RLTrainer,
@@ -40,10 +40,6 @@ async def run(cfg: DictConfig):
             cfg=cfg.replay_buffer,
             processes=cfg.replay_buffer.pop("processes"),
         ),
-        spawn_actors(
-            name="reference_actor",
-            actor_cls=ReferenceActor,
-        ),
     )
     print("Actors spawned")
 
@@ -51,13 +47,11 @@ async def run(cfg: DictConfig):
     await asyncio.gather(
         buffer.setup.call(),
         trainer.setup.call(),
-        reference.setup.call(),
     )
     print("Setup done")
 
     print("shutting down...")
     await asyncio.gather(*[a.mesh.stop() for a in [trainer]])
-    await reference.cleanup.call()
 
 
 @parse
