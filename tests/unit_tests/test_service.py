@@ -12,14 +12,15 @@ import asyncio
 import logging
 
 import pytest
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller import ForgeActor
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class Counter(Actor):
+class Counter(ForgeActor):
     """Test actor that maintains a counter with various endpoints."""
 
     def __init__(self, v: int):
@@ -59,6 +60,23 @@ class Counter(Actor):
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
+async def test_actor_def_type_validation():
+    """Test that spawn_service validates actor_def is a subclass of ForgeActor."""
+
+    # Service can only spawn ForgeActor subclasses
+    class InvalidActor(Actor):
+        def __init__(self):
+            pass
+
+    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
+
+    # Test that TypeError is raised when actor_def is not a ForgeActor subclass
+    with pytest.raises(TypeError, match="actor_def must be a subclass of ForgeActor"):
+        await spawn_service(service_cfg=cfg, actor_def=InvalidActor)
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
     cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
@@ -86,7 +104,7 @@ async def test_basic_service_operations():
         assert session1 not in state["session_replica_map"]
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(10)
@@ -121,7 +139,7 @@ async def test_sessionless_calls():
         assert result == 11  # 1 + 10
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(15)
@@ -160,7 +178,7 @@ async def test_session_context_manager():
         assert len(state["session_replica_map"]) == 0
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 # Fault Tolerance Tests
@@ -244,7 +262,7 @@ async def test_recovery_state_transitions():
         logger.info(f"Final replica state: {replica_state['state']}")
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(15)
@@ -285,7 +303,7 @@ async def test_replica_failure_and_recovery():
         assert assigned_replica["healthy"]
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 # Metrics and Monitoring Tests
@@ -338,7 +356,7 @@ async def test_metrics_collection():
         assert total_failed == 1
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 # Load Balancing and Session Management Tests
@@ -372,7 +390,7 @@ async def test_session_stickiness():
         assert result == 4
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(10)
@@ -421,7 +439,7 @@ async def test_load_balancing_multiple_sessions():
         assert total_requests == 4  # All requests processed
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(10)
@@ -461,7 +479,7 @@ async def test_concurrent_operations():
         assert total_requests == 4
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 # `call` endpoint tests
@@ -494,7 +512,7 @@ async def test_broadcast_call_basic():
         assert all(value == 11 for value in values)
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(15)
@@ -533,7 +551,7 @@ async def test_broadcast_call_with_failed_replica():
         assert all(value == 1 for value in values)
 
     finally:
-        await service.stop()
+        await shutdown_service(service)
 
 
 @pytest.mark.timeout(10)
@@ -570,4 +588,4 @@ async def test_broadcast_call_vs_choose():
         assert total_requests == 10
 
     finally:
-        await service.stop()
+        await shutdown_service(service)

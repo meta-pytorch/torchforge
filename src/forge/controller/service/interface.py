@@ -150,14 +150,6 @@ class ServiceInterface:
         """Returns a context manager for session-based calls."""
         return SessionContext(self)
 
-    # Service control methods - forwarded to Service Actor
-    async def stop(self):
-        """Stops the service gracefully."""
-        # First stop the service
-        await self._service.stop.call_one()
-        # Then stop its underlying proc
-        await self._proc_mesh.stop()
-
     # Metrics methods - forwarded to Service Actor
     async def get_metrics(self):
         """Get comprehensive service metrics for monitoring and analysis."""
@@ -179,10 +171,15 @@ class ServiceInterface:
 
     def __getattr__(self, name: str):
         """Forward all other attribute access to the underlying Service Actor."""
+        try:
+            _service = object.__getattribute__(self, "_service")
+        except AttributeError:
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
         # Forward everything else to the _service
-        if hasattr(self._service, name):
-            return getattr(self._service, name)
-
+        if hasattr(_service, name):
+            return getattr(_service, name)
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
