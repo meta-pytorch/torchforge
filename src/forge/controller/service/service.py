@@ -40,9 +40,10 @@ from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
-from forge.controller.interface import _session_context, Session
-from forge.controller.metrics import ServiceMetrics
-from forge.controller.replica import Replica, ServiceRequest
+from forge.controller.service.interface import _session_context, Session
+
+from forge.controller.service.metrics import ServiceMetrics
+from forge.controller.service.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
@@ -70,13 +71,10 @@ class Service(Actor):
         _endpoints: Dynamically registered actor endpoints
     """
 
-    def __init__(
-        self, cfg: ServiceConfig, actor_def, actor_args: tuple, actor_kwargs: dict
-    ):
+    def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
-        self._actor_args = actor_args
         self._actor_kwargs = actor_kwargs
 
         self._active_sessions = []
@@ -105,7 +103,6 @@ class Service(Actor):
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
                 return_first_rank_result=self._cfg.return_first_rank_result,
                 actor_def=self._actor_def,
-                actor_args=self._actor_args,
                 actor_kwargs=self._actor_kwargs,
             )
             replicas.append(replica)

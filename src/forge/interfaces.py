@@ -7,7 +7,9 @@
 from abc import ABC, abstractmethod
 from typing import Any, Mapping
 
-from monarch.actor import Actor, endpoint
+from monarch.actor import endpoint
+
+from forge.controller import ForgeActor
 
 from forge.types import Action, Message, Observation, Scalar, State
 
@@ -72,7 +74,7 @@ class Environment(ABC):
         return observation
 
 
-class Policy(Actor, ABC):
+class Policy(ForgeActor, ABC):
     """Abstract interface for policies."""
 
     @endpoint
