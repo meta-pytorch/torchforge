@@ -10,13 +10,13 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, Optional, TypeVar
 
 import torch
-
-from forge.data import CROSS_ENTROPY_IGNORE_IDX
-from forge.data.dataset_metrics import AggregationType, Metric
 from torch.nn.attention.flex_attention import (
     create_block_mask as create_block_mask_flex,
 )
 from torchdata.stateful_dataloader import Stateful
+
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
+from forge.data.dataset_metrics import AggregationType, Metric
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 

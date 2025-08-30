@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -36,12 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -216,7 +216,9 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
+    async def generate(
+        self, prompt: str, priority: int = 0
+    ) -> tuple[List[CompletionOutput], int]:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -273,7 +275,8 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        return await request_fut
+        x = await request_fut
+        return x, self.weights_version
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -313,9 +316,13 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output.outputs)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self) -> int:
         """Update the policy weights."""
-        pass
+        # Wait for all current requests to finish, then publish model weights
+        await asyncio.gather(*self.requests.values())
+        await self.policy_worker.update.call()
+        self.weights_version += 1
+        return self.weights_version
 
     @endpoint
     async def stop(self):

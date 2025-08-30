@@ -7,6 +7,7 @@
 from typing import Any, Callable, Optional
 
 import torch
+
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 from forge.data.utils import mask_messages, TuneMessage
