@@ -179,10 +179,16 @@ class ServiceInterface:
 
     def __getattr__(self, name: str):
         """Forward all other attribute access to the underlying Service Actor."""
+        # No infinite recursion please
+        try:
+            _service = object.__getattribute__(self, "_service")
+        except AttributeError:
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
         # Forward everything else to the _service
-        if hasattr(self._service, name):
-            return getattr(self._service, name)
-
+        if hasattr(_service, name):
+            return getattr(_service, name)
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
