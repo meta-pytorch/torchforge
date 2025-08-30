@@ -135,7 +135,7 @@ main() {
     pip install .
 
     # Set up CUDA environment
-    log_info "Setting up CUDA environment..."
+    log_info "Setting up environment..."
     cat > ~/.forge_cuda_env << 'EOF'
 export CUDA_VERSION=12.9
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
