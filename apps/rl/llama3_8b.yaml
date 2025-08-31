@@ -18,7 +18,7 @@ trainer:
   processes:
     scheduler: local # local | mast (not supported yet)
     num_hosts: 1
-    with_gpus: 4
+    with_gpus: True
     num_procs: 4
 
   optimizer:
@@ -68,7 +68,7 @@ replay_buffer:
   processes:
     scheduler: local # local | mast (not supported yet)
     num_hosts: 1
-    with_gpus: 0
+    with_gpus: False
     num_procs: 1
 
 # policy:
