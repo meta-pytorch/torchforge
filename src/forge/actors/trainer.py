@@ -95,7 +95,8 @@ class RLTrainer(ForgeActor):
         os.environ.update(env)
 
     @endpoint
-    async def setup(self):
+    async def setup(self, store: MultiProcessStore = None):
+        self.store = store
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
@@ -280,7 +281,16 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     def push_weights(self) -> None:
-        pass
+        if self.torchstore is None:
+            raise Exception("No torchstore configured, error in model publish")
+        # save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
+        # TODOs:
+        # 1. Figure out if there is a value in calling state_dict_adatpr.to_hf()
+        # 2. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
+        #    May need to replicate the same in this code path.
+        push_state_dict(
+            self.store, self.engine.checkpointer.states, f"v{self.current_step}"
+        )
 
     @endpoint
     async def cleanup(self) -> None:

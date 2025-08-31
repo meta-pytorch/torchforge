@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -36,12 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -329,7 +329,7 @@ class PolicyWorker(ForgeActor):
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
-    state_dict_key: str = "model_state_dict"
+    state_dict_key: str = "v0"  # This should be the dynamic-version of the sd.
 
     def __post_init__(self):
         """Build vLLM Arguments
