@@ -347,62 +347,72 @@ async def main():
     store = await MultiProcessStore.create_store()
 
     # ---- Setup services ---- #
-    (
-        dataloader,
-        policy,
-        trainer,
-        replay_buffer,
-        compute_advantages,
-        ref_model,
-        reward_actor,
-    ) = await asyncio.gather(
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            DatasetActor,
-            path="openai/gsm8k",
-            config_name="main",
-            split="train",
-            streaming=True,
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-            Policy,
-            config=PolicyConfig(
-                worker_params=WorkerConfig(model=model),
-                sampling_params=SamplingOverrides(
-                    num_samples=group_size, max_tokens=16
-                ),
-            ),
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-            Trainer,
-            learning_rate=1e-5,
-            beta=0.1,
-            model_name=model,
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            ReplayBuffer,
-            batch_size=4,
-            max_policy_age=1,
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            ComputeAdvantages,
-            gamma=0.99,
-            lambda_=0.95,
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-            RefModel,
-            model_name=model,
-        ),
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            RewardActor,
-            reward_functions=[MathReward(), ThinkingReward()],
-        ),
+    # (
+    #     dataloader,
+    #     policy,
+    #     trainer,
+    #     replay_buffer,
+    #     compute_advantages,
+    #     ref_model,
+    #     reward_actor,
+    # ) = await asyncio.gather(
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, num_replicas=1),
+    #         DatasetActor,
+    #         path="openai/gsm8k",
+    #         config_name="main",
+    #         split="train",
+    #         streaming=True,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+    #         Policy,
+    #         config=PolicyConfig(
+    #             worker_params=WorkerConfig(model=model),
+    #             sampling_params=SamplingOverrides(
+    #                 num_samples=group_size, max_tokens=16
+    #             ),
+    #         ),
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+    #         Trainer,
+    #         learning_rate=1e-5,
+    #         beta=0.1,
+    #         model_name=model,
+    #         store=store,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, num_replicas=1),
+    #         ReplayBuffer,
+    #         batch_size=4,
+    #         max_policy_age=1,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, num_replicas=1),
+    #         ComputeAdvantages,
+    #         gamma=0.99,
+    #         lambda_=0.95,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+    #         RefModel,
+    #         model_name=model,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(procs_per_replica=1, num_replicas=1),
+    #         RewardActor,
+    #         reward_functions=[MathReward(), ThinkingReward()],
+    #     ),
+    # )
+
+    trainer = await spawn_service(
+        ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+        Trainer,
+        learning_rate=1e-5,
+        beta=0.1,
+        model_name=model,
+        store=store,
     )
 
     print("All services initialized successfully!")
@@ -411,92 +421,92 @@ async def main():
     await trainer.save_weights.choose()
 
     # ---- Core RL loops ---- #
-    async def continuous_rollouts():
-        rollout_count = 0
-        while True:
-            sample = await dataloader.__next__.choose()
-            if sample is None:
-                print("Dataloader is empty, exiting continuous rollout")
-                return
-            prompt, target = sample["question"], sample["answer"]
-            actions, policy_version = await policy.generate.choose(prompt)
-            episode = Episode(
-                episode_id=rollout_count,
-                prompt=prompt,
-                target=target,
-                policy_version=policy_version,
-            )
-            for action in actions:
-                ref_logprobs = await ref_model.forward.choose(action.token_ids)
-                reward = await reward_actor.evaluate_response.choose(
-                    prompt=prompt, response=action.text, target=target
-                )
-                episode.add_group(
-                    Group(
-                        response=action.text,
-                        ref_logprobs=ref_logprobs,
-                        reward=reward,
-                    )
-                )
+    # async def continuous_rollouts():
+    #     rollout_count = 0
+    #     while True:
+    #         sample = await dataloader.__next__.choose()
+    #         if sample is None:
+    #             print("Dataloader is empty, exiting continuous rollout")
+    #             return
+    #         prompt, target = sample["question"], sample["answer"]
+    #         actions, policy_version = await policy.generate.choose(prompt)
+    #         episode = Episode(
+    #             episode_id=rollout_count,
+    #             prompt=prompt,
+    #             target=target,
+    #             policy_version=policy_version,
+    #         )
+    #         for action in actions:
+    #             ref_logprobs = await ref_model.forward.choose(action.token_ids)
+    #             reward = await reward_actor.evaluate_response.choose(
+    #                 prompt=prompt, response=action.text, target=target
+    #             )
+    #             episode.add_group(
+    #                 Group(
+    #                     response=action.text,
+    #                     ref_logprobs=ref_logprobs,
+    #                     reward=reward,
+    #                 )
+    #             )
 
-            advantages = await compute_advantages.__call__.choose(episode.groups)
-            for advantage, group in zip(advantages, episode.groups):
-                group.advantage = advantage
+    #         advantages = await compute_advantages.__call__.choose(episode.groups)
+    #         for advantage, group in zip(advantages, episode.groups):
+    #             group.advantage = advantage
 
-            await replay_buffer.add.choose(episode)
+    #         await replay_buffer.add.choose(episode)
 
-            rollout_count += 1
-            if rollout_count % 10 == 0:
-                avg_reward = sum(group.reward for group in episode.groups) / len(
-                    episode.groups
-                )
-                print(
-                    f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
-                )
-                logger.log("reward/rollout", avg_reward, rollout_count)
+    #         rollout_count += 1
+    #         if rollout_count % 10 == 0:
+    #             avg_reward = sum(group.reward for group in episode.groups) / len(
+    #                 episode.groups
+    #             )
+    #             print(
+    #                 f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
+    #             )
+    #             logger.log("reward/rollout", avg_reward, rollout_count)
 
-    async def continuous_training():
-        on_policy_version = 0
-        training_step = 0
-        while True:
-            batch = await replay_buffer.sample.choose(
-                curr_policy_version=on_policy_version
-            )
-            if batch is None:
-                await asyncio.sleep(0.1)
-            else:
-                training_result = await trainer.train_step.choose(batch)
-                training_step += 1
-                if training_step % 10 == 0:
-                    loss_value = training_result.get("loss", 0.0)
-                    print(
-                        f"Completed {training_step} training steps w/ loss: {loss_value}"
-                    )
-                    logger.log("loss/training_step", loss_value, training_step)
-                print("Updating policy weights...")
-                await trainer.save_weights.choose()
+    # async def continuous_training():
+    #     on_policy_version = 0
+    #     training_step = 0
+    #     while True:
+    #         batch = await replay_buffer.sample.choose(
+    #             curr_policy_version=on_policy_version
+    #         )
+    #         if batch is None:
+    #             await asyncio.sleep(0.1)
+    #         else:
+    #             training_result = await trainer.train_step.choose(batch)
+    #             training_step += 1
+    #             if training_step % 10 == 0:
+    #                 loss_value = training_result.get("loss", 0.0)
+    #                 print(
+    #                     f"Completed {training_step} training steps w/ loss: {loss_value}"
+    #                 )
+    #                 logger.log("loss/training_step", loss_value, training_step)
+    #             print("Updating policy weights...")
+    #             await trainer.save_weights.choose()
 
-    # print("Starting GRPO training loops...")
-    rollout_task = asyncio.create_task(continuous_rollouts())
-    training_task = asyncio.create_task(continuous_training())
+    # # print("Starting GRPO training loops...")
+    # rollout_task = asyncio.create_task(continuous_rollouts())
+    # training_task = asyncio.create_task(continuous_training())
 
-    try:
-        await asyncio.gather(rollout_task, training_task)
-    except KeyboardInterrupt:
-        print("Training interrupted by user")
-        rollout_task.cancel()
-        training_task.cancel()
-    finally:
-        print("Shutting down...")
-        await asyncio.gather(
-            shutdown_service(policy),
-            shutdown_service(trainer),
-            shutdown_service(replay_buffer),
-            shutdown_service(dataloader),
-            shutdown_service(compute_advantages),
-            shutdown_service(ref_model),
-            shutdown_service(reward_actor),
-        )
+    # try:
+    #     await asyncio.gather(rollout_task, training_task)
+    # except KeyboardInterrupt:
+    #     print("Training interrupted by user")
+    #     rollout_task.cancel()
+    #     training_task.cancel()
+    # finally:
+    #     print("Shutting down...")
+    #     await asyncio.gather(
+    #         shutdown_service(policy),
+    #         shutdown_service(trainer),
+    #         shutdown_service(replay_buffer),
+    #         shutdown_service(dataloader),
+    #         shutdown_service(compute_advantages),
+    #         shutdown_service(ref_model),
+    #         shutdown_service(reward_actor),
+    #     )
 
 
 if __name__ == "__main__":

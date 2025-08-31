@@ -101,6 +101,7 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    store: MultiProcessStore | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
