@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -36,12 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -310,7 +310,8 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output.outputs)
+                    # fut.set_result(request_output.outputs)
+                    fut.set_result(request_output)
 
     @endpoint
     async def update_weights(self):

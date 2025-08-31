@@ -38,10 +38,10 @@ logger.setLevel(logging.INFO)
 @dataclass
 class ReferenceActor(ForgeActor):
     """
-    Original idea (not updated); On second throught this might be overkill
+    Original idea (not updated/used); On second throught this might be overkill
     if we can rely on the Service Replicas to handle the queue since there's no
-    real pre/post proc or host management (maybe later for DP?). For now just
-    directly spin up services of the reference models
+    real pre/post proc or host management (maybe later for DP and batching?).
+    For now just directly spin up services of the reference models
     """
 
     model: Model = field(default_factory=Model)
@@ -187,6 +187,8 @@ class TitanRefModel(ForgeActor):
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
+        os.environ["TORCH_USE_CUDA_DSA"] = "1"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
     @endpoint
     async def setup(self):
@@ -194,7 +196,7 @@ class TitanRefModel(ForgeActor):
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
 
     @endpoint
-    async def forward(self, token_ids: list[int]) -> torch.Tensor:
+    async def forward(self, request: list[int], response: list[int]) -> torch.Tensor:
         """
         Given a return the log_probability of the token_ids
         (Used as the reference_logprobs for KL Divergence)
@@ -204,7 +206,9 @@ class TitanRefModel(ForgeActor):
 
         # Use provided token_ids directly
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        input_ids = torch.tensor(token_ids, dtype=torch.long).unsqueeze(0).to(device)
+        input_ids = torch.tensor(
+            request + response, dtype=torch.long, device=device
+        ).unsqueeze(0)
 
         optional_context_parallel_ctx = (
             dist_utils.create_context_parallel_ctx(
@@ -221,17 +225,85 @@ class TitanRefModel(ForgeActor):
         if parallel_dims.pp_enabled:
             raise NotImplementedError("PP not implemented yet")
         else:
-            # Non-PP forward / backward
+            # Non-PP forward
+            # (jackkhuu) I don't think iether context are needed for inference here
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
+                    # Titan Tranformer
                     pred = model_parts[0](input_ids)
+                    logits = pred.logits
 
-        # TODO: Update compute_sequence_logprobs to convert probs (logits) to logprobs
+                    # Compute logprobs
+                    input_ids = input_ids[:, len(response) :]
+                    logprobs = compute_logprobs(logits, input_ids)
+
+                    return logprobs
+
         return pred
 
 
-# Maintained to keep GRPO app prior to migration
+# Tweaked from
+# https://github.com/meta-pytorch/forge/pull/97/files#diff-3bdea8452f8678efbb5410b0618ec2942e39e2678db862e9abf4c2fabf507fd8
+class RefModel(ForgeActor):
+    def __init__(self, model_name, device: torch.device | None = None):
+        super().__init__()
+        self.model_name = model_name
+
+        # Set device
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+
+        # Initialize model and tokenizer
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+        ).to(self.device)
+
+        # Set model to eval mode for reference computations
+        self.model.eval()
+
+        self.logger.info(f"Model initialized on {self.device}")
+
+    @endpoint
+    async def forward(self, request: list[int], response: list[int]) -> torch.Tensor:
+
+        # Convert tokens to tensor
+        input_ids = torch.tensor(
+            request + response, dtype=torch.long, device=self.device
+        ).unsqueeze(0)
+
+        # Compute logits
+        with torch.inference_mode():
+            logits = self.model(input_ids=input_ids).logits
+
+        # Compute logprobs
+        input_ids = input_ids[:, len(response) :]
+        logprobs = compute_logprobs(logits, input_ids)
+
+        return logprobs
+
+
+# Based on torchtune's grpo
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    context_length = logits.shape[1] - input_ids.shape[1]
+
+    # Truncate request logits and drop last
+    logits = logits[:, context_length - 1 : -1]
+
+    # Compute logprobs
+    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+    return logprobs
+
+
+# Maintained to keep Old GRPO app prior to things landing
 class HuggingFaceRefModel(ForgeActor):
     """
     Represents a reference actor leveraging HuggingFace for execution
@@ -289,6 +361,7 @@ def compute_sequence_logprobs(
     with context_manager:
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         logits = outputs.logits
+        print("Logits ", logits.shape)
 
         # Apply log softmax to get log probabilities
         log_probs = torch.log_softmax(logits, dim=-1)

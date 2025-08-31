@@ -16,6 +16,7 @@ from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerC
 from forge.actors.reference_actor import (
     compute_sequence_logprobs,
     HuggingFaceRefModel,
+    RefModel,
     TitanRefModel,
 )
 from forge.actors.replay_buffer import ReplayBuffer
@@ -279,6 +280,7 @@ async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
     model = "Qwen/Qwen3-1.7B"
+    # model = "meta-llama/Meta-Llama-3.1-8B"
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -343,7 +345,7 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
             TitanRefModel,
-            model=TitanJobModelConfig(name=model),
+            # model=TitanJobModelConfig(name=model),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
@@ -370,9 +372,15 @@ async def main():
                 target=target,
                 policy_version=version,
             )
-            actions = await policy.generate.choose(prompt)
+            responses = await policy.generate.choose(prompt)
+            actions = responses.outputs
             for action in actions:
-                ref_logprobs = await ref_model.forward.choose(action.token_ids)
+                # ref_logprobs = await ref_model.forward.choose(action.token_ids)
+                request_tokens = responses.prompt_token_ids
+                response_tokens = action.token_ids
+                ref_logprobs = await ref_model.forward.choose(
+                    request=request_tokens, response=response_tokens
+                )
                 reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=action.text, target=target
                 )

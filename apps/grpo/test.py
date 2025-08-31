@@ -3,11 +3,12 @@ import asyncio
 from datasets import load_dataset
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.actors.reference_actor import HuggingFaceRefModel, TitanRefModel
+from forge.actors.reference_actor import HuggingFaceRefModel, RefModel, TitanRefModel
 
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from monarch.actor import endpoint
+from torchtitan.config.job_config import Model
 
 
 class DatasetActor(ForgeActor):
@@ -40,13 +41,24 @@ async def main():
 
     # For Torchtitan
     model = "Qwen/Qwen3-1.7B"
+    # model = "meta-llama/Meta-Llama-3.1-8B"
 
     # Spawn Reference "Agents"
-    hf_model = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-        HuggingFaceRefModel,
-        model_name=model,
-    )
+
+    # # Joe
+    # hf_model = await spawn_service(
+    #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+    #     HuggingFaceRefModel,
+    #     model_name=model,
+    # )
+
+    # # Philip
+    # hf_model = await spawn_service(
+    #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+    #     RefModel,
+    #     model_name=model,
+    # )
+
     titan_model = await spawn_service(
         ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
         TitanRefModel,
@@ -76,25 +88,38 @@ async def main():
     print("Sample: ", sample)
 
     # Generate output from policy, then pass to reference agents
-    actions = await policy.generate.choose(prompt)
+    responses = await policy.generate.choose(prompt)
+    actions = responses.outputs
     for action in actions:
-        print("Generated Action tok_ids: ", action.token_ids)
+        request_tokens = responses.prompt_token_ids
+        response_tokens = action.token_ids
 
-        print("HuggingFace Results")
-        hf_logprobs: float = await hf_model.forward.choose(action.token_ids)
-        print("HF logprob: ", hf_logprobs)
+        print("request_tokens: ", request_tokens)
+        print("response_tokens: ", response_tokens)
 
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # print("HuggingFace Results")
+        # hf_logprobs = await hf_model.forward.choose(
+        #     request=request_tokens, response=response_tokens
+        # )
+        # print("HF logprob: ", hf_logprobs)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        await asyncio.gather(
+            shutdown_service(policy),
+            shutdown_service(dataloader),
+            # shutdown_service(hf_model),
+        )
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         print("Titan Results")
-        titan_logprobs: float = await titan_model.forward.choose(action.token_ids)
+        titan_logprobs: float = await titan_model.forward.choose(
+            request=request_tokens, response=response_tokens
+        )
         print("Titan logprob: ", titan_logprobs)
-        # TODO: Update forward to convert probs (logits) to logprobs
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    await asyncio.gather(
-        shutdown_service(policy),
-        shutdown_service(dataloader),
-        shutdown_service(hf_model),
-        shutdown_service(titan_model),
-    )
+    # await shutdown_service(titan_model)
 
 
 if __name__ == "__main__":
