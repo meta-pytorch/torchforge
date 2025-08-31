@@ -43,10 +43,12 @@ except ImportError:
 async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
     """Returns a proc mesh with the given process config."""
     # TODO - modify this to work with multi-host
-    env = {
-        "MASTER_ADDR": str(socket.gethostname()),
-        "MASTER_PORT": str(_find_free_port()),
-    }
+    if process_config.env is not None:
+        env = process_config.env
+    else:
+        env = {}
+    env["MASTER_ADDR"] = str(socket.gethostname())
+    env["MASTER_PORT"] = str(_find_free_port())
     gpu_ids = None
 
     def _setup_env(env: dict[str, str]):
@@ -70,6 +72,7 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         #     per_host={"procs": process_config.num_procs},
         #     bootstrap=partial(_setup_env, env=env),
         # )
+        print("using env: {}".format(env))
         m = proc_mesh(gpus=process_config.num_procs, env=env)
         m._gpu_ids = gpu_ids
         return m
