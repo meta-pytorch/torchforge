@@ -20,6 +20,13 @@ from forge.controller.service import ServiceConfig
 from forge.controller.spawn import spawn_service
 from vllm.outputs import CompletionOutput, RequestOutput
 
+# philip
+from vllm.transformers_utils.tokenizer import get_tokenizer
+
+# convert to messages
+# 2 versions: formatted prompt, formatted full sequence
+#   - remove eod if vllm didn't finish sequence
+
 
 async def main():
     """Main application for running vLLM policy inference."""
@@ -34,6 +41,13 @@ async def main():
     else:
         prompt = args.prompt
 
+    # philip: format prompt
+    tokenizer = get_tokenizer(policy_config.worker_params.model)
+    messages = [{"role": "user", "content": prompt}]
+    prompt = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
     # Run the policy
     await run_vllm(service_config, policy_config, prompt)
 
@@ -43,7 +57,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="meta-llama/Llama-3.1-8B-Instruct",
+        default="Qwen/Qwen3-1.7B",  # "meta-llama/Llama-3.1-8B-Instruct",
         help="Model to use",
     )
     parser.add_argument(

@@ -178,7 +178,9 @@ class Policy(PolicyInterface):
 
         # Wraps prompt into a dict
         phil_prompt = prompt
-        prompt: Dict[str, str] = convert_input(prompt)
+        prompt: Dict[str, str] = convert_input(
+            prompt_token_ids=prompt
+        )  # philip remove key
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
@@ -204,8 +206,8 @@ class Policy(PolicyInterface):
         )
         tokenizer = self.processor.input_preprocessor.get_tokenizer_group()
         print("philip1:", request)
-        print("philip2:", tokenizer.encode("A fake response"))
-        print("philip3:", tokenizer.encode(phil_prompt + "A fake response"))
+        # print("philip2:", tokenizer.encode("A fake response"))
+        # print("philip3:", tokenizer.encode(phil_prompt + "A fake response"))
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
