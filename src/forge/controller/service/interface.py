@@ -60,7 +60,6 @@ class SessionContext:
     async def __aenter__(self):
         """Start a session and set context variables."""
         self.session_id = await self.service.start_session()
-        print("[DEBUG] session id: ", self.session_id)
         # Set context for this async task
         context_value = {"session_id": self.session_id}
         self._token = _session_context.set(context_value)
