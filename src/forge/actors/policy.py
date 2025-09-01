@@ -130,7 +130,6 @@ class Policy(PolicyInterface):
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
-        print("philip0:", self.vllm_args.model_config)
         tokenizer = init_tokenizer_from_configs(
             model_config=self.vllm_args.model_config,
             scheduler_config=self.vllm_args.scheduler_config,
@@ -177,10 +176,7 @@ class Policy(PolicyInterface):
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
-        phil_prompt = prompt
-        prompt: Dict[str, str] = convert_input(
-            prompt_token_ids=prompt
-        )  # philip remove key
+        prompt: Dict[str, str] = convert_input(prompt_token_ids=prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
@@ -205,9 +201,6 @@ class Policy(PolicyInterface):
             data_parallel_rank=None,
         )
         tokenizer = self.processor.input_preprocessor.get_tokenizer_group()
-        print("philip1:", request)
-        # print("philip2:", tokenizer.encode("A fake response"))
-        # print("philip3:", tokenizer.encode(phil_prompt + "A fake response"))
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -275,7 +268,6 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    print("philip:", request_output)
                     fut.set_result(request_output)
 
     @endpoint

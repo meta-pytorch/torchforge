@@ -9,7 +9,7 @@ import copy
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Optional
 
 import torch
 from datasets import load_dataset
@@ -20,7 +20,8 @@ from forge.controller.actor import ForgeActor
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from torch import nn
+from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
@@ -39,29 +40,59 @@ def compute_logprobs(
     return logprobs
 
 
+class SimpleGRPOLoss(nn.Module):
+    """Simplified GRPO Loss for simplified single step updates"""
+
+    def __init__(self, epsilon=0.1, beta=0.1):
+        super().__init__()
+        self.epsilon = epsilon
+        self.beta = beta
+
+    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
+        log_ratio = ref_logprobs.detach() - logprobs
+        kl = torch.exp(log_ratio) - log_ratio - 1
+
+        pl = torch.exp(logprobs - logprobs.detach()) * advantages
+        loss = -pl + self.beta * kl
+
+        # Compute mean
+        loss = (loss * padding_mask).sum() / (padding_mask.sum() + 1e-8)
+        return loss
+
+
 @dataclass
 class Episode:
     # TODO: add adtional layer for multi-turn
     episode_id: str
     request: str
     policy_version: int
-    target: Optinoal[Any]
+    pad_id: int
+    request_len: int
+    response_len: int
+    target: Optional[Any] = None
     # processed data
-    response: Optional[str]
-    request_tokens: Optional[list[int]]
-    response_tokens: Optional[list[int]]
+    response: Optional[str] = None
+    request_tokens: Optional[list[int]] = None
+    response_tokens: Optional[list[int]] = None
     ref_logprobs: Optional[torch.Tensor] = None
     reward: Optional[float] = None
     advantage: Optional[float] = None
-    policy_version: Optional[int] = None
 
     @property
-    def tokens(self):
-        return self.request_tokens + self.response_tokens
+    def request_tensor(self):
+        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.request_len:  # left pad
+            diff = self.request_len - tensor.shape[0]
+            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
+        return tensor
 
     @property
-    def mask(self):
-        return [0] * len(self.request_tokens) + [1] * len(self.response_tokens)
+    def response_tensor(self):
+        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.response_len:  # right pad
+            diff = self.request_len - tensor.shape[0]
+            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
+        return tensor
 
 
 @dataclass
@@ -76,6 +107,9 @@ class Group:
         group_size: int,
         request: str,
         policy_version: int,
+        pad_id: int,
+        request_len: int,
+        response_len: int,
         target: Any = None,
     ):
         episodes = []
@@ -84,33 +118,30 @@ class Group:
                 episode_id=str(uuid.uuid4()),
                 request=copy.deepcopy(messages),
                 policy_version=policy_version,
+                pad_id=pad_iddd,
+                request_len=request_len,
+                response_len=response_len,
                 target=target,
             )
         return cls(group_id, episodes)
 
 
+@dataclass
 class Trainer(ForgeActor):
     """GRPO Trainer implementation for policy optimization."""
 
-    def __init__(
-        self,
-        learning_rate: float = 1e-5,
-        beta: float = 0.1,
-        model_name: str = "",
-        device: torch.device | None = None,
-    ):
-        super().__init__()
-        self.learning_rate = learning_rate
-        self.beta = beta  # KL penalty coefficient
-        self.model_name = model_name
+    model_name: str
+    learning_rate: float = 1e-5
+    beta: float = 0.1
+    epsilon: float = 0.1
+    device: torch.device | None = None
 
+    def setup(self):
         # Set device
-        if device is None:
+        if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
 
-        # Initialize model and tokenizer
+        # Initialize model
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,
@@ -118,64 +149,47 @@ class Trainer(ForgeActor):
         ).to(self.device)
         self.model.train()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
         # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.learning_rate
         )
+        self.optimizer.zero_grad()
+
+        # Initialize loss
+        self.loss = SimpleGRPOLoss(self.epsilon, self.beta)
 
         self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
         total_loss = 0.0
-        num_groups_processed = 0
+        num_episodes_processed = 0
+        pad_id = batch[0].pad_id
 
-        # Batch logic -> move to replay replay_buffer
-        input_ids = []
-        advantages = []
-        ref_logprobs = []
-        for episode in batch:
-            # collect infomration and batch + pad sequences
-            input_ids.append(episode.response_tokens + episode.request_tokens)
-            # TODO philip you are here !!!!!!!!!!!!!
+        # prepare batch
+        request = [e.response_tokens for e in batch]
+        request = torch.stack(request).to(self.device)
 
-        # loss reference:
-        # https://github.com/pytorch/torchtune/blob/
-        #   67ab86b94de9e7ac7dd9850113ebe69e2bbd307c/torchtune/dev/grpo/loss.py#L123
-        # input_ids = tokenized["input_ids"].to(self.device)
-        # attention_mask = tokenized["attention_mask"].to(self.device)
-        #
-        # # Compute current policy log probabilities using the model
-        # current_logprobs = compute_sequence_logprobs(
-        #     self.model, input_ids, attention_mask, requires_grad=True
-        # )
-        #
-        # # Convert ref_logprobs and advantages to tensors
-        # ref_logprobs_tensor = torch.stack(ref_logprobs_list).to(self.device)
-        # advantages_tensor = torch.tensor(advantages_list, dtype=torch.float32).to(
-        #     self.device
-        # )
-        #
-        # # Compute GRPO loss components
-        # # Ratio between current policy and reference policy
-        # ratio = torch.exp(current_logprobs - ref_logprobs_tensor)
-        #
-        # # Policy gradient loss weighted by advantages
-        # pg_loss = -torch.mean(ratio * advantages_tensor)
-        #
-        # # KL penalty to prevent policy from deviating too far from reference
-        # kl_penalty = self.beta * torch.mean(
-        #     (current_logprobs - ref_logprobs_tensor) ** 2
-        # )
-        #
-        # # Total GRPO loss
-        # loss = pg_loss + kl_penalty
-        # total_loss += loss.item()
-        # num_groups_processed += len(groups)
+        response = [e.response_tokens for e in batch]
+        response = torch.stack(response).to(self.device)
+
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.stack(ref_logprobs).to(self.device)
+
+        advantages = [e.advantages for e in batch]
+        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)
+        del batch
+
+        # compute policy logprobs
+        input_ids = torch.cat([request, response])
+        mask = input_ids[1] != pad_id
+        logits = self.model(input_ids=input_ids, attention_mask=mask).logits
+        logprobs = compute_logprobs(logits, response)
+        del logits
+
+        # compute loss
+        mask = (response != pad_id).unsqueeze(-1)
+        loss = self.loss(logprobs, ref_logprobs, advantages, mask)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -185,9 +199,10 @@ class Trainer(ForgeActor):
 
         self.optimizer.step()
 
+        total_loss += loss.item()
         avg_loss = total_loss / len(batch) if batch else 0.0
 
-        return {"loss": avg_loss, "groups_processed": num_groups_processed}
+        return {"loss": avg_loss, "episodes_processed": num_episodes_processed}
 
     @endpoint
     async def update_weights(self, policy_actor):
@@ -226,9 +241,6 @@ class RewardActor(ForgeActor):
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
-        # philip: compare against
-        # https://github.com/pytorch/torchtune/blob/
-        #   67ab86b94de9e7ac7dd9850113ebe69e2bbd307c/torchtune/dev/rl/rewards.py#L270
         total_reward = 0.0
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
@@ -239,47 +251,13 @@ class RewardActor(ForgeActor):
 class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
-    def __init__(self, gamma: float = 0.99, lambda_: float = 0.95):
-        super().__init__()
-        # self.gamma = gamma  # Discount factor
-        # self.lambda_ = lambda_  # GAE lambda parameter
-
     @endpoint
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
-        advantages = (rewards - rewards.mean(1, keepdim=True)) / (
+        advantages = (rewards - rewards.me / an(1, keepdim=True)) / (
             rewards.std(1, keepdim=True) + 1e-4
         )
-
-        # # Extract rewards from groups
-        # rewards = [group.reward for group in groups]
-        # num_groups = len(groups)
-        #
-        # # For simplicity, use reward-to-go as advantages
-        # # This is a valid advantage estimator: A(s,a) = Q(s,a) - V(s)
-        # # where Q(s,a) ≈ reward-to-go and V(s) ≈ average reward
-        #
-        # # Compute discounted reward-to-go for each step
-        # reward_to_go = []
-        # running_reward = 0.0
-        #
-        # # Calculate discounted returns (reward-to-go)
-        # for t in reversed(range(num_groups)):
-        #     running_reward = rewards[t] + self.gamma * running_reward
-        #     reward_to_go.insert(0, running_reward)
-        #
-        # # Compute baseline (mean of rewards) and advantages
-        # baseline = sum(rewards) / len(rewards) if rewards else 0.0
-        # advantages = [rtg - baseline for rtg in reward_to_go]
-        #
-        # # Normalize advantages to have zero mean and unit variance
-        # if len(advantages) > 1:
-        #     mean_adv = sum(advantages) / len(advantages)
-        #     var_adv = sum((a - mean_adv) ** 2 for a in advantages) / len(advantages)
-        #     std_adv = (var_adv**0.5) if var_adv > 1e-8 else 1.0
-        #     advantages = [(a - mean_adv) / std_adv for a in advantages]
-
         return advantages.squeeze(0)
 
 
@@ -307,19 +285,19 @@ class RefModel(ForgeActor):
         self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
-    async def forward(self, request: list[int], response: list[int]) -> torch.Tensor:
+    async def forward(self, episode: Episode) -> torch.Tensor:
 
         # Convert tokens to tensor
-        input_ids = torch.tensor(
-            request + response, dtype=torch.long, device=self.device
-        ).unsqueeze(0)
+        req, res = episode.request_tensor, episode.response_tensor
+        input_ids = torch.cat([request, response]).to(self.device).unsqueeze(0)
+        mask = input_ids[1] != episode.pad_id
 
         # Compute logits
         with torch.inference():
-            logits = model(input_ids=input_ids).logits
+            logits = model(input_ids=input_ids, attention_mask=mask).logits
 
         # Compute logprobs
-        input_ids = input_ids[:, len(response) :]
+        input_ids = input_ids[:, request.shape[1] :]
         logprobs = compute_logprobs(logits, input_ids)
 
         return logprobs
@@ -331,7 +309,7 @@ class DatasetActor(ForgeActor):
 
     path: str
     name: str
-    split: str
+    data_split: str
     streaming: bool
     model: str
 
@@ -351,7 +329,7 @@ class DatasetActor(ForgeActor):
             return {"request": formatted_request, "target": formatted_target}
 
         ds = load_dataset(
-            self.path, self.name, split=self.split, streaming=self.streaming
+            self.path, self.name, split=self.data_split, streaming=self.streaming
         )
         ds = ds.map(gsm8k_transform)
         ds = ds.shuffle()
@@ -364,11 +342,19 @@ class DatasetActor(ForgeActor):
         except StopIteration:
             return None
 
+    @endpoint
+    def pad_token(self):
+        if self.tokenizer.pad_token is None:
+            return self.tokenizer.eos_token
+        return self.tokenizer.pad_token
+
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
     model = "Qwen/Qwen3-1.7B"
+    max_req_tokens = 512
+    max_res_tokens = 128
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -389,7 +375,7 @@ async def main():
         PolicyConfig(
             num_workers=1,
             worker_params=WorkerConfig(model=model),
-            sampling_params=SamplingOverrides(n=group_size, max_tokens=16),
+            sampling_params=SamplingOverrides(n=group_size, max_tokens=max_res_tokens),
             available_devices="3",
         ),
     )
@@ -415,7 +401,7 @@ async def main():
         DatasetActor,
         "openai/gsm8k",
         "main",
-        split="train",
+        data_split="train",
         streaming=True,
         model=model,
     )
@@ -445,6 +431,7 @@ async def main():
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
+        pad_id = dataloader.pad_token.choose()
         # TODO: Move this into setup
         asyncio.create_task(policy.run_processing.call())
         while True:
@@ -459,15 +446,16 @@ async def main():
                 group_size=group_size,
                 request=prompt,
                 policy_version=version,
+                pad_id=pad_id,
+                request_len=max_req_tokens,
+                response_len=max_res_tokens,
                 target=target,
             )
             responses = await policy.generate.choose(prompt)
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
-                episode.ref_logprobs = await ref_model.forward.choose(
-                    request=episode.request_tokens, response=episode.response_tokens
-                )
+                episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
