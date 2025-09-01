@@ -101,11 +101,13 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    store: MultiProcessStore | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
+        self.weights_version: int = 0
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -113,6 +115,7 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
+        store: MultiProcessStore,  # Store is required for now
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -132,7 +135,11 @@ class Policy(PolicyInterface):
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         policy = await policy_proc.spawn(
-            actor_name, cls, config=config, policy_worker=workers
+            actor_name,
+            cls,
+            config=config,
+            policy_worker=workers,
+            store=store,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -160,7 +167,7 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call()
+        await self.policy_worker.setup.call(store=self.store)
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
@@ -313,9 +320,21 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output.outputs)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self) -> int:
         """Update the policy weights."""
-        pass
+        print("Updating weights")
+        # Wait for all current requests to finish, then publish model weights
+        futures = [fut for _, fut in self.requests.values()]
+        if futures:
+            await asyncio.gather(*futures)
+        await self.policy_worker.update.call()
+        self.weights_version += 1
+        return self.weights_version
+
+    @endpoint
+    async def get_version(self) -> int:
+        """Get the current policy version."""
+        return self.weights_version
 
     @endpoint
     async def stop(self):
