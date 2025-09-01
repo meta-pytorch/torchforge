@@ -39,6 +39,8 @@ logger.setLevel(logging.INFO)
 class TitanRefModel(ForgeActor):
     """
     Represents a reference actor leveraging a torchtitan model for execution
+
+    Intended for generating reference_logprobs - for example in KL Divergence
     """
 
     # Refer to titan JobConfig for enabling more ForgeEngine configuration
@@ -90,8 +92,9 @@ class TitanRefModel(ForgeActor):
     @endpoint
     async def forward(self, request: list[int], response: list[int]) -> torch.Tensor:
         """
-        Given a return the log_probability of the token_ids
-        (Used as the reference_logprobs for KL Divergence)
+        Given a request and response tokens, return the log_probability of the
+        token_ids
+
         """
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims

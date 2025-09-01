@@ -334,7 +334,7 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
             TitanRefModel,
-            model=TitanJobModelConfig(name="qwen3", flavor="0.6B"),
+            model=titan_model,
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
@@ -364,7 +364,6 @@ async def main():
             responses = await policy.generate.choose(prompt)
             actions = responses.outputs
             for action in actions:
-                # ref_logprobs = await ref_model.forward.choose(action.token_ids)
                 request_tokens = responses.prompt_token_ids
                 response_tokens = action.token_ids
                 ref_logprobs = await ref_model.forward.choose(

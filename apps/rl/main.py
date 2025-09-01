@@ -19,7 +19,6 @@ from forge.actors import ReplayBuffer, RLTrainer
 from forge.cli.config import parse
 from forge.controller import spawn_actors
 from omegaconf import DictConfig
-from torchtitan.config.job_config import Model
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
