@@ -35,9 +35,7 @@ try:
 
     MAST_SUPPORTED = True
 except ImportError:
-    logger.warning(
-        "MAST is not supported on this platform. You can ignore this if you do not work at Meta."
-    )
+    pass
 
 
 async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
@@ -72,7 +70,6 @@ async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
         #     per_host={"procs": process_config.num_procs},
         #     bootstrap=partial(_setup_env, env=env),
         # )
-        print("using env: {}".format(env))
         m = proc_mesh(gpus=process_config.num_procs, env=env)
         m._gpu_ids = gpu_ids
         return m

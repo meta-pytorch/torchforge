@@ -60,6 +60,7 @@ class SessionContext:
     async def __aenter__(self):
         """Start a session and set context variables."""
         self.session_id = await self.service.start_session()
+        print("[DEBUG] session id: ", self.session_id)
         # Set context for this async task
         context_value = {"session_id": self.session_id}
         self._token = _session_context.set(context_value)
@@ -171,12 +172,7 @@ class ServiceInterface:
 
     def __getattr__(self, name: str):
         """Forward all other attribute access to the underlying Service Actor."""
-        try:
-            _service = object.__getattribute__(self, "_service")
-        except AttributeError:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{name}'"
-            )
+        _service = object.__getattribute__(self, "_service")
         # Forward everything else to the _service
         if hasattr(_service, name):
             return getattr(_service, name)
