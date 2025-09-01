@@ -279,8 +279,8 @@ class DatasetActor(ForgeActor):
 async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
-    model = "Qwen/Qwen3-1.7B"
-    # model = "meta-llama/Meta-Llama-3.1-8B"
+    model = "Qwen/Qwen3-0.6B"
+    titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -336,16 +336,10 @@ async def main():
             gamma=0.99,
             lambda_=0.95,
         ),
-        # spawn_service(
-        #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-        #     RefModel,
-        #     model_name=model,
-        # ),
-        # GOAL: Swap this in and everything should just "work"
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
             TitanRefModel,
-            # model=TitanJobModelConfig(name=model),
+            model=TitanJobModelConfig(name="qwen3", flavor="0.6B"),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),

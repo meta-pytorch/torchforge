@@ -226,13 +226,12 @@ class TitanRefModel(ForgeActor):
             raise NotImplementedError("PP not implemented yet")
         else:
             # Non-PP forward
-            # (jackkhuu) I don't think iether context are needed for inference here
+            # (jackkhuu) Not sure if either context are needed for inference here
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
                     # Titan Tranformer
-                    pred = model_parts[0](input_ids)
-                    logits = pred.logits
+                    logits = model_parts[0](input_ids)
 
                     # Compute logprobs
                     input_ids = input_ids[:, len(response) :]
@@ -361,7 +360,6 @@ def compute_sequence_logprobs(
     with context_manager:
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         logits = outputs.logits
-        print("Logits ", logits.shape)
 
         # Apply log softmax to get log probabilities
         log_probs = torch.log_softmax(logits, dim=-1)
