@@ -115,7 +115,7 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
-        store: MultiProcessStore,  # Store is required for now
+        store: MultiProcessStore | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -322,7 +322,6 @@ class Policy(PolicyInterface):
     @endpoint
     async def update_weights(self) -> int:
         """Update the policy weights."""
-        print("Updating weights")
         # Wait for all current requests to finish, then publish model weights
         futures = [fut for _, fut in self.requests.values()]
         if futures:
