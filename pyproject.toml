@@ -23,6 +23,7 @@ dependencies = [
     # Miscellaneous
     "omegaconf",
     "wandb",
+    "aiorwlock",
 ]
 dynamic = ["version"]
 

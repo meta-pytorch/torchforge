@@ -13,7 +13,18 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-from monarch.actor import current_rank, endpoint, ProcMesh
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.controller.synchronization import AsyncRWLock
+
+from forge.data.sharding import VLLMSharding
+from forge.data.weights_handle import WeightsHandle, WeightsHandleType
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
+from monarch.actor import Actor, current_rank, endpoint, proc_mesh, ProcMesh
+
+from tenacity import retry, wait_exponential
+
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -36,15 +47,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -94,6 +96,12 @@ class PolicyConfig:
 
 
 @dataclass
+class CompletionPolicyResponse:
+    policy_version: int
+    completions: list[CompletionOutput]
+
+
+@dataclass
 class Policy(PolicyInterface):
     config: PolicyConfig
     # Gets set up by setup
@@ -101,6 +109,9 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    # TODO: figure out if a finer grained versioing/locking scheme is needed/possible.
+    policy_version: int = 0
+    model_lock: AsyncRWLock = field(default_factory=AsyncRWLock)
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -215,8 +226,10 @@ class Policy(PolicyInterface):
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
 
-    @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
+    async def _generate_nolock(
+        self, prompt: str, priority: int = 0
+    ) -> CompletionPolicyResponse:
+        """Returns the list of completions and policy version. Not safe to use without reader lock."""
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -273,7 +286,19 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        return await request_fut
+        completions = await request_fut
+        return CompletionPolicyResponse(
+            policy_version=self.policy_version, completions=completions
+        )
+
+    @endpoint
+    @retry(wait=wait_exponential(multiplier=1, min=10, max=60))
+    async def generate(
+        self, prompt: str, priority: int = 0
+    ) -> CompletionPolicyResponse:
+        """Returns the list of completions and policy version."""
+        async with self.model_lock.read_lock():
+            return await self._generate_nolock(prompt, priority)
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -313,9 +338,16 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output.outputs)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self, weights_handle: WeightsHandle):
         """Update the policy weights."""
-        pass
+        self.logger.debug("Policy.update_weights() called")
+        async with self.model_lock.write_lock():
+            assert self.policy_version < weights_handle.version, (
+                "current policy version is not older than weights version to be updated\n"
+                + f"{self.policy_version=}, {weights_handle.version=}"
+            )
+            await self.policy_worker.update.call(weights_handle)
+            self.policy_version = weights_handle.version
 
     @endpoint
     async def stop(self):
@@ -365,7 +397,7 @@ class PolicyWorker(ForgeActor):
             for key in cfg:
                 value = getattr(self, key) if key != "data_parallel_size" else 1
                 if getattr(self.vllm_args, key) != value:
-                    logger.warning(
+                    self.logger.warning(
                         f"{key} args don't match value in EngineArgs, overriding with {value}"
                     )
                     setattr(self.vllm_args, key, value)
@@ -408,25 +440,48 @@ class PolicyWorker(ForgeActor):
 
             updated_count += 1
 
-    @endpoint
-    async def update(self):
+    async def _update_torchstore(self):
         """Update model weights by reading state dict from torchstore"""
 
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
-        logger.debug(
+        self.logger.debug(
             f"Starting model update from torchstore with key: {self.state_dict_key}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
+        self.logger.debug(
+            f"Current state dict has {len(current_state_dict)} parameters"
+        )
 
         await self._load_tensor_parallel_state_dict(current_state_dict)
 
-        logger.debug("Successfully updated model weights from torchstore")
+        self.logger.debug("Successfully updated model weights from torchstore")
+
+    async def _update_simple(self, weights_handle: WeightsHandle):
+        """Update model weights by copying from state_dict passed in the weights_handle"""
+        self.logger.debug("Starting simple model update from weights handle")
+        names = weights_handle.data["param_names"]
+        params = await asyncio.gather(*[self.torchstore.get(name) for name in names])
+        self.worker.model_runner.model.load_weights(
+            {name: param for name, param in zip(names, params)}
+        )
+
+    @endpoint
+    async def update(self, weights_handle: WeightsHandle):
+        self.logger.debug("PolicyWorker.update() called")
+        match weights_handle.handle_type:
+            case WeightsHandleType.SIMPLE:
+                await self._update_simple(weights_handle)
+            case WeightsHandleType.TORCH_STORE:
+                await self._update_torchstore()
+            case _:
+                raise ValueError(
+                    f"Unsupported weights handle type: {weights_handle.handle_type}"
+                )
 
     @endpoint
     async def setup_kv_cache(self):

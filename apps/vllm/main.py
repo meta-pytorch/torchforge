@@ -15,7 +15,13 @@ import asyncio
 from argparse import Namespace
 from typing import List
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.policy import (
+    CompletionPolicyResponse,
+    Policy,
+    PolicyConfig,
+    SamplingOverrides,
+    WorkerConfig,
+)
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from vllm.outputs import CompletionOutput
 
@@ -89,7 +95,9 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
 
     async with policy.session():
         print("Requesting generation...")
-        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+        responses: List[CompletionOutput] = await policy.generate.choose(
+            prompt=prompt
+        ).completions
 
         print("\nGeneration Results:")
         print("=" * 80)

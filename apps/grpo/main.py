@@ -17,8 +17,10 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.data.weights_handle import WeightsHandle, WeightsHandleType
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
+from torchstore import MultiProcessStore
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,9 @@ class Episode:
 
     def add_group(self, group: Group):
         self.groups.append(group)
+
+    def add_groups(self, groups: list[Group]):
+        self.groups.extend(groups)
 
 
 class Trainer(ForgeActor):
@@ -189,7 +194,7 @@ class Trainer(ForgeActor):
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    async def update_weights(self, policy_actor):
+    async def update_weights(self, policy_actor, step):
         """Update policy model weights with trainer's current weights."""
         # Time how long it takes to update weights
         start_time = time.time()
@@ -197,16 +202,19 @@ class Trainer(ForgeActor):
         # Set model to eval mode for weight extraction
         self.model.eval()
 
-        # Extract current model state dict
-        model_state_dict = self.model.state_dict()
-
-        # Convert tensors to CPU for transfer (if they're on GPU)
-        cpu_state_dict = {}
-        for key, tensor in model_state_dict.items():
-            cpu_state_dict[key] = tensor.cpu() if tensor.is_cuda else tensor
-
+        store = policy_actor.torchstore
+        await asyncio.gather(
+            *[store.put(name, param) for name, param in self.model.named_parameters()]
+        )
         # Update the policy actor's model weights
-        await policy_actor.update_model_weights.choose(cpu_state_dict)
+        param_names = [name for name, _ in self.model.named_parameters()]
+        await policy_actor.update_model_weights.choose(
+            WeightsHandle(
+                WeightsHandleType=WeightsHandleType.SIMPLE,
+                data={"param_names": param_names},
+                version=step,
+            )
+        )
 
         # Set model back to training mode
         self.model.train()
@@ -344,7 +352,7 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 1
+    group_size = 16
     model = "Qwen/Qwen3-1.7B"
 
     # ---- Setup WandB Logger ---- #
@@ -412,7 +420,6 @@ async def main():
             reward_functions=[MathReward(), ThinkingReward()],
         ),
     )
-
     print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
@@ -424,26 +431,31 @@ async def main():
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["question"], sample["answer"]
-            version = 0  # await policy.get_current_version.choose()
+
+            response = await policy.generate.choose(prompt)
+            actions = response.completions
+            version = response.policy_version
             episode = Episode(
                 episode_id=rollout_count,
                 prompt=prompt,
                 target=target,
                 policy_version=version,
             )
-            actions = await policy.generate.choose(prompt)
-            for action in actions:
-                ref_logprobs = await ref_model.forward.choose(action.token_ids)
-                reward = await reward_actor.evaluate_response.choose(
-                    prompt=prompt, response=action.text, target=target
+
+            async def _get_group(action):
+                ref_logprobs, reward = await asyncio.gather(
+                    ref_model.forward.choose(action.token_ids),
+                    reward_actor.evaluate_response.choose(
+                        prompt=prompt, response=action.text, target=target
+                    ),
                 )
-                episode.add_group(
-                    Group(
-                        response=action.text,
-                        ref_logprobs=ref_logprobs,
-                        reward=reward,
-                    )
+                return Group(
+                    response=action.text, ref_logprobs=ref_logprobs, reward=reward
                 )
+
+            groups = await asyncio.gather(*[_get_group(action) for action in actions])
+
+            episode.add_groups(groups)
 
             advantages = await compute_advantages.__call__.choose(episode.groups)
             for advantage, group in zip(advantages, episode.groups):
@@ -452,33 +464,44 @@ async def main():
             await replay_buffer.add.choose(episode)
 
             rollout_count += 1
+            rewards = []
             if rollout_count % 10 == 0:
-                avg_reward = sum(group.reward for group in episode.groups) / len(
-                    episode.groups
-                )
+                episode_avg_reward = sum(
+                    group.reward for group in episode.groups
+                ) / len(episode.groups)
+                rewards.append(episode_avg_reward)
+                avg_reward = sum(rewards) / len(rewards)
+                rewards.clear()
                 print(
-                    f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
+                    f"Generated {rollout_count} rollouts, average reward of last 10 = {avg_reward}"
                 )
                 logger.log("reward/rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
+        update_period = 10
+        # using training_step as the policy version for now, open to suggestions
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=0)
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
+                # why is call_one not defined?
+                # training_result = await trainer.train_step.call_one(batch)
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
-                if training_step % 10 == 0:
-                    print(f"Completed {training_step} training steps")
-                    if training_result:
-                        loss_value = training_result.get("loss", 0.0)
-                        print(f"Latest loss: {loss_value}")
-                        logger.log("loss/training_step", loss_value, training_step)
-                # await trainer.update_weights(policy)
+                print(f"Completed {training_step} training steps")
+                if training_result:
+                    loss_value = training_result.get("loss", 0.0)
+                    print(f"Latest loss: {loss_value}")
+                    logger.log("loss/training_step", loss_value, training_step)
+                if training_step % update_period == 0:
+                    print(f"Exporting policy weights @ {training_step=}")
+                    await trainer.update_weights.choose(policy, training_step)
+                    print(f"Updated policy weights to version {training_step}")
 
     print("Starting GRPO training loops...")
+
     rollout_task = asyncio.create_task(continuous_rollouts())
     training_task = asyncio.create_task(continuous_training())
 
