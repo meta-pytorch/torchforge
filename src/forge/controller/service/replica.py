@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from forge.controller import get_proc_mesh
-from forge.types import ProcessConfig
+from monarch.actor import ActorError
 
-from monarch.actor import Actor, ActorError, ProcMesh
+from forge.controller import ForgeActor
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -102,13 +102,11 @@ class Replica:
 
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
-    actor_def: type[Actor]
-    actor_args: tuple
+    actor_def: type[ForgeActor]
     actor_kwargs: dict
 
-    # The proc_mesh and actor_mesh that this replica is running
-    proc_mesh: Optional[ProcMesh] = None
-    actor: Optional[Actor] = None
+    # The Actor that this replica is running
+    actor: Optional[ForgeActor] = None
 
     # Async queue for incoming requests
     request_queue: asyncio.Queue[ServiceRequest] = field(default_factory=asyncio.Queue)
@@ -155,23 +153,15 @@ class Replica:
         - Transitions to healthy state
         - Starts the processing loop
         """
-        assert self.proc_mesh is None, "Proc mesh should not be set yet"
+        assert self.actor is None, "Actor should not be set yet"
         try:
-            # Create proc_mesh
-            await self.create_proc_mesh()
-
-            # Ensure we have a healthy proc_mesh
-            if not self.proc_mesh:
-                raise RuntimeError(
-                    f"Replica {self.idx}: proc_mesh is None after creation"
-                )
-
-            # Spawn the actor
-            await self.spawn_actor(
-                self.actor_def,
-                *self.actor_args,
+            # Deploy the actor and its underlying resources
+            logger.debug(f"Launching actor for replica {self.idx}")
+            self.actor = await self.actor_def.launch(
+                process_config=self.proc_config,
                 **self.actor_kwargs,
             )
+
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()
@@ -191,24 +181,17 @@ class Replica:
             return
 
         async def _do_recovery():
-            old_proc_mesh = self.proc_mesh
-            self.proc_mesh = None
-            self.actor = None
-
-            # Stop old proc_mesh if it exists
-            if old_proc_mesh is not None:
-                try:
-                    await old_proc_mesh.stop()
-                    logger.debug(f"Old proc_mesh stopped for replica {self.idx}")
-                except Exception as e:
-                    logger.warning(
-                        f"Error stopping old proc_mesh for replica {self.idx}: {e}"
-                    )
-
             try:
-                logger.debug(f"Creating new proc_mesh for replica {self.idx}")
+                await self.actor_def.shutdown(self.actor)
+                self.actor = None
+            except Exception as e:
+                logger.warning(f"Error shutting down actor for replica {self.idx}: {e}")
+                self.state = ReplicaState.UNHEALTHY
+
+            # Re-create the actor
+            try:
+                logger.debug(f"Re-launching actor for replica {self.idx}")
                 await self.initialize()
-                logger.debug(f"Recovery completed successfully for replica {self.idx}")
             except Exception as e:
                 logger.error(f"Recovery failed for replica {self.idx}: {e}")
                 self.state = ReplicaState.UNHEALTHY
@@ -218,57 +201,6 @@ class Replica:
         self.state = ReplicaState.RECOVERING
         self._recovery_task = asyncio.create_task(_do_recovery())
         await self._recovery_task
-
-    async def create_proc_mesh(self):
-        """Creates the proc_mesh using the stored proc_config."""
-        # TODO - for policy replica, we would override this method to
-        # include multiple proc_meshes
-        if self.proc_mesh is not None:
-            logger.warning(f"Proc mesh already initialized for replica {self.idx}")
-            return
-
-        logger.debug(f"Creating proc_mesh for replica {self.idx}")
-        try:
-            self.proc_mesh = await get_proc_mesh(process_config=self.proc_config)
-            logger.debug(f"Proc mesh created successfully for replica {self.idx}")
-        except Exception as e:
-            logger.error(f"Failed to create proc_mesh for replica {self.idx}: {e}")
-            self.state = ReplicaState.UNHEALTHY
-            raise
-
-    async def spawn_actor(self, actor_def, *actor_args, **actor_kwargs):
-        """
-        Spawn an actor on this replica's proc_mesh.
-
-        This method handles the complete actor spawning process including
-        recovery if the proc_mesh has failed.
-        """
-        if not self.proc_mesh:
-            raise RuntimeError(
-                f"Replica {self.idx}: proc_mesh is None after recovery attempt"
-            )
-
-        try:
-            # TODO - expand support so name can stick within kwargs
-            actor_name = actor_kwargs.pop("name", actor_def.__name__)
-
-            # Spawn the actor
-            self.actor = await self.proc_mesh.spawn(
-                actor_name,
-                actor_def,
-                *actor_args,
-                **actor_kwargs,
-            )
-            # Call actor setup if it exists
-            if setup_method := getattr(self.actor, "setup", None):
-                await setup_method.call()
-
-            logger.debug(f"Actor spawned successfully on replica {self.idx}")
-
-        except Exception as e:
-            logger.error(f"Failed to spawn actor on replica {self.idx}: {e}")
-            self.mark_failed()
-            raise
 
     # Request handling / processing related functionality
 
@@ -465,10 +397,10 @@ class Replica:
             len(failed_requests),
         )
 
-        # Stop the proc_mesh
-        if self.proc_mesh:
+        # Stop the actor
+        if self.actor:
             try:
-                await self.proc_mesh.stop()
+                await self.actor_def.shutdown(self.actor)
             except Exception as e:
                 logger.warning(
                     "Error stopping proc_mesh for replica %d: %s", self.idx, e
