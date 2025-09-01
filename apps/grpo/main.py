@@ -13,12 +13,7 @@ from typing import Callable
 import torch
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.actors.reference_actor import (
-    compute_sequence_logprobs,
-    HuggingFaceRefModel,
-    RefModel,
-    TitanRefModel,
-)
+from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service

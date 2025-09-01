@@ -310,7 +310,6 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    # fut.set_result(request_output.outputs)
                     fut.set_result(request_output)
 
     @endpoint
