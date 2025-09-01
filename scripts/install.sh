@@ -132,7 +132,7 @@ main() {
     pip install "$WHEEL_DIR"/*.whl
 
     log_info "Installing Forge from source..."
-    pip install .
+    pip install -e .
 
     # Set up environment
     log_info "Setting up environment..."
