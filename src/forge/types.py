@@ -99,7 +99,6 @@ class ProcessConfig:
     oncall: str = "torchtune"
     identity: str = "pytorch_distributed"
     image: str = "forge_workspace:latest"
-    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -120,7 +119,6 @@ class ServiceConfig:
     return_first_rank_result: bool = (
         True  # Whether or not to auto-unwrap ValueMesh to first rank's result
     )
-    env: dict[str, str] = field(default_factory=dict)
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.
@@ -134,7 +132,6 @@ class ServiceConfig:
             oncall=self.oncall,
             identity=self.identity,
             image=self.image,
-            env=self.env,
         )
 
 
