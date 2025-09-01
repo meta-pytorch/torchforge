@@ -48,6 +48,8 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SamplingOverrides:
@@ -340,7 +342,7 @@ class Policy(PolicyInterface):
     @endpoint
     async def update_weights(self, weights_handle: WeightsHandle):
         """Update the policy weights."""
-        self.logger.debug("Policy.update_weights() called")
+        logger.debug("Policy.update_weights() called")
         async with self.model_lock.write_lock():
             assert self.policy_version < weights_handle.version, (
                 "current policy version is not older than weights version to be updated\n"
@@ -446,36 +448,43 @@ class PolicyWorker(ForgeActor):
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
-        self.logger.debug(
+        logger.debug(
             f"Starting model update from torchstore with key: {self.state_dict_key}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        self.logger.debug(
-            f"Current state dict has {len(current_state_dict)} parameters"
-        )
+        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
 
         await self._load_tensor_parallel_state_dict(current_state_dict)
 
-        self.logger.debug("Successfully updated model weights from torchstore")
+        logger.debug("Successfully updated model weights from torchstore")
 
-    async def _update_simple(self, weights_handle: WeightsHandle):
-        """Update model weights by copying from state_dict passed in the weights_handle"""
-        self.logger.debug("Starting simple model update from weights handle")
-        names = weights_handle.data["param_names"]
-        params = await asyncio.gather(*[self.torchstore.get(name) for name in names])
-        self.worker.model_runner.model.load_weights(
-            {name: param for name, param in zip(names, params)}
-        )
+    async def _update_from_file(self, weights_handle: WeightsHandle):
+        """Update model weights by reading state dict from file"""
+        import safetensors.torch as safetensors
+
+        file_path = weights_handle.payload["model_path"]
+
+        self.logger.debug(f"Loading model weights from SafeTensors file: {file_path}")
+
+        state_dict = safetensors.load_file(file_path)
+
+        # Convert to the format expected by load_weights: Iterable[tuple[str, Tensor]]
+        new_weights = [(name, tensor) for name, tensor in state_dict.items()]
+
+        # Use the model's built-in load_weights method which handles tensor parallelism correctly and conversion
+        # from huggingface format to vllm format
+        model = self.worker.model_runner.model
+        model.load_weights(new_weights)
 
     @endpoint
     async def update(self, weights_handle: WeightsHandle):
-        self.logger.debug("PolicyWorker.update() called")
+        logger.debug("PolicyWorker.update() called")
         match weights_handle.handle_type:
-            case WeightsHandleType.SIMPLE:
-                await self._update_simple(weights_handle)
+            case WeightsHandleType.FILE:
+                await self._update_from_file(weights_handle)
             case WeightsHandleType.TORCH_STORE:
                 await self._update_torchstore()
             case _:

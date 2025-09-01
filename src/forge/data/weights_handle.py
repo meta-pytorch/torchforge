@@ -9,8 +9,9 @@ from typing import Any
 
 
 class WeightsHandleType(Enum):
-    SIMPLE = 1  # passing state_dict directly
+    SIMPLE = 1  # passing state_dict directly (is this going to work?)
     TORCH_STORE = 2  # using torchstore
+    FILE = 3  # using file system
 
 
 @dataclass
@@ -19,4 +20,4 @@ class WeightsHandle:
 
     handle_type: WeightsHandleType = field(default=WeightsHandleType.SIMPLE)
     version: int = field(default=0)
-    data: Any = field(default_factory=dict)
+    payload: Any = field(default_factory=dict)

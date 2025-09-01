@@ -6,11 +6,15 @@
 
 import asyncio
 import logging
+import tempfile
 import time
 from dataclasses import dataclass
 from typing import Callable
 
+import safetensors.torch as safetensors
 import torch
+
+from absl import app, flags
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.replay_buffer import ReplayBuffer
@@ -22,6 +26,24 @@ from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from torchstore import MultiProcessStore
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.models.granitemoehybrid.modeling_granitemoehybrid import (
+    apply_mask_to_padding_states,
+)
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_integer("batch_size", 8, "")
+flags.DEFINE_integer("update_period", 5, "")
+flags.DEFINE_integer("group_size", 16, "")
+flags.DEFINE_integer("max_policy_age", 10, "")
+
+
+def clean_up_temp_dir(temp_dir: str) -> None:
+    """Clean up temporary directory."""
+    import shutil
+
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -194,27 +216,49 @@ class Trainer(ForgeActor):
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    async def update_weights(self, policy_actor, step):
-        """Update policy model weights with trainer's current weights."""
+    async def export_weights(self, step: int) -> WeightsHandle:
+        """Export weights to a temp file and return the handle."""
         # Time how long it takes to update weights
         start_time = time.time()
 
         # Set model to eval mode for weight extraction
         self.model.eval()
 
-        store = policy_actor.torchstore
-        await asyncio.gather(
-            *[store.put(name, param) for name, param in self.model.named_parameters()]
-        )
-        # Update the policy actor's model weights
-        param_names = [name for name, _ in self.model.named_parameters()]
-        await policy_actor.update_model_weights.choose(
-            WeightsHandle(
-                WeightsHandleType=WeightsHandleType.SIMPLE,
-                data={"param_names": param_names},
-                version=step,
+        # Save weights to a memory-backed temporary directory using /dev/shm
+        import os
+
+        shm_path = "/dev/shm"
+        if os.path.exists(shm_path):
+            # Use shared memory filesystem for memory-backed storage
+            temp_dir = tempfile.mkdtemp(
+                prefix=f"model_weights_step_{step:08d}_", dir=shm_path
             )
-        )
+        else:
+            # Fallback to system temp if /dev/shm not available
+            temp_dir = tempfile.mkdtemp(prefix=f"model_weights_step_{step:08d}_")
+
+        try:
+            # Save weights directly to SafeTensors file
+            weights_file = os.path.join(temp_dir, "model_weights.safetensors")
+            state_dict = {name: param for name, param in self.model.named_parameters()}
+            safetensors.save_file(state_dict, weights_file)
+
+            # Create weights handle with the SafeTensors file path
+            param_names = list(state_dict.keys())
+            weights_handle = WeightsHandle(
+                handle_type=WeightsHandleType.FILE,
+                version=step,
+                payload={
+                    "param_names": param_names,
+                    "model_path": weights_file,
+                    "model_name": self.model_name,
+                },
+            )
+
+        except Exception as e:
+            # Clean up temporary directory if something goes wrong
+            clean_up_temp_dir(temp_dir)
+            raise e
 
         # Set model back to training mode
         self.model.train()
@@ -222,6 +266,7 @@ class Trainer(ForgeActor):
         # Log the time taken
         end_time = time.time()
         self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
+        return weights_handle
 
 
 class RewardActor(ForgeActor):
@@ -350,7 +395,7 @@ class DatasetActor(ForgeActor):
             return None
 
 
-async def main():
+async def _main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 16
     model = "Qwen/Qwen3-1.7B"
@@ -479,7 +524,7 @@ async def main():
 
     async def continuous_training():
         training_step = 0
-        update_period = 10
+        update_period = FLAGS.update_period
         # using training_step as the policy version for now, open to suggestions
         while True:
             batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
@@ -497,8 +542,11 @@ async def main():
                     logger.log("loss/training_step", loss_value, training_step)
                 if training_step % update_period == 0:
                     print(f"Exporting policy weights @ {training_step=}")
-                    await trainer.update_weights.choose(policy, training_step)
-                    print(f"Updated policy weights to version {training_step}")
+                    weights_handle = await trainer.export_weights.choose(training_step)
+                    print(f"Exported weights @ {training_step=}")
+                    await policy.update_weights.call(weights_handle)
+                    print(f"Updated policy weights to version @ {training_step=}")
+                    clean_up_temp_dir(weights_handle.payload["model_path"])
 
     print("Starting GRPO training loops...")
 
@@ -524,5 +572,9 @@ async def main():
         )
 
 
+def main(argv):
+    asyncio.run(_main())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    app.run(main)
