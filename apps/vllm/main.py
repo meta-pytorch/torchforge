@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """To run:
-
+export HF_HUB_DISABLE_XET=1
 python -m apps.vllm.main --guided-decoding --num-samples 3
 
 """
