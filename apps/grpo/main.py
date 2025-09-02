@@ -136,6 +136,7 @@ class Trainer(ForgeActor):
     epsilon: float = 0.1
     device: torch.device | None = None
 
+    @endpoint
     def setup(self):
         # Set device
         if self.device is None:
@@ -255,7 +256,7 @@ class ComputeAdvantages(ForgeActor):
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
-        advantages = (rewards - rewards.me / an(1, keepdim=True)) / (
+        advantages = (rewards - rewards.mean(1, keepdim=True)) / (
             rewards.std(1, keepdim=True) + 1e-4
         )
         return advantages.squeeze(0)
