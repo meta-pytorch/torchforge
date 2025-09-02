@@ -194,12 +194,6 @@ EOF
 
     echo ""
     log_info "Installation completed successfully!"
-    log_info ""
-    log_info "To use the environment:"
-    log_info "  conda activate $CONDA_DEFAULT_ENV"
-    log_info ""
-    log_info "Or add to your ~/.bashrc:"
-    log_info "  echo 'source ~/.forge_cuda_env' >> ~/.bashrc"
 }
 
 main "$@"
