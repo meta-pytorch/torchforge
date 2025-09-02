@@ -35,6 +35,7 @@ try:
 
     MAST_SUPPORTED = True
 except ImportError:
+    # Not built with Meta internal
     pass
 
 

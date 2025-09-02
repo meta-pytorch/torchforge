@@ -187,3 +187,5 @@ cover/
 
 # wandb
 wandb/
+
+assets/wheels/vllm*.whl

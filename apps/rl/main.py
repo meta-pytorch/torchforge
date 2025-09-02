@@ -20,7 +20,6 @@ from forge.cli.config import parse
 from forge.controller import spawn_actors
 from omegaconf import DictConfig
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

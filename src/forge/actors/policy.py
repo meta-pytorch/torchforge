@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -36,12 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -101,11 +101,13 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    store: MultiProcessStore | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
+        self.weights_version: int = 0
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -113,6 +115,7 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
+        store: MultiProcessStore | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -132,7 +135,11 @@ class Policy(PolicyInterface):
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         policy = await policy_proc.spawn(
-            actor_name, cls, config=config, policy_worker=workers
+            actor_name,
+            cls,
+            config=config,
+            policy_worker=workers,
+            store=store,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -160,7 +167,7 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call()
+        await self.policy_worker.setup.call(store=self.store)
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
@@ -310,12 +317,24 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output.outputs)
+                    fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self) -> int:
         """Update the policy weights."""
-        pass
+        # Wait for all current requests to finish, then publish model weights
+        futures = [fut for _, fut in self.requests.values()]
+        if futures:
+            await asyncio.gather(*futures)
+        new_version = self.weights_version + 1
+        await self.policy_worker.update.call(version=new_version)
+        self.weights_version = new_version
+        return self.weights_version
+
+    @endpoint
+    async def get_version(self) -> int:
+        """Get the current policy version."""
+        return self.weights_version
 
     @endpoint
     async def stop(self):
@@ -383,7 +402,9 @@ class PolicyWorker(ForgeActor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+    async def _load_tensor_parallel_state_dict(
+        self, current_state_dict: dict, version: int
+    ):
         """
         Load full state dict from torchstore into tensor parallel model with deterministic sharding.
         """
@@ -398,7 +419,7 @@ class PolicyWorker(ForgeActor):
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
             stored_tensor = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{param_name}"
+                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
                 param_name,
@@ -409,23 +430,19 @@ class PolicyWorker(ForgeActor):
             updated_count += 1
 
     @endpoint
-    async def update(self):
+    async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
         logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}"
+            f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
-
-        await self._load_tensor_parallel_state_dict(current_state_dict)
-
+        await self._load_tensor_parallel_state_dict(current_state_dict, version)
         logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint
