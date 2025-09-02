@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+
+from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
@@ -30,10 +32,58 @@ from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.controller import ForgeActor
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+# Based on torchtune's grpo
+# Will updated to match the definition in grpo/main.py after
+# https://github.com/meta-pytorch/forge/pull/97 lands
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    context_length = logits.shape[1] - input_ids.shape[1]
+
+    # Truncate request logits and drop last
+    logits = logits[:, context_length - 1 : -1]
+
+    # Compute logprobs
+    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+    return logprobs
+
+
+# Maintained to keep Old GRPO app prior to full migration off of HF
+def compute_sequence_logprobs(
+    model: torch.nn.Module,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    requires_grad: bool = True,
+) -> torch.Tensor:
+    context_manager = torch.enable_grad() if requires_grad else torch.no_grad()
+
+    with context_manager:
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        logits = outputs.logits
+
+        # Apply log softmax to get log probabilities
+        log_probs = torch.log_softmax(logits, dim=-1)
+
+        # Extract log probabilities for the actual tokens (excluding the first token for next-token prediction)
+        shifted_input_ids = input_ids[:, 1:]  # Remove first token
+        shifted_log_probs = log_probs[:, :-1, :]  # Remove last logit
+
+        # Gather log probabilities for actual tokens
+        token_log_probs = torch.gather(
+            shifted_log_probs, dim=-1, index=shifted_input_ids.unsqueeze(-1)
+        ).squeeze(-1)
+
+        # Sum log probabilities across sequence (masked by attention)
+        shifted_attention_mask = attention_mask[:, 1:]
+        sequence_log_probs = (token_log_probs * shifted_attention_mask).sum(dim=-1)
+
+        return sequence_log_probs
 
 
 @dataclass
