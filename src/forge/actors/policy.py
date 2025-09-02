@@ -61,7 +61,7 @@ class SamplingOverrides:
         guided_decoding: Whether to use guided decoding.
     """
 
-    num_samples: int
+    num_samples: int = 1
     guided_decoding: bool = False
     max_tokens: int = 512
 
@@ -79,18 +79,34 @@ class WorkerConfig:
         vllm_args: vLLM engine args.
     """
 
-    model: str
+    model: str = "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
-    vllm_args: EngineArgs = None
+    vllm_args: EngineArgs = field(default_factory=EngineArgs)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        d = dict(d)  # copy
+        if "vllm_args" in d and isinstance(d["vllm_args"], dict):
+            d["vllm_args"] = EngineArgs(**d["vllm_args"])
+        return cls(**d)
 
 
 @dataclass
 class PolicyConfig:
-    worker_params: WorkerConfig
-    sampling_params: SamplingOverrides
+    worker_params: WorkerConfig = field(default_factory=WorkerConfig)
+    sampling_params: SamplingOverrides = field(default_factory=SamplingOverrides)
     available_devices: str = None
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        d = dict(d)
+        if "worker_params" in d and isinstance(d["worker_params"], dict):
+            d["worker_params"] = WorkerConfig.from_dict(d["worker_params"])
+        if "sampling_params" in d and isinstance(d["sampling_params"], dict):
+            d["sampling_params"] = SamplingOverrides(**d["sampling_params"])
+        return cls(**d)
 
 
 @dataclass
@@ -108,6 +124,8 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
+        if isinstance(self.config, dict):
+            self.config = PolicyConfig.from_dict(self.config)
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]

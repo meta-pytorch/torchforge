@@ -6,81 +6,34 @@
 
 """To run:
 export HF_HUB_DISABLE_XET=1
-python -m apps.vllm.main --guided-decoding --num-samples 3
-
+python -m apps.vllm.main --config apps/vllm/config.yaml
 """
 
-import argparse
 import asyncio
-from argparse import Namespace
-from typing import List
+import sys
+from typing import Any
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+import yaml
+
+from forge.actors.policy import Policy, PolicyConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
-from vllm.outputs import CompletionOutput
 
 
-async def main():
-    """Main application for running vLLM policy inference."""
-    args = parse_args()
+def load_yaml_config(path: str) -> dict:
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
-    # Create configuration objects
-    policy_config, service_config = get_configs(args)
 
-    # Resolve the Prompts
-    if args.prompt is None:
-        prompt = "What is 3+5?" if args.guided_decoding else "Tell me a joke"
+def get_configs(cfg: dict) -> tuple[PolicyConfig, ServiceConfig, str]:
+    # Instantiate PolicyConfig and ServiceConfig from nested dicts
+    policy_config = PolicyConfig.from_dict(cfg["policy_config"])
+    service_config = ServiceConfig(**cfg["service_config"])
+    if "prompt" in cfg and cfg["prompt"] is not None:
+        prompt = cfg["prompt"]
     else:
-        prompt = args.prompt
-
-    # Run the policy
-    await run_vllm(service_config, policy_config, prompt)
-
-
-def parse_args() -> Namespace:
-    parser = argparse.ArgumentParser(description="VLLM Policy Inference Application")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="meta-llama/Llama-3.1-8B-Instruct",
-        help="Model to use",
-    )
-    parser.add_argument(
-        "--num-samples", type=int, default=2, help="Number of samples to generate"
-    )
-    parser.add_argument(
-        "--guided-decoding", action="store_true", help="Enable guided decoding"
-    )
-    parser.add_argument(
-        "--prompt", type=str, default=None, help="Custom prompt to use for generation"
-    )
-    return parser.parse_args()
-
-
-def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
-
-    worker_size = 2
-    worker_params = WorkerConfig(
-        model=args.model,
-        tensor_parallel_size=worker_size,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        vllm_args=None,
-    )
-
-    sampling_params = SamplingOverrides(
-        num_samples=args.num_samples,
-        guided_decoding=args.guided_decoding,
-    )
-
-    policy_config = PolicyConfig(
-        worker_params=worker_params, sampling_params=sampling_params
-    )
-    service_config = ServiceConfig(
-        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
-    )
-
-    return policy_config, service_config
+        gd = policy_config.sampling_params.guided_decoding
+        prompt = "What is 3+5?" if gd else "Tell me a joke"
+    return policy_config, service_config, prompt
 
 
 async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
@@ -89,11 +42,11 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
 
     async with policy.session():
         print("Requesting generation...")
-        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+        response_output = await policy.generate.choose(prompt=prompt)
 
         print("\nGeneration Results:")
         print("=" * 80)
-        for batch, response in enumerate(responses):
+        for batch, response in enumerate(response_output.outputs):
             print(f"Sample {batch + 1}:")
             print(f"User: {prompt}")
             print(f"Assistant: {response.text}")
@@ -104,5 +57,19 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
     await shutdown_service(policy)
 
 
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="vLLM Policy Inference Application")
+    parser.add_argument(
+        "--config", type=str, required=True, help="Path to YAML config file"
+    )
+    args = parser.parse_args()
+
+    cfg = load_yaml_config(args.config)
+    policy_config, service_config, prompt = get_configs(cfg)
+    asyncio.run(run_vllm(service_config, policy_config, prompt))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())

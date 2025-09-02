@@ -1,0 +1,19 @@
+policy_config:
+  worker_params:
+    model: "meta-llama/Llama-3.1-8B-Instruct"
+    tensor_parallel_size: 2
+    pipeline_parallel_size: 1
+    enforce_eager: true
+    vllm_args: null
+  sampling_params:
+    num_samples: 2
+    guided_decoding: false
+  available_devices: null
+
+service_config:
+  procs_per_replica: 2
+  num_replicas: 1
+  with_gpus: true
+
+# Optional, otherwise argparse fallback kicks in
+prompt: "Tell me a joke"
