@@ -122,6 +122,9 @@ main() {
     check_sudo
     check_wheels
 
+    # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
+    conda install -y openssl
+
     install_system_packages
     download_vllm_wheel
 
@@ -159,7 +162,7 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
 export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
 EOF
 
