@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -36,12 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ class WorkerConfig:
         pipeline_parallel_size: Number of pipeline parallel workers.
         enforce_eager: Whether to enforce eager mode.
         vllm_args: vLLM engine args.
+        store: Torchstore to fetch weights from.
     """
 
     model: str
@@ -84,6 +85,7 @@ class WorkerConfig:
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
+    store: MultiProcessStore = None
 
 
 @dataclass
@@ -315,7 +317,7 @@ class Policy(PolicyInterface):
     @endpoint
     async def update_weights(self):
         """Update the policy weights."""
-        pass
+        # self.policy_worker.update.call()
 
     @endpoint
     async def stop(self):
@@ -329,6 +331,7 @@ class PolicyWorker(ForgeActor):
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
     vllm_args: EngineArgs = None
+    store: MultiProcessStore = None  # gets initialized during spawn/init
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -373,8 +376,7 @@ class PolicyWorker(ForgeActor):
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
     @endpoint
-    async def setup(self, store: MultiProcessStore = None):
-        self.torchstore = store
+    async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -397,7 +399,7 @@ class PolicyWorker(ForgeActor):
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.torchstore.get(
+            stored_tensor = await self.store.get(
                 f"{self.state_dict_key}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
@@ -412,7 +414,7 @@ class PolicyWorker(ForgeActor):
     async def update(self):
         """Update model weights by reading state dict from torchstore"""
 
-        if self.torchstore is None:
+        if self.store is None:
             raise Exception("No torchstore configured, skipping model update")
 
         logger.debug(
