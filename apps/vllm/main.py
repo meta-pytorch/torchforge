@@ -18,6 +18,7 @@ from typing import List
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from vllm.outputs import CompletionOutput, RequestOutput
+from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
 async def main():
