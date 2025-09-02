@@ -9,11 +9,11 @@ import logging
 import os
 import sys
 from copy import copy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -25,7 +25,7 @@ from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
+from vllm.utils import get_distributed_init_method
 from vllm.v1.core.kv_cache_utils import get_kv_cache_config
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
@@ -37,8 +37,11 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -92,7 +95,6 @@ class WorkerConfig:
 
 @dataclass
 class PolicyConfig:
-    num_workers: int
     worker_params: WorkerConfig
     sampling_params: SamplingOverrides
     available_devices: str = None
@@ -102,24 +104,80 @@ class PolicyConfig:
 class Policy(PolicyInterface):
     config: PolicyConfig
     # Gets set up by setup
-    policy_worker: Actor = None
+    sampling_params: SamplingParams | None = None
+    lora_request: LoRARequest | None = None
+    tokenization_kwargs: dict = field(default_factory=dict)
+    policy_worker: "PolicyWorker" = None
+    store: MultiProcessStore | None = None
 
-    sampling_params: SamplingParams = None
-    lora_request: LoRARequest = None
-    tokenization_kwargs: dict = None
+    def __post_init__(self):
+        self._run_task: asyncio.Task | None = None
+        self._policy_proc: ProcMesh | None = None
+        self._worker_procs: ProcMesh | None = None
+        self.weights_version: int = 0
+
+    @classmethod
+    async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"],
+        *,
+        process_config: ProcessConfig,
+        config: PolicyConfig,
+        store: MultiProcessStore | None = None,
+        **kwargs,
+    ) -> "Policy":
+        # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
+        # automatically.
+        worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # TODO - we will want to ensure colocation with workers
+        policy_proc_config = copy(process_config)
+        policy_proc_config.num_procs = 1
+        policy_proc_config.with_gpus = False
+
+        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+        workers = await worker_procs.spawn(
+            "vllm_worker", PolicyWorker, **asdict(config.worker_params)
+        )
+
+        # TODO - expand support so name can stick within kwargs
+        actor_name = kwargs.pop("name", cls.__name__)
+        policy = await policy_proc.spawn(
+            actor_name,
+            cls,
+            config=config,
+            policy_worker=workers,
+            store=store,
+        )
+        policy._policy_proc = policy_proc
+        policy._worker_procs = worker_procs
+        await policy.setup.call()
+        return policy
+
+    @classmethod
+    async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"], actor: "Policy"
+    ):
+        assert (
+            actor._policy_proc is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+        assert (
+            actor._worker_procs is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+
+        # TODO - may want to expand stop to gracefully respond to
+        # ongoing requests.
+        await actor.stop.call()
+        await stop_proc_mesh(actor._worker_procs)
+        await stop_proc_mesh(actor._policy_proc)
 
     @endpoint
     async def setup(self):
         # Set up policy_worker
-        self.available_devices = (
-            self.config.available_devices
-            if self.config.available_devices is not None
-            else ",".join(str(i) for i in range(torch.cuda.device_count()))
-        )
-        await self.spawn_workers()
+        assert self.policy_worker is not None, "Policy worker should not be None"
+        await self.policy_worker.setup.call(store=self.store)
 
         self.request_id = 0
-        self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
@@ -155,20 +213,12 @@ class Policy(PolicyInterface):
             include_finished_set=False,
             log_stats=None,
         )
+        self.start_processing()
 
-    async def spawn_workers(self):
-        self.worker_mesh = await proc_mesh(
-            gpus=self.config.num_workers,
-            env={
-                "MASTER_ADDR": str(get_loopback_ip()),
-                "MASTER_PORT": str(get_open_port()),
-                "CUDA_VISIBLE_DEVICES": self.available_devices,
-            },
-        )
-        self.policy_worker = await self.worker_mesh.spawn(
-            "policy_worker", PolicyWorker, **asdict(self.config.worker_params)
-        )
-        await self.policy_worker.setup.call()
+    def start_processing(self):
+        """Start the replica's processing loop if not already running."""
+        if self._run_task is None or self._run_task.done():
+            self._run_task = asyncio.create_task(self.run())
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
@@ -243,8 +293,7 @@ class Policy(PolicyInterface):
 
         return request, 0  # Unused Arg: Current Wave
 
-    @endpoint
-    async def run_processing(self):
+    async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
         parallel_config = self.vllm_args.parallel_config
@@ -271,17 +320,29 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self) -> int:
         """Update the policy weights."""
-        pass
+        # Wait for all current requests to finish, then publish model weights
+        futures = [fut for _, fut in self.requests.values()]
+        if futures:
+            await asyncio.gather(*futures)
+        new_version = self.weights_version + 1
+        await self.policy_worker.update.call(version=new_version)
+        self.weights_version = new_version
+        return self.weights_version
 
     @endpoint
-    async def shutdown(self):
+    async def get_version(self) -> int:
+        """Get the current policy version."""
+        return self.weights_version
+
+    @endpoint
+    async def stop(self):
         self.running = False
 
 
 @dataclass
-class PolicyWorker(Actor):
+class PolicyWorker(ForgeActor):
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
@@ -341,7 +402,9 @@ class PolicyWorker(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+    async def _load_tensor_parallel_state_dict(
+        self, current_state_dict: dict, version: int
+    ):
         """
         Load full state dict from torchstore into tensor parallel model with deterministic sharding.
         """
@@ -356,7 +419,7 @@ class PolicyWorker(Actor):
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
             stored_tensor = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{param_name}"
+                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
                 param_name,
@@ -367,23 +430,19 @@ class PolicyWorker(Actor):
             updated_count += 1
 
     @endpoint
-    async def update(self):
+    async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
         logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}"
+            f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
-
-        await self._load_tensor_parallel_state_dict(current_state_dict)
-
+        await self._load_tensor_parallel_state_dict(current_state_dict, version)
         logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint

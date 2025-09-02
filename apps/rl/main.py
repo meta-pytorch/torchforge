@@ -20,7 +20,6 @@ from forge.cli.config import parse
 from forge.controller import spawn_actors
 from omegaconf import DictConfig
 
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -30,7 +29,7 @@ async def run(cfg: DictConfig):
         spawn_actors(
             name="trainer",
             actor_cls=RLTrainer,
-            cfg={"config": cfg.trainer},
+            cfg=cfg.trainer,
             processes=cfg.trainer.pop("processes"),
             set_address=True,
         ),
