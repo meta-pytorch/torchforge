@@ -226,7 +226,7 @@ class Policy(PolicyInterface):
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
-        prompt: Dict[str, str] = convert_input(prompt_token_ids=prompt)
+        prompt: Dict[str, str] = convert_input(prompt=prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}

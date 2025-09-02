@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-import copy
 import logging
 import time
 import uuid
@@ -118,14 +117,16 @@ class Group:
     ):
         episodes = []
         for i in range(group_size):
-            Episode(
-                episode_id=str(uuid.uuid4()),
-                request=copy.deepcopy(messages),
-                policy_version=policy_version,
-                pad_id=pad_iddd,
-                request_len=request_len,
-                response_len=response_len,
-                target=target,
+            episodes.append(
+                Episode(
+                    episode_id=str(uuid.uuid4()),
+                    request=request,
+                    policy_version=policy_version,
+                    pad_id=pad_id,
+                    request_len=request_len,
+                    response_len=response_len,
+                    target=target,
+                )
             )
         return cls(group_id, episodes)
 
@@ -148,7 +149,7 @@ class Trainer(ForgeActor):
 
         # Initialize model
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            self.model_name,
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
@@ -313,7 +314,7 @@ class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
     path: str
-    name: str
+    revision: str
     data_split: str
     streaming: bool
     model: str
@@ -334,7 +335,7 @@ class DatasetActor(ForgeActor):
             return {"request": formatted_request, "target": formatted_target}
 
         ds = load_dataset(
-            self.path, self.name, split=self.data_split, streaming=self.streaming
+            self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
         ds = ds.map(gsm8k_transform)
         ds = ds.shuffle()
@@ -382,7 +383,7 @@ async def main():
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             DatasetActor,
             path="openai/gsm8k",
-            name="main",
+            revision="main",
             data_split="train",
             streaming=True,
             model=model,
@@ -416,7 +417,7 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
             RefModel,
-            model=titan_model,
+            model_name=model,
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
