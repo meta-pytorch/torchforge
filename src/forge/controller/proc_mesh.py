@@ -35,9 +35,8 @@ try:
 
     MAST_SUPPORTED = True
 except ImportError:
-    logger.warning(
-        "MAST is not supported on this platform. You can ignore this if you do not work at Meta."
-    )
+    # Not built with Meta internal
+    pass
 
 
 async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:

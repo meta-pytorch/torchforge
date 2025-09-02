@@ -6,6 +6,34 @@
 
 ## Installation
 
+### Basic
+
+Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. For convenience,
+we have pre-packaged these dependencies as wheels in assets/wheels.
+
+To install Forge easily:
+
+```bash
+conda create -n forge python=3.10
+./scripts/install.sh
+```
+
+You can test with
+```
+python -m apps.grpo.main
+```
+
+If you need to re-build the wheels for whatever reason, you can do so with:
+```bash
+conda create -n forge python=3.10
+./scripts/build_wheels.sh
+```
+
+Since the vLLM wheel is too large for GitHub, we uploaded it as a release:
+```
+$ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
+```
+
 ### Basic (Broken)
 
 ```bash
