@@ -13,7 +13,6 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
-    "torchao",
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
@@ -22,6 +21,7 @@ dependencies = [
     "tokenizers",
     # Miscellaneous
     "omegaconf",
+    "wandb",
 ]
 dynamic = ["version"]
 
