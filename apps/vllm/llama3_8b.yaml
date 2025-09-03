@@ -4,8 +4,7 @@ policy:
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: true
-    vllm_args:
-      model: "meta-llama/Llama-3.1-8B-Instruct"
+    vllm_args: null
   sampling_params:
     num_samples: 2
     guided_decoding: false

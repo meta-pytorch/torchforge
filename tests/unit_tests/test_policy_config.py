@@ -124,7 +124,7 @@ class TestPolicyConfig(unittest.TestCase):
 
         # The invalid vllm_args gets removed and default EngineArgs is used
         self.assertEqual(worker_config.model, "meta-llama/Llama-3.1-8B-Instruct")
-        self.assertEqual(worker_config.vllm_args, None)
+        self.assertIsInstance(worker_config.vllm_args, EngineArgs)
 
 
 if __name__ == "__main__":

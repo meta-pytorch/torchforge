@@ -274,10 +274,8 @@ class DatasetActor(ForgeActor):
 async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
-    # model = "Qwen/Qwen3-0.6B"
-    # titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
-    model = "meta-llama/Llama-3.1-8B-Instruct"
-    titan_model = TitanJobModelConfig(name="llama3", flavor="8B")
+    model = "Qwen/Qwen3-0.6B"
+    titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -309,8 +307,6 @@ async def main():
             Policy,
             worker_params=WorkerConfig(model=model),
             sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
-            # worker_params={"model": model, "vllm_args": {"model": model}},
-            # sampling_params={"num_samples": group_size, "max_tokens": 16},
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),

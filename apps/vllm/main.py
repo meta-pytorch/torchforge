@@ -6,7 +6,7 @@
 
 """To run:
 export HF_HUB_DISABLE_XET=1
-python -m apps.vllm.main --config apps/vllm/config.yaml
+python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
 """
 
 import asyncio

@@ -92,6 +92,8 @@ class WorkerConfig:
         d = dict(d)
         if "vllm_args" in d and isinstance(d["vllm_args"], dict):
             d["vllm_args"] = EngineArgs(**d["vllm_args"])
+        else:
+            d["vllm_args"] = EngineArgs()
         return cls(**d)
 
 
@@ -141,20 +143,12 @@ class Policy(PolicyInterface):
 
         if isinstance(worker_params, (dict, DictConfig)):
             worker_params = WorkerConfig.from_dict(worker_params)
-        worker_dict = asdict(worker_params)
-        worker_dict["vllm_args"] = worker_params.vllm_args
-        # if isinstance(worker_dict["vllm_args"], dict):
-        #     # if isinstance(worker_dict["vllm_args"].get("compilation_config"), dict):
-        #     #     worker_dict["vllm_args"]["compilation_config"] = json.dumps(
-        #     #         worker_dict["vllm_args"]["compilation_config"]
-        #     #     )
-        #     worker_dict["vllm_args"] = EngineArgs(**worker_dict["vllm_args"])
 
-        # print("DEBUG worker_params", worker_params)
-
-        # print("DEBUG worker_params.vllm_args", worker_params.vllm_args)
         if isinstance(worker_params, (dict, DictConfig)):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
+
+        worker_dict = asdict(worker_params)
+        worker_dict["vllm_args"] = worker_params.vllm_args
 
         workers = await worker_procs.spawn("vllm_worker", PolicyWorker, **worker_dict)
 
