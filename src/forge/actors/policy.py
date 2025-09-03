@@ -20,6 +20,7 @@ from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
+from omegaconf import DictConfig
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -90,28 +91,16 @@ class WorkerConfig:
         d = dict(d)  # copy
         if "vllm_args" in d and isinstance(d["vllm_args"], dict):
             d["vllm_args"] = EngineArgs(**d["vllm_args"])
-        return cls(**d)
-
-
-@dataclass
-class PolicyConfig:
-    worker_params: WorkerConfig = field(default_factory=WorkerConfig)
-    sampling_params: SamplingOverrides = field(default_factory=SamplingOverrides)
-    available_devices: str = None
-
-    @classmethod
-    def from_dict(cls, d: dict):
-        d = dict(d)
-        if "worker_params" in d and isinstance(d["worker_params"], dict):
-            d["worker_params"] = WorkerConfig.from_dict(d["worker_params"])
-        if "sampling_params" in d and isinstance(d["sampling_params"], dict):
-            d["sampling_params"] = SamplingOverrides(**d["sampling_params"])
+        else:
+            d["vllm_args"] = None
         return cls(**d)
 
 
 @dataclass
 class Policy(PolicyInterface):
-    config: PolicyConfig
+    worker_params: WorkerConfig = field(default_factory=WorkerConfig)
+    sampling_overrides: SamplingOverrides = field(default_factory=SamplingOverrides)
+    available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
@@ -124,15 +113,19 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        if isinstance(self.config, dict):
-            self.config = PolicyConfig.from_dict(self.config)
+        if isinstance(self.worker_params, dict):
+            self.worker_params = WorkerConfig.from_dict(self.worker_params)
+        if isinstance(self.sampling_overrides, dict):
+            self.sampling_overrides = SamplingOverrides(**self.sampling_overrides)
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
         process_config: ProcessConfig,
-        config: PolicyConfig,
+        worker_params: WorkerConfig | dict = WorkerConfig(),
+        sampling_overrides: SamplingOverrides | dict = SamplingOverrides(),
+        available_devices: str | None = None,
         store: MultiProcessStore | None = None,
         **kwargs,
     ) -> "Policy":
@@ -146,8 +139,15 @@ class Policy(PolicyInterface):
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+
+        if isinstance(worker_params, (dict, DictConfig)):
+            worker_params = WorkerConfig.from_dict(worker_params)
+
+        if isinstance(worker_params, (dict, DictConfig)):
+            sampling_overrides = SamplingOverrides(**sampling_overrides)
+
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, **asdict(config.worker_params)
+            "vllm_worker", PolicyWorker, **asdict(worker_params)
         )
 
         # TODO - expand support so name can stick within kwargs
@@ -155,7 +155,9 @@ class Policy(PolicyInterface):
         policy = await policy_proc.spawn(
             actor_name,
             cls,
-            config=config,
+            worker_params=worker_params,
+            sampling_overrides=sampling_overrides,
+            available_devices=available_devices,
             policy_worker=workers,
             store=store,
         )
@@ -192,7 +194,7 @@ class Policy(PolicyInterface):
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
-        sampling_overrides = self.config.sampling_params
+        sampling_overrides = self.sampling_overrides
         overrides = {
             "n": sampling_overrides.num_samples,
             "guided_decoding": (

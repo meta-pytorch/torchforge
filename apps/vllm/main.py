@@ -11,38 +11,31 @@ python -m apps.vllm.main --config apps/vllm/config.yaml
 
 import asyncio
 import sys
-from typing import Any
 
-import yaml
-
-from forge.actors.policy import Policy, PolicyConfig
+from forge.actors.policy import Policy
+from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from omegaconf import DictConfig
+from vllm.outputs import RequestOutput
 
 
-def load_yaml_config(path: str) -> dict:
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+async def run(cfg: DictConfig):
 
-
-def get_configs(cfg: dict) -> tuple[PolicyConfig, ServiceConfig, str]:
-    # Instantiate PolicyConfig and ServiceConfig from nested dicts
-    policy_config = PolicyConfig.from_dict(cfg["policy_config"])
-    service_config = ServiceConfig(**cfg["service_config"])
     if "prompt" in cfg and cfg["prompt"] is not None:
         prompt = cfg["prompt"]
     else:
-        gd = policy_config.sampling_params.guided_decoding
+        gd = cfg.policy.get("sampling_params", {}).get("guided_decoding", False)
         prompt = "What is 3+5?" if gd else "Tell me a joke"
-    return policy_config, service_config, prompt
 
-
-async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
     print("Spawning service...")
-    policy = await spawn_service(service_config, Policy, config=config)
+
+    policy = await spawn_service(
+        ServiceConfig(**cfg.service_config), Policy, **cfg.policy
+    )
 
     async with policy.session():
         print("Requesting generation...")
-        response_output = await policy.generate.choose(prompt=prompt)
+        response_output: RequestOutput = await policy.generate.choose(prompt=prompt)
 
         print("\nGeneration Results:")
         print("=" * 80)
@@ -57,19 +50,10 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
     await shutdown_service(policy)
 
 
-def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="vLLM Policy Inference Application")
-    parser.add_argument(
-        "--config", type=str, required=True, help="Path to YAML config file"
-    )
-    args = parser.parse_args()
-
-    cfg = load_yaml_config(args.config)
-    policy_config, service_config, prompt = get_configs(cfg)
-    asyncio.run(run_vllm(service_config, policy_config, prompt))
+@parse
+def recipe_main(cfg: DictConfig) -> None:
+    asyncio.run(run(cfg))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(recipe_main())
