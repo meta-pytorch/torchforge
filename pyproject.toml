@@ -23,6 +23,7 @@ dependencies = [
     "omegaconf",
     "wandb",
     "torchstore"
+]
 dynamic = ["version"]
 
 [project.urls]
