@@ -274,10 +274,10 @@ class DatasetActor(ForgeActor):
 async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 1
-    model = "Qwen/Qwen3-0.6B"
-    titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
-    # model = "meta-llama/Llama-3.1-8B-Instruct"
-    # titan_model = TitanJobModelConfig(name="llama3", flavor="8B")
+    # model = "Qwen/Qwen3-0.6B"
+    # titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
+    model = "meta-llama/Llama-3.1-8B-Instruct"
+    titan_model = TitanJobModelConfig(name="llama3", flavor="8B")
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
