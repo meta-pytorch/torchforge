@@ -22,7 +22,6 @@ dependencies = [
     # Miscellaneous
     "omegaconf",
     "wandb",
-    "torchstore"
 ]
 dynamic = ["version"]
 
