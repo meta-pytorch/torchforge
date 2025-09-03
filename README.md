@@ -27,8 +27,6 @@ python -m apps.grpo.main
 
 If you need to re-build the wheels for whatever reason, you can do so with:
 ```bash
-conda create -n forge python=3.10
-conda activate forge
 ./scripts/build_wheels.sh
 ```
 
