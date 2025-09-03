@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List
@@ -88,11 +89,9 @@ class WorkerConfig:
 
     @classmethod
     def from_dict(cls, d: dict):
-        d = dict(d)  # copy
+        d = dict(d)
         if "vllm_args" in d and isinstance(d["vllm_args"], dict):
             d["vllm_args"] = EngineArgs(**d["vllm_args"])
-        else:
-            d["vllm_args"] = None
         return cls(**d)
 
 
@@ -113,7 +112,7 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        if isinstance(self.worker_params, dict):
+        if isinstance(self.worker_params, Mapping):
             self.worker_params = WorkerConfig.from_dict(self.worker_params)
         if isinstance(self.sampling_overrides, dict):
             self.sampling_overrides = SamplingOverrides(**self.sampling_overrides)
@@ -142,13 +141,22 @@ class Policy(PolicyInterface):
 
         if isinstance(worker_params, (dict, DictConfig)):
             worker_params = WorkerConfig.from_dict(worker_params)
+        worker_dict = asdict(worker_params)
+        worker_dict["vllm_args"] = worker_params.vllm_args
+        # if isinstance(worker_dict["vllm_args"], dict):
+        #     # if isinstance(worker_dict["vllm_args"].get("compilation_config"), dict):
+        #     #     worker_dict["vllm_args"]["compilation_config"] = json.dumps(
+        #     #         worker_dict["vllm_args"]["compilation_config"]
+        #     #     )
+        #     worker_dict["vllm_args"] = EngineArgs(**worker_dict["vllm_args"])
 
+        # print("DEBUG worker_params", worker_params)
+
+        # print("DEBUG worker_params.vllm_args", worker_params.vllm_args)
         if isinstance(worker_params, (dict, DictConfig)):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
 
-        workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, **asdict(worker_params)
-        )
+        workers = await worker_procs.spawn("vllm_worker", PolicyWorker, **worker_dict)
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)

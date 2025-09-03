@@ -12,7 +12,7 @@ from typing import Callable
 
 import torch
 from datasets import load_dataset
-from forge.actors.policy import Policy
+from forge.actors.policy import Policy, SamplingOverrides, WorkerConfig
 from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
@@ -276,6 +276,8 @@ async def main():
     group_size = 1
     model = "Qwen/Qwen3-0.6B"
     titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
+    # model = "meta-llama/Llama-3.1-8B-Instruct"
+    # titan_model = TitanJobModelConfig(name="llama3", flavor="8B")
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -305,8 +307,10 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
-            worker_params={"model": model, "vllm_args": None},
-            sampling_params={"num_samples": group_size, "max_tokens": 16},
+            worker_params=WorkerConfig(model=model),
+            sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
+            # worker_params={"model": model, "vllm_args": {"model": model}},
+            # sampling_params={"num_samples": group_size, "max_tokens": 16},
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
