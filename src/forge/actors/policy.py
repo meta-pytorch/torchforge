@@ -399,8 +399,6 @@ class PolicyWorker(ForgeActor):
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
             )
-            # Original method returns False when not run in the main thread
-            self.vllm_args._is_v1_supported_oracle = lambda *_: True
         else:
             # Check that provided args match Policy args
             cfg = [
@@ -416,6 +414,8 @@ class PolicyWorker(ForgeActor):
                         f"{key} args don't match value in EngineArgs, overriding with {value}"
                     )
                     setattr(self.vllm_args, key, value)
+        # Original method returns False when not run in the main thread
+        self.vllm_args._is_v1_supported_oracle = lambda *_: True
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
