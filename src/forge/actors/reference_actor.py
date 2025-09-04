@@ -17,8 +17,6 @@ from dataclasses import dataclass, field, fields
 from typing import Any
 
 import torch
-
-from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -29,6 +27,8 @@ from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from transformers import AutoModelForCausalLM
+
+from forge.controller import ForgeActor
 
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class TitanRefModel(ForgeActor):
     async def forward(self, request: list[int], response: list[int]) -> torch.Tensor:
         """
         Given a request and response tokens, return the log_probability of the
-        token_ids
+        token_ids, shape (completion_len, )
 
         """
         model_parts = self.engine.model_parts
@@ -129,9 +129,10 @@ class TitanRefModel(ForgeActor):
 
                     # Compute logprobs
                     input_ids = input_ids[:, len(request) :]
+                    # (bsz=1, completion_len)
                     logprobs = compute_logprobs(logits, input_ids)
-
-                    return logprobs
+                    # (completion_len, )
+                    return logprobs.squeeze(0)
 
         return pred
 
@@ -140,14 +141,39 @@ class TitanRefModel(ForgeActor):
 def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
+    """
+    Compute log probs of the completion input_ids given the logits of the whole sequence.
+    Warning: only works if all prompts in the batch have the same length. TODO: support variable length prompts.
 
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
+    Args:
+        logits (torch.Tensor): (batch_size, seq_len, vocab_size), the logits output from the model.
+        input_ids (torch.Tensor): (batch_size, completion_len), the token ids for the completion.
 
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+    Returns:
+        torch.Tensor: (batch_size, completion_len), the log probabilities of the completion tokens.
+
+    Raises:
+        ValueError: If the inferred context length is less than or equal to 0.
+    """
+    context_len = logits.shape[1] - input_ids.shape[1]
+    completion_len = input_ids.shape[1]
+    if context_len <= 0:
+        raise ValueError(
+            "Context length must be greater than 0. Otherwise the probability of the first token is undefined."
+        )
+
+    # (bsz, completion_len, vocab_size)
+    logits = logits[:, context_len - 1 : -1, :]
+    assert logits.shape == (
+        input_ids.shape[0],
+        completion_len,
+        logits.shape[-1],
+    ), f"logits shape incorrect, {logits.shape=}, {input_ids.shape=}, {logits.shape[-1]=}"
+    token_logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    # (bsz, completion_len, 1)
+    logprobs = torch.gather(token_logprobs, 2, input_ids.unsqueeze(-1))
+    # (bsz, completion_len)
+    logprobs = logprobs.squeeze(-1)
 
     return logprobs
 
