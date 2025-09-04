@@ -13,7 +13,6 @@ python -m apps.vllm.main --guided-decoding --num-samples 3
 import argparse
 import asyncio
 from argparse import Namespace
-from typing import List
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
