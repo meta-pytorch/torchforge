@@ -9,16 +9,16 @@ import logging
 import math
 import sys
 
-from monarch.actor import Actor, current_rank, current_size, endpoint
-
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 from forge.types import ProcessConfig
+
+from monarch.actor import Actor, current_rank, current_size, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class ForgeActor(Actor):
+class Service(Actor):
     def __init__(self, *args, **kwargs):
         if not hasattr(self, "_rank"):
             self._rank = current_rank().rank
@@ -57,7 +57,7 @@ class ForgeActor(Actor):
         pass
 
     @classmethod
-    async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "ForgeActor":
+    async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "Service":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -81,7 +81,7 @@ class ForgeActor(Actor):
         return actor
 
     @classmethod
-    async def shutdown(cls, actor: "ForgeActor"):
+    async def shutdown(cls, actor: "Service"):
         """Shuts down an actor.
 
         This method is used by `Service` to teardown a replica.

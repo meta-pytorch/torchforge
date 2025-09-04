@@ -23,7 +23,7 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
-from forge.controller import ForgeActor, spawn_actors
+from forge.controller import Service, spawn_actors
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class ForgeSFTRecipe(ForgeActor, ForgeEngine):
+class ForgeSFTRecipe(Service, ForgeEngine):
     job_config: ForgeJobConfig
     train_spec: forge_train_spec.ForgeTrainSpec
     parallel_dims: ParallelDims
@@ -90,7 +90,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         torchrun normally hands this, but we need to do it ourselves
         in monarch for now.
 
-        We should consider putting this into ForgeActor, but having this
+        We should consider putting this into Service, but having this
         be explicit for now.
 
         """

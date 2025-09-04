@@ -15,7 +15,7 @@ from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.controller.actor import ForgeActor
+from forge.controller.actor import Service
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
@@ -49,7 +49,7 @@ class Episode:
         self.groups.append(group)
 
 
-class Trainer(ForgeActor):
+class Trainer(Service):
     """GRPO Trainer implementation for policy optimization."""
 
     def __init__(
@@ -187,7 +187,7 @@ class Trainer(ForgeActor):
         self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
-class RewardActor(ForgeActor):
+class RewardActor(Service):
     """Reward actor that uses a list of scoring functions."""
 
     def __init__(self, reward_functions: list[Callable]):
@@ -203,7 +203,7 @@ class RewardActor(ForgeActor):
         return total_reward
 
 
-class ComputeAdvantages(ForgeActor):
+class ComputeAdvantages(Service):
     """Compute advantages for GRPO using reward signals."""
 
     def __init__(self, gamma: float = 0.99, lambda_: float = 0.95):
@@ -244,7 +244,7 @@ class ComputeAdvantages(ForgeActor):
         return advantages
 
 
-class DatasetActor(ForgeActor):
+class DatasetActor(Service):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
     def __init__(

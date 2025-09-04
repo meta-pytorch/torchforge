@@ -8,19 +8,19 @@
 import logging
 from typing import Type
 
-from monarch.actor import proc_mesh
+from forge.controller import Service
 
-from forge.controller import ForgeActor
 from forge.controller.service import Service, ServiceActor, ServiceConfig
 
 from forge.controller.service.interface import ServiceInterface, ServiceInterfaceV2
+from monarch.actor import proc_mesh
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
 async def spawn_service(
-    service_cfg: ServiceConfig, actor_def: Type[ForgeActor], **actor_kwargs
+    service_cfg: ServiceConfig, actor_def: Type[Service], **actor_kwargs
 ) -> ServiceInterface:
     """Spawns a service based on the actor class.
 
@@ -32,10 +32,10 @@ async def spawn_service(
     Returns:
         A ServiceInterface that provides access to the Service Actor
     """
-    # Assert that actor_def is a subclass of ForgeActor
-    if not issubclass(actor_def, ForgeActor):
+    # Assert that actor_def is a subclass of Service
+    if not issubclass(actor_def, Service):
         raise TypeError(
-            f"actor_def must be a subclass of ForgeActor, got {type(actor_def).__name__}"
+            f"actor_def must be a subclass of Service, got {type(actor_def).__name__}"
         )
 
     # Create a single-node proc_mesh and actor_mesh for the Service Actor
@@ -56,7 +56,7 @@ async def shutdown_service(service: ServiceInterface) -> None:
 
 
 async def spawn_service_v2(
-    service_cfg: ServiceConfig, actor_def: Type[ForgeActor], **actor_kwargs
+    service_cfg: ServiceConfig, actor_def: Type[Service], **actor_kwargs
 ) -> ServiceInterfaceV2:
     """Spawns a service based on the actor class.
 
@@ -68,10 +68,10 @@ async def spawn_service_v2(
     Returns:
         A ServiceInterface that provides access to the Service Actor
     """
-    # Assert that actor_def is a subclass of ForgeActor
-    if not issubclass(actor_def, ForgeActor):
+    # Assert that actor_def is a subclass of Service
+    if not issubclass(actor_def, Service):
         raise TypeError(
-            f"actor_def must be a subclass of ForgeActor, got {type(actor_def).__name__}"
+            f"actor_def must be a subclass of Service, got {type(actor_def).__name__}"
         )
 
     # Create a single-node proc_mesh and actor_mesh for the Service Actor

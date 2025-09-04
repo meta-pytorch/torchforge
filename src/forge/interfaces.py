@@ -7,11 +7,11 @@
 from abc import ABC, abstractmethod
 from typing import Any, Mapping
 
-from monarch.actor import endpoint
-
-from forge.controller import ForgeActor
+from forge.controller import Service
 
 from forge.types import Action, Message, Observation, Scalar, State
+
+from monarch.actor import endpoint
 
 
 class Transform(ABC):
@@ -74,7 +74,7 @@ class Environment(ABC):
         return observation
 
 
-class Policy(ForgeActor, ABC):
+class Policy(Service, ABC):
     """Abstract interface for policies."""
 
     @endpoint

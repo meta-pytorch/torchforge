@@ -12,7 +12,7 @@ import asyncio
 import logging
 
 import pytest
-from forge.controller import ForgeActor
+from forge.controller import Service
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from monarch.actor import Actor, endpoint
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class Counter(ForgeActor):
+class Counter(Service):
     """Test actor that maintains a counter with various endpoints."""
 
     def __init__(self, v: int):
@@ -61,17 +61,17 @@ class Counter(ForgeActor):
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_actor_def_type_validation():
-    """Test that spawn_service validates actor_def is a subclass of ForgeActor."""
+    """Test that spawn_service validates actor_def is a subclass of Service."""
 
-    # Service can only spawn ForgeActor subclasses
+    # Service can only spawn Service subclasses
     class InvalidActor(Actor):
         def __init__(self):
             pass
 
     cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
 
-    # Test that TypeError is raised when actor_def is not a ForgeActor subclass
-    with pytest.raises(TypeError, match="actor_def must be a subclass of ForgeActor"):
+    # Test that TypeError is raised when actor_def is not a Service subclass
+    with pytest.raises(TypeError, match="actor_def must be a subclass of Service"):
         await spawn_service(service_cfg=cfg, actor_def=InvalidActor)
 
 

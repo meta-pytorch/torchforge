@@ -8,13 +8,13 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
+from forge.controller import Service
 
-from forge.controller import ForgeActor
+from monarch.actor import endpoint
 
 
 @dataclass
-class ReplayBuffer(ForgeActor):
+class ReplayBuffer(Service):
     """Simple in-memory replay buffer implementation."""
 
     batch_size: int

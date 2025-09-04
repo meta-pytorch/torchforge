@@ -18,7 +18,7 @@ from typing import Any
 
 import torch
 
-from forge.controller import ForgeActor
+from forge.controller import Service
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -36,7 +36,7 @@ logger.setLevel(logging.INFO)
 
 
 @dataclass
-class TitanRefModel(ForgeActor):
+class TitanRefModel(Service):
     """
     Represents a reference actor leveraging a torchtitan model for execution
 
@@ -153,7 +153,7 @@ def compute_logprobs(
 
 
 # Maintained to keep Old GRPO app prior to full migration off of HF
-class HuggingFaceRefModel(ForgeActor):
+class HuggingFaceRefModel(Service):
     """
     Represents a reference actor leveraging HuggingFace for execution
     """
@@ -240,7 +240,7 @@ ReferenceActor: Coordinate requests to reference models
 
 
 @dataclass
-class ReferenceActor(ForgeActor):
+class ReferenceActor(Service):
     """
     DO NOT USE (YET)
 
@@ -258,7 +258,7 @@ class ReferenceActor(ForgeActor):
     # comm: Comm = field(default_factory=Comm)
 
     # For RefModel
-    ref_model: ForgeActor | None = None
+    ref_model: Service | None = None
     device: torch.device | None = None
 
     # For processing

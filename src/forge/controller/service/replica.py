@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from monarch.actor import ActorError
-
-from forge.controller import ForgeActor
+from forge.controller import Service
 from forge.types import ProcessConfig
+
+from monarch.actor import ActorError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -102,11 +102,11 @@ class Replica:
 
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
-    actor_def: type[ForgeActor]
+    actor_def: type[Service]
     actor_kwargs: dict
 
     # The Actor that this replica is running
-    actor: Optional[ForgeActor] = None
+    actor: Optional[Service] = None
 
     # Async queue for incoming requests
     request_queue: asyncio.Queue[ServiceRequest] = field(default_factory=asyncio.Queue)

@@ -14,7 +14,7 @@ from typing import Dict, List
 
 import torch
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.controller import get_proc_mesh, Service, stop_proc_mesh
 
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
@@ -342,7 +342,7 @@ class Policy(PolicyInterface):
 
 
 @dataclass
-class PolicyWorker(ForgeActor):
+class PolicyWorker(Service):
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
