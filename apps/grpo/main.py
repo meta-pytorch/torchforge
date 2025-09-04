@@ -12,12 +12,12 @@ from typing import Callable
 
 import torch
 from datasets import load_dataset
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
-from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import Service
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.services.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.services.reference_actor import compute_sequence_logprobs, TitanRefModel
+from forge.services.replay_buffer import ReplayBuffer
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from torchtitan.config.job_config import Model as TitanJobModelConfig

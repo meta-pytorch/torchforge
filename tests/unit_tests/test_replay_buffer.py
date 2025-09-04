@@ -8,7 +8,7 @@
 
 import pytest
 import pytest_asyncio
-from forge.actors.replay_buffer import ReplayBuffer
+from forge.services.replay_buffer import ReplayBuffer
 from forge.types import Trajectory
 
 from monarch.actor import proc_mesh

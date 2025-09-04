@@ -14,10 +14,10 @@ import asyncio
 import logging
 import sys
 
-from forge.actors import ReplayBuffer, RLTrainer
-
 from forge.cli.config import parse
 from forge.controller import spawn_actors
+
+from forge.services import ReplayBuffer, RLTrainer
 from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)

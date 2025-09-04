@@ -19,8 +19,8 @@ import pytest
 import torch
 
 from apps.toy_rl.main import ToyAction, ToyEnvironment, ToyObservation, ToyPolicy
-from forge.actors.collector import Collector
-from forge.actors.replay_buffer import ReplayBuffer
+from forge.services.collector import Collector
+from forge.services.replay_buffer import ReplayBuffer
 
 # local_proc_mesh is an implementation of proc_mesh for
 # testing purposes. It lacks some features of the real proc_mesh

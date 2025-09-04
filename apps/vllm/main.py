@@ -14,8 +14,9 @@ import argparse
 import asyncio
 from argparse import Namespace
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+
+from forge.services.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from vllm.outputs import RequestOutput
 
 

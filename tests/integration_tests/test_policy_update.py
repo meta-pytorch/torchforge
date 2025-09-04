@@ -10,9 +10,9 @@ import pytest
 import pytest_asyncio
 
 import torch
-
-from forge.actors.policy import Policy
 from forge.data.sharding import VLLMSharding
+
+from forge.services.policy import Policy
 from monarch.actor import proc_mesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict

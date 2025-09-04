@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from functools import partial
 
 import torch
-from forge.actors.collector import Collector
-
-from forge.actors.replay_buffer import ReplayBuffer
 from forge.interfaces import Environment, Policy
+from forge.services.collector import Collector
+
+from forge.services.replay_buffer import ReplayBuffer
 from forge.types import Action, Observation, State
 from monarch.actor import endpoint, proc_mesh
 
