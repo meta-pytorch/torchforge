@@ -220,7 +220,7 @@ async def run_policy_integration(
         "Successfully called Policy.update_weights() to load weights from torchstore!"
     )
     # We get the result as a list.
-    results = await policy.get_model_params.call()
+    results = await policy._get_model_params.call()
     assert len(results) == 1
     print("Successfully got model state dict after update")
     return results[0]
