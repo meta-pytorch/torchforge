@@ -19,6 +19,7 @@ from forge.controller.service import ServiceConfig, shutdown_service, spawn_serv
 from omegaconf import DictConfig
 from vllm.outputs import RequestOutput
 
+
 async def run(cfg: DictConfig):
 
     if "prompt" in cfg and cfg["prompt"] is not None:
