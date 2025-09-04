@@ -20,7 +20,7 @@ from forge.controller.service import (
 )
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.services.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.services.reference_actor import compute_sequence_logprobs, TitanRefModel
+from forge.services.reference_service import compute_sequence_logprobs, TitanRefModel
 from forge.services.replay_buffer import ReplayBuffer
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint

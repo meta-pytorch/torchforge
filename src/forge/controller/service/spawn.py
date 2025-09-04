@@ -10,10 +10,11 @@ from typing import Type
 
 from forge.controller import Service
 
+from monarch.actor import proc_mesh
+
 from forge.controller.service import Service, ServiceActor, ServiceConfig
 
 from forge.controller.service.interface import ServiceInterface, ServiceInterfaceV2
-from monarch.actor import proc_mesh
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

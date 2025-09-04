@@ -25,7 +25,7 @@ def __getattr__(name):
 
         return ReplayBuffer
     elif name == "TitanRefModel":
-        from .reference_actor import TitanRefModel
+        from .reference_service import TitanRefModel
 
         return TitanRefModel
     else:

@@ -38,7 +38,7 @@ logger.setLevel(logging.INFO)
 @dataclass
 class TitanRefModel(Service):
     """
-    Represents a reference actor leveraging a torchtitan model for execution
+    Represents a reference service leveraging a torchtitan model for execution
 
     Intended for generating reference_logprobs - for example in KL Divergence
     """
@@ -155,7 +155,7 @@ def compute_logprobs(
 # Maintained to keep Old GRPO app prior to full migration off of HF
 class HuggingFaceRefModel(Service):
     """
-    Represents a reference actor leveraging HuggingFace for execution
+    Represents a reference service leveraging HuggingFace for execution
     """
 
     def __init__(self, model_name, device: torch.device | None = None):

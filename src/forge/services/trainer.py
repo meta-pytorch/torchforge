@@ -12,8 +12,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
-
-from forge.controller import Service
 from monarch.actor import current_rank, current_size, endpoint
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
@@ -31,6 +29,8 @@ from torchtitan.config.job_config import (
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
+
+from forge.controller import Service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
