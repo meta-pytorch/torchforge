@@ -306,7 +306,7 @@ async def main():
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
             worker_params=WorkerConfig(model=model),
-            sampling_params=SamplingOverrides(num_samples=group_size, max_tokens=16),
+            sampling_overrides=SamplingOverrides(num_samples=group_size, max_tokens=16),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),

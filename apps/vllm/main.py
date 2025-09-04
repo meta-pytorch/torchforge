@@ -24,7 +24,7 @@ async def run(cfg: DictConfig):
     if "prompt" in cfg and cfg["prompt"] is not None:
         prompt = cfg["prompt"]
     else:
-        gd = cfg.policy.get("sampling_params", {}).get("guided_decoding", False)
+        gd = cfg.policy.get("sampling_overrides", {}).get("guided_decoding", False)
         prompt = "What is 3+5?" if gd else "Tell me a joke"
 
     print("Spawning service...")

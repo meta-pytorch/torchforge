@@ -11,9 +11,15 @@ import sys
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from omegaconf import DictConfig
 from torchstore import MultiProcessStore
@@ -39,12 +45,6 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
 
 logger = logging.getLogger(__name__)
 
@@ -69,32 +69,23 @@ class SamplingOverrides:
 
 
 @dataclass
-class WorkerConfig:
+class WorkerConfig(EngineArgs):
     """
-    Config args used for setting up the policy worker.
-
-    Args:
-        model: Model name.
-        tensor_parallel_size: Number of tensor parallel workers.
-        pipeline_parallel_size: Number of pipeline parallel workers.
-        enforce_eager: Whether to enforce eager mode.
-        vllm_args: vLLM engine args.
+    WorkerConfig extends EngineArgs with worker-specific fields.
+    Overlapping keys in input dict will override EngineArgs defaults.
     """
 
     model: str = "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
-    vllm_args: EngineArgs = field(default_factory=EngineArgs)
 
     @classmethod
-    def from_dict(cls, d: dict):
+    def from_dict(cls, d: Dict[str, Any]):
         d = dict(d)
-        if "vllm_args" in d and isinstance(d["vllm_args"], dict):
-            d["vllm_args"] = EngineArgs(**d["vllm_args"])
-        else:
-            d["vllm_args"] = EngineArgs()
-        return cls(**d)
+        all_fields = set(cls.__dataclass_fields__.keys())
+        valid_args = {k: v for k, v in d.items() if k in all_fields}
+        return cls(**valid_args)
 
 
 @dataclass
@@ -147,10 +138,9 @@ class Policy(PolicyInterface):
         if isinstance(worker_params, (dict, DictConfig)):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
 
-        worker_dict = asdict(worker_params)
-        worker_dict["vllm_args"] = worker_params.vllm_args
-
-        workers = await worker_procs.spawn("vllm_worker", PolicyWorker, **worker_dict)
+        workers = await worker_procs.spawn(
+            "vllm_worker", PolicyWorker, vllm_args=worker_params
+        )
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
@@ -365,11 +355,7 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    model: str
-    tensor_parallel_size: int = 1
-    pipeline_parallel_size: int = 1
-    enforce_eager: bool = False
-    vllm_args: EngineArgs = None
+    vllm_args: WorkerConfig | dict = WorkerConfig()
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -385,29 +371,12 @@ class PolicyWorker(ForgeActor):
         - all LLM generate methods, verify against LLM inputs
         - all executor methods verify no changes
         """
-        if self.vllm_args is None:
-            # Use default vllm EngineArgs
-            self.vllm_args = EngineArgs(
-                model=self.model,
-                tensor_parallel_size=self.tensor_parallel_size,
-                pipeline_parallel_size=self.pipeline_parallel_size,
-                enforce_eager=self.enforce_eager,
+        if isinstance(self.vllm_args, dict):
+            self.vllm_args = WorkerConfig.from_dict(self.vllm_args)
+        elif not isinstance(self.vllm_args, WorkerConfig):
+            raise TypeError(
+                f"vllm_args must be a WorkerConfig or dict, got {type(self.vllm_args)}"
             )
-        else:
-            # Check that provided args match Policy args
-            cfg = [
-                "model",
-                "tensor_parallel_size",
-                "pipeline_parallel_size",
-                "data_parallel_size",
-            ]
-            for key in cfg:
-                value = getattr(self, key) if key != "data_parallel_size" else 1
-                if getattr(self.vllm_args, key) != value:
-                    logger.warning(
-                        f"{key} args don't match value in EngineArgs, overriding with {value}"
-                    )
-                    setattr(self.vllm_args, key, value)
         # Original method returns False when not run in the main thread
         self.vllm_args._is_v1_supported_oracle = lambda *_: True
         # Build Config
