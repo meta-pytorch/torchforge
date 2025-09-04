@@ -122,6 +122,9 @@ main() {
     check_sudo
     check_wheels
 
+    # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
+    conda install -y openssl
+
     install_system_packages
     download_vllm_wheel
 
@@ -159,8 +162,13 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
-export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
+
+# Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
+if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat:${LD_LIBRARY_PATH}"
+else
+  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat"
+fi
 EOF
 
     # Create deactivation script to clean up
@@ -172,12 +180,41 @@ unset CUDA_NVCC_EXECUTABLE
 unset CUDA_HOME
 unset CUDA_INCLUDE_DIRS
 unset CUDA_CUDART_LIBRARY
-# Note: We don't unset PATH and LD_LIBRARY_PATH as they may have other content
+# We intentionally do not mutate PATH or LD_LIBRARY_PATH here.
 EOF
 
-    # Source the activation script so it works in the current session.
-    log_info "Loading CUDA environment for current session..."
+    ##########################################
+    # 2) Python-only LD_LIBRARY_PATH shim(s) #
+    ##########################################
+    # These shell *functions* ensure that any `python`/`python3` invocation
+    # gets ${CONDA_PREFIX}/lib in its environment, without polluting the shell.
+    # This avoids OpenSSL/libcrypto collisions with system tools like /usr/bin/conda.
+    # TODO: Build Monarch with ABI3 to avoid this hack.
+    local py_shim_activate="${conda_env_dir}/etc/conda/activate.d/python_ld_shim.sh"
+    cat > "$py_shim_activate" << 'EOF'
+# Define python wrappers that only set LD_LIBRARY_PATH for the launched process
+python()  { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
+python3() { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
+
+# Export functions to subshells when possible (best-effort, shell-dependent)
+if [ -n "${BASH_VERSION:-}" ]; then
+  export -f python python3 2>/dev/null || true
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  typeset -fx python python3 >/dev/null 2>&1 || true
+fi
+EOF
+
+    # Deactivation script to remove the function wrappers
+    cat > "${conda_env_dir}/etc/conda/deactivate.d/python_ld_shim.sh" << 'EOF'
+unset -f python  2>/dev/null || true
+unset -f python3 2>/dev/null || true
+EOF
+
+    log_info "Loading CUDA env and python LD shim for current session..."
+    # shellcheck source=/dev/null
     source "$cuda_activation_script"
+    # shellcheck source=/dev/null
+    source "$py_shim_activate"
 
     # Test installation
     log_info "Testing installation..."
@@ -194,13 +231,9 @@ EOF
 
     echo ""
     log_info "Installation completed successfully!"
-    log_info ""
-    log_info "To use the environment:"
+    echo ""
+    log_info "Re-activate the conda environment to make the changes take effect:"
     log_info "  conda activate $CONDA_DEFAULT_ENV"
-    log_info "  source ~/.forge_cuda_env"
-    log_info ""
-    log_info "Or add to your ~/.bashrc:"
-    log_info "  echo 'source ~/.forge_cuda_env' >> ~/.bashrc"
 }
 
 main "$@"
