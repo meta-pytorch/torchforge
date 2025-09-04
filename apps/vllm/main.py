@@ -15,9 +15,9 @@ import sys
 from forge.actors.policy import Policy
 from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+
 from omegaconf import DictConfig
 from vllm.outputs import RequestOutput
-
 
 async def run(cfg: DictConfig):
 

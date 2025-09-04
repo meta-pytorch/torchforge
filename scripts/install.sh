@@ -10,10 +10,12 @@ set -euo pipefail
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
 PYTORCH_VERSION="2.9.0.dev20250828"
@@ -34,20 +36,49 @@ check_conda_env() {
     log_info "Installing in conda environment: $CONDA_DEFAULT_ENV"
 }
 
-# Check sudo access
+# Check sudo access and if it is not available; continue with Conda
 check_sudo() {
     if ! sudo -n true 2>/dev/null; then
-        log_error "This script requires passwordless sudo access for system packages"
-        log_info "Run 'sudo -v' first, or configure passwordless sudo"
-        exit 1
+        log_warning "Passwordless sudo access is not available."
+        log_info "The script will continue and attempt to install packages via conda instead."
+    else
+        log_info "Passwordless sudo access detected."
     fi
 }
 
 # Install required system packages
 install_system_packages() {
     log_info "Installing required system packages..."
-    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
-    log_info "System packages installed successfully"
+    # Check for sudo access
+    if sudo -n true 2>/dev/null; then
+        # Detect OS and install packages accordingly
+        if [ -f /etc/fedora-release ]; then
+            log_info "Detected Fedora OS"
+            sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+        elif [ -f /etc/lsb-release ] || [ -f /etc/ubuntu-release ]; then
+            log_info "Detected Ubuntu OS"
+            sudo apt-get update
+            sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
+        else
+            log_error "Unsupported OS for automatic system package installation"
+            exit 1
+        fi
+        log_info "System packages installed successfully"
+    else
+        log_warning "No sudo access detected. Attempting to install packages via conda."
+        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 -y
+        log_info "Conda package installation attempted. Please ensure the packages are installed correctly."
+    fi
+}
+
+# Check to see if gh is installed, if not, it will be installed via conda-forge channel
+check_gh_install() {
+  if ! command -v gh &> /dev/null; then
+    log_warning "GitHub CLI (gh) not found. Installing via Conda..."
+    conda install gh --channel conda-forge -y
+  else
+    log_info "GitHub CLI (gh) already installed."
+  fi
 }
 
 # Check wheels exist
@@ -126,6 +157,7 @@ main() {
     conda install -y openssl
 
     install_system_packages
+    check_gh_install
     download_vllm_wheel
 
     log_info "Installing PyTorch nightly..."
@@ -162,8 +194,13 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
-export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
+
+# Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
+if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat:${LD_LIBRARY_PATH}"
+else
+  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat"
+fi
 EOF
 
     # Create deactivation script to clean up
@@ -175,12 +212,41 @@ unset CUDA_NVCC_EXECUTABLE
 unset CUDA_HOME
 unset CUDA_INCLUDE_DIRS
 unset CUDA_CUDART_LIBRARY
-# Note: We don't unset PATH and LD_LIBRARY_PATH as they may have other content
+# We intentionally do not mutate PATH or LD_LIBRARY_PATH here.
 EOF
 
-    # Source the activation script so it works in the current session.
-    log_info "Loading CUDA environment for current session..."
+    ##########################################
+    # 2) Python-only LD_LIBRARY_PATH shim(s) #
+    ##########################################
+    # These shell *functions* ensure that any `python`/`python3` invocation
+    # gets ${CONDA_PREFIX}/lib in its environment, without polluting the shell.
+    # This avoids OpenSSL/libcrypto collisions with system tools like /usr/bin/conda.
+    # TODO: Build Monarch with ABI3 to avoid this hack.
+    local py_shim_activate="${conda_env_dir}/etc/conda/activate.d/python_ld_shim.sh"
+    cat > "$py_shim_activate" << 'EOF'
+# Define python wrappers that only set LD_LIBRARY_PATH for the launched process
+python()  { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
+python3() { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
+
+# Export functions to subshells when possible (best-effort, shell-dependent)
+if [ -n "${BASH_VERSION:-}" ]; then
+  export -f python python3 2>/dev/null || true
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  typeset -fx python python3 >/dev/null 2>&1 || true
+fi
+EOF
+
+    # Deactivation script to remove the function wrappers
+    cat > "${conda_env_dir}/etc/conda/deactivate.d/python_ld_shim.sh" << 'EOF'
+unset -f python  2>/dev/null || true
+unset -f python3 2>/dev/null || true
+EOF
+
+    log_info "Loading CUDA env and python LD shim for current session..."
+    # shellcheck source=/dev/null
     source "$cuda_activation_script"
+    # shellcheck source=/dev/null
+    source "$py_shim_activate"
 
     # Test installation
     log_info "Testing installation..."
@@ -197,6 +263,9 @@ EOF
 
     echo ""
     log_info "Installation completed successfully!"
+    echo ""
+    log_info "Re-activate the conda environment to make the changes take effect:"
+    log_info "  conda activate $CONDA_DEFAULT_ENV"
 }
 
 main "$@"
