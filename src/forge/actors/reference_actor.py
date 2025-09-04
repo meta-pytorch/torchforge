@@ -128,7 +128,7 @@ class TitanRefModel(ForgeActor):
                     logits = model_parts[0](input_ids)
 
                     # Compute logprobs
-                    input_ids = input_ids[:, len(response) :]
+                    input_ids = input_ids[:, len(request) :]
                     logprobs = compute_logprobs(logits, input_ids)
 
                     return logprobs
