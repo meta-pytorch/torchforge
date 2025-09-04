@@ -15,7 +15,7 @@ from typing import Dict, List
 import torch
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM
+from torchstore._state_dict_utils import DELIM, get_state_dict
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -325,9 +325,8 @@ class Policy(PolicyInterface):
         futures = [fut for _, fut in self.requests.values()]
         if futures:
             await asyncio.gather(*futures)
-        new_version = self.weights_version + 1
-        await self.policy_worker.update.call(version=new_version)
-        self.weights_version = new_version
+        await self.policy_worker.update.call(version=self.weights_version)
+        self.weights_version += 1
         return self.weights_version
 
     @endpoint
@@ -439,9 +438,12 @@ class PolicyWorker(ForgeActor):
         )
 
         model = self.worker.model_runner.model
-        current_state_dict = model.state_dict()
+        new_state_dict = await get_state_dict(
+            self.torchstore, f"{self.state_dict_key}{DELIM}{version}"
+        )
+        model.load_weights(list(new_state_dict.items()))
 
-        await self._load_tensor_parallel_state_dict(current_state_dict, version)
+        # await self._load_tensor_parallel_state_dict(current_state_dict, version)
         logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint

@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -21,11 +22,13 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from torch import nn
+from torchstore import MultiProcessStore
+from torchstore._state_dict_utils import DELIM, push_state_dict
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 def compute_logprobs(
@@ -145,6 +148,8 @@ class Trainer(ForgeActor):
     beta: float = 0.1
     epsilon: float = 0.1
     device: torch.device | None = None
+    store: MultiProcessStore | None = None
+    state_dict_key: str = "model_state_dict"
 
     @endpoint
     def setup(self):
@@ -211,8 +216,17 @@ class Trainer(ForgeActor):
         return {"loss": loss.item()}
 
     @endpoint
-    async def push_weights(self):
-        pass
+    async def push_weights(self, version: int):
+        """Update policy model weights with trainer's current weights."""
+        start_time = time.time()
+        assert self.store is not None, "Store must be provided to save weights"
+        await push_state_dict(
+            self.store,
+            self.model.state_dict(),
+            f"{self.state_dict_key}{DELIM}{version}",  # Use version as key
+        )
+        end_time = time.time()
+        self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
 @dataclass
@@ -340,6 +354,8 @@ async def main():
         project="grpo-training",
     )
 
+    store = await MultiProcessStore.create_store()
+
     # ---- Setup services ---- #
     (
         dataloader,
@@ -368,12 +384,14 @@ async def main():
                     n=group_size, max_tokens=max_res_tokens
                 ),
             ),
+            store=store,
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Trainer,
             learning_rate=1e-5,
             model_name=model,
+            store=store,
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
@@ -409,7 +427,7 @@ async def main():
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["request"], sample["target"]
-            version = 0  # await policy.get_current_version.choose()
+            version = await policy.get_version.choose()
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,
@@ -446,8 +464,11 @@ async def main():
 
     async def continuous_training():
         training_step = 0
+        policy_version = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=0)
+            batch = await replay_buffer.sample.choose(
+                curr_policy_version=policy_version
+            )
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
@@ -459,7 +480,13 @@ async def main():
                         loss_value = training_result.get("loss", 0.0)
                         print(f"Latest loss: {loss_value}")
                         logger.log("loss/training_step", loss_value, training_step)
-                # await trainer.update_weights(policy)
+                start_time = time.time()
+                await trainer.push_weights.choose(policy_version)
+                print(f"Updating weights took {time.time() - start_time}")
+                start_time = time.time()
+                _ = await policy.update_weights.choose()
+                print(f"Updating policy took {time.time() - start_time}")
+                policy_version += 1
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it
