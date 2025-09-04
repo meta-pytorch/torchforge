@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import torch
+import torch.nn.functional as F
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.actors.replay_buffer import ReplayBuffer
@@ -173,23 +174,28 @@ class Trainer(ForgeActor):
         pad_id = batch[0].pad_id
 
         # prepare batch
-        request = [e.response_tokens for e in batch]
-        request = torch.stack(request).to(self.device)
+        request = [e.response_tensor for e in batch]
+        request = torch.stack(request).to(self.device) # [b x s]
+        print("phil1", request.shape)
 
-        response = [e.response_tokens for e in batch]
-        response = torch.stack(response).to(self.device)
+        response = [e.response_tensor for e in batch]
+        response = torch.stack(response).to(self.device) # [b x s]
+        print("phil2", response.shape)
 
         ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).to(self.device)
+        ref_logprobs = torch.stack(ref_logprobs).to(self.device) # [b x s x d]
+        print("phil3", ref_logprobs.shape)
 
-        advantages = [e.advantages for e in batch]
-        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)
+        advantages = [e.advantage for e in batch]
+        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1) # [b x 1]
+        print("phil4", advantages)
         del batch
 
         # compute policy logprobs
         input_ids = torch.cat([request, response])
-        mask = input_ids[1] != pad_id
+        mask = input_ids != pad_id
         logits = self.model(input_ids=input_ids, attention_mask=mask).logits
+        print("phil5", logits.shape)
         logprobs = compute_logprobs(logits, response)
         del logits
 
@@ -238,12 +244,10 @@ class Trainer(ForgeActor):
         self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
+@dataclass
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
-
-    def __init__(self, reward_functions: list[Callable]):
-        super().__init__()
-        self.reward_functions = reward_functions
+    reward_functions: list[Callable]
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
@@ -251,6 +255,7 @@ class RewardActor(ForgeActor):
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
             total_reward += reward
+        print("phil_rew_0", total_reward)
         return total_reward
 
 
@@ -261,9 +266,11 @@ class ComputeAdvantages(ForgeActor):
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
+        print("phil", rewards)
         advantages = (rewards - rewards.mean(1, keepdim=True)) / (
             rewards.std(1, keepdim=True) + 1e-4
         )
+        print("phil-1", advantages.squeeze(0))
         return advantages.squeeze(0)
 
 
@@ -295,16 +302,19 @@ class RefModel(ForgeActor):
 
         # Convert tokens to tensor
         req, res = episode.request_tensor, episode.response_tensor
-        input_ids = torch.cat([request, response]).to(self.device).unsqueeze(0)
-        mask = input_ids[1] != episode.pad_id
+        input_ids = torch.cat([req, res]).to(self.device).unsqueeze(0)
+        mask = input_ids != episode.pad_id
 
         # Compute logits
-        with torch.inference():
-            logits = model(input_ids=input_ids, attention_mask=mask).logits
+        with torch.inference_mode():
+            logits = self.model(input_ids=input_ids, attention_mask=mask).logits
 
         # Compute logprobs
-        input_ids = input_ids[:, request.shape[1] :]
+        input_ids = input_ids[:, len(req) :]
+        print("phil_ref_0", input_ids.shape)
+        print("phil_ref_1", logits.shape)
         logprobs = compute_logprobs(logits, input_ids)
+        print("phil_ref_2", logprobs.shape)
 
         return logprobs
 
@@ -349,10 +359,8 @@ class DatasetActor(ForgeActor):
             return None
 
     @endpoint
-    def pad_token(self):
-        if self.tokenizer.pad_token is None:
-            return self.tokenizer.eos_token
-        return self.tokenizer.pad_token
+    async def pad_token(self):
+        return self.tokenizer.pad_token_id
 
 
 async def main():
@@ -431,7 +439,7 @@ async def main():
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token.choose()
         while True:
             sample = await dataloader.sample.choose()
             if sample is None:
