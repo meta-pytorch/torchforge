@@ -36,15 +36,6 @@ check_conda_env() {
     log_info "Installing in conda environment: $CONDA_DEFAULT_ENV"
 }
 
-# Check sudo access only
-check_sudo_only() {
-    if ! sudo -n true 2>/dev/null; then
-        log_error "This script requires passwordless sudo access for system packages"
-        log_info "Run 'sudo -v' first, or configure passwordless sudo"
-        exit 1
-    fi
-}
-
 # Check sudo access and if it is not available; continue with Conda
 check_sudo() {
     if ! sudo -n true 2>/dev/null; then
@@ -53,13 +44,6 @@ check_sudo() {
     else
         log_info "Passwordless sudo access detected."
     fi
-}
-
-# Install required system packages
-install_system_packages_sudo_only() {
-    log_info "Installing required system packages..."
-    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
-    log_info "System packages installed successfully"
 }
 
 # Install required system packages
