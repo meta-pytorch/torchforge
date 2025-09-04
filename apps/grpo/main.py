@@ -53,33 +53,23 @@ class SimpleGRPOLoss(nn.Module):
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        per_token_kl = (
-            torch.exp(ref_logprobs.detach() - logprobs)
-            - (ref_logprobs.detach() - logprobs)
-            - 1
-        )
+        # KL divergence: exp(ref - log) - (ref - log) - 1
+        logprob_diff = ref_logprobs.detach() - logprobs
+        per_token_kl = torch.exp(logprob_diff) - logprob_diff - 1
 
-        advantages = advantages[:, None]  # [B x G, 1]
+        # Policy loss: advantages (logprobs - logprobs.detach() cancels to 0, so exp(0) = 1)
+        per_token_policy_loss = advantages
 
-        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+        # Combined loss: -(policy_loss - beta * kl)
         per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
 
-        loss = (per_token_loss * padding_mask).sum(dim=1) / (
-            padding_mask.sum(dim=1) + 1e-8
-        ).mean()
-
-        return loss
-        # log_ratio = ref_logprobs.detach() - logprobs
-        # kl = torch.exp(log_ratio) - log_ratio - 1
-
-        # pl = torch.exp(logprobs - logprobs.detach()) * advantages
-        # loss = -pl + self.beta * kl
-
-        # print(loss.shape, padding_mask.shape)
-
-        # # Compute mean
-        # loss = (loss * padding_mask).sum() / (padding_mask.sum() + 1e-8)
-        # return loss
+        # Masked average
+        return (
+            (per_token_loss * padding_mask)
+            .sum(dim=1)
+            .div(padding_mask.sum(dim=1) + 1e-8)
+            .mean()
+        )
 
 
 @dataclass
@@ -200,7 +190,7 @@ class Trainer(ForgeActor):
         response = torch.stack(response).to(self.device)  # [b x s]
 
         ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).to(self.device)  # [b x s x d]
+        ref_logprobs = torch.stack(ref_logprobs).to(self.device).squeeze()  # [b x s]
 
         advantages = [e.advantage for e in batch]
         advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
@@ -220,8 +210,8 @@ class Trainer(ForgeActor):
         self.optimizer.zero_grad()
         loss.backward()
 
-        # Gradient clipping (optional but recommended for stability)
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        # # Gradient clipping (optional but recommended for stability)
+        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
         self.optimizer.step()
 
@@ -270,7 +260,6 @@ class RewardActor(ForgeActor):
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
             total_reward += reward
-        print("phil_rew_0", total_reward)
         return total_reward
 
 
@@ -281,11 +270,8 @@ class ComputeAdvantages(ForgeActor):
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
-        print("rewards", rewards)
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
-
-        print(std)
 
         # if std is nan, return 0s. Remove this before shipping
         if std.isnan().any():
@@ -294,7 +280,6 @@ class ComputeAdvantages(ForgeActor):
             advantages = (rewards - mean) / (std + 1e-4)
 
         x = advantages.squeeze(0).tolist()
-        print("phil_adv_0", x)
         return x
 
 
@@ -319,23 +304,15 @@ class RefModel(ForgeActor):
 
     @endpoint
     async def forward(self, episode: Episode) -> torch.Tensor:
-        # Convert tokens to tensor
         req, res = episode.request_tensor, episode.response_tensor
         input_ids = torch.cat([req, res]).to(self.device).unsqueeze(0)
         mask = input_ids != episode.pad_id
 
-        # Compute logits
         with torch.inference_mode():
             logits = self.model(input_ids=input_ids, attention_mask=mask).logits
 
-        # Compute logprobs
         input_ids = input_ids[:, len(req) :]
-        print("phil_ref_0", input_ids.shape)
-        print("phil_ref_1", logits.shape)
-        logprobs = compute_logprobs(logits, input_ids)
-        print("phil_ref_2", logprobs.shape)
-
-        return logprobs
+        return compute_logprobs(logits, input_ids)
 
 
 @dataclass
@@ -478,7 +455,6 @@ async def main():
             )
 
             responses = await policy.generate.choose(prompt)
-            # print("phil_resp", responses)
 
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
@@ -512,7 +488,6 @@ async def main():
             else:
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
-                exit()
                 if training_step % 10 == 0:
                     print(f"Completed {training_step} training steps")
                     if training_result:
