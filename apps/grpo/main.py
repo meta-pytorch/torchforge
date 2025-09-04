@@ -45,7 +45,9 @@ def compute_logprobs(
 
 
 class SimpleGRPOLoss(nn.Module):
-    """Simplified GRPO Loss for simplified single step updates"""
+    """Simplified GRPO Loss for simplified single step updates
+    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
+    """
 
     def __init__(self, epsilon=0.1, beta=0.1):
         super().__init__()
@@ -53,23 +55,18 @@ class SimpleGRPOLoss(nn.Module):
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        # KL divergence: exp(ref - log) - (ref - log) - 1
-        logprob_diff = ref_logprobs.detach() - logprobs
-        per_token_kl = torch.exp(logprob_diff) - logprob_diff - 1
-
-        # Policy loss: advantages (logprobs - logprobs.detach() cancels to 0, so exp(0) = 1)
-        per_token_policy_loss = advantages
-
-        # Combined loss: -(policy_loss - beta * kl)
-        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
-
-        # Masked average
-        return (
-            (per_token_loss * padding_mask)
-            .sum(dim=1)
-            .div(padding_mask.sum(dim=1) + 1e-8)
-            .mean()
+        per_token_kl = (
+            torch.exp(ref_logprobs.detach() - logprobs)
+            - (ref_logprobs.detach() - logprobs)
+            - 1
         )
+        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
+        loss = (
+            (per_token_loss * padding_mask).sum(dim=1)
+            / (padding_mask.sum(dim=1) + 1e-8)
+        ).mean()
+        return loss
 
 
 @dataclass
