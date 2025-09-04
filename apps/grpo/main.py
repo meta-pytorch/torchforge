@@ -12,8 +12,12 @@ from typing import Callable
 
 import torch
 from datasets import load_dataset
-from forge.controller.actor import Service
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.controller.service import (
+    Service,
+    ServiceConfig,
+    shutdown_service,
+    spawn_service,
+)
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.services.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.services.reference_actor import compute_sequence_logprobs, TitanRefModel
@@ -160,7 +164,7 @@ class Trainer(Service):
         return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    async def update_weights(self, policy_actor):
+    async def update_weights(self, policy_service):
         """Update policy model weights with trainer's current weights."""
         # Time how long it takes to update weights
         start_time = time.time()
@@ -176,8 +180,8 @@ class Trainer(Service):
         for key, tensor in model_state_dict.items():
             cpu_state_dict[key] = tensor.cpu() if tensor.is_cuda else tensor
 
-        # Update the policy actor's model weights
-        await policy_actor.update_model_weights.choose(cpu_state_dict)
+        # Update the policy services's model weights
+        await policy_service.update_model_weights.choose(cpu_state_dict)
 
         # Set model back to training mode
         self.model.train()
@@ -187,8 +191,8 @@ class Trainer(Service):
         self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
 
 
-class RewardActor(Service):
-    """Reward actor that uses a list of scoring functions."""
+class RewardService(Service):
+    """Reward Service that uses a list of scoring functions."""
 
     def __init__(self, reward_functions: list[Callable]):
         super().__init__()
@@ -244,8 +248,8 @@ class ComputeAdvantages(Service):
         return advantages
 
 
-class DatasetActor(Service):
-    """Actor wrapper for HuggingFace dataset to provide async interface."""
+class DatasetService(Service):
+    """Service wrapper for HuggingFace dataset to provide async interface."""
 
     def __init__(
         self, path: str, config_name: str, split: str, streaming: bool, **kwargs
@@ -292,11 +296,11 @@ async def main():
         replay_buffer,
         compute_advantages,
         ref_model,
-        reward_actor,
+        reward_service,
     ) = await asyncio.gather(
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
-            DatasetActor,
+            DatasetService,
             path="openai/gsm8k",
             config_name="main",
             split="train",
@@ -338,7 +342,7 @@ async def main():
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
-            RewardActor,
+            RewardService,
             reward_functions=[MathReward(), ThinkingReward()],
         ),
     )
@@ -369,7 +373,7 @@ async def main():
                 ref_logprobs = await ref_model.forward.choose(
                     request=request_tokens, response=response_tokens
                 )
-                reward = await reward_actor.evaluate_response.choose(
+                reward = await reward_service.evaluate_response.choose(
                     prompt=prompt, response=action.text, target=target
                 )
                 episode.add_group(
@@ -432,7 +436,7 @@ async def main():
             shutdown_service(dataloader),
             shutdown_service(compute_advantages),
             shutdown_service(ref_model),
-            shutdown_service(reward_actor),
+            shutdown_service(reward_service),
         )
 
 

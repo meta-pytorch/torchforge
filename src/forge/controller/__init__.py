@@ -4,8 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .actor import Service
 from .proc_mesh import get_proc_mesh, stop_proc_mesh
+from .service import Service
 
 
 # TODO - remove this once everything has moved to

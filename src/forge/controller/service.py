@@ -43,11 +43,11 @@ class Service(Actor):
 
     @endpoint
     async def setup(self):
-        """Sets up the actor.
+        """Sets up the service.
 
-        We assume a specific setup function for all actors. The
-        best practice for actor deployment is to:
-        1. Pass all data to the actor via the constructor.
+        We assume a specific setup function for all services. The
+        best practice for service deployment is to:
+        1. Pass all data to the service via the constructor.
         2. Call setup() to for heavy weight initializations.
 
         This is to ensure that any failures during initialization
@@ -58,34 +58,34 @@ class Service(Actor):
 
     @classmethod
     async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "Service":
-        """Provisions and deploys a new actor.
+        """Provisions and deploys a new service.
 
         This method is used by `Service` to provision a new replica.
 
-        We implement it this way because special actors like inference servers
-        may be composed of multiple actors spawned across multiple processes.
-        This allows you to specify how your actor gets launched together.
+        We implement it this way because special services like inference servers
+        may be composed of multiple services spawned across multiple processes.
+        This allows you to specify how your service gets launched together.
 
         This implementation is basic, assuming that we're spawning
-        a homogeneous set of actors on a single proc mesh.
+        a homogeneous set of services on a single proc mesh.
 
         """
         proc_mesh = await get_proc_mesh(process_config=process_config)
 
         # TODO - expand support so name can stick within kwargs
-        actor_name = kwargs.pop("name", cls.__name__)
-        actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
-        actor._proc_mesh = proc_mesh
+        service_name = kwargs.pop("name", cls.__name__)
+        service = await proc_mesh.spawn(service_name, cls, **kwargs)
+        service._proc_mesh = proc_mesh
 
-        await actor.setup.call()
-        return actor
+        await service.setup.call()
+        return service
 
     @classmethod
-    async def shutdown(cls, actor: "Service"):
-        """Shuts down an actor.
+    async def shutdown(cls, service: "Service"):
+        """Shuts down an service.
 
         This method is used by `Service` to teardown a replica.
         """
-        if actor._proc_mesh is None:
+        if service._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
-        await stop_proc_mesh(actor._proc_mesh)
+        await stop_proc_mesh(service._proc_mesh)
