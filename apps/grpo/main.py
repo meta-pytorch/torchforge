@@ -53,15 +53,33 @@ class SimpleGRPOLoss(nn.Module):
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        log_ratio = ref_logprobs.detach() - logprobs
-        kl = torch.exp(log_ratio) - log_ratio - 1
+        per_token_kl = (
+            torch.exp(ref_logprobs.detach() - logprobs)
+            - (ref_logprobs.detach() - logprobs)
+            - 1
+        )
 
-        pl = torch.exp(logprobs - logprobs.detach()) * advantages
-        loss = -pl + self.beta * kl
+        advantages = advantages[:, None]  # [B x G, 1]
 
-        # Compute mean
-        loss = (loss * padding_mask).sum() / (padding_mask.sum() + 1e-8)
+        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
+
+        loss = (per_token_loss * padding_mask).sum(dim=1) / (
+            padding_mask.sum(dim=1) + 1e-8
+        ).mean()
+
         return loss
+        # log_ratio = ref_logprobs.detach() - logprobs
+        # kl = torch.exp(log_ratio) - log_ratio - 1
+
+        # pl = torch.exp(logprobs - logprobs.detach()) * advantages
+        # loss = -pl + self.beta * kl
+
+        # print(loss.shape, padding_mask.shape)
+
+        # # Compute mean
+        # loss = (loss * padding_mask).sum() / (padding_mask.sum() + 1e-8)
+        # return loss
 
 
 @dataclass
@@ -94,7 +112,7 @@ class Episode:
     def response_tensor(self):
         tensor = torch.tensor(self.response_tokens, dtype=torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
-            diff = self.request_len - tensor.shape[0]
+            diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
 
@@ -129,7 +147,7 @@ class Group:
                     target=target,
                 )
             )
-        return cls(group_id, episodes)
+        return cls(str(group_id), episodes)
 
 
 @dataclass
@@ -172,35 +190,31 @@ class Trainer(ForgeActor):
         total_loss = 0.0
         num_episodes_processed = 0
         pad_id = batch[0].pad_id
+        bsz = len(batch)
 
         # prepare batch
-        request = [e.response_tensor for e in batch]
-        request = torch.stack(request).to(self.device) # [b x s]
-        print("phil1", request.shape)
+        request = [e.request_tensor for e in batch]
+        request = torch.stack(request).to(self.device)  # [b x s]
 
         response = [e.response_tensor for e in batch]
-        response = torch.stack(response).to(self.device) # [b x s]
-        print("phil2", response.shape)
+        response = torch.stack(response).to(self.device)  # [b x s]
 
         ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).to(self.device) # [b x s x d]
-        print("phil3", ref_logprobs.shape)
+        ref_logprobs = torch.stack(ref_logprobs).to(self.device)  # [b x s x d]
 
         advantages = [e.advantage for e in batch]
-        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1) # [b x 1]
-        print("phil4", advantages)
+        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
         del batch
 
         # compute policy logprobs
-        input_ids = torch.cat([request, response])
+        input_ids = torch.cat([request, response], dim=1)
         mask = input_ids != pad_id
         logits = self.model(input_ids=input_ids, attention_mask=mask).logits
-        print("phil5", logits.shape)
         logprobs = compute_logprobs(logits, response)
         del logits
 
         # compute loss
-        mask = (response != pad_id).unsqueeze(-1)
+        mask = response != pad_id
         loss = self.loss(logprobs, ref_logprobs, advantages, mask)
 
         self.optimizer.zero_grad()
@@ -212,7 +226,7 @@ class Trainer(ForgeActor):
         self.optimizer.step()
 
         total_loss += loss.item()
-        avg_loss = total_loss / len(batch) if batch else 0.0
+        avg_loss = total_loss / bsz
 
         return {"loss": avg_loss, "episodes_processed": num_episodes_processed}
 
@@ -247,6 +261,7 @@ class Trainer(ForgeActor):
 @dataclass
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
+
     reward_functions: list[Callable]
 
     @endpoint
@@ -266,12 +281,21 @@ class ComputeAdvantages(ForgeActor):
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
-        print("phil", rewards)
-        advantages = (rewards - rewards.mean(1, keepdim=True)) / (
-            rewards.std(1, keepdim=True) + 1e-4
-        )
-        print("phil-1", advantages.squeeze(0))
-        return advantages.squeeze(0)
+        print("rewards", rewards)
+        mean = rewards.mean(1, keepdim=True)
+        std = rewards.std(1, keepdim=True)
+
+        print(std)
+
+        # if std is nan, return 0s. Remove this before shipping
+        if std.isnan().any():
+            advantages = torch.zeros_like(rewards)
+        else:
+            advantages = (rewards - mean) / (std + 1e-4)
+
+        x = advantages.squeeze(0).tolist()
+        print("phil_adv_0", x)
+        return x
 
 
 class RefModel(ForgeActor):
@@ -279,27 +303,22 @@ class RefModel(ForgeActor):
         super().__init__()
         self.model_name = model_name
 
-        # Set device
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
 
-        # Initialize model and tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
-
-        # Set model to eval mode for reference computations
         self.model.eval()
 
         self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
     async def forward(self, episode: Episode) -> torch.Tensor:
-
         # Convert tokens to tensor
         req, res = episode.request_tensor, episode.response_tensor
         input_ids = torch.cat([req, res]).to(self.device).unsqueeze(0)
@@ -335,14 +354,14 @@ class DatasetActor(ForgeActor):
 
         def gsm8k_transform(sample):
             request: str = sample["question"]
-            formatted_request = self.tokenizer.apply_chat_template(
-                [{"role": "user", "content": request}],
-                tokenize=False,
-                add_generation_prompt=True,
-            )
+            # formatted_request = self.tokenizer.apply_chat_template(
+            #     [{"role": "user", "content": request}],
+            #     tokenize=False,
+            #     add_generation_prompt=True,
+            # )
             target: str = sample["answer"]
             formatted_target = target.split("#### ")[1]
-            return {"request": formatted_request, "target": formatted_target}
+            return {"request": request, "target": formatted_target}
 
         ds = load_dataset(
             self.path, self.revision, split=self.data_split, streaming=self.streaming
@@ -457,10 +476,14 @@ async def main():
                 response_len=max_res_tokens,
                 target=target,
             )
+
             responses = await policy.generate.choose(prompt)
+            # print("phil_resp", responses)
+
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
+                assert len(response.token_ids) <= max_res_tokens
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
@@ -469,6 +492,8 @@ async def main():
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
+
+            # exit()
 
             rollout_count += 1
             if rollout_count % 10 == 0:
@@ -487,6 +512,7 @@ async def main():
             else:
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
+                exit()
                 if training_step % 10 == 0:
                     print(f"Completed {training_step} training steps")
                     if training_result:
