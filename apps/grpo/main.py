@@ -151,7 +151,7 @@ class Trainer(ForgeActor):
         # Initialize model
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
         self.model.train()
@@ -288,7 +288,7 @@ class RefModel(ForgeActor):
         # Initialize model and tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
 
