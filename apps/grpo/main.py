@@ -212,31 +212,8 @@ class Trainer(ForgeActor):
         return {"loss": loss.item()}
 
     @endpoint
-    async def update_weights(self, policy_actor):
-        """Update policy model weights with trainer's current weights."""
-        # Time how long it takes to update weights
-        start_time = time.time()
-
-        # Set model to eval mode for weight extraction
-        self.model.eval()
-
-        # Extract current model state dict
-        model_state_dict = self.model.state_dict()
-
-        # Convert tensors to CPU for transfer (if they're on GPU)
-        cpu_state_dict = {}
-        for key, tensor in model_state_dict.items():
-            cpu_state_dict[key] = tensor.cpu() if tensor.is_cuda else tensor
-
-        # Update the policy actor's model weights
-        await policy_actor.update_model_weights.choose(cpu_state_dict)
-
-        # Set model back to training mode
-        self.model.train()
-
-        # Log the time taken
-        end_time = time.time()
-        self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
+    async def push_weights(self):
+        pass
 
 
 @dataclass
