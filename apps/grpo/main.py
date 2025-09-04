@@ -174,10 +174,7 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
-        total_loss = 0.0
-        num_episodes_processed = 0
         pad_id = batch[0].pad_id
-        bsz = len(batch)
 
         # prepare batch
         request = [e.request_tensor for e in batch]
@@ -212,10 +209,7 @@ class Trainer(ForgeActor):
 
         self.optimizer.step()
 
-        total_loss += loss.item()
-        avg_loss = total_loss / bsz
-
-        return {"loss": avg_loss, "episodes_processed": num_episodes_processed}
+        return {"loss": loss.item()}
 
     @endpoint
     async def update_weights(self, policy_actor):
