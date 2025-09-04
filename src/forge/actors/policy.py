@@ -332,6 +332,12 @@ class Policy(PolicyInterface):
         return self.weights_version
 
     @endpoint
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
+        """Get the current model parameters. Only for testing purposes."""
+        model_params = await self.policy_worker._get_model_params.choose()
+        return model_params
+
+    @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
         return self.weights_version
@@ -480,7 +486,7 @@ class PolicyWorker(ForgeActor):
         return self.vllm_args
 
     @endpoint
-    async def get_model_params(self):
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
         model = self.worker.model_runner.model
         state_dict = {}
 

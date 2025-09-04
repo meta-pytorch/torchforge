@@ -10,10 +10,12 @@ set -euo pipefail
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
 PYTORCH_VERSION="2.9.0.dev20250828"
@@ -34,20 +36,49 @@ check_conda_env() {
     log_info "Installing in conda environment: $CONDA_DEFAULT_ENV"
 }
 
-# Check sudo access
+# Check sudo access and if it is not available; continue with Conda
 check_sudo() {
     if ! sudo -n true 2>/dev/null; then
-        log_error "This script requires passwordless sudo access for system packages"
-        log_info "Run 'sudo -v' first, or configure passwordless sudo"
-        exit 1
+        log_warning "Passwordless sudo access is not available."
+        log_info "The script will continue and attempt to install packages via conda instead."
+    else
+        log_info "Passwordless sudo access detected."
     fi
 }
 
 # Install required system packages
 install_system_packages() {
     log_info "Installing required system packages..."
-    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
-    log_info "System packages installed successfully"
+    # Check for sudo access
+    if sudo -n true 2>/dev/null; then
+        # Detect OS and install packages accordingly
+        if [ -f /etc/fedora-release ]; then
+            log_info "Detected Fedora OS"
+            sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+        elif [ -f /etc/lsb-release ] || [ -f /etc/ubuntu-release ]; then
+            log_info "Detected Ubuntu OS"
+            sudo apt-get update
+            sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
+        else
+            log_error "Unsupported OS for automatic system package installation"
+            exit 1
+        fi
+        log_info "System packages installed successfully"
+    else
+        log_warning "No sudo access detected. Attempting to install packages via conda."
+        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 -y
+        log_info "Conda package installation attempted. Please ensure the packages are installed correctly."
+    fi
+}
+
+# Check to see if gh is installed, if not, it will be installed via conda-forge channel
+check_gh_install() {
+  if ! command -v gh &> /dev/null; then
+    log_warning "GitHub CLI (gh) not found. Installing via Conda..."
+    conda install gh --channel conda-forge -y
+  else
+    log_info "GitHub CLI (gh) already installed."
+  fi
 }
 
 # Check wheels exist
@@ -126,6 +157,7 @@ main() {
     conda install -y openssl
 
     install_system_packages
+    check_gh_install
     download_vllm_wheel
 
     log_info "Installing PyTorch nightly..."
