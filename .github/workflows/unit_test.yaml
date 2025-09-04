@@ -21,6 +21,11 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test
           python-version: ${{ matrix.python-version }}
+      - name: Install torchstore
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
+          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
       - name: Update pip
         run: python -m pip install --upgrade pip
       - name: Install pytorch
