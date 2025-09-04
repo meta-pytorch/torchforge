@@ -250,7 +250,6 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
-        tokenizer = self.processor.input_preprocessor.get_tokenizer_group()
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes

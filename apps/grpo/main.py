@@ -6,7 +6,6 @@
 
 import asyncio
 import logging
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -299,14 +298,14 @@ class DatasetActor(ForgeActor):
 
         def gsm8k_transform(sample):
             request: str = sample["question"]
-            # formatted_request = self.tokenizer.apply_chat_template(
-            #     [{"role": "user", "content": request}],
-            #     tokenize=False,
-            #     add_generation_prompt=True,
-            # )
+            formatted_request = self.tokenizer.apply_chat_template(
+                [{"role": "user", "content": request}],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
             target: str = sample["answer"]
             formatted_target = target.split("#### ")[1]
-            return {"request": request, "target": formatted_target}
+            return {"request": formatted_request, "target": formatted_target}
 
         ds = load_dataset(
             self.path, self.revision, split=self.data_split, streaming=self.streaming
