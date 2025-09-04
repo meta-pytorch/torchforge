@@ -31,7 +31,7 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
-          python -m pip install git+ssh://git@github.com:meta-pytorch/torchstore.git
+          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
       - name: Run unit tests with coverage
