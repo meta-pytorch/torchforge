@@ -27,9 +27,6 @@ from torchstore._state_dict_utils import DELIM, push_state_dict
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 
 def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
@@ -213,7 +210,7 @@ class Trainer(ForgeActor):
 
         self.optimizer.step()
 
-        return {"loss": loss.item()}
+        return loss.item()
 
     @endpoint
     async def push_weights(self, version: int):
@@ -240,6 +237,9 @@ class RewardActor(ForgeActor):
         total_reward = 0.0
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
+            self.logger.info(
+                f"Response: {response} | Target: {target} | Reward: {reward}"
+            )
             total_reward += reward
         return total_reward
 
@@ -253,15 +253,8 @@ class ComputeAdvantages(ForgeActor):
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
-
-        # if std is nan, return 0s. Remove this before shipping
-        if std.isnan().any():
-            advantages = torch.zeros_like(rewards)
-        else:
-            advantages = (rewards - mean) / (std + 1e-4)
-
-        x = advantages.squeeze(0).tolist()
-        return x
+        advantages = (rewards - mean) / (std + 1e-4)
+        return advantages.squeeze(0).tolist()
 
 
 class RefModel(ForgeActor):
@@ -342,8 +335,8 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 1
-    model = "Qwen/Qwen3-1.7B-Base"
+    group_size = 5
+    model = "Qwen/Qwen3-4B-Base"
     max_req_tokens = 512
     max_res_tokens = 128
 
@@ -438,13 +431,15 @@ async def main():
                 response_len=max_res_tokens,
                 target=target,
             )
-
             responses = await policy.generate.choose(prompt)
-
+            if responses is None:
+                continue
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
-                assert len(response.token_ids) <= max_res_tokens
+                logger.log(
+                    "response_len/rollout", len(response.token_ids), rollout_count
+                )
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
@@ -453,14 +448,12 @@ async def main():
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
+                buffer_size = await replay_buffer._numel.choose()
+                logger.log("buffer_size/rollout", buffer_size, rollout_count)
 
             rollout_count += 1
-            if rollout_count % 10 == 0:
-                avg_reward = sum(e.reward for e in group.episodes) / len(group.episodes)
-                print(
-                    f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
-                )
-                logger.log("reward/rollout", avg_reward, rollout_count)
+            avg_reward = sum(e.reward for e in group.episodes) / len(group.episodes)
+            logger.log("reward/rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
@@ -472,21 +465,12 @@ async def main():
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                training_result = await trainer.train_step.choose(batch)
+                loss = await trainer.train_step.choose(batch)
                 training_step += 1
-                if training_step % 10 == 0:
-                    print(f"Completed {training_step} training steps")
-                    if training_result:
-                        loss_value = training_result.get("loss", 0.0)
-                        print(f"Latest loss: {loss_value}")
-                        logger.log("loss/training_step", loss_value, training_step)
-                start_time = time.time()
+                logger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.choose(policy_version)
-                print(f"Updating weights took {time.time() - start_time}")
-                start_time = time.time()
-                _ = await policy.update_weights.choose()
-                print(f"Updating policy took {time.time() - start_time}")
                 policy_version += 1
+                _ = await policy.update_weights.choose()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

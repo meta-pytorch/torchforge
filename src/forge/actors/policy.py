@@ -13,6 +13,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM, get_state_dict
@@ -36,15 +42,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -279,7 +276,11 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        return await request_fut
+        try:
+            generations = await request_fut
+            return generations
+        except asyncio.exceptions.CancelledError:
+            self.logger.debug(f"Request {request_id} was cancelled")
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -321,10 +322,27 @@ class Policy(PolicyInterface):
     @endpoint
     async def update_weights(self) -> int:
         """Update the policy weights."""
-        # Wait for all current requests to finish, then publish model weights
-        futures = [fut for _, fut in self.requests.values()]
-        if futures:
-            await asyncio.gather(*futures)
+        # Cancel all current requests and wait for them to finish
+        pending_futures = []
+        for request_id, (parent_req, fut) in list(self.requests.items()):
+            if not fut.done():
+                fut.cancel("Received weight update, cancelling request")
+                pending_futures.append(fut)
+
+        # Wait for all cancelled requests to finish with a timeout
+        if pending_futures:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending_futures, return_exceptions=True),
+                    timeout=5.0,  # 5 second timeout
+                )
+            except asyncio.TimeoutError:
+                logging.warning("Some requests did not cancel within timeout")
+
+        # Clear any remaining requests
+        self.requests.clear()
+
+        # Now update the weights
         await self.policy_worker.update.call(version=self.weights_version)
         self.weights_version += 1
         return self.weights_version
@@ -382,7 +400,7 @@ class PolicyWorker(ForgeActor):
             for key in cfg:
                 value = getattr(self, key) if key != "data_parallel_size" else 1
                 if getattr(self.vllm_args, key) != value:
-                    logger.warning(
+                    self.logger.warning(
                         f"{key} args don't match value in EngineArgs, overriding with {value}"
                     )
                     setattr(self.vllm_args, key, value)
@@ -433,7 +451,7 @@ class PolicyWorker(ForgeActor):
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
-        logger.debug(
+        self.logger.debug(
             f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
         )
 
@@ -444,7 +462,7 @@ class PolicyWorker(ForgeActor):
         model.load_weights(list(new_state_dict.items()))
 
         # await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.debug("Successfully updated model weights from torchstore")
+        self.logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint
     async def setup_kv_cache(self):

@@ -17,8 +17,6 @@ from dataclasses import dataclass, field, fields
 from typing import Any
 
 import torch
-
-from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
