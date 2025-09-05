@@ -21,6 +21,8 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test
           python-version: ${{ matrix.python-version }}
+      - name: activate conda env
+      - run: conda activate test
       - name: python is python3
         run: source .github/workflows/python_is_python3.sh
       # - uses: Jimver/cuda-toolkit@master
