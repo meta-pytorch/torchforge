@@ -24,7 +24,7 @@ jobs:
       - name: print PATH
         run: echo $PATH
       - name: activate conda env
-        run: conda init && conda activate test
+        run: source .github/workflows/activate_conda_env.sh
       - name: python is python3
         run: source .github/workflows/python_is_python3.sh
       # - uses: Jimver/cuda-toolkit@master
