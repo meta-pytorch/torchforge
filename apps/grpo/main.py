@@ -328,7 +328,7 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 1
+    group_size = 4
     model = "Qwen/Qwen3-1.7B-Base"
     max_req_tokens = 512
     max_res_tokens = 128
