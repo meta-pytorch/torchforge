@@ -12,3 +12,5 @@ if ! command -v python &> /dev/null; then
 else
     echo "'python' already exists: $(command -v python)"
 fi
+echo "Python version:"
+python --version
