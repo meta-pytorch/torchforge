@@ -41,6 +41,12 @@ jobs:
           eval "$(ssh-agent -s)"
           ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
+      - name: Install torchtitan
+        run: |
+          source .github/workflows/activate_conda_env.sh
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHTITAN }}'
+          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
       - name: Install dependencies
         run: |
           source .github/workflows/activate_conda_env.sh
