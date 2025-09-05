@@ -14,8 +14,7 @@ dependencies = [
     "torchdata>=0.8.0",
     "torchtitan",
     # vLLM
-    # TODO: pin specific vllm version
-    #"vllm==0.10.0",
+    "vllm==0.10.1",
     # Hugging Face integrations
     "transformers"
     "datasets>=2.21.0",
