@@ -10,8 +10,12 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from typing import Any, Optional
 
 import torch
+import torch.nn.functional as F
+
+from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
@@ -30,10 +34,83 @@ from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.controller import ForgeActor
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    """
+    Compute log probs of the completion input_ids given the logits of the whole sequence.
+    Warning: only works if all prompts in the batch have the same length. TODO: support variable length prompts.
+
+    Args:
+        logits (torch.Tensor): (batch_size, seq_len, vocab_size), the logits output from the model.
+        input_ids (torch.Tensor): (batch_size, completion_len), the token ids for the completion.
+
+    Returns:
+        torch.Tensor: (batch_size, completion_len), the log probabilities of the completion tokens.
+
+    Raises:
+        ValueError: If the inferred context length is less than or equal to 0.
+    """
+    context_len = logits.shape[1] - input_ids.shape[1]
+    completion_len = input_ids.shape[1]
+    if context_len <= 0:
+        raise ValueError(
+            "Context length must be greater than 0. Otherwise the probability of the first token is undefined."
+        )
+
+    # (bsz, completion_len, vocab_size)
+    logits = logits[:, context_len - 1 : -1, :]
+    assert logits.shape == (
+        input_ids.shape[0],
+        completion_len,
+        logits.shape[-1],
+    ), f"logits shape incorrect, {logits.shape=}, {input_ids.shape=}, {logits.shape[-1]=}"
+    token_logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    # (bsz, completion_len, 1)
+    logprobs = torch.gather(token_logprobs, 2, input_ids.unsqueeze(-1))
+    # (bsz, completion_len)
+    logprobs = logprobs.squeeze(-1)
+
+    return logprobs
+
+
+@dataclass
+class Episode:
+    # TODO: add adtional layer for multi-turn
+    episode_id: str
+    request: str
+    policy_version: int
+    pad_id: int
+    request_len: int
+    response_len: int
+    target: Optional[Any] = None
+    # processed data
+    response: Optional[str] = None
+    request_tokens: Optional[list[int]] = None
+    response_tokens: Optional[list[int]] = None
+    ref_logprobs: Optional[torch.Tensor] = None
+    reward: Optional[float] = None
+    advantage: Optional[float] = None
+
+    @property
+    def request_tensor(self):
+        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.request_len:  # left pad
+            diff = self.request_len - tensor.shape[0]
+            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
+        return tensor
+
+    @property
+    def response_tensor(self):
+        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.response_len:  # right pad
+            diff = self.response_len - tensor.shape[0]
+            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
+        return tensor
 
 
 @dataclass
