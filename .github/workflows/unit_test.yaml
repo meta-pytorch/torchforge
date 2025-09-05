@@ -32,7 +32,7 @@ jobs:
           log-file-suffix: '${{matrix.python-version}}.txt'
       - name: Check CUDA version
         run: |
-          nvcc --version
+          $CUDA_PATH/bin/nvcc --version
           nvidia-smi
       - name: Install pytorch
         run: |
