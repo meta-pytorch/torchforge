@@ -25,16 +25,6 @@ jobs:
         run: |
           source .github/workflows/activate_conda_env.sh
           python -m pip install --upgrade pip
-      - uses: Jimver/cuda-toolkit@master
-        id: cuda-toolkit
-        with:
-          cuda: '12.9.0'
-          log-file-suffix: '${{matrix.python-version}}.txt'
-      - name: Check CUDA version
-        run: |
-          sudo chmod -R 777 $CUDA_PATH
-          $CUDA_PATH/bin/nvcc --version
-          nvidia-smi
       - name: Install pytorch
         run: |
           source .github/workflows/activate_conda_env.sh
@@ -43,6 +33,8 @@ jobs:
         run: |
           source .github/workflows/activate_conda_env.sh
           python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
+      - name: Add GitHub.com to known_hosts
+        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
       - name: Install torchstore
         run: |
           source .github/workflows/activate_conda_env.sh
@@ -53,6 +45,16 @@ jobs:
         run: |
           source .github/workflows/activate_conda_env.sh
           python -m pip install --no-build-isolation -e ".[dev]"
+            - uses: Jimver/cuda-toolkit@master
+        id: cuda-toolkit
+        with:
+          cuda: '12.9.0'
+          log-file-suffix: '${{matrix.python-version}}.txt'
+      - name: Check CUDA version
+        run: |
+          sudo chmod -R 777 $CUDA_PATH
+          $CUDA_PATH/bin/nvcc --version
+          nvidia-smi
       - name: Run unit tests with coverage
         # TODO add all tests
         run: |
