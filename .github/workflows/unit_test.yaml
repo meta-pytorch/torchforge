@@ -14,11 +14,6 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
-      - uses: Jimver/cuda-toolkit@master
-        id: cuda-toolkit
-        with:
-          cuda: '12.9.0'
-          log-file-suffix: '${{ matrix.python-version }}.txt'
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
@@ -26,6 +21,11 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test
           python-version: ${{ matrix.python-version }}
+      - uses: Jimver/cuda-toolkit@master
+        id: cuda-toolkit
+        with:
+          cuda: '12.9.0'
+          log-file-suffix: '${{ matrix.python-version }}.txt'
       - name: python is python3
         run: source .github/workflows/python_is_python3.sh
       - name: Update pip
