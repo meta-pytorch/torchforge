@@ -7,4 +7,3 @@
 conda init
 source ~/.bashrc
 conda activate test
-python --version
