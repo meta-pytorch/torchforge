@@ -6,7 +6,7 @@ on:
 
 jobs:
   unit_tests:
-    runs-on: 4-core-ubuntu-gpu-t4
+    runs-on: ubuntu-latest, 4-core-ubuntu-gpu-t4
     timeout-minutes: 15
     strategy:
       matrix:
