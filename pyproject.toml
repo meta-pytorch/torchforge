@@ -13,7 +13,6 @@ dependencies = [
     # PyTorch
     "torchdata>=0.8.0",
     "torchtitan",
-    "tyro", # temp dep that titan needs
     # vLLM
     # TODO: pin specific vllm version
     #"vllm==0.10.0",
