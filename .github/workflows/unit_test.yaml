@@ -27,7 +27,7 @@ jobs:
           activate-environment: test
           python-version: ${{ matrix.python-version }}
       - name: python is python3
-      - run: source .github/workflows/python_is_python3.sh
+        run: source .github/workflows/python_is_python3.sh
       - name: Update pip
         run: python -m pip install --upgrade pip
       - name: Check CUDA version
