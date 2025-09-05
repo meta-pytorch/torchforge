@@ -13,16 +13,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
+import torchstore as store
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
-
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
@@ -43,8 +36,33 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
+
 
 logger = logging.getLogger(__name__)
+
+
+def create_vllm_args(
+    model: str,
+    tensor_parallel_size: int = 1,
+    pipeline_parallel_size: int = 1,
+    enforce_eager: bool = False,
+    enable_expert_parallel: bool = False,
+):
+    """Create vLLM configuration from parameters."""
+    args = EngineArgs(
+        model=model,
+        tensor_parallel_size=tensor_parallel_size,
+        pipeline_parallel_size=pipeline_parallel_size,
+        enforce_eager=enforce_eager,
+        enable_expert_parallel=enable_expert_parallel,
+    )
+    # Original method returns False when not run in the main thread
+    args._is_v1_supported_oracle = lambda *_: True
+    return args.create_engine_config(UsageContext.LLM_CLASS)
 
 
 @dataclass
@@ -76,14 +94,26 @@ class WorkerConfig:
         tensor_parallel_size: Number of tensor parallel workers.
         pipeline_parallel_size: Number of pipeline parallel workers.
         enforce_eager: Whether to enforce eager mode.
-        vllm_args: vLLM engine args.
+        enable_expert_parallel: Whether to enable expert parallelism.
+        vllm_args: vLLM engine args (optional - will be created if None).
     """
 
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
-    vllm_args: EngineArgs = None
+    enable_expert_parallel: bool = False
+    vllm_args = None
+
+    def create_vllm_args(self):
+        """Create vLLM configuration from worker config parameters."""
+        return create_vllm_args(
+            model=self.model,
+            tensor_parallel_size=self.tensor_parallel_size,
+            pipeline_parallel_size=self.pipeline_parallel_size,
+            enforce_eager=self.enforce_eager,
+            enable_expert_parallel=self.enable_expert_parallel,
+        )
 
 
 @dataclass
@@ -101,7 +131,6 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
-    store: MultiProcessStore | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -115,7 +144,6 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
-        store: MultiProcessStore | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -128,6 +156,7 @@ class Policy(PolicyInterface):
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+        print("worker params: ", config.worker_params)
         workers = await worker_procs.spawn(
             "vllm_worker", PolicyWorker, **asdict(config.worker_params)
         )
@@ -139,7 +168,6 @@ class Policy(PolicyInterface):
             cls,
             config=config,
             policy_worker=workers,
-            store=store,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -167,11 +195,13 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call(store=self.store)
+        await self.policy_worker.setup.call()
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
+
+        # Create vllm_args using the worker config
+        self.vllm_args = self.config.worker_params.create_vllm_args()
 
         # Setup sampling params
         sampling_overrides = self.config.sampling_params
@@ -346,8 +376,9 @@ class PolicyWorker(ForgeActor):
     model: str
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
+    enable_expert_parallel: bool = False
     enforce_eager: bool = False
-    vllm_args: EngineArgs = None
+    vllm_args = None
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -364,15 +395,13 @@ class PolicyWorker(ForgeActor):
         - all executor methods verify no changes
         """
         if self.vllm_args is None:
-            # Use default vllm EngineArgs
-            self.vllm_args = EngineArgs(
+            self.vllm_args = create_vllm_args(
                 model=self.model,
                 tensor_parallel_size=self.tensor_parallel_size,
                 pipeline_parallel_size=self.pipeline_parallel_size,
                 enforce_eager=self.enforce_eager,
+                enable_expert_parallel=self.enable_expert_parallel,
             )
-            # Original method returns False when not run in the main thread
-            self.vllm_args._is_v1_supported_oracle = lambda *_: True
         else:
             # Check that provided args match Policy args
             cfg = [
@@ -388,12 +417,14 @@ class PolicyWorker(ForgeActor):
                         f"{key} args don't match value in EngineArgs, overriding with {value}"
                     )
                     setattr(self.vllm_args, key, value)
-        # Build Config
-        self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
+            # Build Config if needed - the vllm_args might already be a VllmConfig
+            if hasattr(self.vllm_args, "create_engine_config"):
+                args = self.vllm_args
+                args._is_v1_supported_oracle = lambda *_: True
+                self.vllm_args = args.create_engine_config(UsageContext.LLM_CLASS)
 
     @endpoint
-    async def setup(self, store: MultiProcessStore = None):
-        self.torchstore = store
+    async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -418,7 +449,7 @@ class PolicyWorker(ForgeActor):
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.torchstore.get(
+            stored_tensor = await store.get(
                 f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
@@ -432,9 +463,6 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        if self.torchstore is None:
-            raise Exception("No torchstore configured, skipping model update")
-
         logger.debug(
             f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
         )
@@ -474,10 +502,6 @@ class PolicyWorker(ForgeActor):
         self.worker.compile_or_warm_up_model()
         self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
         return kv_cache_config
-
-    @endpoint
-    async def get_vllm_args(self):
-        return self.vllm_args
 
     @endpoint
     async def get_model_params(self):
