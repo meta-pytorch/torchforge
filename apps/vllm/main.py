@@ -12,11 +12,15 @@ python -m apps.vllm.main --guided-decoding --num-samples 3
 
 import argparse
 import asyncio
+import os
 from argparse import Namespace
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from vllm.outputs import RequestOutput
+
+os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
+os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
 
 async def main():
