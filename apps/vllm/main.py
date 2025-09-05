@@ -13,11 +13,10 @@ python -m apps.vllm.main --guided-decoding --num-samples 3
 import argparse
 import asyncio
 from argparse import Namespace
-from typing import List
 
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
-from vllm.outputs import CompletionOutput
+from vllm.outputs import RequestOutput
 
 
 async def main():
@@ -43,8 +42,10 @@ def parse_args() -> Namespace:
         "--model",
         type=str,
         default="meta-llama/Llama-3.1-8B-Instruct",
+        # default="deepseek-ai/DeepSeek-R1-0528",
         help="Model to use",
     )
+    parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size")
     parser.add_argument(
         "--num-samples", type=int, default=2, help="Number of samples to generate"
     )
@@ -59,13 +60,12 @@ def parse_args() -> Namespace:
 
 def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
 
-    worker_size = 2
     worker_params = WorkerConfig(
         model=args.model,
-        tensor_parallel_size=worker_size,
+        tensor_parallel_size=args.tp_size,
         pipeline_parallel_size=1,
         enforce_eager=True,
-        vllm_args=None,
+        enable_expert_parallel="DeepSeek" in args.model,
     )
 
     sampling_params = SamplingOverrides(
@@ -77,23 +77,23 @@ def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
         worker_params=worker_params, sampling_params=sampling_params
     )
     service_config = ServiceConfig(
-        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
+        procs_per_replica=args.tp_size, num_replicas=1, with_gpus=True
     )
 
     return policy_config, service_config
 
 
 async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
-    print("Spawning service...")
+    print("Spawning policy service...")
     policy = await spawn_service(service_config, Policy, config=config)
 
     async with policy.session():
         print("Requesting generation...")
-        responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+        responses: RequestOutput = await policy.generate.choose(prompt=prompt)
 
         print("\nGeneration Results:")
         print("=" * 80)
-        for batch, response in enumerate(responses):
+        for batch, response in enumerate(responses.outputs):
             print(f"Sample {batch + 1}:")
             print(f"User: {prompt}")
             print(f"Assistant: {response.text}")
