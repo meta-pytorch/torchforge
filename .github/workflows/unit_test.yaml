@@ -21,15 +21,15 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test
           python-version: ${{ matrix.python-version }}
+      - name: Update pip
+        run: |
+          source .github/workflows/activate_conda_env.sh
+          python -m pip install --upgrade pip
       - uses: Jimver/cuda-toolkit@master
         id: cuda-toolkit
         with:
           cuda: '12.9.0'
           log-file-suffix: '${{matrix.python-version}}.txt'
-      - name: Update pip
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          python -m pip install --upgrade pip
       - name: Check CUDA version
         run: |
           nvcc --version
