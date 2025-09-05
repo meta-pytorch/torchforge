@@ -16,7 +16,7 @@ dependencies = [
     # vLLM
     "vllm==0.10.1",
     # Hugging Face integrations
-    "transformers"
+    "transformers",
     "datasets>=2.21.0",
     "tokenizers",
     # Miscellaneous
