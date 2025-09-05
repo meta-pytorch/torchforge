@@ -52,7 +52,7 @@ install_system_packages() {
     # Check for sudo access
     if sudo -n true 2>/dev/null; then
         # Detect OS and install packages accordingly
-        if [ -f /etc/fedora-release ]; then
+        if [ -f /etc/fedora-release ] || [ -f /etc/centos-release ]; then
             log_info "Detected Fedora OS"
             sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
         elif [ -f /etc/lsb-release ] || [ -f /etc/ubuntu-release ]; then
