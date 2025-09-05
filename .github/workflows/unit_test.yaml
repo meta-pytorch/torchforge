@@ -44,9 +44,7 @@ jobs:
       - name: Install torchtitan
         run: |
           source .github/workflows/activate_conda_env.sh
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHTITAN }}'
-          python -m pip install git+ssh://git@github.com/pytorch/torchtitan.git
+          pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu126
       - name: Install dependencies
         run: |
           source .github/workflows/activate_conda_env.sh
