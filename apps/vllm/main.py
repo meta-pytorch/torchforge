@@ -46,7 +46,6 @@ def parse_args() -> Namespace:
         "--model",
         type=str,
         default="meta-llama/Llama-3.1-8B-Instruct",
-        # default="deepseek-ai/DeepSeek-R1-0528",
         help="Model to use",
     )
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size")
