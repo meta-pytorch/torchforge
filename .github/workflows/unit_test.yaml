@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+      - uses: Jimver/cuda-toolkit@master
+        id: cuda-toolkit
+        with:
+          cuda: '12.9.0'
+          log-file-suffix: '${{matrix.python-version}}.txt'
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
@@ -28,7 +33,7 @@ jobs:
           nvcc --version
           nvidia-smi
       - name: Install pytorch
-        run: python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu126
+        run: python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu129
       - name: Install monarch
         run: python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
       - name: Install torchstore
