@@ -11,7 +11,7 @@ Tests for reference_actor.py - compute_logprobs function
 import pytest
 import torch
 
-from forge.actors.reference_actor import compute_logprobs
+from forge.actors.reference_model import compute_logprobs
 
 
 class TestComputeLogprobs:
