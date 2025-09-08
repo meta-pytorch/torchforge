@@ -13,12 +13,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM, get_state_dict
@@ -42,6 +36,12 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 
 
 @dataclass
@@ -348,6 +348,12 @@ class Policy(PolicyInterface):
         return self.weights_version
 
     @endpoint
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
+        """Get the current model parameters. Only for testing purposes."""
+        model_params = await self.policy_worker._get_model_params.choose()
+        return model_params
+
+    @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
         return self.weights_version
@@ -499,7 +505,7 @@ class PolicyWorker(ForgeActor):
         return self.vllm_args
 
     @endpoint
-    async def get_model_params(self):
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
         model = self.worker.model_runner.model
         state_dict = {}
 

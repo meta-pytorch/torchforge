@@ -103,6 +103,81 @@ class Episode:
         return tensor
 
 
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    context_length = logits.shape[1] - input_ids.shape[1]
+
+    # Truncate request logits and drop last
+    logits = logits[:, context_length - 1 : -1]
+
+    # Compute logprobs
+    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+    return logprobs
+
+
+class SimpleGRPOLoss(nn.Module):
+    """Simplified GRPO Loss for simplified single step updates
+    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
+    """
+
+    def __init__(self, epsilon=0.1, beta=0.1):
+        super().__init__()
+        self.epsilon = epsilon
+        self.beta = beta
+
+    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
+        per_token_kl = (
+            torch.exp(ref_logprobs.detach() - logprobs)
+            - (ref_logprobs.detach() - logprobs)
+            - 1
+        )
+        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
+        loss = (
+            (per_token_loss * padding_mask).sum(dim=1)
+            / (padding_mask.sum(dim=1) + 1e-8)
+        ).mean()
+        return loss
+
+
+@dataclass
+class Episode:
+    # TODO: add adtional layer for multi-turn
+    episode_id: str
+    request: str
+    policy_version: int
+    pad_id: int
+    request_len: int
+    response_len: int
+    target: Optional[Any] = None
+    # processed data
+    response: Optional[str] = None
+    request_tokens: Optional[list[int]] = None
+    response_tokens: Optional[list[int]] = None
+    ref_logprobs: Optional[torch.Tensor] = None
+    reward: Optional[float] = None
+    advantage: Optional[float] = None
+
+    @property
+    def request_tensor(self):
+        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.request_len:  # left pad
+            diff = self.request_len - tensor.shape[0]
+            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
+        return tensor
+
+    @property
+    def response_tensor(self):
+        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.response_len:  # right pad
+            diff = self.response_len - tensor.shape[0]
+            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
+        return tensor
+
+
 @dataclass
 class Group:
     group_id: str
@@ -335,8 +410,8 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 5
-    model = "Qwen/Qwen3-4B-Base"
+    group_size = 4
+    model = "Qwen/Qwen3-1.7B-Base"
     max_req_tokens = 512
     max_res_tokens = 128
 
@@ -431,6 +506,7 @@ async def main():
                 response_len=max_res_tokens,
                 target=target,
             )
+
             responses = await policy.generate.choose(prompt)
             if responses is None:
                 continue
