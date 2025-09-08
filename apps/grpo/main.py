@@ -4,15 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-
-"""To run:
-python -m apps.grpo.main --config apps/grpo/llama3_8b.yaml
-"""
-
-
 import asyncio
 import logging
-import sys
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -22,13 +15,11 @@ from datasets import load_dataset
 from forge.actors.policy import Policy, SamplingOverrides, WorkerConfig
 from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
-from omegaconf import DictConfig
 from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -280,20 +271,17 @@ class DatasetActor(ForgeActor):
             return None
 
 
-async def run(cfg: DictConfig):
+async def main():
     """Main GRPO training loop with rollout and training processes."""
-    # cfg is now a DictConfig from YAML
-    group_size = cfg.training.group_size
-    model_name = cfg.model.name
-    titan_model = TitanJobModelConfig(
-        name=cfg.titan_model.name, flavor=cfg.titan_model.flavor
-    )
+    group_size = 1
+    model = "Qwen/Qwen3-0.6B"
+    titan_model = TitanJobModelConfig(name="qwen3", flavor="0.6B")
 
-    # Setup WandB logger
+    # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
-        cfg.logging.backend,
-        freq=cfg.logging.frequency,
-        project=cfg.logging.project,
+        "wandb",
+        freq=1,
+        project="grpo-training",
     )
 
     # ---- Setup services ---- #
@@ -307,47 +295,45 @@ async def run(cfg: DictConfig):
         reward_actor,
     ) = await asyncio.gather(
         spawn_service(
-            ServiceConfig(**cfg.services.dataloader),
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
             DatasetActor,
-            path=cfg.dataset.path,
-            config_name=cfg.dataset.config_name,
-            split=cfg.dataset.split,
-            streaming=cfg.dataset.streaming,
+            path="openai/gsm8k",
+            config_name="main",
+            split="train",
+            streaming=True,
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.policy),
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
-            worker_params=WorkerConfig(model=model_name),
-            sampling_overrides=SamplingOverrides(
-                num_samples=group_size, max_tokens=cfg.training.max_tokens
-            ),
+            worker_params=WorkerConfig(model=model),
+            sampling_overrides=SamplingOverrides(num_samples=group_size, max_tokens=16),
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.trainer),
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Trainer,
-            learning_rate=cfg.training.learning_rate,
-            beta=cfg.training.beta,
-            model_name=model_name,
+            learning_rate=1e-5,
+            beta=0.1,
+            model_name=model,
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.replay_buffer),
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
             ReplayBuffer,
-            batch_size=cfg.training.batch_size,
-            max_policy_age=cfg.training.max_policy_age,
+            batch_size=4,
+            max_policy_age=1,
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.compute_advantages.service),
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
             ComputeAdvantages,
-            gamma=cfg.services.compute_advantages.gamma,
-            lambda_=cfg.services.compute_advantages.lambda_,
+            gamma=0.99,
+            lambda_=0.95,
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.ref_model),
+            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
             TitanRefModel,
             model=titan_model,
         ),
         spawn_service(
-            ServiceConfig(**cfg.services.reward_actor),
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
             RewardActor,
             reward_functions=[MathReward(), ThinkingReward()],
         ),
@@ -446,10 +432,5 @@ async def run(cfg: DictConfig):
         )
 
 
-@parse
-def recipe_main(cfg: DictConfig) -> None:
-    asyncio.run(run(cfg))
-
-
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    asyncio.run(main())
