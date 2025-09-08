@@ -107,7 +107,7 @@ class Policy(PolicyInterface):
         self.weights_version: int = 0
         if isinstance(self.engine_params, Mapping):
             self.engine_params = EngineConfig.from_dict(self.engine_params)
-        if isinstance(self.sampling_overrides, dict):
+        if isinstance(self.sampling_overrides, Mapping):
             self.sampling_overrides = SamplingOverrides(**self.sampling_overrides)
 
     @classmethod
@@ -115,8 +115,8 @@ class Policy(PolicyInterface):
         cls: type["Policy"],
         *,
         process_config: ProcessConfig,
-        engine_params: EngineConfig | dict = EngineConfig(),
-        sampling_overrides: SamplingOverrides | dict = SamplingOverrides(),
+        engine_params: EngineConfig | Mapping = EngineConfig(),
+        sampling_overrides: SamplingOverrides | Mapping = SamplingOverrides(),
         available_devices: str | None = None,
         store: MultiProcessStore | None = None,
         **kwargs,
@@ -132,10 +132,10 @@ class Policy(PolicyInterface):
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
-        if isinstance(engine_params, (dict, DictConfig)):
+        if isinstance(engine_params, Mapping):
             engine_params = EngineConfig.from_dict(engine_params)
 
-        if isinstance(engine_params, (dict, DictConfig)):
+        if isinstance(engine_params, Mapping):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
 
         workers = await worker_procs.spawn(
@@ -408,7 +408,9 @@ class PolicyWorker(ForgeActor):
 
         updated_count = 0
         # setting explictly to llama3 for now as its our only use case
-        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
+        sharding = VLLMSharding(
+            self.vllm_args.parallel_config.tensor_parallel_size, self.rank
+        )
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
