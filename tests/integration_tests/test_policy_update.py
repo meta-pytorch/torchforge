@@ -176,7 +176,7 @@ def get_configs(worker_size: int, model_name: str) -> Tuple[Dict, ServiceConfig]
     )
 
     sampling_overrides = SamplingOverrides(
-        num_samples=3,
+        n=3,
         guided_decoding=True,
     )
 
