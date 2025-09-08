@@ -16,7 +16,7 @@ from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig, spawn_service
 from forge.data.sharding import VLLMSharding
 
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
 from transformers import AutoModelForCausalLM
@@ -202,11 +202,11 @@ async def run_rl_trainer(store, worker_size) -> None:
     2. Inject torchstore references via setup call.
     2. Call push weights.
     """
-    cfg = OmegaConf.load("apps/rl/llama3_8b.yaml")
+    cfg: DictConfig = OmegaConf.load("apps/rl/llama3_8b.yaml")
     rl_trainer = await spawn_service(
         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         RLTrainer,
-        cfg=**cfg.trainer,
+        **cfg.trainer,
     )
     rl_trainer.push_weights.call()
 
@@ -286,7 +286,7 @@ async def test_llama3_policy_update_single(llama3_torchstore_setup):
     print("Starting Llama 3 8B torchstore test (single GPU)...")
 
     store, original_state_dict = llama3_torchstore_setup
-    #store = MultiProcessStore.create_store()
+    # store = MultiProcessStore.create_store()
     await run_rl_trainer(store, worker_size=1)
 
     loaded_state_dict = await run_policy_integration(
