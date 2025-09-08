@@ -31,7 +31,7 @@ async def run(cfg: DictConfig):
     print("Spawning service...")
 
     policy = await spawn_service(
-        ServiceConfig(**cfg.service_config), Policy, **cfg.policy
+        ServiceConfig(**cfg.policy.service), Policy, **cfg.policy
     )
 
     async with policy.session():
