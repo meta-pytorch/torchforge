@@ -15,11 +15,8 @@ import logging
 import sys
 
 from forge.actors import ReplayBuffer, RLTrainer
-
 from forge.cli.config import parse
-from forge.controller import spawn_actors
-
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
@@ -29,26 +26,20 @@ logger.setLevel(logging.INFO)
 async def run(cfg: DictConfig):
 
     trainer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=4),
         RLTrainer,
         **cfg.trainer,
     )
-    buffer = (
-        await spawn_actors(
-            name="replay_buffer",
-            actor_cls=ReplayBuffer,
-            cfg=cfg.replay_buffer,
-            processes=cfg.replay_buffer.pop("processes"),
-        ),
+    replay_buffer = await spawn_service(
+        ServiceConfig(procs_per_replica=1, num_replicas=1),
+        ReplayBuffer,
+        **cfg.replay_buffer,
     )
-    print("Actors spawned")
-
-    # Initialize everything
-    await trainer.setup.call()
-    print("Setup done")
+    print("Services initialized....")
 
     print("shutting down...")
-    await asyncio.gather(*[a.mesh.stop() for a in [trainer]])
+    await shutdown_service(trainer)
+    await shutdown_service(replay_buffer)
 
 
 @parse
