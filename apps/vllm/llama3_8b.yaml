@@ -5,7 +5,7 @@ policy:
     pipeline_parallel_size: 1
     enforce_eager: true
   sampling_overrides:
-    num_samples: 2
+    n: 2
     guided_decoding: false
     max_tokens: 512
   available_devices: null

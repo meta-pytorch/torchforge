@@ -31,7 +31,7 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertFalse(policy.engine_params.enforce_eager)
 
         # Sampling defaults
-        self.assertEqual(policy.sampling_overrides.num_samples, 1)
+        self.assertEqual(policy.sampling_overrides.n, 1)
         self.assertFalse(policy.sampling_overrides.guided_decoding)
         self.assertEqual(policy.sampling_overrides.max_tokens, 512)
 
@@ -45,7 +45,7 @@ class TestPolicyConfig(unittest.TestCase):
         }
 
         sampling_dict = {
-            "num_samples": 1357,
+            "n": 1357,
             "guided_decoding": True,
             "max_tokens": 2468,
         }
@@ -64,8 +64,9 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertEqual(policy.engine_params.pipeline_parallel_size, 8888)
         self.assertTrue(policy.engine_params.enforce_eager)
 
-        self.assertEqual(policy.sampling_overrides.num_samples, 1357)
-        self.assertTrue(policy.sampling_overrides.guided_decoding)
+        self.assertEqual(policy.sampling_overrides.n, 1357)
+        # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
+        self.assertIsNotNone(policy.sampling_overrides.guided_decoding)
         self.assertEqual(policy.sampling_overrides.max_tokens, 2468)
 
     def test_policy_yaml_config_loading(self):
@@ -78,7 +79,7 @@ class TestPolicyConfig(unittest.TestCase):
           enforce_eager: true
 
         sampling_overrides:
-          num_samples: 2468
+          n: 2468
           guided_decoding: true
           max_tokens: 1357
 
@@ -99,8 +100,9 @@ class TestPolicyConfig(unittest.TestCase):
             self.assertEqual(policy.engine_params.pipeline_parallel_size, 5678)
             self.assertTrue(policy.engine_params.enforce_eager)
 
-            self.assertEqual(policy.sampling_overrides.num_samples, 2468)
-            self.assertTrue(policy.sampling_overrides.guided_decoding)
+            self.assertEqual(policy.sampling_overrides.n, 2468)
+            # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
+            self.assertIsNotNone(policy.sampling_overrides.guided_decoding)
             self.assertEqual(policy.sampling_overrides.max_tokens, 1357)
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")

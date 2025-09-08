@@ -10,10 +10,16 @@ import os
 import sys
 from collections.abc import Mapping
 from copy import copy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from omegaconf import DictConfig
 from torchstore import MultiProcessStore
@@ -38,12 +44,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -194,7 +194,7 @@ class Policy(PolicyInterface):
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=asdict(self.config.sampling_params)
+            self.vllm_args, overrides=asdict(self.sampling_overrides)
         )
 
         # Setup processors
