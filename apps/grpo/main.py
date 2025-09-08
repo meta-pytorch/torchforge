@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -103,81 +102,6 @@ class Episode:
         return tensor
 
 
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
-
-
-class SimpleGRPOLoss(nn.Module):
-    """Simplified GRPO Loss for simplified single step updates
-    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
-    """
-
-    def __init__(self, epsilon=0.1, beta=0.1):
-        super().__init__()
-        self.epsilon = epsilon
-        self.beta = beta
-
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        per_token_kl = (
-            torch.exp(ref_logprobs.detach() - logprobs)
-            - (ref_logprobs.detach() - logprobs)
-            - 1
-        )
-        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
-        loss = (
-            (per_token_loss * padding_mask).sum(dim=1)
-            / (padding_mask.sum(dim=1) + 1e-8)
-        ).mean()
-        return loss
-
-
-@dataclass
-class Episode:
-    # TODO: add adtional layer for multi-turn
-    episode_id: str
-    request: str
-    policy_version: int
-    pad_id: int
-    request_len: int
-    response_len: int
-    target: Optional[Any] = None
-    # processed data
-    response: Optional[str] = None
-    request_tokens: Optional[list[int]] = None
-    response_tokens: Optional[list[int]] = None
-    ref_logprobs: Optional[torch.Tensor] = None
-    reward: Optional[float] = None
-    advantage: Optional[float] = None
-
-    @property
-    def request_tensor(self):
-        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
-        if tensor.shape[0] < self.request_len:  # left pad
-            diff = self.request_len - tensor.shape[0]
-            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
-        return tensor
-
-    @property
-    def response_tensor(self):
-        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
-        if tensor.shape[0] < self.response_len:  # right pad
-            diff = self.response_len - tensor.shape[0]
-            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
-        return tensor
-
-
 @dataclass
 class Group:
     group_id: str
@@ -196,7 +120,7 @@ class Group:
         target: Any = None,
     ):
         episodes = []
-        for i in range(group_size):
+        for _ in range(group_size):
             episodes.append(
                 Episode(
                     episode_id=str(uuid.uuid4()),
@@ -292,13 +216,12 @@ class Trainer(ForgeActor):
         """Update policy model weights with trainer's current weights."""
         start_time = time.time()
         assert self.store is not None, "Store must be provided to save weights"
-        await push_state_dict(
-            self.store,
-            self.model.state_dict(),
-            f"{self.state_dict_key}{DELIM}{version}",  # Use version as key
-        )
+        key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
+        await push_state_dict(self.store, self.model.state_dict(), key)
         end_time = time.time()
-        self.logger.info(f"Updating weights took {end_time - start_time:.2f} seconds")
+        self.logger.debug(
+            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
+        )
 
 
 @dataclass
@@ -410,10 +333,10 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 4
-    model = "Qwen/Qwen3-1.7B-Base"
+    group_size = 5
+    model = "Qwen/Qwen3-4B-Base"
     max_req_tokens = 512
-    max_res_tokens = 128
+    max_res_tokens = 512
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -464,8 +387,8 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             ReplayBuffer,
-            batch_size=4,
-            max_policy_age=1,
+            batch_size=8,
+            max_policy_age=0,  # Fully on-policy for now
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
@@ -495,6 +418,12 @@ async def main():
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["request"], sample["target"]
+            responses = await policy.generate.choose(prompt)
+            # If weights are updating mid-rollout, response will be cancelled and service
+            # will return None. We currently throw away the sample.
+            if responses is None:
+                continue
+
             version = await policy.get_version.choose()
             group = Group.new_group(
                 group_id=rollout_count,
@@ -507,15 +436,10 @@ async def main():
                 target=target,
             )
 
-            responses = await policy.generate.choose(prompt)
-            if responses is None:
-                continue
+            # TODO: Parallelize the following calculation
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
-                logger.log(
-                    "response_len/rollout", len(response.token_ids), rollout_count
-                )
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
@@ -524,12 +448,17 @@ async def main():
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
-                buffer_size = await replay_buffer._numel.choose()
-                logger.log("buffer_size/rollout", buffer_size, rollout_count)
+
+            avg_response_len = (
+                sum(len(e.response_tokens) for e in group.episodes) / group_size
+            )
+            logger.log("avg_response_len/rollout", avg_response_len, rollout_count)
+            buffer_size = await replay_buffer._numel.choose()
+            logger.log("buffer_size/rollout", buffer_size, rollout_count)
+            avg_reward = sum(e.reward for e in group.episodes) / group_size
+            logger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1
-            avg_reward = sum(e.reward for e in group.episodes) / len(group.episodes)
-            logger.log("reward/rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
@@ -546,7 +475,7 @@ async def main():
                 logger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.choose(policy_version)
                 policy_version += 1
-                _ = await policy.update_weights.choose()
+                await policy.update_weights.choose()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

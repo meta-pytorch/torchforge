@@ -5,12 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-import logging
 import os
 import sys
+import time
 from copy import copy
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List
 
 import torch
 from monarch.actor import current_rank, endpoint, ProcMesh
@@ -21,7 +20,7 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.lora.request import LoRARequest
-from vllm.outputs import CompletionOutput
+from vllm.outputs import RequestOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
@@ -112,6 +111,9 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
+        self._updating_weights: bool = False
+        self._request_queue: list[tuple[str, int, asyncio.Future]] = []
+        self.running: bool = False
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -174,7 +176,7 @@ class Policy(PolicyInterface):
         await self.policy_worker.setup.call(store=self.store)
 
         self.request_id = 0
-        self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
@@ -218,12 +220,21 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
+    async def generate(self, prompt: str, priority: int = 0) -> RequestOutput | None:
+        """Generate a response for the given prompt."""
+        if self._updating_weights:
+            request_future = asyncio.Future()
+            self._request_queue.append((prompt, priority, request_future))
+            return await request_future
+        return await self._generate(prompt, priority)
+
+    async def _generate(self, prompt: str, priority: int = 0) -> RequestOutput | None:
+        """Internal generation method that doesn't check for weight updates."""
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
-        prompt: Dict[str, str] = convert_input(prompt=prompt)
+        prompt_dict: dict[str, str] = convert_input(prompt=prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
@@ -238,7 +249,7 @@ class Policy(PolicyInterface):
         # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
             request_id=request_id,
-            prompt=prompt,
+            prompt=prompt_dict,
             params=self.sampling_params,
             arrival_time=None,
             lora_request=self.lora_request,
@@ -276,11 +287,15 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
+        # Yield control to allow the run() loop to process the scheduled request
+        await asyncio.sleep(0)
+
         try:
             generations = await request_fut
             return generations
         except asyncio.exceptions.CancelledError:
             self.logger.debug(f"Request {request_id} was cancelled")
+            return None
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -314,14 +329,27 @@ class Policy(PolicyInterface):
                 engine_core_timestamp=outputs.timestamp,
                 iteration_stats=None,
             )
+
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
-                    _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output)
+                    if request_output.request_id in self.requests:
+                        _, fut = self.requests.pop(request_output.request_id)
+                        fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self) -> int:
-        """Update the policy weights."""
+    async def update_weights(self):
+        """Update the policy weights and schedule processing of queued requests."""
+        queued_count = len(self._request_queue)
+        self.logger.debug(
+            f"Starting weight update (v{self.weights_version} -> v{self.weights_version + 1})"
+        )
+        if queued_count > 0:
+            self.logger.debug(
+                f"Will process {queued_count} queued requests after update"
+            )
+
+        self._updating_weights = True
+
         # Cancel all current requests and wait for them to finish
         pending_futures = []
         for request_id, (parent_req, fut) in list(self.requests.items()):
@@ -331,24 +359,59 @@ class Policy(PolicyInterface):
 
         # Wait for all cancelled requests to finish with a timeout
         if pending_futures:
+            self.logger.debug(f"Cancelling {len(pending_futures)} pending requests")
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*pending_futures, return_exceptions=True),
-                    timeout=5.0,  # 5 second timeout
+                    timeout=5.0,
                 )
             except asyncio.TimeoutError:
-                logging.warning("Some requests did not cancel within timeout")
+                self.logger.warning("Some requests did not cancel within timeout")
 
-        # Clear any remaining requests
         self.requests.clear()
 
-        # Now update the weights
-        await self.policy_worker.update.call(version=self.weights_version)
-        self.weights_version += 1
-        return self.weights_version
+        try:
+            await self.policy_worker.update.call(version=self.weights_version)
+            self.weights_version += 1
+            self.logger.info(f"Weight update completed (now v{self.weights_version})")
+        except Exception as e:
+            self.logger.error(f"Weight update failed: {e}")
+            self._updating_weights = False
+            raise
+
+        self._updating_weights = False
+
+        # Schedule queue processing as a separate task to avoid blocking the endpoint
+        if self._request_queue:
+            task = asyncio.create_task(self._process_queued_requests())
+            task.add_done_callback(self._queue_processing_callback)
+
+    async def _process_queued_requests(self):
+        """Process all queued requests after weight update completes."""
+        queued_requests = self._request_queue.copy()
+        self._request_queue.clear()
+
+        for i, (prompt, priority, future) in enumerate(queued_requests):
+            try:
+                # Use the internal method directly to avoid the updating weights check
+                result = await self._generate(prompt, priority)
+                future.set_result(result)
+            except Exception as e:
+                self.logger.error(f"Error processing queued request {i+1}: {e}")
+                future.set_exception(e)
+
+    def _queue_processing_callback(self, task: asyncio.Task):
+        """Callback to handle completion/errors of queue processing task."""
+        try:
+            if task.exception():
+                self.logger.error(f"Queue processing task failed: {task.exception()}")
+            else:
+                self.logger.debug("Queue processing task completed successfully")
+        except Exception as e:
+            self.logger.error(f"Error in queue processing callback: {e}")
 
     @endpoint
-    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
+    async def _get_model_params(self) -> dict[str, torch.Tensor]:
         """Get the current model parameters. Only for testing purposes."""
         model_params = await self.policy_worker._get_model_params.choose()
         return model_params
@@ -457,18 +520,18 @@ class PolicyWorker(ForgeActor):
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
-        self.logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
-        )
-
+        key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
+        start = time.time()
         new_state_dict = await get_state_dict(
             self.torchstore, f"{self.state_dict_key}{DELIM}{version}"
         )
+        # We use the load_weights method from vLLM b/c they perform custom mapping like
+        # fusing QKV linear layers
         model.load_weights(list(new_state_dict.items()))
-
-        # await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        self.logger.debug("Successfully updated model weights from torchstore")
+        self.logger.debug(
+            f"Loaded state dict from {key} in {time.time() - start} seconds"
+        )
 
     @endpoint
     async def setup_kv_cache(self):
@@ -505,7 +568,7 @@ class PolicyWorker(ForgeActor):
         return self.vllm_args
 
     @endpoint
-    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
+    async def _get_model_params(self) -> dict[str, torch.Tensor]:
         model = self.worker.model_runner.model
         state_dict = {}
 
@@ -538,7 +601,7 @@ class PolicyWorker(ForgeActor):
         return worker
 
 
-def convert_input(prompt=None, prompt_token_ids=None) -> Dict:
+def convert_input(prompt=None, prompt_token_ids=None) -> dict:
     assert (prompt is None) ^ (prompt_token_ids is None)
     if prompt is not None:
         return {"prompt": prompt}
