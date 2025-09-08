@@ -182,7 +182,7 @@ def get_configs(
     )
 
     sampling_params = SamplingOverrides(
-        num_samples=3,
+        n=3,
         guided_decoding=True,
     )
 
@@ -206,9 +206,10 @@ async def run_rl_trainer(store, worker_size) -> None:
     rl_trainer = await spawn_service(
         ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
         RLTrainer,
-        **cfg.trainer,
+        **{**cfg.trainer, "store": store},
     )
-    rl_trainer.push_weights.call()
+    # Push the weights to torchstore
+    await rl_trainer.push_weights.choose()
 
 
 async def run_policy_integration(
@@ -247,7 +248,7 @@ async def run_policy_integration(
 @pytest_asyncio.fixture(scope="session")
 async def llama3_torchstore_setup():
     """
-    Pytest fixture to load Llama 3.1 8B-Instruct and write state dict to torchstore.
+    Pytest fixture to load Llama 3.1 8B-Instruct. We use the loaded state dict as SOT for validation.
     Uses session scope so it's only called once when both tests are run.
     """
     print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
@@ -266,16 +267,8 @@ async def llama3_torchstore_setup():
 
     original_state_dict = model.state_dict()
     print(f"Original state dict has {len(original_state_dict)} parameters")
-
-    print("Converting transformers state dict to vLLM format...")
     converted_state_dict = convert_state_dict(original_state_dict)
     print(f"Converted state dict has {len(converted_state_dict)} parameters")
-
-    state_dict_key = "model_state_dict/1"  # {app_namespace}/{version}
-    await save_state_dict(store, converted_state_dict, state_dict_key)
-    print(
-        f"Successfully wrote converted state dict to torchstore with key: {state_dict_key}"
-    )
 
     return store, converted_state_dict
 
