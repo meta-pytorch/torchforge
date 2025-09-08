@@ -19,7 +19,7 @@ def _module_not_found():
         import forge.actors.reference_actor  # noqa: F401
 
         return False
-    except ModuleNotFoundError:
+    except Exception:
         return True
 
 
