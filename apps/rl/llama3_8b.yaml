@@ -15,11 +15,6 @@ trainer:
     flavor: 8B
     tokenizer_path: /tmp/Meta-Llama-3.1-8B-Instruct
 
-  processes:
-    scheduler: local # local | mast (not supported yet)
-    num_hosts: 1
-    with_gpus: True
-    num_procs: 4
 
   optimizer:
     name: AdamW
@@ -65,11 +60,6 @@ replay_buffer:
   batch_size: 2
   max_policy_age: 2
   seed: None
-  processes:
-    scheduler: local # local | mast (not supported yet)
-    num_hosts: 1
-    with_gpus: False
-    num_procs: 1
 
 # policy:
 #   scheduler:
