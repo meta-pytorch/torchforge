@@ -13,12 +13,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -43,6 +37,12 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,20 @@ class SamplingOverrides:
             subset
 
     Args:
-        num_samples: Number of samples to generate.
+        n: Number of samples to generate.
         guided_decoding: Whether to use guided decoding.
+        max_tokens: Maximum number of tokens to generate.
     """
 
-    num_samples: int
+    n: int
     guided_decoding: bool = False
     max_tokens: int = 512
+
+    def __post_init__(self):
+        gd_params = None
+        if self.guided_decoding:
+            gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
+        self.guided_decoding = gd_params
 
 
 @dataclass
@@ -174,17 +181,8 @@ class Policy(PolicyInterface):
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
-        sampling_overrides = self.config.sampling_params
-        overrides = {
-            "n": sampling_overrides.num_samples,
-            "guided_decoding": (
-                GuidedDecodingParams(choice=["Positive", "Negative"])
-                if sampling_overrides.guided_decoding
-                else None
-            ),
-        }
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=overrides
+            self.vllm_args, overrides=asdict(self.config.sampling_params)
         )
 
         # Setup processors
@@ -228,10 +226,11 @@ class Policy(PolicyInterface):
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
-        prompt: Dict[str, str] = convert_input(prompt)
+        prompt: Dict[str, str] = convert_input(prompt=prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
+        # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
             self.vllm_args.model_config.max_model_len,
