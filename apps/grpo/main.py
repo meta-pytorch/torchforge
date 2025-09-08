@@ -14,7 +14,6 @@ import torch
 import torch.nn.functional as F
 from datasets import load_dataset
 from forge.actors.policy import EngineConfig, Policy, SamplingOverrides
-from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
