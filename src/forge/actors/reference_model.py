@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, fields
 import torch
 from monarch.actor import current_rank, current_size, endpoint
 
-from torchtitan.config.job_config import Compile, Checkpoint, Model, Parallelism
+from torchtitan.config.job_config import Checkpoint, Compile, Model, Parallelism
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
@@ -84,7 +84,7 @@ class ReferenceModel(ForgeActor):
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
 
     @endpoint
-    async def forward(self, episode: 'Episode') -> torch.Tensor:
+    async def forward(self, episode: "Episode") -> torch.Tensor:
         """
         Given an episode, return the log_probability of the
         token_ids, shape (completion_len, )

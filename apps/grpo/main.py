@@ -12,10 +12,9 @@ from typing import Any, Callable, Optional
 
 import torch
 import torch.nn.functional as F
-from torchtitan.config.job_config import Model as TitanJobModelConfig
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-# from forge.actors.reference_model import ReferenceModel
+from forge.actors.reference_model import ReferenceModel  # noqa: F401
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
@@ -23,6 +22,7 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from torch import nn
+from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
