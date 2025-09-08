@@ -28,7 +28,7 @@ class TestComputeLogprobs(unittest.TestCase):
 
     @pytest.mark.skipif(
         _import_error(),
-        reason="Moduel not found error, likely due to missing dependencies on CI.",
+        reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_basic(self):
         """Test basic logprobs computation."""
@@ -53,7 +53,7 @@ class TestComputeLogprobs(unittest.TestCase):
 
     @pytest.mark.skipif(
         _import_error(),
-        reason="Moduel not found error, likely due to missing dependencies on CI.",
+        reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_with_temperature(self):
         """Test logprobs computation with temperature scaling."""
@@ -78,7 +78,7 @@ class TestComputeLogprobs(unittest.TestCase):
 
     @pytest.mark.skipif(
         _import_error(),
-        reason="Moduel not found error, likely due to missing dependencies on CI.",
+        reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_single_token(self):
         """Test logprobs computation with single token response."""
@@ -99,7 +99,7 @@ class TestComputeLogprobs(unittest.TestCase):
 
     @pytest.mark.skipif(
         _import_error(),
-        reason="Moduel not found error, likely due to missing dependencies on CI.",
+        reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_empty_response(self):
         """Test logprobs computation with empty response."""
@@ -119,7 +119,7 @@ class TestComputeLogprobs(unittest.TestCase):
 
     @pytest.mark.skipif(
         _import_error(),
-        reason="Moduel not found error, likely due to missing dependencies on CI.",
+        reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_empty_prompt(self):
         """Test logprobs computation with empty prompt."""
