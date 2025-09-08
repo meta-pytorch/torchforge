@@ -36,12 +36,18 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertEqual(policy.sampling_overrides.max_tokens, 512)
 
     def test_policy_with_dict_configs(self):
-        """Policy accepts dicts for engine_params and sampling_overrides."""
+        """Policy accepts dicts for engine_params and sampling_overrides, including nested dicts."""
+        # Test with nested dict structure
         engine_dict = {
             "model": "test-model-6789",
             "tensor_parallel_size": 7777,
             "pipeline_parallel_size": 8888,
             "enforce_eager": True,
+            "nested_config": {
+                "gpu_memory_utilization": 0.9,
+                "max_model_len": 4096,
+                "custom_settings": {"temperature": 0.7, "top_p": 0.9},
+            },
         }
 
         sampling_dict = {
@@ -59,6 +65,7 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertIsInstance(policy.engine_params, EngineConfig)
         self.assertIsInstance(policy.sampling_overrides, SamplingOverrides)
 
+        # Test basic fields
         self.assertEqual(policy.engine_params.model, "test-model-6789")
         self.assertEqual(policy.engine_params.tensor_parallel_size, 7777)
         self.assertEqual(policy.engine_params.pipeline_parallel_size, 8888)
@@ -68,6 +75,16 @@ class TestPolicyConfig(unittest.TestCase):
         # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
         self.assertIsNotNone(policy.sampling_overrides.guided_decoding)
         self.assertEqual(policy.sampling_overrides.max_tokens, 2468)
+
+        # Test that engine_dict accepts and preserves nested dict structure
+        # The original engine_dict should remain unchanged and accessible
+        self.assertIn("nested_config", engine_dict)
+        self.assertEqual(engine_dict["nested_config"]["gpu_memory_utilization"], 0.9)
+        self.assertEqual(engine_dict["nested_config"]["max_model_len"], 4096)
+        self.assertEqual(
+            engine_dict["nested_config"]["custom_settings"]["temperature"], 0.7
+        )
+        self.assertEqual(engine_dict["nested_config"]["custom_settings"]["top_p"], 0.9)
 
     def test_policy_yaml_config_loading(self):
         """Policy can be constructed from a YAML config file."""
