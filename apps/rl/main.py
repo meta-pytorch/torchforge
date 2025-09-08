@@ -24,16 +24,17 @@ logger.setLevel(logging.INFO)
 
 
 async def run(cfg: DictConfig):
-
-    trainer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=4),
-        RLTrainer,
-        **cfg.trainer,
-    )
-    replay_buffer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, num_replicas=1),
-        ReplayBuffer,
-        **cfg.replay_buffer,
+    trainer, replay_buffer = await asyncio.gather(
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=4),
+            RLTrainer,
+            **cfg.trainer,
+        ),
+        spawn_service(
+            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ReplayBuffer,
+            **cfg.replay_buffer,
+        ),
     )
     print("Services initialized....")
 
