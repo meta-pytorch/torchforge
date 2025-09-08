@@ -12,7 +12,7 @@ from typing import Callable
 
 import torch
 from datasets import load_dataset
-from forge.actors.policy import Policy, SamplingOverrides, WorkerConfig
+from forge.actors.policy import EngineConfig, Policy, SamplingOverrides
 from forge.actors.reference_actor import compute_sequence_logprobs, TitanRefModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
@@ -305,7 +305,7 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
-            worker_params=WorkerConfig(model=model),
+            engine_params=EngineConfig(model=model),
             sampling_overrides=SamplingOverrides(num_samples=group_size, max_tokens=16),
         ),
         spawn_service(

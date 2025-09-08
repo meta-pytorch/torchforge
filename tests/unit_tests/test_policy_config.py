@@ -9,7 +9,7 @@ import unittest
 
 import yaml
 
-from forge.actors.policy import Policy, SamplingOverrides, WorkerConfig
+from forge.actors.policy import EngineConfig, Policy, SamplingOverrides
 
 
 class TestPolicyConfig(unittest.TestCase):
@@ -20,15 +20,15 @@ class TestPolicyConfig(unittest.TestCase):
         policy = Policy()
 
         # Default factories
-        self.assertIsInstance(policy.worker_params, WorkerConfig)
+        self.assertIsInstance(policy.engine_params, EngineConfig)
         self.assertIsInstance(policy.sampling_overrides, SamplingOverrides)
         self.assertIsNone(policy.available_devices)
 
         # Worker defaults
-        self.assertEqual(policy.worker_params.model, "meta-llama/Llama-3.1-8B-Instruct")
-        self.assertEqual(policy.worker_params.tensor_parallel_size, 1)
-        self.assertEqual(policy.worker_params.pipeline_parallel_size, 1)
-        self.assertFalse(policy.worker_params.enforce_eager)
+        self.assertEqual(policy.engine_params.model, "meta-llama/Llama-3.1-8B-Instruct")
+        self.assertEqual(policy.engine_params.tensor_parallel_size, 1)
+        self.assertEqual(policy.engine_params.pipeline_parallel_size, 1)
+        self.assertFalse(policy.engine_params.enforce_eager)
 
         # Sampling defaults
         self.assertEqual(policy.sampling_overrides.num_samples, 1)
@@ -36,7 +36,7 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertEqual(policy.sampling_overrides.max_tokens, 512)
 
     def test_policy_with_dict_configs(self):
-        """Policy accepts dicts for worker_params and sampling_overrides."""
+        """Policy accepts dicts for engine_params and sampling_overrides."""
         worker_dict = {
             "model": "test-model-6789",
             "tensor_parallel_size": 7777,
@@ -51,18 +51,18 @@ class TestPolicyConfig(unittest.TestCase):
         }
 
         policy = Policy(
-            worker_params=worker_dict,
+            engine_params=worker_dict,
             sampling_overrides=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
 
-        self.assertIsInstance(policy.worker_params, WorkerConfig)
+        self.assertIsInstance(policy.engine_params, EngineConfig)
         self.assertIsInstance(policy.sampling_overrides, SamplingOverrides)
 
-        self.assertEqual(policy.worker_params.model, "test-model-6789")
-        self.assertEqual(policy.worker_params.tensor_parallel_size, 7777)
-        self.assertEqual(policy.worker_params.pipeline_parallel_size, 8888)
-        self.assertTrue(policy.worker_params.enforce_eager)
+        self.assertEqual(policy.engine_params.model, "test-model-6789")
+        self.assertEqual(policy.engine_params.tensor_parallel_size, 7777)
+        self.assertEqual(policy.engine_params.pipeline_parallel_size, 8888)
+        self.assertTrue(policy.engine_params.enforce_eager)
 
         self.assertEqual(policy.sampling_overrides.num_samples, 1357)
         self.assertTrue(policy.sampling_overrides.guided_decoding)
@@ -71,7 +71,7 @@ class TestPolicyConfig(unittest.TestCase):
     def test_policy_yaml_config_loading(self):
         """Policy can be constructed from a YAML config file."""
         yaml_content = """
-        worker_params:
+        engine_params:
           model: "yaml-test-model-9876"
           tensor_parallel_size: 1234
           pipeline_parallel_size: 5678
@@ -94,10 +94,10 @@ class TestPolicyConfig(unittest.TestCase):
 
             policy = Policy(**config)
 
-            self.assertEqual(policy.worker_params.model, "yaml-test-model-9876")
-            self.assertEqual(policy.worker_params.tensor_parallel_size, 1234)
-            self.assertEqual(policy.worker_params.pipeline_parallel_size, 5678)
-            self.assertTrue(policy.worker_params.enforce_eager)
+            self.assertEqual(policy.engine_params.model, "yaml-test-model-9876")
+            self.assertEqual(policy.engine_params.tensor_parallel_size, 1234)
+            self.assertEqual(policy.engine_params.pipeline_parallel_size, 5678)
+            self.assertTrue(policy.engine_params.enforce_eager)
 
             self.assertEqual(policy.sampling_overrides.num_samples, 2468)
             self.assertTrue(policy.sampling_overrides.guided_decoding)
@@ -105,15 +105,15 @@ class TestPolicyConfig(unittest.TestCase):
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
 
-    def test_workerconfig_ignores_invalid_keys(self):
-        """WorkerConfig.from_dict ignores unexpected keys."""
-        worker_dict = {
+    def test_engineconfig_ignores_invalid_keys(self):
+        """EngineConfig.from_dict ignores unexpected keys."""
+        engine_params = {
             "model": "custom-model",
             "tensor_parallel_size": 2,
             "invalid_key_123": "should be ignored",
         }
 
-        config = WorkerConfig.from_dict(worker_dict)
+        config = EngineConfig.from_dict(engine_params)
 
         self.assertEqual(config.model, "custom-model")
         self.assertEqual(config.tensor_parallel_size, 2)

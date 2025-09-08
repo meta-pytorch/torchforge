@@ -1,5 +1,5 @@
 policy:
-  worker_params:
+  engine_params:
     model: "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: 2
     pipeline_parallel_size: 1

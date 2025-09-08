@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from omegaconf import DictConfig
 from torchstore import MultiProcessStore
@@ -39,12 +45,6 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +69,9 @@ class SamplingOverrides:
 
 
 @dataclass
-class WorkerConfig(EngineArgs):
+class EngineConfig(EngineArgs):
     """
-    WorkerConfig extends EngineArgs with worker-specific fields.
+    EngineConfig extends EngineArgs with worker-specific fields.
     Overlapping keys in input dict will override EngineArgs defaults.
     """
 
@@ -90,7 +90,7 @@ class WorkerConfig(EngineArgs):
 
 @dataclass
 class Policy(PolicyInterface):
-    worker_params: WorkerConfig = field(default_factory=WorkerConfig)
+    engine_params: EngineConfig = field(default_factory=EngineConfig)
     sampling_overrides: SamplingOverrides = field(default_factory=SamplingOverrides)
     available_devices: str | None = None
     # Gets set up by setup
@@ -105,8 +105,8 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        if isinstance(self.worker_params, Mapping):
-            self.worker_params = WorkerConfig.from_dict(self.worker_params)
+        if isinstance(self.engine_params, Mapping):
+            self.engine_params = EngineConfig.from_dict(self.engine_params)
         if isinstance(self.sampling_overrides, dict):
             self.sampling_overrides = SamplingOverrides(**self.sampling_overrides)
 
@@ -115,7 +115,7 @@ class Policy(PolicyInterface):
         cls: type["Policy"],
         *,
         process_config: ProcessConfig,
-        worker_params: WorkerConfig | dict = WorkerConfig(),
+        engine_params: EngineConfig | dict = EngineConfig(),
         sampling_overrides: SamplingOverrides | dict = SamplingOverrides(),
         available_devices: str | None = None,
         store: MultiProcessStore | None = None,
@@ -132,14 +132,14 @@ class Policy(PolicyInterface):
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
-        if isinstance(worker_params, (dict, DictConfig)):
-            worker_params = WorkerConfig.from_dict(worker_params)
+        if isinstance(engine_params, (dict, DictConfig)):
+            engine_params = EngineConfig.from_dict(engine_params)
 
-        if isinstance(worker_params, (dict, DictConfig)):
+        if isinstance(engine_params, (dict, DictConfig)):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
 
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_args=worker_params
+            "vllm_worker", PolicyWorker, vllm_args=engine_params
         )
 
         # TODO - expand support so name can stick within kwargs
@@ -147,7 +147,7 @@ class Policy(PolicyInterface):
         policy = await policy_proc.spawn(
             actor_name,
             cls,
-            worker_params=worker_params,
+            engine_params=engine_params,
             sampling_overrides=sampling_overrides,
             available_devices=available_devices,
             policy_worker=workers,
@@ -361,7 +361,7 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    vllm_args: WorkerConfig | dict = WorkerConfig()
+    vllm_args: EngineConfig | dict = EngineConfig()
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -378,10 +378,10 @@ class PolicyWorker(ForgeActor):
         - all executor methods verify no changes
         """
         if isinstance(self.vllm_args, dict):
-            self.vllm_args = WorkerConfig.from_dict(self.vllm_args)
-        elif not isinstance(self.vllm_args, WorkerConfig):
+            self.vllm_args = EngineConfig.from_dict(self.vllm_args)
+        elif not isinstance(self.vllm_args, EngineConfig):
             raise TypeError(
-                f"vllm_args must be a WorkerConfig or dict, got {type(self.vllm_args)}"
+                f"vllm_args must be a EngineConfig or dict, got {type(self.vllm_args)}"
             )
         # Original method returns False when not run in the main thread
         self.vllm_args._is_v1_supported_oracle = lambda *_: True
