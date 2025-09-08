@@ -12,8 +12,10 @@ from typing import Any, Callable, Optional
 
 import torch
 import torch.nn.functional as F
+from torchtitan.config.job_config import Model as TitanJobModelConfig
 from datasets import load_dataset
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+# from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
@@ -330,6 +332,8 @@ async def main():
     """Main GRPO training loop with rollout and training processes."""
     group_size = 4
     model = "Qwen/Qwen3-1.7B-Base"
+    titan_model = TitanJobModelConfig(name="qwen3", flavor="1.7B")
+
     max_req_tokens = 512
     max_res_tokens = 128
 
@@ -390,6 +394,11 @@ async def main():
             RefModel,
             model_name=model,
         ),
+        # spawn_service(
+        #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+        #     ReferenceModel,
+        #     model=titan_model,
+        # ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             RewardActor,

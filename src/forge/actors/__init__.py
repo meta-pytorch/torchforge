@@ -24,9 +24,9 @@ def __getattr__(name):
         from .replay_buffer import ReplayBuffer
 
         return ReplayBuffer
-    elif name == "TitanRefModel":
-        from .reference_actor import TitanRefModel
+    elif name == "ReferenceModel":
+        from .reference_model import ReferenceModel
 
-        return TitanRefModel
+        return ReferenceModel
     else:
         raise AttributeError(f"module {__name__} has no attribute {name}")
