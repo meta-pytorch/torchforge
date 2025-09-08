@@ -12,7 +12,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
+
+from torchstore import MultiProcessStore
+from torchstore._state_dict_utils import push_state_dict
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -25,12 +29,9 @@ from torchtitan.config.job_config import (
     Parallelism,
     Training,
 )
-
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -68,7 +69,7 @@ class RLTrainer(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        self.current_step = 0
+        self.current_step = 1 # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         self.rank = current_rank().rank
@@ -89,12 +90,13 @@ class RLTrainer(ForgeActor):
         os.environ.update(env)
 
     @endpoint
-    async def setup(self):
+    async def setup(self, store: MultiProcessStore = None):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
         self.engine.optimizers.zero_grad()
+        self.store = store
 
     def forward_backward(
         self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
@@ -262,7 +264,19 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     def push_weights(self) -> None:
-        pass
+        # save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
+        # TODOs:
+        # 2. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
+        #    May need to replicate the same in this code path.
+        # 3. Integrate zero-overhead version of push_state_dict.
+        # 4. Figure out a way to notify the generator app that weights are ready. This beyond the initial integration success.
+        # 5. Unify CheckpointManager and TorchStore weights save control path.
+        assert self.store is not None, "TorchStore is not initialized"
+        push_state_dict(
+            self._tstore,
+            self.checkpointer.states,
+            f"model_state_dict/{self.current_step}",
+        )
 
     @endpoint
     async def cleanup(self) -> None:
