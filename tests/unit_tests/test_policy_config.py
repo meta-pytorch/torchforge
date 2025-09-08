@@ -37,7 +37,7 @@ class TestPolicyConfig(unittest.TestCase):
 
     def test_policy_with_dict_configs(self):
         """Policy accepts dicts for engine_params and sampling_overrides."""
-        worker_dict = {
+        engine_dict = {
             "model": "test-model-6789",
             "tensor_parallel_size": 7777,
             "pipeline_parallel_size": 8888,
@@ -51,7 +51,7 @@ class TestPolicyConfig(unittest.TestCase):
         }
 
         policy = Policy(
-            engine_params=worker_dict,
+            engine_params=engine_dict,
             sampling_overrides=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
