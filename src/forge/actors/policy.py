@@ -14,6 +14,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -37,12 +43,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,13 @@ class SamplingOverrides:
             gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
         self.guided_decoding = gd_params
 
+    @classmethod
+    def from_dict(cls, d: Mapping):
+        d = dict(d)
+        all_fields = set(cls.__dataclass_fields__.keys())
+        valid_args = {k: v for k, v in d.items() if k in all_fields}
+        return cls(**valid_args)
+
 
 @dataclass
 class EngineConfig(EngineArgs):
@@ -87,7 +94,7 @@ class EngineConfig(EngineArgs):
     enforce_eager: bool = False
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]):
+    def from_dict(cls, d: Mapping):
         d = dict(d)
         all_fields = set(cls.__dataclass_fields__.keys())
         valid_args = {k: v for k, v in d.items() if k in all_fields}
@@ -96,7 +103,7 @@ class EngineConfig(EngineArgs):
 
 @dataclass
 class Policy(PolicyInterface):
-    engine_params: EngineConfig = field(default_factory=EngineConfig)
+    engine_params: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_overrides: SamplingOverrides = field(default_factory=SamplingOverrides)
     available_devices: str | None = None
     # Gets set up by setup
@@ -114,7 +121,9 @@ class Policy(PolicyInterface):
         if isinstance(self.engine_params, Mapping):
             self.engine_params = EngineConfig.from_dict(self.engine_params)
         if isinstance(self.sampling_overrides, Mapping):
-            self.sampling_overrides = SamplingOverrides(**self.sampling_overrides)
+            self.sampling_overrides = SamplingOverrides.from_dict(
+                self.sampling_overrides
+            )
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
