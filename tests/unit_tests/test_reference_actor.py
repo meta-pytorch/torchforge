@@ -27,7 +27,7 @@ class TestComputeLogprobs(unittest.TestCase):
     """Test the compute_logprobs utility function."""
 
     @pytest.mark.skipif(
-        _import_error,
+        _import_error(),
         reason="Moduel not found error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_basic(self):
@@ -52,7 +52,7 @@ class TestComputeLogprobs(unittest.TestCase):
         assert torch.all(result <= 0)  # Log probabilities should be <= 0
 
     @pytest.mark.skipif(
-        _import_error,
+        _import_error(),
         reason="Moduel not found error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_with_temperature(self):
@@ -77,7 +77,7 @@ class TestComputeLogprobs(unittest.TestCase):
         assert not torch.allclose(result, default_result)
 
     @pytest.mark.skipif(
-        _import_error,
+        _import_error(),
         reason="Moduel not found error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_single_token(self):
@@ -98,7 +98,7 @@ class TestComputeLogprobs(unittest.TestCase):
         assert result.numel() == 1  # Single element
 
     @pytest.mark.skipif(
-        _import_error,
+        _import_error(),
         reason="Moduel not found error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_empty_response(self):
@@ -118,7 +118,7 @@ class TestComputeLogprobs(unittest.TestCase):
         assert result.shape == (batch_size, response_len)
 
     @pytest.mark.skipif(
-        _import_error,
+        _import_error(),
         reason="Moduel not found error, likely due to missing dependencies on CI.",
     )
     def test_compute_logprobs_empty_prompt(self):
