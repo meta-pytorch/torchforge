@@ -12,13 +12,15 @@ Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. Fo
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
-Forge requires the Github CLI (gh) to download a compatible vLLM package. See [here](https://github.com/cli/cli#installation) for gh install instructions before continuting.
+Forge requires the Github CLI (gh) to download a compatible vLLM package. See [here](https://github.com/cli/cli#installation) for gh install instructions before continuting. Please login to gh with your Github account before continuing with `gh auth login`. You may use either https or ssh as the protocol for authentication.
 
 ```bash
 conda create -n forge python=3.10
 conda activate forge
 ./scripts/install.sh
 ```
+
+Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
 After install, you can run the following command and should see output confirming GRPO training is running.
 ```
