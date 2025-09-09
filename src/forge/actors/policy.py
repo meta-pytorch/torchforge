@@ -104,7 +104,7 @@ class EngineConfig(EngineArgs):
 @dataclass
 class Policy(PolicyInterface):
     engine_params: EngineConfig | Mapping = field(default_factory=EngineConfig)
-    sampling_overrides: SamplingOverrides = field(default_factory=SamplingOverrides)
+    sampling_overrides: SamplingOverrides | Mapping = field(default_factory=SamplingOverrides)
     available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
