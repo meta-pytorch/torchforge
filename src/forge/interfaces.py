@@ -5,13 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
-
-from monarch.actor import endpoint
+from typing import Any, List, Mapping
 
 from forge.controller import ForgeActor
 
 from forge.types import Action, Message, Observation, Scalar, State
+
+from monarch.actor import endpoint
 
 
 class Transform(ABC):
@@ -87,6 +87,200 @@ class Policy(ForgeActor, ABC):
     @abstractmethod
     async def update_weights(self):
         """Update the policy weights."""
+        pass
+
+
+class StoreInterface(ABC):
+    """
+    Abstract base class for a KV store. This closely follows the interface of
+    torchstore.
+    """
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def numel(self, prefix=None) -> int:
+        """Return the number of keys starting with the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+        Returns:
+            int: The number of keys matching the prefix in the store.
+        """
+        pass
+
+    @abstractmethod
+    async def keys(self, prefix=None) -> List[str]:
+        """Return an iterable of all keys in the store matching the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+        Returns:
+            Iterable[K]: An iterable containing all keys in the buffer.
+        """
+        pass
+
+    @abstractmethod
+    async def put(self, key: str, value: Any) -> None:
+        """
+        Add a key-value pair to the buffer.
+
+        Args:
+            key (K): The key to store the value under
+            val (V): The value to store in the buffer
+
+        Returns:
+            None
+        """
+        pass
+
+    @abstractmethod
+    async def get(self, key: str) -> Any:
+        """
+        Get a key-value pair from the store.
+
+        Args:
+            key (K): The key to get
+
+        Returns:
+            V: The value stored under the key
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+        pass
+
+    @abstractmethod
+    async def exists(self, key: str) -> bool:
+        """
+        Check if a key exists in the store.
+        """
+        pass
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def release(self, key: str) -> None:
+        """
+        Release a key-value pair from the store.
+        This is a hint to the store that the key-value pair is no longer needed.
+        It is not guaranteed that the key-value pair will be deleted immediately.
+        As such, users should filter out the keys they don't want instead of relying on this method to ensure that the keys are deleted.
+
+        Args:
+            key (K): The key to release
+
+        Returns:
+            None
+        """
+        pass
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def release_all(self, prefix: str) -> None:
+        """
+        Release all key-value pairs from the store that match the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        This is a hint to the store that the key-value pair is no longer needed.
+        It is not guaranteed that the key-value pair will be deleted immediately.
+        As such, users should filter out the keys they don't want instead of relying on this method to ensure that the keys are deleted.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+        Returns:
+            None
+        """
+        pass
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def pop(self, key: str) -> Any:
+        """
+        Get a key-value pair from the store, and delete it from the store.
+
+        Args:
+            key (K): The key to get
+
+        Returns:
+            V: The value stored under the key
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def pop_all(self, prefix: str | None) -> Any:
+        """
+        Get a key-value pair from the store, and delete it from the store.
+
+        Args:
+            key (K): The key to get
+
+        Returns:
+            V: The value stored under the key
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+
+    # TODO: add this to torchstore.
+    @abstractmethod
+    async def delete(self, key: str) -> None:
+        """
+        Delete a key-value pair from the store.
+
+        Args:
+            key (K): The key to delete
+
+        Returns:
+            None
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+        pass
+
+    # TODO(yuxuanh): add this to torchstore.
+    @abstractmethod
+    async def delete_all(self, prefix: str | None) -> None:
+        """
+        Delete all key-value pairs from the store that match the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        This is a hint to the store that the key-value pair is no longer needed.
+        It is not guaranteed that the key-value pair will be deleted immediately.
+        As such, users should filter out the keys they don't want instead of relying on this method to ensure that the keys are deleted.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+
+        Args:
+            key (K): The key to delete
+
+        Returns:
+            None
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
         pass
 
 
