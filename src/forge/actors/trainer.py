@@ -12,11 +12,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+
+import torchstore as ts
 from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
-
-from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import push_state_dict
+from torch.distributed.checkpoint.state_dict_saver import _stateful_to_state_dict
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -39,7 +39,6 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class RLTrainer(ForgeActor):
-    store: MultiProcessStore = field(default=None)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
     lr_scheduler: LRScheduler = field(default_factory=LRScheduler)
@@ -265,20 +264,23 @@ class RLTrainer(ForgeActor):
     #     return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    def push_weights(self) -> None:
+    async def push_weights(self) -> None:
         # save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         # TODOs:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
         # 2. Unify CheckpointManager and TorchStore weights save control path.
-        assert self.store is not None, "TorchStore is not initialized"
         print(
-            f"Getting keys from checkpointer state and pushing to TS {self.engine.checkpointer.states}"
+            f"Getting keys from checkpointer state and pushing to TS ..."
         )
-        push_state_dict(
-            self.store,
-            self.engine.checkpointer.states,
-            f"model_state_dict/{self.current_step}",
+        assert (
+            "model" in self.engine.checkpointer.states
+        ), "Model state not found in checkpointer state"
+        await ts.put_state_dict(
+            state_dict=_stateful_to_state_dict(
+                {"model": self.engine.checkpointer.states.pop("model")}
+            ),
+            key=f"model_state_dict/{self.current_step}",
         )
 
     @endpoint

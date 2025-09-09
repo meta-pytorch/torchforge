@@ -13,9 +13,14 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+import torchstore as ts
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -36,12 +41,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +107,7 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
-    store: MultiProcessStore | None = None
+    store = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -122,7 +121,7 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
-        store: MultiProcessStore | None = None,
+        store=None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -146,7 +145,6 @@ class Policy(PolicyInterface):
             cls,
             config=config,
             policy_worker=workers,
-            store=store,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -397,8 +395,7 @@ class PolicyWorker(ForgeActor):
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
     @endpoint
-    async def setup(self, store: MultiProcessStore = None):
-        self.torchstore = store
+    async def setup(self, store=None):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -418,13 +415,17 @@ class PolicyWorker(ForgeActor):
         # setting explictly to llama3 for now as its our only use case
         sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
 
+        key_str = ""
+        for param_name in current_state_dict.keys():
+            key_str += f" {self.state_dict_key}/{version}/{param_name}\n"
+        logger.warning(f"############### policy get keys : {key_str}")
+        return
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
-
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
+            stored_tensor = await ts.get(
+                f"{self.state_dict_key}/{version}/{param_name}"
             )
             sharding.load_from_source_to_target(
                 param_name,
@@ -437,11 +438,9 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        if self.torchstore is None:
-            raise Exception("No torchstore configured, skipping model update")
 
         logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
+            f"Starting model update from torchstore with key: {self.state_dict_key}/{version}"
         )
 
         model = self.worker.model_runner.model
