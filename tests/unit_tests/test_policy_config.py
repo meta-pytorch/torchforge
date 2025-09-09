@@ -9,7 +9,7 @@ import unittest
 
 import yaml
 
-from forge.actors.policy import EngineArgOverrides, Policy, SamplingOverrides
+from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 
 
 class TestPolicyConfig(unittest.TestCase):
@@ -20,8 +20,8 @@ class TestPolicyConfig(unittest.TestCase):
         policy = Policy()
 
         # Default factories
-        self.assertIsInstance(policy.engine_params, EngineArgOverrides)
-        self.assertIsInstance(policy.sampling_overrides, SamplingOverrides)
+        self.assertIsInstance(policy.engine_params, EngineConfig)
+        self.assertIsInstance(policy.sampling_overrides, SamplingConfig)
         self.assertIsNone(policy.available_devices)
 
         # Worker defaults
@@ -62,8 +62,8 @@ class TestPolicyConfig(unittest.TestCase):
             available_devices="test-gpu-device-abcd",
         )
 
-        self.assertIsInstance(policy.engine_params, EngineArgOverrides)
-        self.assertIsInstance(policy.sampling_overrides, SamplingOverrides)
+        self.assertIsInstance(policy.engine_params, EngineConfig)
+        self.assertIsInstance(policy.sampling_overrides, SamplingConfig)
 
         # Test basic fields
         self.assertEqual(policy.engine_params.model, "test-model-6789")
@@ -124,15 +124,15 @@ class TestPolicyConfig(unittest.TestCase):
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
 
-    def test_engineargoverrides_ignores_invalid_keys(self):
-        """EngineArgOverrides.from_dict ignores unexpected keys."""
+    def test_engineconfig_ignores_invalid_keys(self):
+        """EngineConfig.from_dict ignores unexpected keys."""
         engine_params = {
             "model": "custom-model",
             "tensor_parallel_size": 2,
             "invalid_key_123": "should be ignored",
         }
 
-        config = EngineArgOverrides.from_dict(engine_params)
+        config = EngineConfig.from_dict(engine_params)
 
         self.assertEqual(config.model, "custom-model")
         self.assertEqual(config.tensor_parallel_size, 2)
