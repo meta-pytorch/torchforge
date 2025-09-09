@@ -4,8 +4,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+
 import asyncio
 import logging
+import sys
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -13,13 +16,16 @@ from typing import Any, Callable, Optional
 import torch
 import torch.nn.functional as F
 from datasets import load_dataset
-from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
+from omegaconf import DictConfig
+from src.forge.data.utils import exclude_service
 from torch import nn
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -286,11 +292,11 @@ class RefModel(ForgeActor):
 class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    path: str
-    revision: str
-    data_split: str
-    streaming: bool
-    model: str
+    path: str = "openai/gsm8k"
+    revision: str = "main"
+    data_split: str = "train"
+    streaming: bool = True
+    model: str = "Qwen/Qwen3-1.7B-Base"
 
     @endpoint
     def setup(self):
@@ -326,12 +332,17 @@ class DatasetActor(ForgeActor):
         return self.tokenizer.pad_token_id
 
 
-async def main():
+async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 4
-    model = "Qwen/Qwen3-1.7B-Base"
-    max_req_tokens = 512
-    max_res_tokens = 128
+    # Get parameters from config with fallbacks
+    group_size = cfg.get("group_size", 4)
+    model = (
+        cfg.get("policy", {})
+        .get("engine_config", {})
+        .get("model", "Qwen/Qwen3-1.7B-Base")
+    )
+    max_req_tokens = cfg.get("max_req_tokens", 512)
+    max_res_tokens = cfg.get("max_res_tokens", 128)
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -351,43 +362,37 @@ async def main():
         reward_actor,
     ) = await asyncio.gather(
         spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ServiceConfig(**cfg.dataset.service),
             DatasetActor,
-            path="openai/gsm8k",
-            revision="main",
-            data_split="train",
-            streaming=True,
-            model=model,
+            **exclude_service(cfg.dataset),
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+            ServiceConfig(**cfg.policy.service),
             Policy,
-            engine_config=EngineConfig(model=model),
-            sampling_config=SamplingConfig(n=group_size, max_tokens=max_res_tokens),
+            **exclude_service(cfg.policy),
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+            ServiceConfig(**cfg.trainer.service),
             Trainer,
-            learning_rate=1e-5,
             model_name=model,
+            **exclude_service(cfg.trainer),
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ServiceConfig(**cfg.replay_buffer.service),
             ReplayBuffer,
-            batch_size=4,
-            max_policy_age=1,
+            **exclude_service(cfg.replay_buffer),
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ServiceConfig(**cfg.compute_advantages.service),
             ComputeAdvantages,
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
+            ServiceConfig(**cfg.ref_model.service),
             RefModel,
             model_name=model,
         ),
         spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
+            ServiceConfig(**cfg.reward_actor.service),
             RewardActor,
             reward_functions=[MathReward(), ThinkingReward()],
         ),
@@ -481,5 +486,10 @@ async def main():
         )
 
 
+@parse
+def recipe_main(cfg: DictConfig) -> None:
+    asyncio.run(main(cfg))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(recipe_main())
