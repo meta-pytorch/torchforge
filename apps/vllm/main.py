@@ -10,7 +10,6 @@ python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
 """
 
 import asyncio
-import sys
 
 from forge.actors.policy import Policy
 from forge.cli.config import parse

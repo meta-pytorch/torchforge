@@ -8,7 +8,6 @@
 
 import asyncio
 import logging
-import sys
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
