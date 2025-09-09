@@ -372,7 +372,7 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    vllm_args: EngineArgOverrides | dict = EngineArgOverrides()
+    vllm_args: EngineArgOverrides | Mapping = EngineArgOverrides()
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -388,12 +388,9 @@ class PolicyWorker(ForgeActor):
         - all LLM generate methods, verify against LLM inputs
         - all executor methods verify no changes
         """
-        if isinstance(self.vllm_args, dict):
+        if isinstance(self.vllm_args, Mapping):
             self.vllm_args = EngineArgOverrides.from_dict(self.vllm_args)
-        elif not isinstance(self.vllm_args, EngineArgOverrides):
-            raise TypeError(
-                f"vllm_args must be a EngineArgOverrides or dict, got {type(self.vllm_args)}"
-            )
+
         # Original method returns False when not run in the main thread
         self.vllm_args._is_v1_supported_oracle = lambda *_: True
         # Build Config
