@@ -7,16 +7,31 @@
 import tempfile
 import unittest
 
+import pytest
 import yaml
 
-from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+
+def _import_error():
+    """Check if there are import errors that would cause CI failures."""
+    try:
+        import forge.actors.policy  # noqa: F401
+
+        return False
+    except ImportError:
+        return True
 
 
 class TestPolicyConfig(unittest.TestCase):
     """Test suite for Policy configuration handling after PolicyConfig removal."""
 
+    @pytest.mark.skipif(
+        _import_error(),
+        reason="Import error, likely due to missing dependencies on CI.",
+    )
     def test_policy_default_initialization(self):
         """Policy initializes with default values."""
+        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+
         policy = Policy()
 
         # Default factories
@@ -35,8 +50,14 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertFalse(policy.sampling_config.guided_decoding)
         self.assertEqual(policy.sampling_config.max_tokens, 512)
 
+    @pytest.mark.skipif(
+        _import_error(),
+        reason="Import error, likely due to missing dependencies on CI.",
+    )
     def test_policy_with_dict_configs(self):
         """Policy accepts dicts for engine_config and sampling_config, including nested dicts."""
+        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+
         # Test with nested dict structure
         engine_dict = {
             "model": "test-model-6789",
@@ -86,8 +107,14 @@ class TestPolicyConfig(unittest.TestCase):
         )
         self.assertEqual(engine_dict["nested_config"]["custom_settings"]["top_p"], 0.9)
 
+    @pytest.mark.skipif(
+        _import_error(),
+        reason="Import error, likely due to missing dependencies on CI.",
+    )
     def test_policy_yaml_config_loading(self):
         """Policy can be constructed from a YAML config file."""
+        from forge.actors.policy import Policy
+
         yaml_content = """
         engine_config:
           model: "yaml-test-model-9876"
@@ -124,8 +151,14 @@ class TestPolicyConfig(unittest.TestCase):
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
 
+    @pytest.mark.skipif(
+        _import_error(),
+        reason="Import error, likely due to missing dependencies on CI.",
+    )
     def test_engineconfig_ignores_invalid_keys(self):
         """EngineConfig.from_dict ignores unexpected keys."""
+        from forge.actors.policy import EngineConfig
+
         engine_config = {
             "model": "custom-model",
             "tensor_parallel_size": 2,

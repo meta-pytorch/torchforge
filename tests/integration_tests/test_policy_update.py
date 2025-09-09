@@ -11,7 +11,7 @@ import pytest_asyncio
 
 import torch
 
-from forge.actors.policy import EngineCnofig, Policy, SamplingConfig
+from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 from forge.controller.service import ServiceConfig, spawn_service
 from forge.data.sharding import VLLMSharding
 from torchstore import MultiProcessStore
@@ -168,7 +168,7 @@ def validate_loaded_tensors_equals_original(
 
 def get_configs(worker_size: int, model_name: str) -> Tuple[Dict, ServiceConfig]:
 
-    engine_config = EngineCnofig(
+    engine_config = EngineConfig(
         model=model_name,
         tensor_parallel_size=worker_size,
         pipeline_parallel_size=1,
