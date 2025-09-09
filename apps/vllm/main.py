@@ -23,11 +23,7 @@ from vllm.outputs import RequestOutput
 async def run(cfg: DictConfig):
 
     if (prompt := cfg.get("prompt")) is None:
-        gd = cfg.policy.get("sampling_overrides", {}).get("guided_decoding", False)
-        prompt = "What is 3+5?" if gd else "Tell me a joke"
-        prompt = cfg["prompt"]
-    else:
-        gd = cfg.policy.get("sampling_overrides", {}).get("guided_decoding", False)
+        gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
         prompt = "What is 3+5?" if gd else "Tell me a joke"
 
     print("Spawning service...")

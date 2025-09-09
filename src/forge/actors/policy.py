@@ -10,7 +10,7 @@ import os
 import sys
 from collections.abc import Mapping
 from copy import copy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Dict, List
 
 import torch
@@ -96,15 +96,15 @@ class EngineConfig(EngineArgs):
     @classmethod
     def from_dict(cls, d: Mapping):
         d = dict(d)
-        all_fields = set(cls.__dataclass_fields__.keys())
+        all_fields = [f.name for f in fields(cls)]
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
 
 
 @dataclass
 class Policy(PolicyInterface):
-    engine_params: EngineConfig | Mapping = field(default_factory=EngineConfig)
-    sampling_overrides: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
+    engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
+    sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
@@ -118,18 +118,18 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        if isinstance(self.engine_params, Mapping):
-            self.engine_params = EngineConfig.from_dict(self.engine_params)
-        if isinstance(self.sampling_overrides, Mapping):
-            self.sampling_overrides = SamplingConfig.from_dict(self.sampling_overrides)
+        if isinstance(self.engine_config, Mapping):
+            self.engine_config = EngineConfig.from_dict(self.engine_config)
+        if isinstance(self.sampling_config, Mapping):
+            self.sampling_config = SamplingConfig.from_dict(self.sampling_config)
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
         process_config: ProcessConfig,
-        engine_params: EngineConfig | Mapping = EngineConfig(),
-        sampling_overrides: SamplingConfig | Mapping = SamplingConfig(),
+        engine_config: EngineConfig | Mapping = EngineConfig(),
+        sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
         store: MultiProcessStore | None = None,
         **kwargs,
@@ -145,14 +145,14 @@ class Policy(PolicyInterface):
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
-        if isinstance(engine_params, Mapping):
-            engine_params = EngineConfig.from_dict(engine_params)
+        if isinstance(engine_config, Mapping):
+            engine_config = EngineConfig.from_dict(engine_config)
 
-        if isinstance(engine_params, Mapping):
-            sampling_overrides = SamplingConfig(**sampling_overrides)
+        if isinstance(engine_config, Mapping):
+            sampling_config = SamplingConfig(**sampling_config)
 
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_args=engine_params
+            "vllm_worker", PolicyWorker, vllm_args=engine_config
         )
 
         # TODO - expand support so name can stick within kwargs
@@ -160,8 +160,8 @@ class Policy(PolicyInterface):
         policy = await policy_proc.spawn(
             actor_name,
             cls,
-            engine_params=engine_params,
-            sampling_overrides=sampling_overrides,
+            engine_config=engine_config,
+            sampling_config=sampling_config,
             available_devices=available_devices,
             policy_worker=workers,
             store=store,
@@ -200,7 +200,7 @@ class Policy(PolicyInterface):
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=asdict(self.sampling_overrides)
+            self.vllm_args, overrides=asdict(self.sampling_config)
         )
 
         # Setup processors

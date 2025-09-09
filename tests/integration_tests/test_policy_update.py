@@ -168,21 +168,21 @@ def validate_loaded_tensors_equals_original(
 
 def get_configs(worker_size: int, model_name: str) -> Tuple[Dict, ServiceConfig]:
 
-    engine_params = EngineCnofig(
+    engine_config = EngineCnofig(
         model=model_name,
         tensor_parallel_size=worker_size,
         pipeline_parallel_size=1,
         enforce_eager=True,
     )
 
-    sampling_overrides = SamplingConfig(
+    sampling_config = SamplingConfig(
         n=3,
         guided_decoding=True,
     )
 
     policy_config = {
-        "engine_params": engine_params,
-        "sampling_overrides": sampling_overrides,
+        "engine_config": engine_config,
+        "sampling_config": sampling_config,
     }
     service_config = ServiceConfig(
         procs_per_replica=worker_size, num_replicas=1, with_gpus=True

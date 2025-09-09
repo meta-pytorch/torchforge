@@ -1,10 +1,10 @@
 policy:
-  engine_params:
+  engine_config:
     model: "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: true
-  sampling_overrides:
+  sampling_config:
     n: 2
     guided_decoding: false
     max_tokens: 512
