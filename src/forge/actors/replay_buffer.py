@@ -8,17 +8,17 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 
 @dataclass
 class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
-    batch_size: int = 10
-    max_policy_age: int = 1
+    batch_size: int = 4
+    max_policy_age: int = 0
     seed: int | None = None
 
     @endpoint

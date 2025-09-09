@@ -2,8 +2,10 @@
 
 # Global configuration
 group_size: 4
+batch_size: 4
 max_req_tokens: 512
 max_res_tokens: 128
+model: "Qwen/Qwen3-1.7B-Base"
 
 # Dataset configuration
 dataset:
@@ -19,7 +21,7 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: "Qwen/Qwen3-1.7B-Base"
+    model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: true
@@ -43,8 +45,8 @@ trainer:
 
 # Replay buffer configuration
 replay_buffer:
-  batch_size: 4
-  max_policy_age: 1
+  batch_size: ${batch_size}
+  max_policy_age: 0
   service:
     procs_per_replica: 1
     num_replicas: 1

@@ -335,14 +335,10 @@ class DatasetActor(ForgeActor):
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     # Get parameters from config with fallbacks
-    group_size = cfg.get("group_size", 4)
-    model = (
-        cfg.get("policy", {})
-        .get("engine_config", {})
-        .get("model", "Qwen/Qwen3-1.7B-Base")
-    )
-    max_req_tokens = cfg.get("max_req_tokens", 512)
-    max_res_tokens = cfg.get("max_res_tokens", 128)
+    group_size = cfg.group_size
+    model = cfg.model
+    max_req_tokens = cfg.max_req_tokens
+    max_res_tokens = cfg.max_res_tokens
 
     # ---- Setup WandB Logger ---- #
     logger = get_metric_logger(
@@ -492,4 +488,4 @@ def recipe_main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(recipe_main())
+    recipe_main()
