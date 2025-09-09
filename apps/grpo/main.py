@@ -363,7 +363,7 @@ async def main():
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
             engine_params=EngineConfig(model=model),
-            sampling_overrides=SamplingOverrides(n=group_size, max_tokens=16),
+            sampling_overrides=SamplingOverrides(n=group_size, max_tokens=max_res_tokens),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
