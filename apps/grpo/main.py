@@ -13,7 +13,7 @@ from typing import Any, Callable, Optional
 import torch
 import torch.nn.functional as F
 from datasets import load_dataset
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 from forge.actors.reference_model import ReferenceModel  # noqa: F401
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
@@ -366,12 +366,8 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
             Policy,
-            config=PolicyConfig(
-                worker_params=WorkerConfig(model=model),
-                sampling_params=SamplingOverrides(
-                    n=group_size, max_tokens=max_res_tokens
-                ),
-            ),
+            engine_config=EngineConfig(model=model),
+            sampling_config=SamplingConfig(n=group_size, max_tokens=max_res_tokens),
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
