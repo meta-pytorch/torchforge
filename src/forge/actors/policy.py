@@ -14,6 +14,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -37,12 +43,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -82,9 +82,9 @@ class SamplingOverrides:
 
 
 @dataclass
-class EngineConfig(EngineArgs):
+class EngineArgOverrides(EngineArgs):
     """
-    EngineConfig extends EngineArgs with worker-specific fields.
+    EngineArgOverrides extends EngineArgs with worker-specific fields.
     Overlapping keys in input dict will override EngineArgs defaults.
     """
 
@@ -103,8 +103,12 @@ class EngineConfig(EngineArgs):
 
 @dataclass
 class Policy(PolicyInterface):
-    engine_params: EngineConfig | Mapping = field(default_factory=EngineConfig)
-    sampling_overrides: SamplingOverrides | Mapping = field(default_factory=SamplingOverrides)
+    engine_params: EngineArgOverrides | Mapping = field(
+        default_factory=EngineArgOverrides
+    )
+    sampling_overrides: SamplingOverrides | Mapping = field(
+        default_factory=SamplingOverrides
+    )
     available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
@@ -119,7 +123,7 @@ class Policy(PolicyInterface):
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
         if isinstance(self.engine_params, Mapping):
-            self.engine_params = EngineConfig.from_dict(self.engine_params)
+            self.engine_params = EngineArgOverrides.from_dict(self.engine_params)
         if isinstance(self.sampling_overrides, Mapping):
             self.sampling_overrides = SamplingOverrides.from_dict(
                 self.sampling_overrides
@@ -130,7 +134,7 @@ class Policy(PolicyInterface):
         cls: type["Policy"],
         *,
         process_config: ProcessConfig,
-        engine_params: EngineConfig | Mapping = EngineConfig(),
+        engine_params: EngineArgOverrides | Mapping = EngineArgOverrides(),
         sampling_overrides: SamplingOverrides | Mapping = SamplingOverrides(),
         available_devices: str | None = None,
         store: MultiProcessStore | None = None,
@@ -148,7 +152,7 @@ class Policy(PolicyInterface):
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
         if isinstance(engine_params, Mapping):
-            engine_params = EngineConfig.from_dict(engine_params)
+            engine_params = EngineArgOverrides.from_dict(engine_params)
 
         if isinstance(engine_params, Mapping):
             sampling_overrides = SamplingOverrides(**sampling_overrides)
@@ -368,7 +372,7 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    vllm_args: EngineConfig | dict = EngineConfig()
+    vllm_args: EngineArgOverrides | dict = EngineArgOverrides()
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -385,10 +389,10 @@ class PolicyWorker(ForgeActor):
         - all executor methods verify no changes
         """
         if isinstance(self.vllm_args, dict):
-            self.vllm_args = EngineConfig.from_dict(self.vllm_args)
-        elif not isinstance(self.vllm_args, EngineConfig):
+            self.vllm_args = EngineArgOverrides.from_dict(self.vllm_args)
+        elif not isinstance(self.vllm_args, EngineArgOverrides):
             raise TypeError(
-                f"vllm_args must be a EngineConfig or dict, got {type(self.vllm_args)}"
+                f"vllm_args must be a EngineArgOverrides or dict, got {type(self.vllm_args)}"
             )
         # Original method returns False when not run in the main thread
         self.vllm_args._is_v1_supported_oracle = lambda *_: True
