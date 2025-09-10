@@ -415,11 +415,11 @@ class PolicyWorker(ForgeActor):
         # setting explictly to llama3 for now as its our only use case
         sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
 
-        key_str = ""
-        for param_name in current_state_dict.keys():
-            key_str += f" {self.state_dict_key}/{version}/{param_name}\n"
-        logger.warning(f"############### policy get keys : {key_str}")
-        return
+        # key_str = ""
+        # for param_name in current_state_dict.keys():
+        #    key_str += f" {self.state_dict_key}/{version}/{param_name}\n"
+        # logger.warning(f"############### policy get keys : {key_str}")
+
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
             # Load the full tensor from torchstore

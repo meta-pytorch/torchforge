@@ -16,6 +16,7 @@ import torch
 import torchstore as ts
 from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
+from torch.distributed.checkpoint._nested_dict import flatten_state_dict
 from torch.distributed.checkpoint.state_dict_saver import _stateful_to_state_dict
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
@@ -270,16 +271,47 @@ class RLTrainer(ForgeActor):
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
         # 2. Unify CheckpointManager and TorchStore weights save control path.
-        print(
-            f"Getting keys from checkpointer state and pushing to TS ..."
-        )
+        print(f"Getting keys from checkpointer state and pushing to TS ...")
         assert (
             "model" in self.engine.checkpointer.states
         ), "Model state not found in checkpointer state"
+        sd = self.engine.checkpointer.states["model"].state_dict()
+
+        flattened_state_dict, _ = flatten_state_dict(sd)
+        # Save the state dict using HF format.
+        # 1. Use the torch.titan adaptor's 'to_hf' routines to convert the state dict.
+        # 2. Missing conversions ( QKV, MLP fusion) is done using custom code. Probably
+        #    we should move that code to 'to_hf' function.
+
+        assert (
+            self.engine.checkpointer.sd_adapter is not None
+        ), "trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+
+        for i in range(32):  # improve this using regex similar to to_hf function.
+            prefix = f"model.layers.{i}."
+            # QKV fusion
+            q = hf_state_dict.pop(prefix + "self_attn.q_proj.weight")
+            k = hf_state_dict.pop(prefix + "self_attn.k_proj.weight")
+            v = hf_state_dict.pop(prefix + "self_attn.v_proj.weight")
+            hf_state_dict[prefix + "self_attn.qkv_proj.weight"] = torch.cat(
+                [q, k, v], dim=0
+            )
+            # MLP gate_up_proj fusion
+            gate = hf_state_dict.pop(prefix + "mlp.gate_proj.weight")
+            up = hf_state_dict.pop(prefix + "mlp.up_proj.weight")
+            hf_state_dict[prefix + "mlp.gate_up_proj.weight"] = torch.cat(
+                [gate, up], dim=0
+            )
+
+        # Remove before landing
+        # key_str = ""
+        # for key, _ in hf_state_dict.items():
+        #    key_str += f" model_state_dict/{self.current_step}/{key}\n"
+        # logger.warning(f"rltrainer, put_state_dict keys : {key_str}")
+
         await ts.put_state_dict(
-            state_dict=_stateful_to_state_dict(
-                {"model": self.engine.checkpointer.states.pop("model")}
-            ),
+            state_dict=hf_state_dict,
             key=f"model_state_dict/{self.current_step}",
         )
 
