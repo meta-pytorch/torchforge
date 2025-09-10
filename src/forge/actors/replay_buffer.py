@@ -57,17 +57,20 @@ class ReplayBuffer(ForgeActor):
 
         # TODO: Make this more efficient
         idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
-        sampled_episodes = [self.buffer[i] for i in idx_to_sample]
+        # Pop episodes in descending order to avoid shifting issues
+        popped = [self.buffer.pop(i) for i in sorted(idx_to_sample, reverse=True)]
 
-        # Evict sampled episodes (descending order so pops are safe)
-        for i in sorted(idx_to_sample, reverse=True):
-            self.buffer.pop(i)
+        # Reorder popped episodes to match the original random sample order
+        sorted_idxs = sorted(idx_to_sample, reverse=True)
+        idx_to_popped = dict(zip(sorted_idxs, popped))
+        sampled_episodes = [idx_to_popped[i] for i in idx_to_sample]
 
         # Reshape into (dp_size, bsz, ...)
         reshaped_episodes = [
             sampled_episodes[dp_idx * bsz : (dp_idx + 1) * bsz]
             for dp_idx in range(self.dp_size)
         ]
+
         return reshaped_episodes
 
     @endpoint
