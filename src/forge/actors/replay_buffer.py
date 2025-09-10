@@ -17,8 +17,8 @@ from forge.controller import ForgeActor
 class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
-    batch_size: int
-    max_policy_age: int
+    batch_size: int = 4
+    max_policy_age: int = 0
     seed: int | None = None
 
     @endpoint

@@ -12,7 +12,7 @@ import pytest_asyncio
 
 import torch
 import torchstore as ts
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 
 from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig, spawn_service
@@ -164,26 +164,24 @@ def validate_loaded_tensors_equals_original(
     )
 
 
-def get_configs(
-    worker_size: int, model_name: str
-) -> Tuple[PolicyConfig, ServiceConfig]:
+def get_configs(worker_size: int, model_name: str) -> Tuple[Dict, ServiceConfig]:
 
-    worker_params = WorkerConfig(
+    engine_config = EngineConfig(
         model=model_name,
         tensor_parallel_size=worker_size,
         pipeline_parallel_size=1,
         enforce_eager=True,
-        vllm_args=None,
     )
 
-    sampling_params = SamplingOverrides(
+    sampling_config = SamplingConfig(
         n=3,
         guided_decoding=True,
     )
 
-    policy_config = PolicyConfig(
-        worker_params=worker_params, sampling_params=sampling_params
-    )
+    policy_config = {
+        "engine_config": engine_config,
+        "sampling_config": sampling_config,
+    }
     service_config = ServiceConfig(
         procs_per_replica=worker_size, num_replicas=1, with_gpus=True
     )
@@ -245,7 +243,7 @@ async def run_policy_integration(worker_size) -> Dict[str, torch.Tensor]:
     policy_config, service_config = get_configs(
         worker_size=worker_size, model_name="meta-llama/Llama-3.1-8B-Instruct"
     )
-    policy = await spawn_service(service_config, Policy, config=policy_config)
+    policy = await spawn_service(service_config, Policy, **policy_config)
 
     # Policy engine start with default version 0 that gets incremented.
     print("Calling Policy.update() to load weights from torchstore...")
