@@ -210,6 +210,14 @@ def batch_to_device(batch: dict, device: torch.device) -> None:
             batch[k] = v.to(device)
         else:
             raise ValueError(
-                f"""To use batch_to_device, all elements in the batch must be a dict, Tensor, or BlockMask with flexattention enabled.
-Got key "{k}" with value of type {type(v)}"""
+                f"To use batch_to_device, all elements in the batch must be a dict, "
+                f"Tensor, or BlockMask with flexattention enabled. "
+                f'Got key "{k}" with value of type {type(v)}'
             )
+
+
+def exclude_service(config_dict: dict) -> dict:
+    """Remove 'service' key from config dict without modifying original."""
+    result = config_dict.copy()
+    result.pop("service", None)
+    return result
