@@ -13,10 +13,13 @@ Run this with:
 import asyncio
 import logging
 import sys
+from dataclasses import dataclass
 
+import torch
 from forge.actors import ReplayBuffer, RLTrainer
 from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.data import Episode
 from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
@@ -36,9 +39,33 @@ async def run(cfg: DictConfig):
             **cfg.replay_buffer,
         ),
     )
-    print("Services initialized....")
+    print("Services initialized...")
 
-    print("shutting down...")
+    print("Collecting Data...")
+    g = torch.manual_seed(0)
+    for i in range(cfg.replay_buffer.batch_size):
+        req_len, res_len = torch.randint(64,256, (2,), generator=g).tolist()
+        e = Episode(
+            episode_id=i,
+            request="",
+            policy_version=0,
+            pad_id=0,
+            request_len=256,
+            response_len=256,
+            request_tokens=torch.randint(64_000, (req_len,), generator=g),
+            response_tokens=torch.randint(64_000, (res_len,), generator=g),
+            ref_logprobs=torch.randn((512, 64_000), generator=g),
+            advantage=torch.randn((1,), generator=g)
+        )
+        replay_buffer.add(e)
+
+    print("Train step...")
+    batch = await replay_buffer.sample.choose(curr_policy_version=0)
+    loss = await trainer.train_step.choose(batch)["loss"]
+    print("Loss: ", loss)
+
+
+    print("Shutting down...")
     await shutdown_service(trainer)
     await shutdown_service(replay_buffer)
 

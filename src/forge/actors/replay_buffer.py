@@ -11,6 +11,7 @@ from typing import Any
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
+from forge.data import Episode
 
 
 @dataclass
@@ -30,7 +31,7 @@ class ReplayBuffer(ForgeActor):
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, episode) -> None:
+    async def add(self, episode: Episode) -> None:
         self.buffer.append(episode)
 
     @endpoint

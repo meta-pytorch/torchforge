@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+from torch import nn
 from monarch.actor import current_rank, current_size, endpoint
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
@@ -31,6 +32,7 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
+from forge.data import Episode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -94,18 +96,23 @@ class RLTrainer(ForgeActor):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
+        # Add Support for full GRPO Loss
+        self.loss = SimpleGRPOLoss()
         self.engine.optimizers.zero_grad()
 
     def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
+        self, 
+        request: torch.Tensor,
+        response: torch.Tensor,
+        ref_logprobs: torch.Tensor,
+        advantages: torch.Tensor,
+        mask: torch.Tensor
     ) -> torch.Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
-        inputs = input_dict["tokens"]
-
         if getattr(self.engine.model_args, "use_flex_attn", False):
             cp_mesh = (
                 parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
@@ -155,30 +162,50 @@ class RLTrainer(ForgeActor):
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
-                    pred = model_parts[0](inputs)
-                    loss = self.engine.loss_fn(pred, labels)
+                    input_ids = torch.cat([request, response], dim=1)
+                    logits = model_parts[0](input_ids)
+                    logprobs = compute_logprobs(logits, response)
+                    del logits
+
+                    # compute loss
+                    mask = response != pad_id
+                    loss = self.loss(logprobs, ref_logprobs, advantages, mask)
                 # need to free to before bwd to avoid peaking memory
-                del pred
+                del logprobs
                 loss.backward()
 
         return loss
 
     @endpoint
-    def train_step(self, batch) -> None:
-        # Move tensors to the appropriate device
-        for k, v in batch.items():
-            if isinstance(v, torch.Tensor):
-                batch[k] = v.to("cuda")  # TODO: hardcoded for now
+    def train_step(self, batch: list[Episode]) -> None:
+        # TODO: move batch logic to buffer
+        pad_id = batch[0].pad_id
 
+        # prepare batch
+        request = [e.request_tensor for e in batch]
+        request = torch.stack(request).to(self.device)  # [b x s]
+
+        response = [e.response_tensor for e in batch]
+        response = torch.stack(response).to(self.device)  # [b x s]
+
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.stack(ref_logprobs).to(self.device).squeeze()  # [b x s x v]
+
+        advantages = [e.advantage for e in batch]
+        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
+        del batch
+
+        # compute policy logprobs
         # TODO implement gradient accumulation
         # with GradientAccumulation(
         #     self.gradient_accumulation_steps,
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        # TODO: convert to GRPO Loss
-        labels = batch.pop("labels")
-        loss = self.forward_backward(batch, labels)
+        loss = self.forward_backward(request, response, ref_logprobs, advantages)
+
+        # # Gradient clipping (optional but recommended for stability)
+        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
@@ -190,75 +217,8 @@ class RLTrainer(ForgeActor):
             last_step=self.current_step == self.num_training_steps,
         )
 
-    # TODO: integrate the grpo app step with the above step
-    # def train_step(self, self, batch: list(Episode)):
-    #     total_loss = 0.0
-    #     num_groups_processed = 0
-    #
-    #     for episode in batch:
-    #         groups = episode.groups
-    #
-    #         # Collect all response texts and corresponding data
-    #         response_texts = []
-    #         ref_logprobs_list = []
-    #         advantages_list = []
-    #
-    #         for group in groups:
-    #             response_texts.append(group.response)
-    #             ref_logprobs_list.append(group.ref_logprobs)
-    #             advantages_list.append(group.advantage)
-    #
-    #         # Tokenize all responses in batch
-    #         tokenized = self.tokenizer(
-    #             response_texts,
-    #             padding=True,
-    #             truncation=True,
-    #             return_tensors="pt",
-    #             max_length=512,  # Adjust based on your needs
-    #         )
-    #
-    #         input_ids = tokenized["input_ids"].to(self.device)
-    #         attention_mask = tokenized["attention_mask"].to(self.device)
-    #
-    #         # Compute current policy log probabilities using the model
-    #         current_logprobs = compute_sequence_logprobs(
-    #             self.model, input_ids, attention_mask, requires_grad=True
-    #         )
-    #
-    #         # Convert ref_logprobs and advantages to tensors
-    #         ref_logprobs_tensor = torch.stack(ref_logprobs_list).to(self.device)
-    #         advantages_tensor = torch.tensor(advantages_list, dtype=torch.float32).to(
-    #             self.device
-    #         )
-    #
-    #         # Compute GRPO loss components
-    #         # Ratio between current policy and reference policy
-    #         ratio = torch.exp(current_logprobs - ref_logprobs_tensor)
-    #
-    #         # Policy gradient loss weighted by advantages
-    #         pg_loss = -torch.mean(ratio * advantages_tensor)
-    #
-    #         # KL penalty to prevent policy from deviating too far from reference
-    #         kl_penalty = self.beta * torch.mean(
-    #             (current_logprobs - ref_logprobs_tensor) ** 2
-    #         )
-    #
-    #         # Total GRPO loss
-    #         loss = pg_loss + kl_penalty
-    #         total_loss += loss.item()
-    #         num_groups_processed += len(groups)
-    #
-    #         self.optimizer.zero_grad()
-    #         loss.backward()
-    #
-    #         # Gradient clipping (optional but recommended for stability)
-    #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-    #
-    #         self.optimizer.step()
-    #
-    #     avg_loss = total_loss / len(batch) if batch else 0.0
-    #
-    #     return {"loss": avg_loss, "groups_processed": num_groups_processed}
+        return {"loss": loss.item()}
+
 
     @endpoint
     def push_weights(self) -> None:
@@ -268,3 +228,43 @@ class RLTrainer(ForgeActor):
     async def cleanup(self) -> None:
         if self.engine.checkpointer:
             self.engine.checkpointer.close()
+
+
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    context_length = logits.shape[1] - input_ids.shape[1]
+
+    # Truncate request logits and drop last
+    logits = logits[:, context_length - 1 : -1]
+
+    # Compute logprobs
+    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+    return logprobs
+
+
+class SimpleGRPOLoss(nn.Module):
+    """Simplified GRPO Loss for simplified single step updates
+    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
+    """
+
+    def __init__(self, epsilon=0.1, beta=0.1):
+        super().__init__()
+        self.epsilon = epsilon
+        self.beta = beta
+
+    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
+        per_token_kl = (
+            torch.exp(ref_logprobs.detach() - logprobs)
+            - (ref_logprobs.detach() - logprobs)
+            - 1
+        )
+        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
+        loss = (
+            (per_token_loss * padding_mask).sum(dim=1)
+            / (padding_mask.sum(dim=1) + 1e-8)
+        ).mean()
+        return loss
