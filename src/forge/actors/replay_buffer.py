@@ -8,9 +8,9 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 
 @dataclass
@@ -57,18 +57,17 @@ class ReplayBuffer(ForgeActor):
 
         # TODO: Make this more efficient
         idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
-        sorted_idxs = sorted(
-            idx_to_sample, reverse=True
-        )  # Sort in desc order to avoid shifting idxs
-        sampled_episodes = [self.buffer.pop(i) for i in sorted_idxs]
+        sampled_episodes = [self.buffer[i] for i in idx_to_sample]
 
-        # Reshape to (dp_size, bsz, ...)
-        reshaped_episodes = []
-        for dp_idx in range(self.dp_size):
-            start_idx = dp_idx * bsz
-            end_idx = start_idx + bsz
-            reshaped_episodes.append(sampled_episodes[start_idx:end_idx])
+        # Evict sampled episodes (descending order so pops are safe)
+        for i in sorted(idx_to_sample, reverse=True):
+            self.buffer.pop(i)
 
+        # Reshape into (dp_size, bsz, ...)
+        reshaped_episodes = [
+            sampled_episodes[dp_idx * bsz : (dp_idx + 1) * bsz]
+            for dp_idx in range(self.dp_size)
+        ]
         return reshaped_episodes
 
     @endpoint
