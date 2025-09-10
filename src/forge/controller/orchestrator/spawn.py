@@ -55,7 +55,7 @@ async def shutdown_service(service: OrchestratorInterface) -> None:
     Implemented in this way to avoid actors overriding stop() unintentionally.
 
     """
-    await service._service.stop()
+    await service._orchestrator.stop()
 
 
 async def spawn_service_v2(

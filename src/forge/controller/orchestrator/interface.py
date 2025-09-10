@@ -138,7 +138,7 @@ class ServiceEndpointV2(Generic[P, R]):
 
 class OrchestratorInterface:
     """
-    A lightweight interface to the base Service class.
+    A lightweight interface to the base Orchestrator class.
 
     This is a temporary workaround until Monarch supports nested
     actors.

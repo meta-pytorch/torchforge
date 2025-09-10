@@ -38,13 +38,13 @@ import pprint
 import uuid
 from typing import Dict, List
 
+from monarch.actor import Actor, endpoint
+
 from forge.controller.orchestrator.interface import _session_context, Session
 
 from forge.controller.orchestrator.metrics import ServiceMetrics
 from forge.controller.orchestrator.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
-
-from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
