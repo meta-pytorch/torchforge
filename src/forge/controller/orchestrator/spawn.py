@@ -95,5 +95,5 @@ async def shutdown_service_v2(orchestrator: OrchestratorInterfaceV2) -> None:
     Implemented in this way to avoid actors overriding stop() unintentionally.
 
     """
-    await orchestrator._orchestrator.stop.call_one()
+    await orchestrator._orchestrator_actor.stop.call_one()
     await orchestrator._proc_mesh.stop()
