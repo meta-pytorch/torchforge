@@ -281,4 +281,3 @@ async def test_llama3_policy_update_single(setup_test):
     logger.info(
         "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
-    assert False, "Planned failure"
