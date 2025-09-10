@@ -13,7 +13,7 @@ import asyncio
 
 from forge.actors.policy import Policy
 from forge.cli.config import parse
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.controller.orchestrator import ServiceConfig, shutdown_service, spawn_service
 
 from omegaconf import DictConfig
 from src.forge.data.utils import exclude_service

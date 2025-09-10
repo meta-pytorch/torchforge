@@ -38,36 +38,36 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
 
+from monarch.actor import Actor, endpoint
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class Service:
+class Orchestrator:
     """
-    Actor-less implementation of Service.
+    Actor-less implementation of Orchestrator.
 
     This is a temporary solution to disable nested actors, which is proving
     problematic temporarily.
 
     Args:
-        cfg: Service configuration including number of replicas, GPUs per replica, and health polling rate
+        cfg: Orchestrator configuration including number of replicas, GPUs per replica, and health polling rate
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
 
     Attributes:
-        _cfg: Service configuration
+        _cfg: Orchestrator configuration
         _replicas: List of managed replica instances
         _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
+        _metrics: Aggregated orchestrator and replica metrics
         _endpoints: Dynamically registered actor endpoints
     """
 
@@ -91,8 +91,10 @@ class Service:
         self._replicas_to_recover = []
 
     async def __initialize__(self):
-        """Initializes the service and starts the health loop."""
-        logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
+        """Initializes the orchestrator and starts the health loop."""
+        logger.debug(
+            f"Starting orchestrator up with {self._cfg.num_replicas} replicas."
+        )
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
@@ -603,12 +605,12 @@ class Service:
         }
 
     def __repr__(self):
-        return f"Service(actor={self._actor_def.__name__})"
+        return f"Orchestrator(actor={self._actor_def.__name__})"
 
 
-class ServiceActor(Actor):
+class OrchestratorActor(Actor):
     """
-    Distributed Actor Service Controller
+    Distributed Orchestrator Actor Controller
 
     A service orchestration system that manages multiple replicas of actor-based
     services with fault tolerance and load balancing.
@@ -620,7 +622,7 @@ class ServiceActor(Actor):
         **actor_kwargs: Keyword arguments passed to actor constructor
 
     Attributes:
-        _cfg: Service configuration
+        _cfg: Orchestrator configuration
         _replicas: List of managed replica instances
         _active_sessions: Currently active sessions
         _metrics: Aggregated service and replica metrics
@@ -628,7 +630,7 @@ class ServiceActor(Actor):
     """
 
     def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):
-        self._service = Service()
+        self._service = Orchestrator()
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
@@ -649,8 +651,10 @@ class ServiceActor(Actor):
 
     @endpoint
     async def __initialize__(self):
-        """Initializes the service and starts the health loop."""
-        logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
+        """Initializes the orchestrator and starts the health loop."""
+        logger.debug(
+            f"Starting orchestrator up with {self._cfg.num_replicas} replicas."
+        )
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
@@ -1172,4 +1176,4 @@ class ServiceActor(Actor):
         }
 
     def __repr__(self):
-        return f"Service(actor={self._actor_def.__name__})"
+        return f"Orchestrator(actor={self._actor_def.__name__})"

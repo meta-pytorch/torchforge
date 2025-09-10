@@ -8,12 +8,12 @@
 import logging
 from typing import Type
 
-from monarch.actor import proc_mesh
-
 from forge.controller import ForgeActor
-from forge.controller.service import Service, ServiceActor, ServiceConfig
+from forge.controller.service import Orchestrator, OrchestratorActor, ServiceConfig
 
 from forge.controller.service.interface import ServiceInterface, ServiceInterfaceV2
+
+from monarch.actor import proc_mesh
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -40,7 +40,7 @@ async def spawn_service(
 
     # Create a single-node proc_mesh and actor_mesh for the Service Actor
     logger.info("Spawning Service Actor for %s", actor_def.__name__)
-    service = Service(service_cfg, actor_def, actor_kwargs)
+    service = Orchestrator(service_cfg, actor_def, actor_kwargs)
     await service.__initialize__()
     # Return the ServiceInterface that wraps the proc_mesh, actor_mesh, and actor_def
     return ServiceInterface(service, actor_def)
@@ -78,7 +78,7 @@ async def spawn_service_v2(
     logger.info("Spawning Service Actor for %s", actor_def.__name__)
     m = await proc_mesh(gpus=1)
     service_actor = await m.spawn(
-        "service", ServiceActor, service_cfg, actor_def, actor_kwargs
+        "service", OrchestratorActor, service_cfg, actor_def, actor_kwargs
     )
     await service_actor.__initialize__.call_one()
 

@@ -12,7 +12,7 @@ import pytest_asyncio
 import torch
 
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.orchestrator import ServiceConfig, spawn_service
 from forge.data.sharding import VLLMSharding
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict

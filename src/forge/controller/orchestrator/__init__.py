@@ -7,19 +7,19 @@
 from .interface import ServiceInterface, Session, SessionContext
 from .metrics import ServiceMetrics
 from .replica import Replica, ReplicaMetrics
-from .service import Service, ServiceActor, ServiceConfig
+from .service import Orchestrator, OrchestratorActor, ServiceConfig
 from .spawn import shutdown_service, spawn_service
 
 __all__ = [
     "Replica",
     "ReplicaMetrics",
-    "Service",
+    "Orchestrator",
     "ServiceConfig",
     "ServiceInterface",
     "ServiceMetrics",
     "Session",
     "SessionContext",
-    "ServiceActor",
+    "OrchestratorActor",
     "spawn_service",
     "shutdown_service",
 ]
