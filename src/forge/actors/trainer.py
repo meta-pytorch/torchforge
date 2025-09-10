@@ -93,9 +93,7 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
-        engine_config = {
-            f.name: getattr(self, f.name) for f in fields(self) if f.name != "store"
-        }
+        engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
         self.engine.optimizers.zero_grad()
