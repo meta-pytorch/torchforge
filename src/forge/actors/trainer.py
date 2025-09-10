@@ -304,12 +304,6 @@ class RLTrainer(ForgeActor):
                 [gate, up], dim=0
             )
 
-        # Remove before landing
-        # key_str = ""
-        # for key, _ in hf_state_dict.items():
-        #    key_str += f" model_state_dict/{self.current_step}/{key}\n"
-        # logger.warning(f"rltrainer, put_state_dict keys : {key_str}")
-
         await ts.put_state_dict(
             state_dict=hf_state_dict,
             key=f"model_state_dict/{self.current_step}",
