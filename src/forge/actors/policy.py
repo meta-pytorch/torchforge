@@ -111,8 +111,6 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        self._updating_weights: bool = False
-        self._request_queue: list[tuple[str, int, asyncio.Future]] = []
         self.running: bool = False
 
     @classmethod
@@ -220,16 +218,19 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> RequestOutput | None:
-        """Generate a response for the given prompt."""
-        if self._updating_weights:
-            request_future = asyncio.Future()
-            self._request_queue.append((prompt, priority, request_future))
-            return await request_future
+    async def generate(self, prompt: str, priority: int = 0) -> RequestOutput:
+        """Generate a response for the given prompt
+
+        Args:
+            prompt (str): The prompt to generate a response for.
+            priority (int, optional): The priority of the request. Defaults to 0.
+
+        Returns:
+            RequestOutput: vLLM class with the generated response.
+        """
         return await self._generate(prompt, priority)
 
-    async def _generate(self, prompt: str, priority: int = 0) -> RequestOutput | None:
-        """Internal generation method that doesn't check for weight updates."""
+    async def _generate(self, prompt: str, priority: int = 0) -> RequestOutput:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -287,15 +288,7 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        # Yield control to allow the run() loop to process the scheduled request
-        await asyncio.sleep(0)
-
-        try:
-            generations = await request_fut
-            return generations
-        except asyncio.exceptions.CancelledError:
-            self.logger.debug(f"Request {request_id} was cancelled")
-            return None
+        return await request_fut
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -338,77 +331,16 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def update_weights(self):
-        """Update the policy weights and schedule processing of queued requests."""
-        queued_count = len(self._request_queue)
-        self.logger.debug(
-            f"Starting weight update (v{self.weights_version} -> v{self.weights_version + 1})"
-        )
-        if queued_count > 0:
-            self.logger.debug(
-                f"Will process {queued_count} queued requests after update"
-            )
+        # TODO: If generating long sequences, this might be long and will block policy weight updates
+        curr_requests = [fut for _, fut in self.requests.values()]
+        if curr_requests:
+            self.logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            await asyncio.gather(*curr_requests)
 
-        self._updating_weights = True
-
-        # Cancel all current requests and wait for them to finish
-        pending_futures = []
-        for request_id, (parent_req, fut) in list(self.requests.items()):
-            if not fut.done():
-                fut.cancel("Received weight update, cancelling request")
-                pending_futures.append(fut)
-
-        # Wait for all cancelled requests to finish with a timeout
-        if pending_futures:
-            self.logger.debug(f"Cancelling {len(pending_futures)} pending requests")
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*pending_futures, return_exceptions=True),
-                    timeout=5.0,
-                )
-            except asyncio.TimeoutError:
-                self.logger.warning("Some requests did not cancel within timeout")
-
-        self.requests.clear()
-
-        try:
-            await self.policy_worker.update.call(version=self.weights_version)
-            self.weights_version += 1
-            self.logger.info(f"Weight update completed (now v{self.weights_version})")
-        except Exception as e:
-            self.logger.error(f"Weight update failed: {e}")
-            self._updating_weights = False
-            raise
-
-        self._updating_weights = False
-
-        # Schedule queue processing as a separate task to avoid blocking the endpoint
-        if self._request_queue:
-            task = asyncio.create_task(self._process_queued_requests())
-            task.add_done_callback(self._queue_processing_callback)
-
-    async def _process_queued_requests(self):
-        """Process all queued requests after weight update completes."""
-        queued_requests = self._request_queue.copy()
-        self._request_queue.clear()
-
-        for i, (prompt, priority, future) in enumerate(queued_requests):
-            try:
-                # Use the internal method directly to avoid the updating weights check
-                result = await self._generate(prompt, priority)
-                future.set_result(result)
-            except Exception as e:
-                self.logger.error(f"Error processing queued request {i+1}: {e}")
-                future.set_exception(e)
-
-    def _queue_processing_callback(self, task: asyncio.Task):
-        """Callback to handle completion/errors of queue processing task."""
-        try:
-            if task.exception():
-                self.logger.error(f"Queue processing task failed: {task.exception()}")
-            else:
-                self.logger.debug("Queue processing task completed successfully")
-        except Exception as e:
-            self.logger.error(f"Error in queue processing callback: {e}")
+        self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
+        await self.policy_worker.update.call(version=self.weights_version)
+        self.weights_version += 1
+        self.logger.info(f"Weight update completed (now v{self.weights_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:

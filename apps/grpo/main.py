@@ -8,7 +8,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
@@ -47,9 +47,8 @@ class SimpleGRPOLoss(nn.Module):
     Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
     """
 
-    def __init__(self, epsilon=0.1, beta=0.1):
+    def __init__(self, beta: float = 0.1):
         super().__init__()
-        self.epsilon = epsilon
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
@@ -76,14 +75,14 @@ class Episode:
     pad_id: int
     request_len: int
     response_len: int
-    target: Optional[Any] = None
+    target: Any | None = None
     # processed data
-    response: Optional[str] = None
-    request_tokens: Optional[list[int]] = None
-    response_tokens: Optional[list[int]] = None
-    ref_logprobs: Optional[torch.Tensor] = None
-    reward: Optional[float] = None
-    advantage: Optional[float] = None
+    response: str | None = None
+    request_tokens: list[int] | None = None
+    response_tokens: list[int] | None = None
+    ref_logprobs: torch.Tensor | None = None
+    reward: float | None = None
+    advantage: float | None = None
 
     @property
     def request_tensor(self):
@@ -142,18 +141,15 @@ class Trainer(ForgeActor):
     model_name: str
     learning_rate: float = 1e-5
     beta: float = 0.1
-    epsilon: float = 0.1
     device: torch.device | None = None
     store: MultiProcessStore | None = None
     state_dict_key: str = "model_state_dict"
 
     @endpoint
     def setup(self):
-        # Set device
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Initialize model
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             dtype=torch.bfloat16,
@@ -161,16 +157,14 @@ class Trainer(ForgeActor):
         ).to(self.device)
         self.model.train()
 
-        # Initialize optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.learning_rate
         )
         self.optimizer.zero_grad()
 
-        # Initialize loss
-        self.loss = SimpleGRPOLoss(self.epsilon, self.beta)
+        self.loss = SimpleGRPOLoss(self.beta)
 
-        self.logger.info(f"Model initialized on {self.device}")
+        self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
@@ -190,26 +184,19 @@ class Trainer(ForgeActor):
         advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
         del batch
 
-        # compute policy logprobs
         input_ids = torch.cat([request, response], dim=1)
         mask = input_ids != pad_id
         logits = self.model(input_ids=input_ids, attention_mask=mask).logits
         logprobs = compute_logprobs(logits, response)
         del logits
 
-        # compute loss
         mask = response != pad_id
         loss = self.loss(logprobs, ref_logprobs, advantages, mask)
-
         self.optimizer.zero_grad()
         loss.backward()
-
-        # # Gradient clipping (optional but recommended for stability)
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-
         self.optimizer.step()
 
-        return loss.item()
+        return loss.detach()
 
     @endpoint
     async def push_weights(self, version: int):
@@ -232,14 +219,11 @@ class RewardActor(ForgeActor):
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
-        total_reward = 0.0
+        total_rewards = 0.0
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
-            self.logger.info(
-                f"Response: {response} | Target: {target} | Reward: {reward}"
-            )
-            total_reward += reward
-        return total_reward
+            total_rewards += reward
+        return total_rewards / len(self.reward_functions)
 
 
 class ComputeAdvantages(ForgeActor):
@@ -248,7 +232,7 @@ class ComputeAdvantages(ForgeActor):
     @endpoint
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
-        rewards = torch.Tensor([[e.reward for e in group.episodes]])
+        rewards = torch.tensor([[e.reward for e in group.episodes]])
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
         advantages = (rewards - mean) / (std + 1e-4)
@@ -302,9 +286,17 @@ class DatasetActor(ForgeActor):
         self.tokenizer = get_tokenizer(self.model)
 
         def gsm8k_transform(sample):
+            system_prompt = """
+            Put all your scratchpad work between <think> and </think> tags.
+            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
+            """
             request: str = sample["question"]
+            as_chat = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request},
+            ]
             formatted_request = self.tokenizer.apply_chat_template(
-                [{"role": "user", "content": request}],
+                as_chat,
                 tokenize=False,
                 add_generation_prompt=True,
             )
@@ -333,21 +325,20 @@ class DatasetActor(ForgeActor):
 
 async def main():
     """Main GRPO training loop with rollout and training processes."""
-    group_size = 5
-    model = "Qwen/Qwen3-4B-Base"
+    model = "Qwen/Qwen3-1.7B"
     max_req_tokens = 512
     max_res_tokens = 512
-
-    # ---- Setup WandB Logger ---- #
-    logger = get_metric_logger(
+    group_size = 8
+    batch_size = 16
+    max_policy_age = 0  # Fully on-policy
+    mlogger = get_metric_logger(
         "wandb",
         freq=1,
         project="grpo-training",
     )
 
-    store = await MultiProcessStore.create_store()
-
     # ---- Setup services ---- #
+    store = await MultiProcessStore.create_store()
     (
         dataloader,
         policy,
@@ -387,8 +378,8 @@ async def main():
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             ReplayBuffer,
-            batch_size=8,
-            max_policy_age=0,  # Fully on-policy for now
+            batch_size=batch_size,
+            max_policy_age=max_policy_age,
         ),
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
@@ -419,11 +410,6 @@ async def main():
                 return
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.choose(prompt)
-            # If weights are updating mid-rollout, response will be cancelled and service
-            # will return None. We currently throw away the sample.
-            if responses is None:
-                continue
-
             version = await policy.get_version.choose()
             group = Group.new_group(
                 group_id=rollout_count,
@@ -440,6 +426,7 @@ async def main():
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
+                episode.response = response.text
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
@@ -452,11 +439,11 @@ async def main():
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
-            logger.log("avg_response_len/rollout", avg_response_len, rollout_count)
+            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
             buffer_size = await replay_buffer._numel.choose()
-            logger.log("buffer_size/rollout", buffer_size, rollout_count)
+            mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
-            logger.log("avg_reward/rollout", avg_reward, rollout_count)
+            mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1
 
@@ -472,7 +459,7 @@ async def main():
             else:
                 loss = await trainer.train_step.choose(batch)
                 training_step += 1
-                logger.log("loss/training_step", loss, training_step)
+                mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.choose(policy_version)
                 policy_version += 1
                 await policy.update_weights.choose()
