@@ -186,15 +186,12 @@ def get_configs(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def llama3_torchstore_setup():
+async def setup_test():
     """
-    Pytest fixture to load Llama 3.1 8B-Instruct. We use the loaded state dict as SOT for validation.
-    Uses session scope so it's only called once when both tests are run.
+    Pytest fixture to load Llama 3.1 8B-Instruct. We use the loaded state dict
+    as the SOT for validation. Uses session scope so it's only called once
+    across UT.
     """
-    print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
-
-    store = await ts.initialize()
-
     model_path = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
     # Load the model from local path - using device_map="auto" for efficient loading
@@ -207,21 +204,21 @@ async def llama3_torchstore_setup():
 
     original_state_dict = model.state_dict()
     print(f"Original state dict has {len(original_state_dict)} parameters")
-    converted_state_dict = convert_state_dict(original_state_dict)
-    print(f"Converted state dict has {len(converted_state_dict)} parameters")
+    hf_state_dict = convert_state_dict(original_state_dict)
+    print(f"Converted state dict has {len(hf_state_dict)} parameters")
 
-    return store, converted_state_dict
+    return hf_state_dict
 
 
 async def run_rl_trainer(worker_size) -> None:
     """
-    1. Spawn the trainer.
-    2. Inject torchstore references via setup call.
-    2. Call push weights.
+    Spawn the RL trainer
+    Args:
+        worker_size: Number of workers/procs.
     """
     cfg: DictConfig = OmegaConf.load("apps/rl/llama3_8b.yaml")
     rl_trainer = await spawn_service(
-        ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
+        ServiceConfig(procs_per_replica=worker_size, with_gpus=True, num_replicas=1),
         RLTrainer,
         **cfg.trainer,
     )
@@ -229,23 +226,20 @@ async def run_rl_trainer(worker_size) -> None:
     await rl_trainer.push_weights.choose()
 
 
-async def run_policy_integration(store, worker_size) -> Dict[str, torch.Tensor]:
+async def run_policy_integration(worker_size) -> Dict[str, torch.Tensor]:
     """
-    Common helper function to test Policy integration with different GPU configurations.
+    Launch the policy service.
 
     Args:
         store: TorchStore instance
-        original_state_dict: Original state dict for validation
-        num_gpus: Number of GPUs to use (1 for single GPU, 2+ for tensor parallel)
+        worker_size: Number of workers/procs (2+ for tensor parallel)
     """
-    print(f"=== PHASE 2: Testing Policy Integration (Workers: {worker_size}) ===")
+    print(f"=== PHASE 2: Launching Policy Engine (Workers: {worker_size}) ===")
 
     policy_config, service_config = get_configs(
         worker_size=worker_size, model_name="meta-llama/Llama-3.1-8B-Instruct"
     )
-    policy = await spawn_service(
-        service_config, Policy, config=policy_config, store=store
-    )
+    policy = await spawn_service(service_config, Policy, config=policy_config)
 
     # Policy engine start with default version 0 that gets incremented.
     print("Calling Policy.update() to load weights from torchstore...")
@@ -253,30 +247,27 @@ async def run_policy_integration(store, worker_size) -> Dict[str, torch.Tensor]:
     print(
         "Successfully called Policy.update_weights() to load weights from torchstore!"
     )
-    # We get the result as a list.
-    #results = await policy._get_model_params.call()
-    #assert len(results) == 1
-    #print("Successfully got model state dict after update")
-    #return results[0]
-    return {}
+    results = await policy._get_model_params.call()
+    assert len(results) == 1
+    print("Successfully got model state dict after update")
+    return results[0]
 
 
 @pytest.mark.asyncio
 @requires_cuda
-async def test_llama3_policy_update_single():
+async def test_llama3_policy_update_single(setup_test):
     print("Starting Llama 3 8B torchstore test (single GPU)...")
 
-    # store, original_state_dict = llama3_torchstore_setup
     await ts.initialize()
+    expected_state_dict = setup_test
     await run_rl_trainer(worker_size=1)
-    loaded_state_dict = await run_policy_integration(None, worker_size=1)
-    assert False, "Planned failure"
+    loaded_state_dict = await run_policy_integration(worker_size=1)
 
     # validating for single resource case.
-    # validate_loaded_tensors_equals_original(
-    #    loaded_state_dict, original_state_dict, tensor_parallel_size=0, rank=0
-    # )
-
+    validate_loaded_tensors_equals_original(
+       loaded_state_dict, expected_state_dict, tensor_parallel_size=0, rank=0
+    )
     print(
         "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
+    assert False, "Planned failure"

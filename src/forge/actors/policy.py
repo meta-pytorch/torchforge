@@ -107,7 +107,6 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
-    store = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -121,7 +120,6 @@ class Policy(PolicyInterface):
         *,
         process_config: ProcessConfig,
         config: PolicyConfig,
-        store=None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -172,7 +170,7 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call(store=self.store)
+        await self.policy_worker.setup.call()
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
@@ -395,7 +393,7 @@ class PolicyWorker(ForgeActor):
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
     @endpoint
-    async def setup(self, store=None):
+    async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
