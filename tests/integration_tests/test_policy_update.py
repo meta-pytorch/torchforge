@@ -262,8 +262,13 @@ async def run_policy_integration(worker_size) -> Dict[str, torch.Tensor]:
 @pytest.mark.asyncio
 @requires_cuda
 async def test_llama3_policy_update_single(setup_test):
-    print("Starting Llama 3 8B torchstore test (single GPU)...")
-
+    """
+    1. Loads weights from HF model into in-memory state-dict (source of truth)
+    2. Initializes RLTrainer, make the weights available in torchstore.
+    3. Initializes Policy, and calls update_weights() to load weights from torchstore.
+    4. Validate the policy weights against source of truth.
+    """
+    logger.info("Starting Llama 3 8B torchstore test (single GPU)...")
     await ts.initialize()
     expected_state_dict = setup_test
     await run_rl_trainer(worker_size=1)
@@ -273,7 +278,7 @@ async def test_llama3_policy_update_single(setup_test):
     validate_loaded_tensors_equals_original(
         loaded_state_dict, expected_state_dict, tensor_parallel_size=0, rank=0
     )
-    print(
+    logger.info(
         "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
     )
     assert False, "Planned failure"
