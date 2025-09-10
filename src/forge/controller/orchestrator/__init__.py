@@ -4,10 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .interface import ServiceInterface, Session, SessionContext
+from .interface import OrchestratorInterface, Session, SessionContext
 from .metrics import ServiceMetrics
+from .orchestrator import Orchestrator, OrchestratorActor, ServiceConfig
 from .replica import Replica, ReplicaMetrics
-from .service import Orchestrator, OrchestratorActor, ServiceConfig
 from .spawn import shutdown_service, spawn_service
 
 __all__ = [
@@ -15,7 +15,7 @@ __all__ = [
     "ReplicaMetrics",
     "Orchestrator",
     "ServiceConfig",
-    "ServiceInterface",
+    "OrchestratorInterface",
     "ServiceMetrics",
     "Session",
     "SessionContext",

@@ -9,9 +9,12 @@ import logging
 from typing import Type
 
 from forge.controller import ForgeActor
-from forge.controller.service import Orchestrator, OrchestratorActor, ServiceConfig
+from forge.controller.orchestrator import Orchestrator, OrchestratorActor, ServiceConfig
 
-from forge.controller.service.interface import ServiceInterface, ServiceInterfaceV2
+from forge.controller.orchestrator.interface import (
+    OrchestratorInterface,
+    OrchestratorInterfaceV2,
+)
 
 from monarch.actor import proc_mesh
 
@@ -21,8 +24,8 @@ logger.setLevel(logging.INFO)
 
 async def spawn_service(
     service_cfg: ServiceConfig, actor_def: Type[ForgeActor], **actor_kwargs
-) -> ServiceInterface:
-    """Spawns a service based on the actor class.
+) -> OrchestratorInterface:
+    """Spawns a orchestrator based on the actor class.
 
     Args:
         service_cfg: Service configuration
@@ -30,7 +33,7 @@ async def spawn_service(
         **actor_kwargs: Keyword arguments to pass to actor constructor
 
     Returns:
-        A ServiceInterface that provides access to the Service Actor
+        A OrchestratorInterface that provides access to the Service Actor
     """
     # Assert that actor_def is a subclass of ForgeActor
     if not issubclass(actor_def, ForgeActor):
@@ -38,15 +41,15 @@ async def spawn_service(
             f"actor_def must be a subclass of ForgeActor, got {type(actor_def).__name__}"
         )
 
-    # Create a single-node proc_mesh and actor_mesh for the Service Actor
+    # Create a single-node proc_mesh and actor_mesh for the Orchestrator
     logger.info("Spawning Service Actor for %s", actor_def.__name__)
-    service = Orchestrator(service_cfg, actor_def, actor_kwargs)
-    await service.__initialize__()
-    # Return the ServiceInterface that wraps the proc_mesh, actor_mesh, and actor_def
-    return ServiceInterface(service, actor_def)
+    orchestrator = Orchestrator(service_cfg, actor_def, actor_kwargs)
+    await orchestrator.__initialize__()
+    # Return the OrchestratorInterface that wraps the proc_mesh, actor_mesh, and actor_def
+    return OrchestratorInterface(orchestrator, actor_def)
 
 
-async def shutdown_service(service: ServiceInterface) -> None:
+async def shutdown_service(service: OrchestratorInterface) -> None:
     """Shuts down the service.
 
     Implemented in this way to avoid actors overriding stop() unintentionally.
@@ -57,7 +60,7 @@ async def shutdown_service(service: ServiceInterface) -> None:
 
 async def spawn_service_v2(
     service_cfg: ServiceConfig, actor_def: Type[ForgeActor], **actor_kwargs
-) -> ServiceInterfaceV2:
+) -> OrchestratorInterfaceV2:
     """Spawns a service based on the actor class.
 
     Args:
@@ -66,7 +69,7 @@ async def spawn_service_v2(
         **actor_kwargs: Keyword arguments to pass to actor constructor
 
     Returns:
-        A ServiceInterface that provides access to the Service Actor
+        A OrchestratorInterface that provides access to the Orchestrator Actor
     """
     # Assert that actor_def is a subclass of ForgeActor
     if not issubclass(actor_def, ForgeActor):
@@ -74,23 +77,23 @@ async def spawn_service_v2(
             f"actor_def must be a subclass of ForgeActor, got {type(actor_def).__name__}"
         )
 
-    # Create a single-node proc_mesh and actor_mesh for the Service Actor
-    logger.info("Spawning Service Actor for %s", actor_def.__name__)
+    # Create a single-node proc_mesh and actor_mesh for the Orchestrator Actor
+    logger.info("Spawning Orchestrator Actor for %s", actor_def.__name__)
     m = await proc_mesh(gpus=1)
-    service_actor = await m.spawn(
+    orchestrator_actor = await m.spawn(
         "service", OrchestratorActor, service_cfg, actor_def, actor_kwargs
     )
-    await service_actor.__initialize__.call_one()
+    await orchestrator_actor.__initialize__.call_one()
 
-    # Return the ServiceInterface that wraps the proc_mesh, actor_mesh, and actor_def
-    return ServiceInterfaceV2(m, service_actor, actor_def)
+    # Return the OrchestratorInterface that wraps the proc_mesh, actor_mesh, and actor_def
+    return OrchestratorInterfaceV2(m, orchestrator_actor, actor_def)
 
 
-async def shutdown_service_v2(service: ServiceInterfaceV2) -> None:
-    """Shuts down the service.
+async def shutdown_service_v2(orchestrator: OrchestratorInterfaceV2) -> None:
+    """Shuts down the orchestrator.
 
     Implemented in this way to avoid actors overriding stop() unintentionally.
 
     """
-    await service._service.stop.call_one()
-    await service._proc_mesh.stop()
+    await orchestrator._orchestrator.stop.call_one()
+    await orchestrator._proc_mesh.stop()

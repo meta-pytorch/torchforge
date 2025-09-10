@@ -4,9 +4,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 """
-Service interface and session management.
+Orchestrator interface and session management.
 
-This module provides the user-facing API for interacting with distributed services,
+This module provides the user-facing API for interacting with distributed orchestrators,
 including session management, context propagation, and dynamic endpoint registration.
 """
 
@@ -37,7 +37,7 @@ _session_context = contextvars.ContextVar("session_context")
 
 class SessionContext:
     """
-    Async context manager for stateful service sessions with automatic lifecycle management.
+    Async context manager for stateful orchestrator sessions with automatic lifecycle management.
 
     Provides a convenient way to maintain stateful connections to replicas across multiple
     requests. Sessions ensure that all requests within the context are routed to the same
@@ -45,21 +45,21 @@ class SessionContext:
 
     Example:
 
-        >>> async with service.session() as session:
+        >>> async with orchestrator.session() as session:
         ...     # All calls within this block use the same replica
-        ...     result1 = await service.my_endpoint(arg1)
-        ...     result2 = await service.another_endpoint(result1)
+        ...     result1 = await orchestrator.my_endpoint(arg1)
+        ...     result2 = await orchestrator.another_endpoint(result1)
 
     """
 
-    def __init__(self, service: "ServiceInterface"):
-        self.service = service
+    def __init__(self, orchestrator: "OrchestratorInterface"):
+        self.orchestrator = orchestrator
         self.session_id: str | None = None
         self._token = None
 
     async def __aenter__(self):
         """Start a session and set context variables."""
-        self.session_id = await self.service.start_session()
+        self.session_id = await self.orchestrator.start_session()
         # Set context for this async task
         context_value = {"session_id": self.session_id}
         self._token = _session_context.set(context_value)
@@ -70,7 +70,7 @@ class SessionContext:
         if self._token:
             _session_context.reset(self._token)
         if self.session_id:
-            await self.service.terminate_session(self.session_id)
+            await self.orchestrator.terminate_session(self.session_id)
             self.session_id = None
 
 
@@ -136,7 +136,7 @@ class ServiceEndpointV2(Generic[P, R]):
         return result
 
 
-class ServiceInterface:
+class OrchestratorInterface:
     """
     A lightweight interface to the base Service class.
 
@@ -145,8 +145,8 @@ class ServiceInterface:
 
     """
 
-    def __init__(self, _service, actor_def):
-        self._service = _service
+    def __init__(self, _orchestrator, actor_def):
+        self._orchestrator = _orchestrator
         self.actor_def = actor_def
 
         # Dynamically create ServiceEndpoint objects for user's actor endpoints
@@ -155,17 +155,17 @@ class ServiceInterface:
             attr_value = getattr(actor_def, attr_name)
             if isinstance(attr_value, EndpointProperty):
                 # Create a ServiceEndpoint that will route through the Service Actor
-                endpoint = ServiceEndpoint(self._service, attr_name)
+                endpoint = ServiceEndpoint(self._orchestrator, attr_name)
                 setattr(self, attr_name, endpoint)
 
-    # Session management methods - handled by ServiceInterface
+    # Session management methods - handled by OrchestratorInterface
     async def start_session(self) -> str:
         """Starts a new session for stateful request handling."""
-        return await self._service.start_session()
+        return await self._orchestrator.start_session()
 
     async def terminate_session(self, sess_id: str):
         """Terminates an active session and cleans up associated resources."""
-        return await self._service.terminate_session(sess_id)
+        return await self._orchestrator.terminate_session(sess_id)
 
     def session(self) -> "SessionContext":
         """Returns a context manager for session-based calls."""
@@ -173,11 +173,11 @@ class ServiceInterface:
 
     async def get_metrics(self):
         """Get comprehensive service metrics for monitoring and analysis."""
-        return self._service.get_metrics()
+        return self._orchestrator.get_metrics()
 
     async def get_metrics_summary(self):
         """Get a summary of key metrics for monitoring and debugging."""
-        return self._service.get_metrics_summary()
+        return self._orchestrator.get_metrics_summary()
 
     # Testing method - forwarded to Service Actor
     async def _get_internal_state(self):
@@ -187,20 +187,20 @@ class ServiceInterface:
         Returns:
             dict: Complete internal state including sessions, replicas, and metrics
         """
-        return await self._service._get_internal_state()
+        return await self._orchestrator._get_internal_state()
 
     def __getattr__(self, name: str):
         """Forward all other attribute access to the underlying Service Actor."""
-        _service = object.__getattribute__(self, "_service")
-        # Forward everything else to the _service
-        if hasattr(_service, name):
-            return getattr(_service, name)
+        _orchestrator = object.__getattribute__(self, "_orchestrator")
+        # Forward everything else to the _orchestrator
+        if hasattr(_orchestrator, name):
+            return getattr(_orchestrator, name)
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
 
 
-class ServiceInterfaceV2:
+class OrchestratorInterfaceV2:
     """
     A lightweight interface to a Service Actor running on a single-node mesh.
 
@@ -208,7 +208,7 @@ class ServiceInterfaceV2:
     and exposes its user-defined actor endpoints as ServiceEndpoint objects that
     route through the Service Actor's _call and _call_all endpoints.
 
-    The ServiceInterface acts as the handle that is returned to end clients,
+    The OrchestratorInterface acts as the handle that is returned to end clients,
     providing a simple interface that makes actual calls to the Service Actor.
 
     This is also needed to simplify serializing a handle to the service, in case
@@ -216,9 +216,9 @@ class ServiceInterfaceV2:
 
     """
 
-    def __init__(self, _proc_mesh, _service, actor_def):
+    def __init__(self, _proc_mesh, _orchestrator, actor_def):
         self._proc_mesh = _proc_mesh
-        self._service = _service
+        self._orchestrator = _orchestrator
         self.actor_def = actor_def
 
         # Dynamically create ServiceEndpoint objects for user's actor endpoints
@@ -227,30 +227,30 @@ class ServiceInterfaceV2:
             attr_value = getattr(actor_def, attr_name)
             if isinstance(attr_value, EndpointProperty):
                 # Create a ServiceEndpoint that will route through the Service Actor
-                endpoint = ServiceEndpointV2(self._service, attr_name)
+                endpoint = ServiceEndpointV2(self._orchestrator, attr_name)
                 setattr(self, attr_name, endpoint)
 
-    # Session management methods - handled by ServiceInterface
+    # Session management methods - handled by OrchestratorInterface
     async def start_session(self) -> str:
         """Starts a new session for stateful request handling."""
-        return await self._service.start_session.call_one()
+        return await self._orchestrator.start_session.call_one()
 
     async def terminate_session(self, sess_id: str):
         """Terminates an active session and cleans up associated resources."""
-        return await self._service.terminate_session.call_one(sess_id)
+        return await self._orchestrator.terminate_session.call_one(sess_id)
 
     def session(self) -> "SessionContext":
         """Returns a context manager for session-based calls."""
         return SessionContext(self)
 
-    # Metrics methods - forwarded to Service Actor
+    # Metrics methods - forwarded to Orchestrator Actor
     async def get_metrics(self):
-        """Get comprehensive service metrics for monitoring and analysis."""
-        return await self._service.get_metrics.call_one()
+        """Get comprehensive orchestrator metrics for monitoring and analysis."""
+        return await self._orchestrator.get_metrics.call_one()
 
     async def get_metrics_summary(self):
         """Get a summary of key metrics for monitoring and debugging."""
-        return await self._service.get_metrics_summary.call_one()
+        return await self._orchestrator.get_metrics_summary.call_one()
 
     # Testing method - forwarded to Service Actor
     async def _get_internal_state(self):
@@ -260,14 +260,14 @@ class ServiceInterfaceV2:
         Returns:
             dict: Complete internal state including sessions, replicas, and metrics
         """
-        return await self._service._get_internal_state.call_one()
+        return await self._orchestrator._get_internal_state.call_one()
 
     def __getattr__(self, name: str):
-        """Forward all other attribute access to the underlying Service Actor."""
-        _service = object.__getattribute__(self, "_service")
-        # Forward everything else to the _service
-        if hasattr(_service, name):
-            return getattr(_service, name)
+        """Forward all other attribute access to the underlying Orchestrator."""
+        _orchestrator = object.__getattribute__(self, "_orchestrator")
+        # Forward everything else to the _orchestrator
+        if hasattr(_orchestrator, name):
+            return getattr(_orchestrator, name)
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )

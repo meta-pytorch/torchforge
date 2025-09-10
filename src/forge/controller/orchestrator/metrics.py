@@ -14,7 +14,7 @@ health status information.
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from forge.controller.service.replica import ReplicaMetrics
+from forge.controller.orchestrator.replica import ReplicaMetrics
 
 
 # TODO - tie this into metrics logger when it exists.

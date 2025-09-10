@@ -38,10 +38,10 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from forge.controller.service.interface import _session_context, Session
+from forge.controller.orchestrator.interface import _session_context, Session
 
-from forge.controller.service.metrics import ServiceMetrics
-from forge.controller.service.replica import Replica, ServiceRequest
+from forge.controller.orchestrator.metrics import ServiceMetrics
+from forge.controller.orchestrator.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
 
 from monarch.actor import Actor, endpoint

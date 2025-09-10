@@ -55,7 +55,7 @@ The Service class provides a unified interface for deploying and managing multip
 ### Basic Service Setup
 
 ```python
-from forge.controller.service import Service, ServiceConfig
+from forge.controller.orchestrator import Service, ServiceConfig
 
 # Configure service parameters
 config = ServiceConfig(
