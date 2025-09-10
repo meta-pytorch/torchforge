@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from typing import Dict, Tuple
 
 import pytest
@@ -24,6 +25,10 @@ requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="CUDA not available",
 )
+
+
+logger: logging.Logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def convert_state_dict(saved_sd):
@@ -119,8 +124,6 @@ def validate_loaded_tensors_equals_original(
     For tensor parallel cases, instead of gathering sharded tensors, we shard
     the original tensor and compare it with the loaded shard.
     """
-    validation_errors = []
-
     for param_name, loaded_tensor in loaded_state_dict.items():
         if param_name in original_state_dict:
             expected_tensor = original_state_dict[param_name]
@@ -137,21 +140,24 @@ def validate_loaded_tensors_equals_original(
             else:
                 tensor_to_compare = expected_tensor.cpu().float()
 
+            # Training trainer emitted and loaded tensors are of type bfloat16,
+            # where as a HF model loaded(expected) tensor has type float16.
             if not torch.allclose(
                 loaded_tensor.float(),
                 tensor_to_compare,
-                rtol=1e-5,
-                atol=1e-8,
+                rtol=1e-2,
+                atol=1e-3,
             ):
-                validation_errors.append(
+                logger.warning(
+                    f"Loaded tensor {param_name} does not equal original. \ndtype = {loaded_tensor.dtype} vs {expected_tensor.dtype}\n"
+                    f"shape= {loaded_tensor.shape} vs {expected_tensor.shape}\n, values = {copy_of_loaded_tensor} vs {copy_of_expected_tensor}"
+                )
+                raise ValueError(
                     f"Loaded tensor {param_name} does not equal original "
                     f"(shapes: loaded={loaded_tensor.shape}, expected={tensor_to_compare.shape})"
                 )
             else:
                 print(f"Loaded tensor {param_name} correctly validated")
-
-    if validation_errors:
-        raise ValueError(f"Validation failed: {validation_errors}")
 
     print(
         f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original"
@@ -265,7 +271,7 @@ async def test_llama3_policy_update_single(setup_test):
 
     # validating for single resource case.
     validate_loaded_tensors_equals_original(
-       loaded_state_dict, expected_state_dict, tensor_parallel_size=0, rank=0
+        loaded_state_dict, expected_state_dict, tensor_parallel_size=0, rank=0
     )
     print(
         "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
