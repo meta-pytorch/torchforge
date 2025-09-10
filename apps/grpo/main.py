@@ -150,6 +150,7 @@ class Trainer(ForgeActor):
     beta: float = 0.1
     epsilon: float = 0.1
     device: torch.device | None = None
+    dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
 
     @endpoint
     def setup(self):
@@ -178,6 +179,7 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
+        batch = batch[self.dp_rank]
         pad_id = batch[0].pad_id
 
         # prepare batch
@@ -447,7 +449,6 @@ async def main(cfg: DictConfig):
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                batch = batch[0]  # Hard coded because we are not doing data parallel
                 training_result = await trainer.train_step.choose(batch)
                 training_step += 1
                 if training_step % 10 == 0:
