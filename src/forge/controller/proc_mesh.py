@@ -11,13 +11,13 @@ import logging
 
 import os
 import socket
+from functools import partial
 
 from monarch.actor import proc_mesh, ProcMesh
 from monarch.tools import commands
 from monarch.tools.config import Config
-from omegaconf import DictConfig
 
-from forge.controller import ForgeActor
+from forge.controller.system_controllers.gpu_manager import get_gpu_ids, release_gpus
 from forge.types import ProcessConfig
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -35,39 +35,49 @@ try:
 
     MAST_SUPPORTED = True
 except ImportError:
-    logger.warning(
-        "MAST is not supported on this platform. You can ignore this if you do not work at Meta."
-    )
+    # Not built with Meta internal
+    pass
 
 
-async def spawn_actors(
-    name: str,
-    actor_cls: ForgeActor,
-    cfg: DictConfig,
-    processes: ProcessConfig,
-    set_address: bool = False,
-):
-    """Setup process Mesh and spawn Actors."""
-    mesh = await get_proc_mesh(processes, set_address)
-    actors = await mesh.spawn(name, actor_cls, **cfg)
-    actors.mesh = mesh
-    return actors
+async def get_proc_mesh(process_config: ProcessConfig) -> ProcMesh:
+    """Returns a proc mesh with the given process config."""
+    # TODO - modify this to work with multi-host
+    env = {
+        "MASTER_ADDR": str(socket.gethostname()),
+        "MASTER_PORT": str(_find_free_port()),
+    }
+    gpu_ids = None
 
+    def _setup_env(env: dict[str, str]):
+        """Sets up the environment on proc mesh creation."""
+        for k, v in env.items():
+            os.environ[k] = v
 
-async def get_proc_mesh(process_config: ProcessConfig, set_address=False) -> ProcMesh:
-    env = None
-    if set_address:
-        env = {
-            "MASTER_ADDR": str(socket.gethostname()),
-            "MASTER_PORT": str(_find_free_port()),
-        }
     if process_config.scheduler == "local":
         if process_config.num_hosts != 1:
             raise ValueError("Local scheduler only supports 1 host")
-        return await proc_mesh(gpus=process_config.num_procs, env=env)
+
+        if process_config.with_gpus:
+            gpu_ids = await get_gpu_ids(process_config.num_procs)
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpu_ids))
+
+        # TODO - update to use this_host() whenever it supports
+        # being run within actors:
+        # AttributeError: NYI: attempting to get ProcMesh attribute `slice` on object that's
+        # actually a ProcMeshRef
+        # return this_host().spawn_procs(
+        #     per_host={"procs": process_config.num_procs},
+        #     bootstrap=partial(_setup_env, env=env),
+        # )
+        m = proc_mesh(gpus=process_config.num_procs, env=env)
+        m._gpu_ids = gpu_ids
+        return m
     elif process_config.scheduler == "mast":
         if not MAST_SUPPORTED:
             raise ValueError("MAST is not supported on this platform")
+
+        if process_config.with_gpus:
+            raise ValueError("NYI - need to add HostMesh tracking in GpuManager")
 
         logging.info("Scheduling on MAST with: ", process_config)
         jobname = f"monarch-{getpass.getuser()}"
@@ -104,18 +114,22 @@ async def get_proc_mesh(process_config: ProcessConfig, set_address=False) -> Pro
         )
         alloc = await allocator.allocate(AllocSpec(constraints, **mesh_dimensions))
         if env:
-
-            def setup():  # noqa: FB811
-                for k, v in env.items():
-                    os.environ[k] = v
-
-            p = await ProcMesh.from_alloc(alloc, setup=setup)
+            p = await ProcMesh.from_alloc(alloc, setup=partial(_setup_env, env=env))
         else:
             p = await ProcMesh.from_alloc(alloc)
         await p.logging_option(stream_to_client=True, aggregate_window_sec=3)
         return p
     else:
         raise ValueError("Unsupported scheduler: {}".format(process_config.scheduler))
+
+
+async def stop_proc_mesh(mesh: ProcMesh) -> None:
+    """Stops the given proc mesh."""
+    if hasattr(mesh, "_gpu_ids") and mesh._gpu_ids is not None:
+        gpu_ids = mesh._gpu_ids
+        logger.debug("Releasing GPUs: %s", gpu_ids)
+        await release_gpus(gpu_ids)
+    await mesh.stop()
 
 
 def _find_free_port() -> int:

@@ -5,104 +5,56 @@
 # LICENSE file in the root directory of this source tree.
 
 """To run:
-
-python -m apps.vllm.main --guided-decoding --num-samples 3
-
+export HF_HUB_DISABLE_XET=1
+python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
 """
 
-import argparse
 import asyncio
-from argparse import Namespace
-from typing import List
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
-from forge.controller.service import ServiceConfig
-from forge.controller.spawn import spawn_service
-from vllm.outputs import CompletionOutput
+from forge.actors.policy import Policy
+from forge.cli.config import parse
+from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 
-
-async def main():
-    """Main application for running vLLM policy inference."""
-    args = parse_args()
-
-    # Create configuration objects
-    policy_config, service_config = get_configs(args)
-
-    # Resolve the Prompts
-    if args.prompt is None:
-        prompt = "What is 3+5?" if args.guided_decoding else "Tell me a joke"
-    else:
-        prompt = args.prompt
-
-    # Run the policy
-    await run_vllm(service_config, policy_config, prompt)
+from omegaconf import DictConfig
+from src.forge.data.utils import exclude_service
+from vllm.outputs import RequestOutput
 
 
-def parse_args() -> Namespace:
-    parser = argparse.ArgumentParser(description="VLLM Policy Inference Application")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="meta-llama/Llama-3.1-8B-Instruct",
-        help="Model to use",
-    )
-    parser.add_argument(
-        "--num-samples", type=int, default=2, help="Number of samples to generate"
-    )
-    parser.add_argument(
-        "--guided-decoding", action="store_true", help="Enable guided decoding"
-    )
-    parser.add_argument(
-        "--prompt", type=str, default=None, help="Custom prompt to use for generation"
-    )
-    return parser.parse_args()
+async def run(cfg: DictConfig):
 
+    if (prompt := cfg.get("prompt")) is None:
+        gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
+        prompt = "What is 3+5?" if gd else "Tell me a joke"
 
-def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
-    worker_params = WorkerConfig(
-        model=args.model,
-        tensor_parallel_size=2,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        vllm_args=None,
-    )
-
-    sampling_params = SamplingOverrides(
-        num_samples=args.num_samples,
-        guided_decoding=args.guided_decoding,
-    )
-
-    policy_config = PolicyConfig(
-        num_workers=2, worker_params=worker_params, sampling_params=sampling_params
-    )
-    service_config = ServiceConfig(procs_per_replica=1, num_replicas=1)
-
-    return policy_config, service_config
-
-
-async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
     print("Spawning service...")
-    policy = await spawn_service(service_config, Policy, config=config)
-    session_id = await policy.start_session()
 
-    print("Starting background processing...")
-    processing_task = asyncio.create_task(policy.run_processing.call())
+    policy = await spawn_service(
+        ServiceConfig(**cfg.policy.service),
+        Policy,
+        **exclude_service(cfg.policy),
+    )
 
-    print("Requesting generation...")
-    responses: List[CompletionOutput] = await policy.generate.choose(prompt=prompt)
+    async with policy.session():
+        print("Requesting generation...")
+        response_output: RequestOutput = await policy.generate.choose(prompt=prompt)
 
-    print("\nGeneration Results:")
-    print("=" * 80)
-    for batch, response in enumerate(responses):
-        print(f"Sample {batch + 1}:")
-        print(f"User: {prompt}")
-        print(f"Assistant: {response.text}")
-        print("-" * 80)
+        print("\nGeneration Results:")
+        print("=" * 80)
+        for batch, response in enumerate(response_output.outputs):
+            print(f"Sample {batch + 1}:")
+            print(f"User: {prompt}")
+            print(f"Assistant: {response.text}")
+            print("-" * 80)
 
-    print("\nShutting down...")
-    await policy.shutdown.call()
-    await policy.terminate_session(session_id)
+        print("\nShutting down...")
+
+    await shutdown_service(policy)
+
+
+@parse
+def recipe_main(cfg: DictConfig) -> None:
+    asyncio.run(run(cfg))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    recipe_main()

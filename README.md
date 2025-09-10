@@ -6,20 +6,38 @@
 
 ## Installation
 
-### Basic (Broken)
+### Basic
+
+Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. For convenience,
+we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
+uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
+
+Forge requires the Github CLI (gh) to download a compatible vLLM package. See [here](https://github.com/cli/cli#installation) for gh install instructions before continuting. Please login to gh with your Github account before continuing with `gh auth login`. You may use either https or ssh as the protocol for authentication.
 
 ```bash
-pip install uv
-git clone https://github.com/pytorch-labs/forge
-cd forge
-uv sync
-
-# Or for dev install:
-uv sync --all-extras
+conda create -n forge python=3.10
+conda activate forge
+./scripts/install.sh
 ```
 
+Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
-### Internal Machine
+After install, you can run the following command and should see output confirming GRPO training is running.
+```
+python -m apps.grpo.main
+```
+
+If you need to re-build the wheels for whatever reason, you can do so with:
+```bash
+./scripts/build_wheels.sh
+```
+
+Since the vLLM wheel is too large for GitHub, we uploaded it as a release:
+```
+$ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
+```
+
+### Meta Internal Build
 
 1. Build uv package
 

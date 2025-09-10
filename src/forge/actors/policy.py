@@ -8,12 +8,13 @@ import asyncio
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from copy import copy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, fields
 from typing import Dict, List
 
 import torch
-from monarch.actor import Actor, current_rank, endpoint, proc_mesh
+from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
 
@@ -25,7 +26,7 @@ from vllm.outputs import CompletionOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils import get_distributed_init_method, get_loopback_ip, get_open_port
+from vllm.utils import get_distributed_init_method
 from vllm.v1.core.kv_cache_utils import get_kv_cache_config
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
@@ -37,15 +38,18 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SamplingOverrides:
+class SamplingConfig:
     """
     Overrides for vLLMs sampling params.
 
@@ -54,79 +58,149 @@ class SamplingOverrides:
             subset
 
     Args:
-        num_samples: Number of samples to generate.
+        n: Number of samples to generate.
         guided_decoding: Whether to use guided decoding.
+        max_tokens: Maximum number of tokens to generate.
     """
 
-    num_samples: int
+    n: int = 1
     guided_decoding: bool = False
     max_tokens: int = 512
 
+    def __post_init__(self):
+        gd_params = None
+        if self.guided_decoding:
+            gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
+        self.guided_decoding = gd_params
+
+    @classmethod
+    def from_dict(cls, d: Mapping):
+        d = dict(d)
+        all_fields = set(cls.__dataclass_fields__.keys())
+        valid_args = {k: v for k, v in d.items() if k in all_fields}
+        return cls(**valid_args)
+
 
 @dataclass
-class WorkerConfig:
+class EngineConfig(EngineArgs):
     """
-    Config args used for setting up the policy worker.
-
-    Args:
-        model: Model name.
-        tensor_parallel_size: Number of tensor parallel workers.
-        pipeline_parallel_size: Number of pipeline parallel workers.
-        enforce_eager: Whether to enforce eager mode.
-        vllm_args: vLLM engine args.
+    EngineConfig extends EngineArgs with worker-specific fields.
+    Overlapping keys in input dict will override EngineArgs defaults.
     """
 
-    model: str
+    model: str = "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
-    vllm_args: EngineArgs = None
 
-
-@dataclass
-class PolicyConfig:
-    num_workers: int
-    worker_params: WorkerConfig
-    sampling_params: SamplingOverrides
-    available_devices: str = None
+    @classmethod
+    def from_dict(cls, d: Mapping):
+        d = dict(d)
+        all_fields = [f.name for f in fields(cls)]
+        valid_args = {k: v for k, v in d.items() if k in all_fields}
+        return cls(**valid_args)
 
 
 @dataclass
 class Policy(PolicyInterface):
-    config: PolicyConfig
+    engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
+    sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
+    available_devices: str | None = None
     # Gets set up by setup
-    policy_worker: Actor = None
+    sampling_params: SamplingParams | None = None
+    lora_request: LoRARequest | None = None
+    tokenization_kwargs: dict = field(default_factory=dict)
+    policy_worker: "PolicyWorker" = None
+    store: MultiProcessStore | None = None
 
-    sampling_params: SamplingParams = None
-    lora_request: LoRARequest = None
-    tokenization_kwargs: dict = None
+    def __post_init__(self):
+        self._run_task: asyncio.Task | None = None
+        self._policy_proc: ProcMesh | None = None
+        self._worker_procs: ProcMesh | None = None
+        self.weights_version: int = 0
+        if isinstance(self.engine_config, Mapping):
+            self.engine_config = EngineConfig.from_dict(self.engine_config)
+        if isinstance(self.sampling_config, Mapping):
+            self.sampling_config = SamplingConfig.from_dict(self.sampling_config)
+
+    @classmethod
+    async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"],
+        *,
+        process_config: ProcessConfig,
+        engine_config: EngineConfig | Mapping = EngineConfig(),
+        sampling_config: SamplingConfig | Mapping = SamplingConfig(),
+        available_devices: str | None = None,
+        store: MultiProcessStore | None = None,
+        **kwargs,
+    ) -> "Policy":
+        # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
+        # automatically.
+        worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # TODO - we will want to ensure colocation with workers
+        policy_proc_config = copy(process_config)
+        policy_proc_config.num_procs = 1
+        policy_proc_config.with_gpus = False
+
+        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+
+        if isinstance(engine_config, Mapping):
+            engine_config = EngineConfig.from_dict(engine_config)
+
+        if isinstance(engine_config, Mapping):
+            sampling_config = SamplingConfig(**sampling_config)
+
+        workers = await worker_procs.spawn(
+            "vllm_worker", PolicyWorker, vllm_args=engine_config
+        )
+
+        # TODO - expand support so name can stick within kwargs
+        actor_name = kwargs.pop("name", cls.__name__)
+        policy = await policy_proc.spawn(
+            actor_name,
+            cls,
+            engine_config=engine_config,
+            sampling_config=sampling_config,
+            available_devices=available_devices,
+            policy_worker=workers,
+            store=store,
+        )
+        policy._policy_proc = policy_proc
+        policy._worker_procs = worker_procs
+        await policy.setup.call()
+        return policy
+
+    @classmethod
+    async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"], actor: "Policy"
+    ):
+        assert (
+            actor._policy_proc is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+        assert (
+            actor._worker_procs is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+
+        # TODO - may want to expand stop to gracefully respond to
+        # ongoing requests.
+        await actor.stop.call()
+        await stop_proc_mesh(actor._worker_procs)
+        await stop_proc_mesh(actor._policy_proc)
 
     @endpoint
     async def setup(self):
         # Set up policy_worker
-        self.available_devices = (
-            self.config.available_devices
-            if self.config.available_devices is not None
-            else ",".join(str(i) for i in range(torch.cuda.device_count()))
-        )
-        await self.spawn_workers()
+        assert self.policy_worker is not None, "Policy worker should not be None"
+        await self.policy_worker.setup.call(store=self.store)
 
         self.request_id = 0
-        self.requests: Dict[str, Tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_args = await self.policy_worker.get_vllm_args.choose()
 
         # Setup sampling params
-        sampling_overrides = self.config.sampling_params
-        overrides = {
-            "n": sampling_overrides.num_samples,
-            "guided_decoding": (
-                GuidedDecodingParams(choice=["Positive", "Negative"])
-                if sampling_overrides.guided_decoding
-                else None
-            ),
-        }
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=overrides
+            self.vllm_args, overrides=asdict(self.sampling_config)
         )
 
         # Setup processors
@@ -157,20 +231,12 @@ class Policy(PolicyInterface):
             include_finished_set=False,
             log_stats=None,
         )
+        self.start_processing()
 
-    async def spawn_workers(self):
-        self.worker_mesh = await proc_mesh(
-            gpus=self.config.num_workers,
-            env={
-                "MASTER_ADDR": str(get_loopback_ip()),
-                "MASTER_PORT": str(get_open_port()),
-                "CUDA_VISIBLE_DEVICES": self.available_devices,
-            },
-        )
-        self.policy_worker = await self.worker_mesh.spawn(
-            "policy_worker", PolicyWorker, **asdict(self.config.worker_params)
-        )
-        await self.policy_worker.setup.call()
+    def start_processing(self):
+        """Start the replica's processing loop if not already running."""
+        if self._run_task is None or self._run_task.done():
+            self._run_task = asyncio.create_task(self.run())
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
@@ -178,10 +244,11 @@ class Policy(PolicyInterface):
         request_id = str(self.request_id)  # implement from a counter
 
         # Wraps prompt into a dict
-        prompt: Dict[str, str] = convert_input(prompt)
+        prompt: Dict[str, str] = convert_input(prompt=prompt)
 
         # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
+        # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
             self.vllm_args.model_config.max_model_len,
@@ -243,8 +310,7 @@ class Policy(PolicyInterface):
 
         return request, 0  # Unused Arg: Current Wave
 
-    @endpoint
-    async def run_processing(self):
+    async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
         parallel_config = self.vllm_args.parallel_config
@@ -268,25 +334,39 @@ class Policy(PolicyInterface):
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output.outputs)
+                    fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self) -> int:
         """Update the policy weights."""
-        pass
+        # Wait for all current requests to finish, then publish model weights
+        futures = [fut for _, fut in self.requests.values()]
+        if futures:
+            await asyncio.gather(*futures)
+        new_version = self.weights_version + 1
+        await self.policy_worker.update.call(version=new_version)
+        self.weights_version = new_version
+        return self.weights_version
 
     @endpoint
-    async def shutdown(self):
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
+        """Get the current model parameters. Only for testing purposes."""
+        model_params = await self.policy_worker._get_model_params.choose()
+        return model_params
+
+    @endpoint
+    async def get_version(self) -> int:
+        """Get the current policy version."""
+        return self.weights_version
+
+    @endpoint
+    async def stop(self):
         self.running = False
 
 
 @dataclass
-class PolicyWorker(Actor):
-    model: str
-    tensor_parallel_size: int = 1
-    pipeline_parallel_size: int = 1
-    enforce_eager: bool = False
-    vllm_args: EngineArgs = None
+class PolicyWorker(ForgeActor):
+    vllm_args: EngineConfig | Mapping = EngineConfig()
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -302,31 +382,11 @@ class PolicyWorker(Actor):
         - all LLM generate methods, verify against LLM inputs
         - all executor methods verify no changes
         """
-        if self.vllm_args is None:
-            # Use default vllm EngineArgs
-            self.vllm_args = EngineArgs(
-                model=self.model,
-                tensor_parallel_size=self.tensor_parallel_size,
-                pipeline_parallel_size=self.pipeline_parallel_size,
-                enforce_eager=self.enforce_eager,
-            )
-            # Original method returns False when not run in the main thread
-            self.vllm_args._is_v1_supported_oracle = lambda *_: True
-        else:
-            # Check that provided args match Policy args
-            cfg = [
-                "model",
-                "tensor_parallel_size",
-                "pipeline_parallel_size",
-                "data_parallel_size",
-            ]
-            for key in cfg:
-                value = getattr(self, key) if key != "data_parallel_size" else 1
-                if getattr(self.vllm_args, key) != value:
-                    logger.warning(
-                        f"{key} args don't match value in EngineArgs, overriding with {value}"
-                    )
-                    setattr(self.vllm_args, key, value)
+        if isinstance(self.vllm_args, Mapping):
+            self.vllm_args = EngineConfig.from_dict(self.vllm_args)
+
+        # Original method returns False when not run in the main thread
+        self.vllm_args._is_v1_supported_oracle = lambda *_: True
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
@@ -341,14 +401,18 @@ class PolicyWorker(Actor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    async def _load_tensor_parallel_state_dict(self, current_state_dict: dict):
+    async def _load_tensor_parallel_state_dict(
+        self, current_state_dict: dict, version: int
+    ):
         """
         Load full state dict from torchstore into tensor parallel model with deterministic sharding.
         """
 
         updated_count = 0
         # setting explictly to llama3 for now as its our only use case
-        sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
+        sharding = VLLMSharding(
+            self.vllm_args.parallel_config.tensor_parallel_size, self.rank
+        )
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
@@ -356,7 +420,7 @@ class PolicyWorker(Actor):
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
             stored_tensor = await self.torchstore.get(
-                f"{self.state_dict_key}{DELIM}{param_name}"
+                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
                 param_name,
@@ -367,23 +431,19 @@ class PolicyWorker(Actor):
             updated_count += 1
 
     @endpoint
-    async def update(self):
+    async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
 
         logger.debug(
-            f"Starting model update from torchstore with key: {self.state_dict_key}"
+            f"Starting model update from torchstore with key: {self.state_dict_key}{DELIM}{version}"
         )
 
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
 
-        logger.debug(f"Current state dict has {len(current_state_dict)} parameters")
-
-        await self._load_tensor_parallel_state_dict(current_state_dict)
-
+        await self._load_tensor_parallel_state_dict(current_state_dict, version)
         logger.debug("Successfully updated model weights from torchstore")
 
     @endpoint
@@ -421,7 +481,7 @@ class PolicyWorker(Actor):
         return self.vllm_args
 
     @endpoint
-    async def get_model_params(self):
+    async def _get_model_params(self) -> Dict[str, torch.Tensor]:
         model = self.worker.model_runner.model
         state_dict = {}
 
