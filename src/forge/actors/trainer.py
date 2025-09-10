@@ -10,6 +10,7 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from typing import Any, Dict
 
 import torch
 
@@ -286,24 +287,10 @@ class RLTrainer(ForgeActor):
         ), "trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
 
-        for i in range(32):  # improve this using regex similar to to_hf function.
-            prefix = f"model.layers.{i}."
-            # QKV fusion
-            q = hf_state_dict.pop(prefix + "self_attn.q_proj.weight")
-            k = hf_state_dict.pop(prefix + "self_attn.k_proj.weight")
-            v = hf_state_dict.pop(prefix + "self_attn.v_proj.weight")
-            hf_state_dict[prefix + "self_attn.qkv_proj.weight"] = torch.cat(
-                [q, k, v], dim=0
-            )
-            # MLP gate_up_proj fusion
-            gate = hf_state_dict.pop(prefix + "mlp.gate_proj.weight")
-            up = hf_state_dict.pop(prefix + "mlp.up_proj.weight")
-            hf_state_dict[prefix + "mlp.gate_up_proj.weight"] = torch.cat(
-                [gate, up], dim=0
-            )
+        vllm_ready_hf_sd = llama3_hf_to_vllm(hf_trainer_sd=hf_state_dict)
 
         await ts.put_state_dict(
-            state_dict=hf_state_dict,
+            state_dict=vllm_ready_hf_sd,
             key=f"model_state_dict/{self.current_step}",
         )
 
@@ -311,3 +298,26 @@ class RLTrainer(ForgeActor):
     async def cleanup(self) -> None:
         if self.engine.checkpointer:
             self.engine.checkpointer.close()
+
+
+def llama3_hf_to_vllm(hf_trainer_sd: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert HF formatted state-dict to VLLM format. Ideally this conversion
+    should not be needed, if the VLLM fully supports the loading of
+    HF formatted llama3 model.
+    """
+    for i in range(32):  # number of layers in llama3 8B model.
+        prefix = f"model.layers.{i}."
+        # QKV fusion
+        q = hf_trainer_sd.pop(prefix + "self_attn.q_proj.weight")
+        k = hf_trainer_sd.pop(prefix + "self_attn.k_proj.weight")
+        v = hf_trainer_sd.pop(prefix + "self_attn.v_proj.weight")
+        hf_trainer_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat(
+            [q, k, v], dim=0
+        )
+        # MLP gate_up_proj fusion
+        gate = hf_trainer_sd.pop(prefix + "mlp.gate_proj.weight")
+        up = hf_trainer_sd.pop(prefix + "mlp.up_proj.weight")
+        hf_trainer_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+
+    return hf_trainer_sd
