@@ -78,7 +78,7 @@ class Provisioner:
         else:
             host_mesh = this_host()
         procs = host_mesh.spawn_procs(
-            per_host={"procs": num_procs},
+            per_host={"gpus": num_procs},
             bootstrap=functools.partial(
                 bootstrap, num_procs=num_procs, with_gpus=with_gpus),
         )
