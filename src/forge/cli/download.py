@@ -115,7 +115,7 @@ class Download(Subcommand):
             if args.hf_token:
                 self._parser.error(
                     "It looks like you are trying to access a gated repository. Please ensure you "
-                    "have access to the repository."
+                    f"have access to the repository. {args.repo_id}"
                 )
             else:
                 self._parser.error(

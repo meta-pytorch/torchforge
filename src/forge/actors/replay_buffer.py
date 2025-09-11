@@ -8,9 +8,9 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 
 @dataclass
@@ -21,7 +21,7 @@ class ReplayBuffer(ForgeActor):
     max_policy_age: int = 0
     seed: int | None = None
 
-    @endpoint
+    # @endpoint
     async def setup(self) -> None:
         self.buffer: list = []
         if self.seed is None:
@@ -29,11 +29,11 @@ class ReplayBuffer(ForgeActor):
         random.seed(self.seed)
         self.sampler = random.sample
 
-    @endpoint
+    # @endpoint
     async def add(self, episode) -> None:
         self.buffer.append(episode)
 
-    @endpoint
+    # @endpoint
     async def sample(self, curr_policy_version: int, batch_size: int | None = None):
         """Sample from the replay buffer.
 
@@ -61,7 +61,7 @@ class ReplayBuffer(ForgeActor):
         sampled_episodes = [self.buffer.pop(i) for i in sorted_idxs]
         return sampled_episodes
 
-    @endpoint
+    # @endpoint
     async def evict(self, curr_policy_version: int) -> None:
         """Evict episodes from the replay buffer if they are too old based on the current policy version
         and the max policy age allowed.
@@ -78,21 +78,21 @@ class ReplayBuffer(ForgeActor):
             if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
         ]
 
-    @endpoint
+    # @endpoint
     async def _getitem(self, idx: int):
         return self.buffer[idx]
 
-    @endpoint
+    # @endpoint
     async def _numel(self) -> int:
         """Number of elements (episodes) in the replay buffer."""
         return len(self.buffer)
 
-    @endpoint
+    # @endpoint
     async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all episodes."""
         self.buffer.clear()
 
-    @endpoint
+    # @endpoint
     async def state_dict(self) -> dict[str, Any]:
         return {
             "buffer": self.buffer,
@@ -100,7 +100,7 @@ class ReplayBuffer(ForgeActor):
             "seed": self.seed,
         }
 
-    @endpoint
+    # @endpoint
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.buffer = state_dict["buffer"]
         random.setstate(state_dict["rng_state"])

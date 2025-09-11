@@ -14,6 +14,12 @@ from dataclasses import asdict, dataclass, field, fields
 from typing import Dict, List
 
 import torch
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import DELIM
@@ -37,12 +43,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 logger = logging.getLogger(__name__)
@@ -166,9 +166,10 @@ class Policy(PolicyInterface):
             policy_worker=workers,
             store=store,
         )
+
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
-        await policy.setup.call()
+        await policy.setup()
         return policy
 
     @classmethod
@@ -188,19 +189,29 @@ class Policy(PolicyInterface):
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._policy_proc)
 
-    @endpoint
+    async def setup_v0(
+        self,
+        engine_config: EngineConfig | Mapping = EngineConfig(),
+        sampling_config: SamplingConfig | Mapping = SamplingConfig(),
+    ):
+        self.engine_config = engine_config
+        self.sampling_config = sampling_config
+        self.policy_worker = PolicyWorker(vllm_args=engine_config)
+        await self.setup()
+
+    # @endpoint
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call(store=self.store)
+        await self.policy_worker.setup(store=self.store)
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
+        self.vllm_args = await self.policy_worker.get_vllm_args()
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=asdict(self.sampling_config)
+            self.vllm_args, overrides=self.sampling_config
         )
 
         # Setup processors
@@ -218,8 +229,8 @@ class Policy(PolicyInterface):
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
-        kv_cache_config = kv_cache_configs._values[0]
+        kv_cache_configs = await self.policy_worker.setup_kv_cache()
+        kv_cache_config = kv_cache_configs
         self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_args.cache_config.num_cpu_blocks = 0
 
@@ -238,7 +249,7 @@ class Policy(PolicyInterface):
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
 
-    @endpoint
+    # @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> List[CompletionOutput]:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
@@ -318,10 +329,8 @@ class Policy(PolicyInterface):
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.policy_worker.execute_model.call(
-                scheduler_output
-            )
-            worker_output = worker_outputs._values[output_rank]
+            worker_outputs = await self.policy_worker.execute_model(scheduler_output)
+            worker_output = worker_outputs
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
             await asyncio.sleep(0)  # Release control before processing outputs
@@ -336,7 +345,7 @@ class Policy(PolicyInterface):
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(request_output)
 
-    @endpoint
+    # @endpoint
     async def update_weights(self) -> int:
         """Update the policy weights."""
         # Wait for all current requests to finish, then publish model weights
@@ -344,22 +353,22 @@ class Policy(PolicyInterface):
         if futures:
             await asyncio.gather(*futures)
         new_version = self.weights_version + 1
-        await self.policy_worker.update.call(version=new_version)
+        await self.policy_worker.update(version=new_version)
         self.weights_version = new_version
         return self.weights_version
 
-    @endpoint
+    # @endpoint
     async def _get_model_params(self) -> Dict[str, torch.Tensor]:
         """Get the current model parameters. Only for testing purposes."""
-        model_params = await self.policy_worker._get_model_params.choose()
+        model_params = await self.policy_worker._get_model_params()
         return model_params
 
-    @endpoint
+    # @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
         return self.weights_version
 
-    @endpoint
+    # @endpoint
     async def stop(self):
         self.running = False
 
@@ -390,14 +399,15 @@ class PolicyWorker(ForgeActor):
         # Build Config
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
-    @endpoint
+    # @endpoint
     async def setup(self, store: MultiProcessStore = None):
         self.torchstore = store
         # TODO: remove ["gpus"] when monarch implements a flat rank
-        self.rank = current_rank()["gpus"]
+        # self.rank = current_rank()["gpus"]
+        self.rank = 0
         self.worker = self.setup_worker()
 
-    @endpoint
+    # @endpoint
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
@@ -430,7 +440,7 @@ class PolicyWorker(ForgeActor):
 
             updated_count += 1
 
-    @endpoint
+    # @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         if self.torchstore is None:
@@ -446,7 +456,7 @@ class PolicyWorker(ForgeActor):
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
         logger.debug("Successfully updated model weights from torchstore")
 
-    @endpoint
+    # @endpoint
     async def setup_kv_cache(self):
         """Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
         TODO: test that fails if vllm method updates
@@ -476,11 +486,11 @@ class PolicyWorker(ForgeActor):
         self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
         return kv_cache_config
 
-    @endpoint
+    # @endpoint
     async def get_vllm_args(self):
         return self.vllm_args
 
-    @endpoint
+    # @endpoint
     async def _get_model_params(self) -> Dict[str, torch.Tensor]:
         model = self.worker.model_runner.model
         state_dict = {}

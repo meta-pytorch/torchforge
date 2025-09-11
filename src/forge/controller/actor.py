@@ -9,10 +9,10 @@ import logging
 import math
 import sys
 
-from monarch.actor import Actor, current_rank, current_size, endpoint
-
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 from forge.types import ProcessConfig
+
+from monarch.actor import Actor, current_rank, current_size, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -41,7 +41,7 @@ class ForgeActor(Actor):
         self.logger.root.addHandler(stdout_handler)
         super().__init__(*args, **kwargs)
 
-    @endpoint
+    # @endpoint
     async def setup(self):
         """Sets up the actor.
 

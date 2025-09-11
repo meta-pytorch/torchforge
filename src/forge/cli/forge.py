@@ -44,4 +44,11 @@ def main():
 
 
 if __name__ == "__main__":
+    import debugpy
+
+    print("Rithesh Baradi is here")
+    debugpy.listen(5678)
+    print("Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
     main()

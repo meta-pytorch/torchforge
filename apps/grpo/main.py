@@ -15,7 +15,7 @@ from typing import Any, Callable, Optional
 import torch
 import torch.nn.functional as F
 from datasets import load_dataset
-from forge.actors.policy import Policy
+from forge.actors.policy import Policy, PolicyWorker
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
@@ -151,7 +151,7 @@ class Trainer(ForgeActor):
     epsilon: float = 0.1
     device: torch.device | None = None
 
-    @endpoint
+    # @endpoint
     def setup(self):
         # Set device
         if self.device is None:
@@ -176,7 +176,7 @@ class Trainer(ForgeActor):
 
         self.logger.info(f"Model initialized on {self.device}")
 
-    @endpoint
+    # @endpoint
     async def train_step(self, batch: list[Episode]):
         pad_id = batch[0].pad_id
 
@@ -215,7 +215,7 @@ class Trainer(ForgeActor):
 
         return {"loss": loss.item()}
 
-    @endpoint
+    # @endpoint
     async def push_weights(self):
         pass
 
@@ -226,7 +226,7 @@ class RewardActor(ForgeActor):
 
     reward_functions: list[Callable]
 
-    @endpoint
+    # @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
         total_reward = 0.0
         for reward_fn in self.reward_functions:
@@ -238,7 +238,7 @@ class RewardActor(ForgeActor):
 class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
-    @endpoint
+    # @endpoint
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
         rewards = torch.Tensor([[e.reward for e in group.episodes]])
@@ -274,7 +274,7 @@ class RefModel(ForgeActor):
 
         self.logger.info(f"Model initialized on {self.device}")
 
-    @endpoint
+    # @endpoint
     async def forward(self, episode: Episode) -> torch.Tensor:
         req, res = episode.request_tensor, episode.response_tensor
         input_ids = torch.cat([req, res]).to(self.device).unsqueeze(0)
@@ -297,7 +297,7 @@ class DatasetActor(ForgeActor):
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B-Base"
 
-    @endpoint
+    # @endpoint
     def setup(self):
         self.tokenizer = get_tokenizer(self.model)
 
@@ -319,14 +319,14 @@ class DatasetActor(ForgeActor):
         ds = ds.shuffle()
         self._iterator = iter(ds)
 
-    @endpoint
+    # @endpoint
     async def sample(self) -> dict[str, str] | None:
         try:
             return next(self._iterator)
         except StopIteration:
             return None
 
-    @endpoint
+    # @endpoint
     async def pad_token(self):
         return self.tokenizer.pad_token_id
 
@@ -347,60 +347,89 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
-    (
-        dataloader,
-        policy,
-        trainer,
-        replay_buffer,
-        compute_advantages,
-        ref_model,
-        reward_actor,
-    ) = await asyncio.gather(
-        spawn_service(
-            ServiceConfig(**cfg.dataset.service),
-            DatasetActor,
-            **exclude_service(cfg.dataset),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.policy.service),
-            Policy,
-            **exclude_service(cfg.policy),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.trainer.service),
-            Trainer,
-            model_name=model,
-            **exclude_service(cfg.trainer),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.replay_buffer.service),
-            ReplayBuffer,
-            **exclude_service(cfg.replay_buffer),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.compute_advantages.service),
-            ComputeAdvantages,
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.ref_model.service),
-            RefModel,
-            model_name=model,
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.reward_actor.service),
-            RewardActor,
-            reward_functions=[MathReward(), ThinkingReward()],
-        ),
+    # (
+    #     dataloader,
+    #     policy,
+    #     trainer,
+    #     replay_buffer,
+    #     compute_advantages,
+    #     ref_model,
+    #     reward_actor,
+    # ) = await asyncio.gather(
+    #     spawn_service(
+    #         ServiceConfig(**cfg.dataset.service),
+    #         DatasetActor,
+    #         **exclude_service(cfg.dataset),
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.policy.service),
+    #         Policy,
+    #         **exclude_service(cfg.policy),
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.trainer.service),
+    #         Trainer,
+    #         model_name=model,
+    #         **exclude_service(cfg.trainer),
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.replay_buffer.service),
+    #         ReplayBuffer,
+    #         **exclude_service(cfg.replay_buffer),
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.compute_advantages.service),
+    #         ComputeAdvantages,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.ref_model.service),
+    #         RefModel,
+    #         model_name=model,
+    #     ),
+    #     spawn_service(
+    #         ServiceConfig(**cfg.reward_actor.service),
+    #         RewardActor,
+    #         reward_functions=[MathReward(), ThinkingReward()],
+    #     ),
+    # )
+
+    import os
+
+    master_port = int(os.environ.get("BASE_MASTER_PORT", "12345"))
+    master_addr = "localhost"
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ["MASTER_PORT"] = str(master_port)
+    os.environ["RANK"] = str(0)
+    os.environ["LOCAL_RANK"] = str(0)
+    os.environ["WORLD_SIZE"] = str(1)
+
+    dataloader = DatasetActor()
+    policy = Policy(*cfg.policy)
+    trainer = Trainer(model_name=model)
+    replay_buffer = ReplayBuffer()
+    compute_advantages = ComputeAdvantages()
+    ref_model = RefModel(model_name=model)
+    reward_actor = RewardActor(reward_functions=[MathReward(), ThinkingReward()])
+
+    dataloader.setup()
+    await policy.setup_v0(
+        engine_config=cfg.policy.engine_config,
+        sampling_config=cfg.policy.sampling_config,
     )
+    trainer.setup()
+    await replay_buffer.setup()
+    await compute_advantages.setup()
+    await ref_model.setup()
+    await reward_actor.setup()
 
     print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token()
         while True:
-            sample = await dataloader.sample.choose()
+            sample = await dataloader.sample()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -417,20 +446,20 @@ async def main(cfg: DictConfig):
                 target=target,
             )
 
-            responses = await policy.generate.choose(prompt)
+            responses = await policy.generate(prompt)
 
             for episode, response in zip(group.episodes, responses.outputs):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
                 assert len(response.token_ids) <= max_res_tokens
-                episode.ref_logprobs = await ref_model.forward.choose(episode)
-                episode.reward = await reward_actor.evaluate_response.choose(
+                episode.ref_logprobs = await ref_model.forward(episode)
+                episode.reward = await reward_actor.evaluate_response(
                     prompt=prompt, response=response.text, target=target
                 )
-            advantages = await compute_advantages.compute.choose(group)
+            advantages = await compute_advantages.compute(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.choose(episode)
+                await replay_buffer.add(episode)
 
             rollout_count += 1
             if rollout_count % 10 == 0:
@@ -443,11 +472,11 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=0)
+            batch = await replay_buffer.sample(curr_policy_version=0)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                training_result = await trainer.train_step.choose(batch)
+                training_result = await trainer.train_step(batch)
                 training_step += 1
                 if training_step % 10 == 0:
                     print(f"Completed {training_step} training steps")
@@ -487,4 +516,11 @@ def recipe_main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+    import debugpy
+
+    print("Rithesh Baradi is here")
+    debugpy.listen(5678)
+    print("Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
     recipe_main()
