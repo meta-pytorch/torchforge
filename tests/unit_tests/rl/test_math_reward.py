@@ -187,7 +187,13 @@ class TestMathReward(unittest.TestCase):
         """Test __call__ with multiple answer tags (should use first one)."""
         response = "First answer: <answer>42</answer> Second: <answer>43</answer>"
         self.assertEqual(self.reward("prompt", response, "42"), 1.0)
-        self.assertEqual(self.reward("prompt", response, "43"), 0.1)
+        self.assertEqual(self.reward("prompt", response, "43"), 0.0)
+
+        # Test case where target appears outside answer tags for partial credit
+        response_with_partial = (
+            "I think the answer is 43. <answer>42</answer> But 43 might be better."
+        )
+        self.assertEqual(self.reward("prompt", response_with_partial, "43"), 0.1)
 
 
 if __name__ == "__main__":
