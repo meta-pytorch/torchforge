@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 import torch
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM, get_state_dict
+from torchstore._state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -425,9 +425,6 @@ class PolicyWorker(ForgeActor):
         """
         Load full state dict from torchstore into tensor parallel model with deterministic sharding.
         """
-
-        updated_count = 0
-        # setting explictly to llama3 for now as its our only use case
         sharding = VLLMSharding(self.tensor_parallel_size, self.rank)
 
         for param_name in current_state_dict.keys():
@@ -444,23 +441,16 @@ class PolicyWorker(ForgeActor):
                 current_tensor,
             )
 
-            updated_count += 1
-
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         if self.torchstore is None:
             raise Exception("No torchstore configured, skipping model update")
-
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
+        current_state_dict = model.state_dict()
         start = time.time()
-        new_state_dict = await get_state_dict(
-            self.torchstore, f"{self.state_dict_key}{DELIM}{version}"
-        )
-        # We use the load_weights method from vLLM b/c they perform custom mapping like
-        # fusing QKV linear layers
-        model.load_weights(list(new_state_dict.items()))
+        await self._load_tensor_parallel_state_dict(current_state_dict, version)
         self.logger.debug(
             f"Loaded state dict from {key} in {time.time() - start} seconds"
         )

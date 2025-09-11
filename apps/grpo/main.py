@@ -166,6 +166,44 @@ class Trainer(ForgeActor):
 
         self.logger.info(f"Trainer model initialized on {self.device}")
 
+    def _qwen3_hf_to_vllm(self, saved_sd):
+        """Convert transformers state dict to vLLM format."""
+        load_sd = {}
+        num_layers = 28  # For Qwen3-1.7B
+
+        # Copy over directly mapped keys
+        for k in saved_sd:
+            if any(
+                x in k
+                for x in [
+                    "down_proj",
+                    "input_layernorm",
+                    "post_attention_layernorm",
+                    "o_proj",
+                    "norm.weight",
+                    "embed_tokens.weight",
+                    "lm_head.weight",
+                ]
+            ):
+                load_sd[k] = saved_sd[k]
+
+        # Fuse QKV and gate_up_proj
+        for i in range(num_layers):
+            prefix = f"model.layers.{i}."
+
+            # QKV fusion
+            q = saved_sd[prefix + "self_attn.q_proj.weight"]
+            k = saved_sd[prefix + "self_attn.k_proj.weight"]
+            v = saved_sd[prefix + "self_attn.v_proj.weight"]
+            load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+
+            # MLP gate_up_proj fusion
+            gate = saved_sd[prefix + "mlp.gate_proj.weight"]
+            up = saved_sd[prefix + "mlp.up_proj.weight"]
+            load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+
+        return load_sd
+
     @endpoint
     async def train_step(self, batch: list[Episode]):
         pad_id = batch[0].pad_id
@@ -204,7 +242,8 @@ class Trainer(ForgeActor):
         start_time = time.time()
         assert self.store is not None, "Store must be provided to save weights"
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
-        await push_state_dict(self.store, self.model.state_dict(), key)
+        new_sd = self._qwen3_hf_to_vllm(self.model.state_dict())
+        await push_state_dict(self.store, new_sd, key)
         end_time = time.time()
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
@@ -460,9 +499,9 @@ async def main():
                 loss = await trainer.train_step.choose(batch)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.choose(policy_version)
+                await trainer.push_weights.call(policy_version)
                 policy_version += 1
-                await policy.update_weights.choose()
+                await policy.update_weights.call()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it
