@@ -26,6 +26,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 # testing purposes. It lacks some features of the real proc_mesh
 # but spawns much quicker
 from monarch.actor import Actor, endpoint, local_proc_mesh
+from src.forge.data.stores import KVStore
 
 
 class TestToyEnvironment:
@@ -211,8 +212,10 @@ class TestIntegration:
         replay_buffer = await proc.spawn(
             "replay_buffer",
             ReplayBuffer,
-            1,  # batch_size
-            1,  # max_policy_age
+            store=KVStore(),
+            batch_size=1,
+            max_policy_age=1,
+            dp_size=1,
         )
         await replay_buffer.setup.call()
         collector = await proc.spawn(
