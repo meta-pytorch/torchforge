@@ -47,6 +47,7 @@ trainer:
 replay_buffer:
   batch_size: ${batch_size}
   max_policy_age: 0
+  dp_size: 1
   service:
     procs_per_replica: 1
     num_replicas: 1

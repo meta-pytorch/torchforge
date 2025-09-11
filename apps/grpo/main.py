@@ -150,6 +150,7 @@ class Trainer(ForgeActor):
     beta: float = 0.1
     epsilon: float = 0.1
     device: torch.device | None = None
+    dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
 
     @endpoint
     def setup(self):
@@ -178,6 +179,7 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def train_step(self, batch: list[Episode]):
+        batch = batch[self.dp_rank]
         pad_id = batch[0].pad_id
 
         # prepare batch
@@ -438,7 +440,7 @@ async def main(cfg: DictConfig):
                 print(
                     f"Generated {rollout_count} rollouts w/ average reward {avg_reward}"
                 )
-                logger.log("reward/rollout", avg_reward, rollout_count)
+                logger.log("reward_per_rollout", avg_reward, rollout_count)
 
     async def continuous_training():
         training_step = 0
