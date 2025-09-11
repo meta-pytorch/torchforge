@@ -5,7 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Dict, Sequence, Tuple
+from collections.abc import Iterator, Sequence
+from typing import Dict, Tuple
 
 import torch
 
@@ -15,6 +16,7 @@ from forge.data_models.minibatch import Minibatch
 
 from forge.data_models.prompt import Prompt
 from forge.data_models.scored_completion import ScoredCompletion
+from torch.utils.data import DataLoader, IterableDataset
 
 
 # TODO: This file needs should not be in the data_models folder/package
@@ -86,3 +88,24 @@ class Scorer(ABC):
         Optionally override for efficient batch scoring.
         """
         return [self.score(c) for c in completions]
+
+
+class PromptDataset(IterableDataset):
+    """
+    Users should inherit from this and implement __iter__.
+    """
+
+    def __iter__(self) -> Iterator[Prompt]:
+        """
+        defines how to generate or yield SimpleElement objects.
+        """
+        raise NotImplementedError
+
+
+class PromptDataLoader(DataLoader):
+    """
+    subclass of DataLoader to handles batching, parallelism, and other data serving concerns.
+    """
+
+    def __init__(self, dataset: PromptDataset, **kwargs):
+        super().__init__(dataset, **kwargs)
