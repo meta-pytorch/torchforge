@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from typing import Optional
 
 from forge.interfaces import Reward
 
@@ -71,11 +70,13 @@ class ThinkingReward(Reward):
         self._THINK_TAG_ATTEMPT_RE = re.compile(r"<\s*/?\s*think\s*>", re.IGNORECASE)
 
     def __call__(self, prompt: str, response: str, target: str | None = None) -> float:
-        matches = self._THINK_BLOCK_RE.findall(response or "")
+        """Compute thinking reward."""
+        if not response:
+            return 0.0
+
+        matches = self._THINK_BLOCK_RE.findall(response)
         has_well_formed = any(len(re.sub(r"\s+", "", m)) >= 1 for m in matches)
-        has_attempt = bool(self._THINK_TAG_ATTEMPT_RE.search(response or "")) or bool(
-            matches
-        )
+        has_attempt = bool(self._THINK_TAG_ATTEMPT_RE.search(response)) or bool(matches)
         if has_well_formed:
             return self.full_reward
         elif has_attempt:
