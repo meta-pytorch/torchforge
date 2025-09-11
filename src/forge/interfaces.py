@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
+from typing import Any, List, Mapping
 
 from forge.controller import ForgeActor
 
@@ -214,7 +214,7 @@ class StoreInterface(ABC):
     torchstore.
     """
 
-    # TODO: add this to torchstore.
+    # TODO: support this in torchstore.
     @abstractmethod
     async def numel(self, prefix=None) -> int:
         """Return the number of keys starting with the given prefix.
@@ -284,7 +284,7 @@ class StoreInterface(ABC):
         """
         pass
 
-    # TODO: add this to torchstore.
+    # TODO: support this in torchstore.
     @abstractmethod
     async def pop(self, key: str) -> Any:
         """
@@ -300,7 +300,7 @@ class StoreInterface(ABC):
             KeyError: If the key does not exist in the store
         """
 
-    # TODO: add this to torchstore.
+    # TODO: support this in torchstore.
     @abstractmethod
     async def delete(self, key: str) -> None:
         """
