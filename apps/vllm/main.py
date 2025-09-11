@@ -13,7 +13,12 @@ import asyncio
 
 from forge.actors.policy import Policy
 from forge.cli.config import parse
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.controller.service import (
+    Service,
+    ServiceConfig,
+    shutdown_service,
+    spawn_service,
+)
 
 from omegaconf import DictConfig
 from src.forge.data.utils import exclude_service
@@ -28,10 +33,13 @@ async def run(cfg: DictConfig):
 
     print("Spawning service...")
 
-    policy = await spawn_service(
-        ServiceConfig(**cfg.policy.service),
-        Policy,
-        **exclude_service(cfg.policy),
+    # policy = await spawn_service(
+    #     ServiceConfig(**cfg.policy.service),
+    #     Policy,
+    #     **exclude_service(cfg.policy),
+    # )
+    policy = await Service.options(**cfg.policy.service).as_service(
+        Policy, **exclude_service(cfg.policy)
     )
 
     async with policy.session():

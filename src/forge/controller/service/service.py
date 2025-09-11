@@ -36,15 +36,22 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Type
 
-from monarch.actor import Actor, endpoint
+from forge.controller import ForgeActor
 
-from forge.controller.service.interface import _session_context, Session
+from forge.controller.service.interface import (
+    _session_context,
+    ServiceInterface,
+    ServiceInterfaceV2,
+    Session,
+)
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -118,6 +125,51 @@ class Service:
         self._health_task = asyncio.create_task(
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
+
+    @classmethod
+    def options(
+        cls, *, num_replicas: int, procs_per_replica: int, **kwargs
+    ) -> Type["Service"]:
+        """
+        Returns a subclass of Service with a pre-configured ServiceConfig.
+
+        Required:
+            num_replicas
+            procs_per_replica
+
+        Optional kwargs are passed directly to ServiceConfig.
+        """
+        cfg = ServiceConfig(
+            num_replicas=num_replicas,
+            procs_per_replica=procs_per_replica,
+            **kwargs,
+        )
+
+        class ConfiguredService(cls):
+            def __init__(self):
+                # Only store cfg; actor_def comes later in as_service
+                super().__init__(cfg, actor_def=None, actor_kwargs={})
+
+            @classmethod
+            async def as_service(
+                cls, actor_def=None, **actor_kwargs
+            ) -> "ServiceInterface":
+                """
+                Instantiate and initialize the service using the subclass itself as the actor.
+                Returns:
+                    ServiceInterface
+                """
+                actor_def = actor_def or cls  # Use passed actor_def or default to cls
+                if not issubclass(actor_def, ForgeActor):
+                    raise TypeError(
+                        f"actor_def must be a subclass of ForgeActor, got {actor_def.__name__}"
+                    )
+                logger.info("Spawning Service Actor for %s", actor_def.__name__)
+                service = Service(cfg, actor_def, actor_kwargs)
+                await service.__initialize__()
+                return ServiceInterface(service, actor_def)
+
+        return ConfiguredService
 
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
