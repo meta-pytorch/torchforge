@@ -22,9 +22,9 @@ conda activate forge
 
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
+After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices) (you need a minimum 3 GPU devices).
 ```
-python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml
+python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml  --config apps/grpo/qwen3_1_7b.yaml
 ```
 
 If you need to re-build the wheels for whatever reason, you can do so with:
@@ -32,8 +32,11 @@ If you need to re-build the wheels for whatever reason, you can do so with:
 ./scripts/build_wheels.sh
 ```
 
-### Meta Internal Build (Alternative Route)
+For your information, since the vLLM wheel is too large for GitHub, we uploaded it as a release in the `install.sh` script:
+```
+$ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
 
+### Meta Internal Build (Alternative Route)
 
 1. Build uv package
 
