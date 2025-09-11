@@ -46,28 +46,81 @@ check_sudo() {
     fi
 }
 
+# Detect OS distribution from /etc/os-release
+detect_os_family() {
+    if [ ! -f /etc/os-release ]; then
+        log_error "/etc/os-release not found. Cannot determine OS distribution."
+        return 1
+    fi
+
+    # Source the os-release file to get variables
+    . /etc/os-release
+
+    # Check ID_LIKE field for supported distributions
+    case "${ID_LIKE:-}" in
+        *"rhel"*|*"fedora"*)
+            echo "rhel_fedora"
+            ;;
+        *"debian"*)
+            echo "debian"
+            ;;
+        *)
+            # Fallback to ID if ID_LIKE is not set or doesn't match
+            case "${ID:-}" in
+                "rhel"|"fedora"|"centos"|"rocky"|"almalinux")
+                    echo "rhel_fedora"
+                    ;;
+                "debian"|"ubuntu")
+                    echo "debian"
+                    ;;
+                *)
+                    echo "unknown"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
 # Install required system packages
 install_system_packages() {
+    local use_sudo=${1:-false}
+
     log_info "Installing required system packages..."
-    # Check for sudo access
-    if sudo -n true 2>/dev/null; then
-        # Detect OS and install packages accordingly
-        if [ -f /etc/fedora-release ] || [ -f /etc/centos-release ]; then
-            log_info "Detected Fedora OS"
-            sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
-        elif [ -f /etc/lsb-release ] || [ -f /etc/ubuntu-release ]; then
-            log_info "Detected Ubuntu OS"
-            sudo apt-get update
-            sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
+
+    if [ "$use_sudo" = "true" ]; then
+        # User explicitly requested sudo installation
+        if sudo -n true 2>/dev/null; then
+            # Detect OS family using /etc/os-release
+            local os_family
+            os_family=$(detect_os_family)
+
+            case "$os_family" in
+                "rhel_fedora")
+                    log_info "Detected RHEL/Fedora-based OS - using system package manager"
+                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+                    ;;
+                "debian")
+                    log_info "Detected Debian-based OS - using system package manager"
+                    sudo apt-get update
+                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
+                    ;;
+                "unknown")
+                    log_error "Unsupported OS for automatic system package installation"
+                    log_info "Supported distributions: RHEL/Fedora-based (rhel fedora) and Debian-based (debian)"
+                    exit 1
+                    ;;
+            esac
+            log_info "System packages installed successfully via system package manager"
         else
-            log_error "Unsupported OS for automatic system package installation"
+            log_error "Sudo installation requested but no sudo access available"
+            log_info "Either run with sudo privileges or remove the --use-sudo flag to use conda"
             exit 1
         fi
-        log_info "System packages installed successfully"
     else
-        log_warning "No sudo access detected. Attempting to install packages via conda."
+        # Default to conda installation
+        log_info "Installing system packages via conda (default method)"
         conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 -y
-        log_info "Conda package installation attempted. Please ensure the packages are installed correctly."
+        log_info "Conda package installation completed. Packages installed in conda environment."
     fi
 }
 
@@ -76,6 +129,8 @@ check_gh_install() {
   if ! command -v gh &> /dev/null; then
     log_warning "GitHub CLI (gh) not found. Installing via Conda..."
     conda install gh --channel conda-forge -y
+    log_info "GitHub CLI (gh) installed successfully."
+    log_info "Please run 'gh auth login' to authenticate with GitHub."
   else
     log_info "GitHub CLI (gh) already installed."
   fi
@@ -141,22 +196,60 @@ download_vllm_wheel() {
 }
 
 
+# Parse command line arguments
+parse_args() {
+    USE_SUDO=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --use-sudo)
+                USE_SUDO=true
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: $0 [OPTIONS]"
+                echo ""
+                echo "Options:"
+                echo "  --use-sudo    Use system package manager instead of conda for system packages"
+                echo "  -h, --help    Show this help message"
+                echo ""
+                echo "By default, system packages are installed via conda for better isolation."
+                echo "Use --use-sudo to install system packages via the system package manager."
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                log_info "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 main() {
+    # Parse command line arguments first
+    parse_args "$@"
+
     echo "Forge User Installation"
     echo "======================"
     echo ""
     echo "Note: Run this from the root of the forge repository"
     echo "This script requires GitHub CLI (gh) to download large wheels"
+    if [ "$USE_SUDO" = "true" ]; then
+        echo "System packages will be installed via system package manager (requires sudo)"
+        check_sudo
+    else
+        echo "System packages will be installed via conda (default, safer)"
+    fi
     echo ""
 
     check_conda_env
-    check_sudo
     check_wheels
 
     # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
     conda install -y openssl
 
-    install_system_packages
+    install_system_packages "$USE_SUDO"
     check_gh_install
     download_vllm_wheel
 
