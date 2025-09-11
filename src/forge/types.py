@@ -91,10 +91,9 @@ class State:
 class ProcessConfig:
     """A proc_mesh config for the torchx scheduler."""
 
-    scheduler: Literal["mast", "local"] = "local"
     num_procs: int = 1
     with_gpus: bool = False
-    num_hosts: int = 1
+    num_hosts: int | None = None
     # The following is mast specific.
     oncall: str = "torchtune"
     identity: str = "pytorch_distributed"
@@ -108,11 +107,7 @@ class ServiceConfig:
     procs_per_replica: int
     num_replicas: int
     with_gpus: bool = False
-    num_hosts: int = 1
-    scheduler: Literal["mast", "local"] = "local"
-    oncall: str = "torchtune"
-    identity: str = "pytorch_distributed"
-    image: str = "forge_workspace:latest"
+    hosts_per_replica: int | None = None
     # ServiceConfig-specific fields
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
@@ -125,13 +120,9 @@ class ServiceConfig:
         Maps procs_per_replica to num_procs for ProcessConfig.
         """
         return ProcessConfig(
-            scheduler=self.scheduler,
             num_procs=self.procs_per_replica,
             with_gpus=self.with_gpus,
-            num_hosts=self.num_hosts,
-            oncall=self.oncall,
-            identity=self.identity,
-            image=self.image,
+            num_hosts=self.hosts_per_replica,
         )
 
 

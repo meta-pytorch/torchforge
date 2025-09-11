@@ -56,6 +56,15 @@ class ForgeActor(Actor):
         """
         pass
 
+    @endpoint
+    async def set_env(self, addr: str, port: str):
+        """A temporary workaround to set master addr/port.
+        TODO - issues/144
+        """
+        import os
+        os.environ["MASTER_ADDR"] = addr
+        os.environ["MASTER_PORT"] = port
+
     @classmethod
     async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
