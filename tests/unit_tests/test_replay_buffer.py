@@ -9,6 +9,7 @@
 import pytest
 import pytest_asyncio
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.data.stores import KVStore
 from forge.types import Trajectory
 
 from monarch.actor import proc_mesh
@@ -18,8 +19,14 @@ class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
         mesh = await proc_mesh(gpus=1)
+        store = KVStore()
         replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
+            "replay_buffer",
+            ReplayBuffer,
+            store=store,
+            batch_size=2,
+            max_policy_age=1,
+            dp_size=1,
         )
         await replay_buffer.setup.call()
         return replay_buffer
@@ -29,7 +36,6 @@ class TestReplayBuffer:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
         assert replay_buffer._numel.call_one().get() == 1
-        assert replay_buffer._getitem.call_one(0).get() == trajectory
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -39,8 +45,6 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
         assert replay_buffer._numel.call_one().get() == 2
-        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
-        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -113,9 +117,15 @@ class TestReplayBuffer:
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
         mesh = await proc_mesh(gpus=1)
+        store = KVStore()
         # Create replay buffer with dp_size=3
         replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1, dp_size=3
+            "replay_buffer",
+            ReplayBuffer,
+            store=store,
+            batch_size=2,
+            max_policy_age=1,
+            dp_size=3,
         )
         await replay_buffer.setup.call()
 

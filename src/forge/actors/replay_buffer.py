@@ -5,18 +5,21 @@
 # LICENSE file in the root directory of this source tree.
 
 import random
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+from forge.interfaces import StoreInterface
+
+from monarch.actor import endpoint
 
 
 @dataclass
 class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
+    store: StoreInterface
     batch_size: int
     max_policy_age: int
     dp_size: int = 1
@@ -24,7 +27,6 @@ class ReplayBuffer(ForgeActor):
 
     @endpoint
     async def setup(self) -> None:
-        self.buffer: list = []
         if self.seed is None:
             self.seed = random.randint(0, 2**32)
         random.seed(self.seed)
@@ -32,7 +34,11 @@ class ReplayBuffer(ForgeActor):
 
     @endpoint
     async def add(self, episode) -> None:
-        self.buffer.append(episode)
+        await self._add(episode)
+
+    async def _add(self, episode) -> None:
+        key = f"rb_ep_{await self.store.numel()}_{uuid.uuid4().hex}"
+        await self.store.put(key, episode)
 
     @endpoint
     async def sample(self, curr_policy_version: int, batch_size: int | None = None):
@@ -50,18 +56,21 @@ class ReplayBuffer(ForgeActor):
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
-        self._evict(curr_policy_version)
+        await self._evict(curr_policy_version)
 
-        if total_samples > len(self.buffer):
+        total_available = await self.store.numel()
+        if total_samples > total_available:
             return None
 
+        keys = await self.store.keys()
+
         # TODO: Make this more efficient
-        idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
+        idx_to_sample = self.sampler(range(len(keys)), k=total_samples)
         # Pop episodes in descending order to avoid shifting issues
-        popped = [self.buffer.pop(i) for i in sorted(idx_to_sample, reverse=True)]
+        sorted_idxs = sorted(idx_to_sample, reverse=True)
+        popped = [await self.store.pop(keys[i]) for i in sorted_idxs]
 
         # Reorder popped episodes to match the original random sample order
-        sorted_idxs = sorted(idx_to_sample, reverse=True)
         idx_to_popped = dict(zip(sorted_idxs, popped))
         sampled_episodes = [idx_to_popped[i] for i in idx_to_sample]
 
@@ -81,38 +90,46 @@ class ReplayBuffer(ForgeActor):
         Args:
             curr_policy_version (int): The current policy version.
         """
-        self._evict(curr_policy_version)
+        await self._evict(curr_policy_version)
 
-    def _evict(self, curr_policy_version: int) -> None:
-        self.buffer = [
-            trajectory
-            for trajectory in self.buffer
-            if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
-        ]
+    async def _evict(self, curr_policy_version: int) -> None:
+        keys = await self.store.keys()
+        for key in keys:
+            episode = await self.store.get(key)
+            if (curr_policy_version - episode.policy_version) > self.max_policy_age:
+                await self.store.delete(key)
 
     @endpoint
-    async def _getitem(self, idx: int):
-        return self.buffer[idx]
+    async def _getitem(self, key: str):
+        return await self.store.get(key)
 
     @endpoint
     async def _numel(self) -> int:
         """Number of elements (episodes) in the replay buffer."""
-        return len(self.buffer)
+        return await self.store.numel()
 
     @endpoint
     async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all episodes."""
-        self.buffer.clear()
+        await self._clear()
+
+    async def _clear(self) -> None:
+        await self.store.delete_all()
 
     @endpoint
     async def state_dict(self) -> dict[str, Any]:
+        keys = await self.store.keys()
+        episodes = [await self.store.get(k) for k in keys]
         return {
-            "buffer": self.buffer,
+            "buffer": episodes,
             "rng_state": random.getstate(),
             "seed": self.seed,
         }
 
     @endpoint
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self.buffer = state_dict["buffer"]
+        await self._clear()
+        for ep in state_dict["buffer"]:
+            await self._add(ep)
         random.setstate(state_dict["rng_state"])
+        self.seed = state_dict["seed"]
