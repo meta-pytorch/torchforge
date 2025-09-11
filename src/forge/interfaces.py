@@ -7,11 +7,11 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Mapping
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
 
 from forge.types import Action, Message, Observation, Scalar, State
+
+from monarch.actor import endpoint
 
 
 class Transform(ABC):
@@ -314,6 +314,24 @@ class StoreInterface(ABC):
 
         Raises:
             KeyError: If the key does not exist in the store
+        """
+        pass
+
+    # TODO: support this in torchstore.
+    @abstractmethod
+    async def delete_all(self, prefix=None) -> int:
+        """
+        Delete all key-value pairs from the store matching the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+            prefix (str): The prefix to match against stored keys.
+                For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+                Note: None is the prefix of all keys, while "" is the prefix of keys
+                starting with "." and "" itself.
+
+        Returns:
+            int: The number of keys deleted from the store.
         """
         pass
 

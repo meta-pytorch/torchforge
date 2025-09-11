@@ -59,6 +59,16 @@ class TestKVStore:
         empty_keys = await store.keys("nonexistent")
         assert empty_keys == []
 
+        # Test delete_all with prefix
+        deleted_count = await store.delete_all("user")
+        assert deleted_count == 2
+        assert await store.numel("user") == 0
+        assert await store.numel() == 2  # post and comment remain
+
+        # Test delete_all with non-existent prefix
+        deleted_count = await store.delete_all("nonexistent")
+        assert deleted_count == 0
+
     @pytest.mark.asyncio
     async def test_keys_empty_store(self, store: KVStore) -> None:
         """Test keys method on empty store."""
@@ -130,3 +140,8 @@ class TestKVStore:
 
         popped_result = await store.pop("none_key")
         assert popped_result is None
+
+        # Test delete_all on empty store
+        deleted_count = await store.delete_all()
+        assert deleted_count == 0
+        assert await store.numel() == 0
