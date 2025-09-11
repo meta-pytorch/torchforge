@@ -143,7 +143,7 @@ class Provisioner:
             # Once we have true HostMesh support, we can do this on proc 0 of each host
             # then spin up the proc meshes with the environment afterwards.
             hostname, port = await setup.get_info.choose()
-            procs._host = hostname
+            procs._hostname = hostname
             procs._port = port
             procs._gpu_ids = gpu_ids
         else:

@@ -87,8 +87,8 @@ class ForgeActor(Actor):
         actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
         actor._proc_mesh = proc_mesh
 
-        if hasattr(proc_mesh, "_host") and hasattr(proc_mesh, "_port"):
-            host, port = proc_mesh._host, proc_mesh._port
+        if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
+            host, port = proc_mesh._hostname, proc_mesh._port
             await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
         return actor
