@@ -156,7 +156,7 @@ class OrchestratorInterface:
         for attr_name in dir(actor_def):
             attr_value = getattr(actor_def, attr_name)
             if isinstance(attr_value, EndpointProperty):
-                # Create a OrchestratorEndpoint that will route through the Service Actor
+                # Create a OrchestratorEndpoint that will route through the Orchestrator
                 endpoint = OrchestratorEndpoint(self._orchestrator, attr_name)
                 setattr(self, attr_name, endpoint)
 
@@ -174,14 +174,14 @@ class OrchestratorInterface:
         return SessionContext(self)
 
     async def get_metrics(self):
-        """Get comprehensive service metrics for monitoring and analysis."""
+        """Get comprehensive orchestrator metrics for monitoring and analysis."""
         return self._orchestrator.get_metrics()
 
     async def get_metrics_summary(self):
         """Get a summary of key metrics for monitoring and debugging."""
         return self._orchestrator.get_metrics_summary()
 
-    # Testing method - forwarded to Service Actor
+    # Testing method - forwarded to Orchestrator
     async def _get_internal_state(self):
         """
         Get comprehensive internal state for testing purposes.
@@ -192,7 +192,7 @@ class OrchestratorInterface:
         return await self._orchestrator._get_internal_state()
 
     def __getattr__(self, name: str):
-        """Forward all other attribute access to the underlying Service Actor."""
+        """Forward all other attribute access to the underlying Orchestrator."""
         _orchestrator = object.__getattribute__(self, "_orchestrator")
         # Forward everything else to the _orchestrator
         if hasattr(_orchestrator, name):

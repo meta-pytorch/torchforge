@@ -9,7 +9,7 @@ Distributed Actor Service Controller
 This module provides a robust service orchestration system for managing distributed
 actor-based workloads with automatic scaling, fault tolerance, and intelligent load balancing.
 
-The main Service class acts as a singleton controller that handles:
+The main Orchestrator class acts as a singleton controller that handles:
 - Fault tolerance with automatic replica recovery
 - Autoscaling based on real-time metrics
 - Load balancing across healthy replicas
@@ -17,19 +17,19 @@ The main Service class acts as a singleton controller that handles:
 - Comprehensive metrics collection and monitoring
 
 Example:
-    Basic service setup:
+    Basic orchestrator setup:
 
     >>> config = ServiceConfig(
     ...     gpus_per_replica=1,
     ...     num_replicas=3
     ... )
-    >>> service = Service(config, MyActorClass, *args, **kwargs)
-    >>> await service.__initialize__()
+    >>> orchestrator = Orchestrator(config, MyActorClass, *args, **kwargs)
+    >>> await orchestrator.__initialize__()
 
     Session-based usage:
 
-    >>> async with service.session():
-    ...     result = await service.my_endpoint(arg1, arg2)
+    >>> async with orchestrator.session():
+    ...     result = await orchestrator.my_endpoint(arg1, arg2)
 """
 
 import asyncio
@@ -38,13 +38,13 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.orchestrator.interface import _session_context, Session
 
 from forge.controller.orchestrator.metrics import ServiceMetrics
 from forge.controller.orchestrator.replica import Replica, ServiceRequest
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -300,9 +300,9 @@ class Orchestrator:
             str: Unique session identifier for use in subsequent requests
 
         Example:
-            >>> session_id = await service.start_session()
-            >>> result = await service.my_endpoint(session_id, arg1, arg2)
-            >>> await service.terminate_session(session_id)
+            >>> session_id = await orchestrator.start_session()
+            >>> result = await orchestrator.my_endpoint(session_id, arg1, arg2)
+            >>> await orchestrator.terminate_session(session_id)
         """
         sess_id = str(uuid.uuid4())
         session = Session(session_id=sess_id)
@@ -866,9 +866,9 @@ class OrchestratorActor(Actor):
             str: Unique session identifier for use in subsequent requests
 
         Example:
-            >>> session_id = await service.start_session()
-            >>> result = await service.my_endpoint(session_id, arg1, arg2)
-            >>> await service.terminate_session(session_id)
+            >>> session_id = await orchestrator.start_session()
+            >>> result = await orchestrator.my_endpoint(session_id, arg1, arg2)
+            >>> await orchestrator.terminate_session(session_id)
         """
         sess_id = str(uuid.uuid4())
         session = Session(session_id=sess_id)
@@ -980,9 +980,9 @@ class OrchestratorActor(Actor):
             sess_id: The unique session identifier to terminate
 
         Example:
-            >>> session_id = await service.start_session()
+            >>> session_id = await orchestrator.start_session()
             >>> # ... use session for requests ...
-            >>> await service.terminate_session(session_id)
+            >>> await orchestrator.terminate_session(session_id)
         """
         logger.debug("Terminating session %s", sess_id)
 
