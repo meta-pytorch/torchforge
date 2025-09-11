@@ -496,7 +496,7 @@ async def main():
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch)
+                loss = sum(await trainer.train_step.call(batch))
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.call(policy_version)
