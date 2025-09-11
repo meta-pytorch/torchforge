@@ -366,7 +366,7 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     async def pad_token(self):
-        return self.tokenizer.pad_token_id
+        return self._tokenizer.pad_token_id
 
 
 async def main(cfg: DictConfig):
