@@ -62,6 +62,7 @@ class ForgeActor(Actor):
         TODO - issues/144
         """
         import os
+        logger.info(f"Setting addr: {addr} and port: {port} ")
         os.environ["MASTER_ADDR"] = addr
         os.environ["MASTER_PORT"] = port
 
@@ -86,6 +87,9 @@ class ForgeActor(Actor):
         actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
         actor._proc_mesh = proc_mesh
 
+        if hasattr(proc_mesh, "_host") and hasattr(proc_mesh, "_port"):
+            host, port = proc_mesh._host, proc_mesh._port
+            await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
         return actor
 

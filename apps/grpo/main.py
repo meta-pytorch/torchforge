@@ -20,6 +20,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
@@ -481,6 +482,7 @@ async def main(cfg: DictConfig):
             shutdown_service(ref_model),
             shutdown_service(reward_actor),
         )
+        shutdown()
 
 
 @parse

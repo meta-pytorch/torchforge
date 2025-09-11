@@ -109,8 +109,7 @@ class Provisioner:
         if num_hosts is not None and num_hosts > 0:
             print("using remote mesh")
             host_mesh, server_name = await self.create_host_mesh(name=f"alloc-{num_hosts}", num_hosts=num_hosts)
-
-            host_id = uuid.uuid()
+            host_id = uuid.uuid1()
             gpu_manager = GpuManager()
             self._host_gpu_map[host_id] = gpu_manager
             host_mesh._host_id = host_id
@@ -145,7 +144,7 @@ class Provisioner:
             # then spin up the proc meshes with the environment afterwards.
             hostname, port = await setup.get_info.choose()
             procs._host = hostname
-            procs._addr = port
+            procs._port = port
             procs._gpu_ids = gpu_ids
         else:
             procs = host_mesh.spawn_procs(
@@ -155,7 +154,7 @@ class Provisioner:
         procs._host = host_mesh
         if server_name:
             self._server_names.append(server_name)
-            self._proc_server_name[procs] = server_name
+            self._proc_server_map[procs] = server_name
 
         return procs
 

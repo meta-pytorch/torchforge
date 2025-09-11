@@ -139,8 +139,10 @@ class Policy(PolicyInterface):
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # TODO - we will want to ensure colocation with workers
+        # TODO - issues/144
         policy_proc_config = copy(process_config)
         policy_proc_config.num_procs = 1
+        policy_proc_config.num_hosts = None
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
