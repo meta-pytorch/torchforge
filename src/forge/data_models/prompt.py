@@ -4,16 +4,16 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Sequence
+from typing import Any
 
 
 class Role(Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
-    TOOL = "tool"
     NONE = "none"
 
 
@@ -21,7 +21,7 @@ class Role(Enum):
 class Message:
     """A single message in a conversation."""
 
-    context: str
+    chunks: Sequence[str]
     role: Role
 
 
@@ -49,9 +49,9 @@ def prompt_to_messages(
     """Convert a prompt to a sequence of messages."""
     messages = []
     if system_instruction is not None:
-        messages.append(Message(system_instruction, role=Role.SYSTEM))
+        messages.append(Message(chunks=[system_instruction], role=Role.SYSTEM))
     messages.append(
-        Message(prompt, role=Role.USER),
+        Message(chunks=[prompt], role=Role.USER),
     )
     return messages
 
