@@ -9,7 +9,6 @@ from typing import Dict, Sequence, Tuple
 
 import torch
 
-from forge.controller import ForgeActor
 from forge.data_models.completion import Completion
 from forge.data_models.loss import LossOutput
 from forge.data_models.minibatch import Minibatch
