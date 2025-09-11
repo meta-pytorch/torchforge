@@ -7,7 +7,11 @@
 
 from typing import Any
 
+<<<<<<< HEAD
 from forge.interfaces import StoreInterface
+=======
+from src.forge.interfaces import StoreInterface
+>>>>>>> 05dd33b7eb5574b9db6f8ec0ee2417919946b0fe
 
 
 class KVStore(StoreInterface):
