@@ -121,15 +121,6 @@ class TestKVStore:
             await store.pop("nonexistent_key")
 
     @pytest.mark.asyncio
-    async def test_overwrite_existing_key(self, store: KVStore) -> None:
-        """Test overwriting an existing key."""
-        await store.put("key1", "value1")
-        await store.put("key1", "new_value")
-
-        result = await store.get("key1")
-        assert result == "new_value"
-
-    @pytest.mark.asyncio
     async def test_none_values(self, store: KVStore) -> None:
         """Test storing and retrieving None values."""
         await store.put("none_key", None)

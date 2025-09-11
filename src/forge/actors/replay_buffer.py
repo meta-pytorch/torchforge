@@ -37,7 +37,7 @@ class ReplayBuffer(ForgeActor):
         await self._add(episode)
 
     async def _add(self, episode) -> None:
-        key = f"rb_ep_{await self.store.numel()}_{uuid.uuid4().hex}"
+        key = f"rb_{uuid.uuid4().hex}"
         await self.store.put(key, episode)
 
     @endpoint
@@ -66,13 +66,9 @@ class ReplayBuffer(ForgeActor):
 
         # TODO: Make this more efficient
         idx_to_sample = self.sampler(range(len(keys)), k=total_samples)
-        # Pop episodes in descending order to avoid shifting issues
-        sorted_idxs = sorted(idx_to_sample, reverse=True)
-        popped = [await self.store.pop(keys[i]) for i in sorted_idxs]
 
-        # Reorder popped episodes to match the original random sample order
-        idx_to_popped = dict(zip(sorted_idxs, popped))
-        sampled_episodes = [idx_to_popped[i] for i in idx_to_sample]
+        # Fetch and remove the sampled episodes
+        sampled_episodes = [await self.store.pop(keys[i]) for i in idx_to_sample]
 
         # Reshape into (dp_size, bsz, ...)
         reshaped_episodes = [
@@ -104,6 +100,11 @@ class ReplayBuffer(ForgeActor):
         return await self.store.get(key)
 
     @endpoint
+    async def items(self) -> list[tuple[str, Any]]:
+        keys = await self.store.keys()
+        return [(k, await self.store.get(k)) for k in keys]
+
+    @endpoint
     async def _numel(self) -> int:
         """Number of elements (episodes) in the replay buffer."""
         return await self.store.numel()
@@ -119,7 +120,7 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def state_dict(self) -> dict[str, Any]:
         keys = await self.store.keys()
-        episodes = [await self.store.get(k) for k in keys]
+        episodes = [(k, await self.store.get(k)) for k in keys]
         return {
             "buffer": episodes,
             "rng_state": random.getstate(),
@@ -129,7 +130,7 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         await self._clear()
-        for ep in state_dict["buffer"]:
-            await self._add(ep)
+        for k, ep in state_dict["buffer"]:
+            await self.store.put(k, ep)
         random.setstate(state_dict["rng_state"])
         self.seed = state_dict["seed"]

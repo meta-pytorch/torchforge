@@ -36,6 +36,12 @@ class TestReplayBuffer:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
         assert replay_buffer._numel.call_one().get() == 1
+        assert (
+            replay_buffer.sample.call_one(curr_policy_version=1, batch_size=1).get()[0][
+                0
+            ]
+            == trajectory
+        )
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -45,17 +51,45 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
         assert replay_buffer._numel.call_one().get() == 2
+        sampled = replay_buffer.sample.call_one(
+            curr_policy_version=1, batch_size=2
+        ).get()
+        flat_sampled = [ep for dp in sampled for ep in dp]
+        assert all(ep in [trajectory_0, trajectory_1] for ep in flat_sampled)
+
+        # By curr_policy_version = 2, t0 should be evicted (age > 1)
+        result = replay_buffer.sample.call_one(curr_policy_version=2).get()
+        assert result is None  # not enough episodes left (only t1 remains)
+
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_state_dict_save_load(self, replay_buffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        trajectory_0 = Trajectory(policy_version=0)
+        trajectory_1 = Trajectory(policy_version=1)
+        await replay_buffer.add.call_one(trajectory_0)
+        await replay_buffer.add.call_one(trajectory_1)
+
+        # Capture the original key → episode mapping
+        original_kv = dict(replay_buffer.items.call_one().get())
+
+        # Save state dict
         state_dict = replay_buffer.state_dict.call_one().get()
+
+        # Clear the buffer
         replay_buffer.clear.call_one().get()
         assert replay_buffer._numel.call_one().get() == 0
+
+        # Load state dict
         await replay_buffer.load_state_dict.call_one(state_dict)
-        assert replay_buffer._numel.call_one().get() == 1
+        assert replay_buffer._numel.call_one().get() == 2
+
+        # Capture the loaded key → episode mapping
+        loaded_kv = dict(replay_buffer.items.call_one().get())
+
+        # Check that the mappings are identical
+        assert original_kv == loaded_kv
+
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
