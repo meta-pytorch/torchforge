@@ -49,7 +49,8 @@ def compute_logprobs(
 
 class SimpleGRPOLoss(nn.Module):
     """Simplified GRPO Loss for simplified single step updates
-    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
+    Inspired by the Hugging Face TRL implementation:
+        https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624.
     """
 
     def __init__(self, beta: float = 0.1):
@@ -57,16 +58,12 @@ class SimpleGRPOLoss(nn.Module):
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        per_token_kl = (
-            torch.exp(ref_logprobs.detach() - logprobs)
-            - (ref_logprobs.detach() - logprobs)
-            - 1
-        )
+        kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
         per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
+        per_token_loss = -(per_token_policy_loss - self.beta * kl)
         loss = (
-            (per_token_loss * padding_mask).sum(dim=1)
-            / (padding_mask.sum(dim=1) + 1e-8)
+            ((per_token_loss * padding_mask).sum(dim=1))
+            / (padding_mask.sum(dim=1).clamp(min=1.0))
         ).mean()
         return loss
 
@@ -211,21 +208,21 @@ class Trainer(ForgeActor):
         return load_sd
 
     @endpoint
-    async def train_step(self, batch: list[Episode]):
-        batch = batch[self.dp_rank]
-        pad_id = batch[0].pad_id
+    async def train_step(self, batch: list[list[Episode]]):
+        microbatch = batch[self.dp_rank]
+        pad_id = microbatch[0].pad_id
 
         # prepare batch
-        request = [e.request_tensor for e in batch]
+        request = [e.request_tensor for e in microbatch]
         request = torch.stack(request).to(self.device)  # [b x s]
 
-        response = [e.response_tensor for e in batch]
+        response = [e.response_tensor for e in microbatch]
         response = torch.stack(response).to(self.device)  # [b x s]
 
-        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = [e.ref_logprobs for e in microbatch]
         ref_logprobs = torch.stack(ref_logprobs).to(self.device).squeeze()  # [b x s]
 
-        advantages = [e.advantage for e in batch]
+        advantages = [e.advantage for e in microbatch]
         advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
         del batch
 
@@ -522,10 +519,10 @@ async def main(cfg: DictConfig):
         )
 
 
-@parse
-def recipe_main(cfg: DictConfig) -> None:
-    asyncio.run(main(cfg))
-
-
 if __name__ == "__main__":
-    recipe_main()
+
+    @parse
+    def _main(cfg):
+        asyncio.run(main(cfg))
+
+    _main()  # @parse grabs the cfg from CLI
