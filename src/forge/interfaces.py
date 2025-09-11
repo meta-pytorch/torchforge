@@ -7,11 +7,11 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Mapping
 
+from monarch.actor import endpoint
+
 from forge.controller import ForgeActor
 
 from forge.types import Action, Message, Observation, Scalar, State
-
-from monarch.actor import endpoint
 
 
 class Transform(ABC):
