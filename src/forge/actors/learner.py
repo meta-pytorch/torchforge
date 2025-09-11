@@ -9,7 +9,7 @@ import os
 import torch
 
 from forge.data_models.minibatch import Minibatch
-from forge.trainer.huggingface_trainer import HuggingFaceTrainer
+from forge.trainers.huggingface_trainer import HuggingFaceTrainer
 from monarch._src.actor.actor_mesh import Actor, current_rank
 from monarch._src.actor.endpoint import endpoint
 

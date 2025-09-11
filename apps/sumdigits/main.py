@@ -8,25 +8,35 @@ import asyncio
 import getpass
 import os
 import uuid
-from argparse import ArgumentParser, Namespace
 
-from agent_tune.data_loaders.sum_digits_data_loader import SumDigitsDataLoader
-from agent_tune.data_models.experience import from_scored_completions
-from agent_tune.data_models.minibatch import from_experiences
-from agent_tune.scorers.sum_digits_scorer import SumDigitsScorer
+from apps.sumdigits.sum_digits_data_loader import SumDigitsDataLoader
+
+from apps.sumdigits.sum_digits_scorer import SumDigitsScorer
 
 from forge.actors.learner import Learner
 from forge.actors.policy_v1 import Policy
+
+from forge.data_models.experience import from_scored_completions
+from forge.data_models.minibatch import from_experiences
 from monarch._src.actor.proc_mesh import proc_mesh as local_proc_mesh
 from torch.utils.tensorboard import SummaryWriter
 
 
-async def main(args: Namespace) -> None:
+def _local_root_dir() -> str:
+    local_runs_root = os.path.expanduser("~/forge_local_runs")
+    job_name = f"rl_loca_run_{uuid.uuid4().hex}"
+    path = os.path.join(local_runs_root, job_name)
+    os.makedirs(path, exist_ok=True)
+    return os.path.abspath(path)
+
+
+async def main() -> None:
     master_port = int(os.environ.get("BASE_MASTER_PORT", "12345"))
     master_addr = "localhost"
     os.environ["MASTER_ADDR"] = master_addr
     os.environ["MASTER_PORT"] = str(master_port)
-    model_name = args.model_name
+    os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
+    model_name = "Qwen/Qwen3-1.7B-Base"
     log_dir = f"{_local_root_dir()}/tb"
     writer = SummaryWriter(log_dir=log_dir)
     print(f"To launch a TensorBoard: tensorboard --logdir {log_dir}")
@@ -38,6 +48,7 @@ async def main(args: Namespace) -> None:
 
     # change the master-port for policy mesh
     os.environ["MASTER_PORT"] = str(master_port + 1)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "7"
     policy_proc_mesh = await local_proc_mesh(
         hosts=1,
         gpus=1,
@@ -75,9 +86,7 @@ async def main(args: Namespace) -> None:
             experiences = from_scored_completions(scored_completions)
             mini_batch = from_experiences(experiences, 300)
             loss_output = await trainer_mesh.accummulate_gradients.call_one(mini_batch)
-            # print(
-            #     f"loss: {loss_output.loss.numerator.local()/loss_output.loss.denominator.local()};"
-            # )
+
             # Accumulate loss
             current_loss = (
                 loss_output.loss.numerator.local()
@@ -112,29 +121,5 @@ async def main(args: Namespace) -> None:
     writer.close()
 
 
-def _local_root_dir() -> str:
-    local_runs_root = os.path.expanduser("~/monarchrl_local_runs")
-    job_name = f"rl_loca_run_{uuid.uuid4().hex}"
-    path = os.path.join(local_runs_root, job_name)
-    os.makedirs(path, exist_ok=True)
-    return os.path.abspath(path)
-
-
 if __name__ == "__main__":
-    parser = ArgumentParser(description="Run a sync RL loop using monarch")
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        required=False,
-        default=f"/home/{getpass.getuser()}/pci-wsf/huggingface_models/models--Qwen--Qwen2.5-0.5B-Instruct/snapshots/model",
-        help="Path to the model to use for training",
-    )
-    parser.add_argument(
-        "--experiment-type",
-        type=str,
-        default="sum_digits",
-        choices=["sum_digits"],
-        help="Type of experiment to run (currently only sum_digits is supported)",
-    )
-    args: Namespace = parser.parse_args()
-    asyncio.run(main(args))
+    asyncio.run(main())

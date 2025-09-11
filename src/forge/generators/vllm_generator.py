@@ -16,6 +16,7 @@ from forge.data_models.prompt import Message, Prompt
 from transformers import AutoTokenizer
 from vllm import SamplingParams
 from vllm.config import (
+    CacheConfig,
     ModelConfig,
     ObservabilityConfig,
     ParallelConfig,
@@ -47,7 +48,6 @@ class VLLMGenerator(Generator):
                 quantization=None,
                 revision=None,
                 enforce_eager=False,
-                gpu_memory_utilization=0.3,
                 swap_space=4.0,
             ),
             parallel_config=ParallelConfig(
@@ -63,6 +63,9 @@ class VLLMGenerator(Generator):
                 enable_chunked_prefill=False,
             ),
             observability_config=ObservabilityConfig(),
+            cache_config=CacheConfig(
+                gpu_memory_utilization=0.5,
+            ),
         )
         return LLMEngine.from_vllm_config(cfg)
 

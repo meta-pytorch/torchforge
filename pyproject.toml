@@ -41,6 +41,7 @@ dev = [
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
+    "trl"
 ]
 oss = [
     "torch",
