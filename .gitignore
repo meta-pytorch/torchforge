@@ -17,6 +17,7 @@ cython_debug/
 
 # SLURM logs
 slogs/
+slurm-*
 
 # Celery stuff
 celerybeat-schedule

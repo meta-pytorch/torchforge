@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
 import asyncio
 import logging
 import os
@@ -92,6 +93,7 @@ class EngineConfig(EngineArgs):
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
+    enable_expert_parallel: bool = False
 
     @classmethod
     def from_dict(cls, d: Mapping):
@@ -99,6 +101,16 @@ class EngineConfig(EngineArgs):
         all_fields = [f.name for f in fields(cls)]
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
+
+    @classmethod
+    def as_engine_args(cls, config: Mapping | EngineConfig) -> EngineConfig:
+        if isinstance(config, Mapping):
+            config = EngineConfig.from_dict(config)
+
+        # Original method returns False when not run in the main thread
+        config._is_v1_supported_oracle = lambda *_: True
+        # Build Config
+        return config.create_engine_config(UsageContext.LLM_CLASS)
 
 
 @dataclass
@@ -198,7 +210,7 @@ class Policy(PolicyInterface):
 
         self.request_id = 0
         self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = await self.policy_worker.get_vllm_args.choose()
+        self.vllm_args = EngineConfig.as_engine_args(self.engine_config)
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
@@ -384,13 +396,7 @@ class PolicyWorker(ForgeActor):
         - all LLM generate methods, verify against LLM inputs
         - all executor methods verify no changes
         """
-        if isinstance(self.vllm_args, Mapping):
-            self.vllm_args = EngineConfig.from_dict(self.vllm_args)
-
-        # Original method returns False when not run in the main thread
-        self.vllm_args._is_v1_supported_oracle = lambda *_: True
-        # Build Config
-        self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
+        self.vllm_args = EngineConfig.as_engine_args(self.vllm_args)
 
     @endpoint
     async def setup(self, store: MultiProcessStore = None):
@@ -477,10 +483,6 @@ class PolicyWorker(ForgeActor):
         self.worker.compile_or_warm_up_model()
         self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
         return kv_cache_config
-
-    @endpoint
-    async def get_vllm_args(self):
-        return self.vllm_args
 
     @endpoint
     async def _get_model_params(self) -> Dict[str, torch.Tensor]:

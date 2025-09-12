@@ -16,6 +16,10 @@ import functools
 import socket
 import uuid
 from forge.types import ProcessConfig
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def _get_port() -> str:
@@ -71,7 +75,7 @@ class Provisioner:
         }
 
     async def create_host_mesh(self, name: str, num_hosts: int) -> RemoteAllocator:
-        print(f"for {name}, creating {num_hosts}")
+        logger.debug(f"Creating remote server for alloc {name}")
         appdef = hyperactor.host_mesh(
             image="test",
             meshes=[f"{name}:{num_hosts}:gpu.small"]
@@ -89,7 +93,6 @@ class Provisioner:
             appdef=appdef,
             workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
         )
-        print("Creating server")
         server_info = await commands.get_or_create(
             "forge_job",
             server_config,
@@ -107,14 +110,13 @@ class Provisioner:
         # TODO - issues/144
         server_name = None
         if num_hosts is not None and num_hosts > 0:
-            print("using remote mesh")
-            host_mesh, server_name = await self.create_host_mesh(name=f"alloc-{num_hosts}", num_hosts=num_hosts)
+            created_hosts = len(self._server_names)
+            host_mesh, server_name = await self.create_host_mesh(name=f"alloc-{created_hosts}", num_hosts=num_hosts)
             host_id = uuid.uuid1()
             gpu_manager = GpuManager()
             self._host_gpu_map[host_id] = gpu_manager
             host_mesh._host_id = host_id
         else:
-            print("using local host mesh")
             host_mesh = this_host()
             gpu_manager = self._host_gpu_map[self._this_host_id]
 
@@ -131,6 +133,8 @@ class Provisioner:
                 # Multiple actors trying to call _get_port doesn't work
                 # os.environ["MASTER_PORT"] = _get_port()
                 os.environ["MASTER_PORT"] = "12345"
+                os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
+                os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
             gpu_ids = gpu_manager.get_gpus(num_procs)
             procs = host_mesh.spawn_procs(
@@ -158,19 +162,17 @@ class Provisioner:
 
         return procs
 
-    async def stop_proc_mesh(self, procs: ProcMesh):
-        if procs._gpu_ids:
-            gpu_manager = self._host_gpu_map[procs._host._host_id]
-            gpu_manager.release_gpus(procs._gpu_ids)
-        await procs.stop()
-        if procs in self._proc_server_map:
-            server_name = self._proc_server_map[procs]
-            print("Shutting down ", server_name)
+    async def stop_proc_mesh(self, proc_mesh: ProcMesh):
+        if hasattr(proc_mesh, "_gpu_ids"):
+            gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
+            gpu_manager.release_gpus(proc_mesh._gpu_ids)
+        await proc_mesh.stop()
+        if proc_mesh in self._proc_server_map:
+            server_name = self._proc_server_map[proc_mesh]
             commands.kill(server_name)
 
     async def shutdown(self):
         for server_name in self._server_names:
-            print(f"shutting down {server_name}")
             commands.kill(server_name)
 
 
@@ -199,4 +201,5 @@ async def stop_proc_mesh(proc_mesh: ProcMesh):
 
 
 async def shutdown():
+    logger.info("Shutting down provisioner..")
     await _get_provisioner().shutdown()

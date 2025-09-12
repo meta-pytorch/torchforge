@@ -482,7 +482,9 @@ async def main(cfg: DictConfig):
             shutdown_service(ref_model),
             shutdown_service(reward_actor),
         )
-        shutdown()
+        # TODO - add a global shutdown that implicitly shuts down all services
+        # and remote allocations
+        await shutdown()
 
 
 @parse
