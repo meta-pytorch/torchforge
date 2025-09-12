@@ -116,6 +116,20 @@ class ForgeActor(Actor):
 
         return ConfiguredService
 
+    @classmethod
+    async def as_service(cls, **actor_kwargs) -> "ConfiguredService":
+        """
+        Spawn this ForgeActor inside a Service with default configuration.
+        Defaults: num_replicas=1, procs_per_replica=1
+
+        Usage:
+            service = await MyForgeActor.as_service(...)
+            await service.shutdown()
+        """
+        return await cls.options(num_replicas=1, procs_per_replica=1).as_service(
+            **actor_kwargs
+        )
+
     @endpoint
     async def setup(self):
         """Sets up the actor.
