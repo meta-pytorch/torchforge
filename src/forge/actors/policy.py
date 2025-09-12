@@ -67,6 +67,8 @@ class SamplingConfig:
     n: int = 1
     guided_decoding: bool = False
     max_tokens: int = 512
+    temperature: float = 1.0
+    top_p: float = 1.0
 
     def __post_init__(self):
         gd_params = None
