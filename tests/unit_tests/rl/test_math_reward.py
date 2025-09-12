@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from unittest import mock
 
 from forge.data.rewards import MathReward
 
@@ -36,6 +35,13 @@ class TestMathReward(unittest.TestCase):
         self.assertEqual(self.reward._to_float("0"), 0.0)
         self.assertEqual(self.reward._to_float("  123.45  "), 123.45)
 
+    def test_to_float_with_currency_and_formatting(self):
+        """Test _to_float with currency symbols and commas."""
+        self.assertEqual(self.reward._to_float("$42"), 42.0)
+        self.assertEqual(self.reward._to_float("$1,000"), 1000.0)
+        self.assertEqual(self.reward._to_float("1,234.56"), 1234.56)
+        self.assertEqual(self.reward._to_float("$ 42.50 "), 42.5)
+
     def test_to_float_invalid_inputs(self):
         """Test _to_float with invalid inputs."""
         self.assertIsNone(self.reward._to_float("abc"))
@@ -48,154 +54,146 @@ class TestMathReward(unittest.TestCase):
         """Test _to_float with edge cases."""
         self.assertEqual(self.reward._to_float("1e6"), 1000000.0)
         self.assertEqual(self.reward._to_float("-1.5e-3"), -0.0015)
-        self.assertEqual(self.reward._to_float("inf"), float("inf"))
-        self.assertEqual(self.reward._to_float("-inf"), float("-inf"))
 
-    def test_extract_number_gsm8k_format(self):
-        """Test _extract_number with GSM8K style format."""
-        self.assertEqual(self.reward._extract_number("#### 42"), 42.0)
-        self.assertEqual(self.reward._extract_number("#### -3.14"), -3.14)
-        self.assertEqual(self.reward._extract_number("Some text #### 123.45"), 123.45)
+    def test_call_correct_answer_in_tags(self):
+        """Test __call__ with correct answers in <answer></answer> tags."""
+        self.assertEqual(self.reward("prompt", "<answer>42</answer>", "42"), 1.0)
+        self.assertEqual(self.reward("prompt", "<answer>3.14</answer>", "3.14"), 1.0)
+        self.assertEqual(self.reward("prompt", "<answer>-5.5</answer>", "-5.5"), 1.0)
 
-    def test_extract_number_answer_patterns(self):
-        """Test _extract_number with various answer patterns."""
-        self.assertEqual(self.reward._extract_number("The answer is 42"), 42.0)
-        self.assertEqual(self.reward._extract_number("answer is 3.14"), 3.14)
-        self.assertEqual(self.reward._extract_number("Answer: 123"), 123.0)
-        self.assertEqual(self.reward._extract_number("Result: -5.5"), -5.5)
-
-    def test_extract_number_equals_pattern(self):
-        """Test _extract_number with equals sign patterns."""
-        self.assertEqual(self.reward._extract_number("x = 42."), 42.0)
-        self.assertEqual(self.reward._extract_number("The result = 3.14"), 3.14)
-        self.assertEqual(self.reward._extract_number("calculation = -7.5."), -7.5)
-
-    def test_extract_number_end_of_text(self):
-        """Test _extract_number with numbers at end of text."""
-        self.assertEqual(self.reward._extract_number("The final result is 42."), 42.0)
-        self.assertEqual(self.reward._extract_number("We get 3.14"), 3.14)
-        self.assertEqual(self.reward._extract_number("Answer: -5.5."), -5.5)
-
-    def test_extract_number_fallback_pattern(self):
-        """Test _extract_number with fallback pattern (any number)."""
-        self.assertEqual(self.reward._extract_number("There are 42 items"), 42.0)
-        self.assertEqual(self.reward._extract_number("Cost is $3.14 per item"), 3.14)
-        self.assertEqual(self.reward._extract_number("Temperature: -5.5 degrees"), -5.5)
-
-    def test_extract_number_multiple_matches(self):
-        """Test _extract_number returns the last match when multiple numbers exist."""
-        # Should return the last match from the pattern
+    def test_call_answer_tags_with_whitespace(self):
+        """Test __call__ with answer tags containing whitespace."""
+        self.assertEqual(self.reward("prompt", "<answer> 42 </answer>", "42"), 1.0)
         self.assertEqual(
-            self.reward._extract_number("First 10, then 20, finally 30"), 30.0
-        )
-        self.assertEqual(
-            self.reward._extract_number("#### 5 but actually #### 10"), 10.0
+            self.reward("prompt", "<answer>\n3.14\n</answer>", "3.14"), 1.0
         )
 
-    def test_extract_number_no_match(self):
-        """Test _extract_number when no numbers are found."""
-        self.assertIsNone(self.reward._extract_number("No numbers here"))
-        self.assertIsNone(self.reward._extract_number(""))
-        self.assertIsNone(self.reward._extract_number("Just text"))
-
-    def test_extract_number_case_insensitive(self):
-        """Test _extract_number is case insensitive."""
-        self.assertEqual(self.reward._extract_number("THE ANSWER IS 42"), 42.0)
-        self.assertEqual(self.reward._extract_number("Answer: 3.14"), 3.14)
-        self.assertEqual(self.reward._extract_number("RESULT: 123"), 123.0)
-
-    def test_call_correct_answer(self):
-        """Test __call__ with correct answers."""
-        self.assertEqual(self.reward("prompt", "The answer is 42", "42"), 1.0)
-        self.assertEqual(self.reward("prompt", "#### 3.14", "3.14"), 1.0)
-        self.assertEqual(self.reward("prompt", "Result: -5.5", "-5.5"), 1.0)
-
-    def test_call_within_tolerance(self):
-        """Test __call__ with answers within tolerance."""
-        # Default tolerance is 1e-6
-        self.assertEqual(self.reward("prompt", "42.0000001", "42"), 1.0)
-        self.assertEqual(self.reward("prompt", "3.1400001", "3.14"), 1.0)
-
-        # Custom tolerance
-        self.assertEqual(self.custom_reward("prompt", "42.0001", "42"), 1.0)
-        self.assertEqual(self.custom_reward("prompt", "3.141", "3.14"), 1.0)
-
-    def test_call_outside_tolerance(self):
-        """Test __call__ with answers outside tolerance."""
-        self.assertEqual(self.reward("prompt", "42.1", "42"), 0.0)
-        self.assertEqual(self.reward("prompt", "3.15", "3.14"), 0.0)
-        self.assertEqual(self.custom_reward("prompt", "42.01", "42"), 0.0)
-
-    def test_call_invalid_target(self):
-        """Test __call__ with invalid target values."""
-        self.assertEqual(
-            self.reward("prompt", "42", "invalid"), self.reward.partial_credit
-        )
-        self.assertEqual(self.reward("prompt", "42", ""), self.reward.partial_credit)
-        self.assertEqual(
-            self.reward("prompt", "42", "not a number"), self.reward.partial_credit
-        )
-
-    def test_call_invalid_response(self):
-        """Test __call__ with invalid response values."""
-        self.assertEqual(
-            self.reward("prompt", "no number", "42"), self.reward.partial_credit
-        )
-        self.assertEqual(self.reward("prompt", "", "42"), self.reward.partial_credit)
-        self.assertEqual(
-            self.reward("prompt", "just text", "42"), self.reward.partial_credit
-        )
-
-    def test_call_both_invalid(self):
-        """Test __call__ with both invalid target and response."""
-        self.assertEqual(
-            self.reward("prompt", "no number", "invalid"), self.reward.partial_credit
-        )
-        self.assertEqual(self.reward("prompt", "", ""), self.reward.partial_credit)
-
-    def test_call_custom_partial_credit(self):
-        """Test __call__ uses custom partial credit value."""
-        self.assertEqual(self.custom_reward("prompt", "no number", "42"), 0.2)
-        self.assertEqual(self.custom_reward("prompt", "42", "invalid"), 0.2)
-
-    def test_call_zero_values(self):
-        """Test __call__ with zero values."""
-        self.assertEqual(self.reward("prompt", "0", "0"), 1.0)
-        self.assertEqual(self.reward("prompt", "The answer is 0", "0.0"), 1.0)
-
-    def test_call_negative_values(self):
-        """Test __call__ with negative values."""
-        self.assertEqual(self.reward("prompt", "-42", "-42"), 1.0)
-        self.assertEqual(self.reward("prompt", "#### -3.14", "-3.14"), 1.0)
-        self.assertEqual(self.reward("prompt", "-5", "-4.9"), 0.0)
-
-    def test_call_large_numbers(self):
-        """Test __call__ with large numbers."""
-        self.assertEqual(self.reward("prompt", "1000000", "1000000"), 1.0)
-        self.assertEqual(self.reward("prompt", "1e6", "1000000"), 1.0)
-        self.assertEqual(self.reward("prompt", "1000001", "1000000"), 0.0)
-
-    def test_call_small_numbers(self):
-        """Test __call__ with very small numbers."""
-        self.assertEqual(self.reward("prompt", "0.000001", "0.000001"), 1.0)
-        self.assertEqual(self.reward("prompt", "1e-6", "0.000001"), 1.0)
-
-    def test_call_complex_response_text(self):
-        """Test __call__ with complex response text containing multiple elements."""
+    def test_call_answer_tags_with_complex_content(self):
+        """Test __call__ with complex content in answer tags."""
         response = """
         Let me solve this step by step:
         First, I calculate 2 + 3 = 5
         Then, I multiply by 4: 5 * 4 = 20
         Finally, I subtract 8: 20 - 8 = 12
-        #### 12
+        <answer>12</answer>
         """
         self.assertEqual(self.reward("prompt", response, "12"), 1.0)
 
-    def test_call_with_units_and_formatting(self):
-        """Test __call__ with responses containing units and formatting."""
-        self.assertEqual(self.reward("prompt", "The cost is $42.50", "42.5"), 1.0)
-        self.assertEqual(self.reward("prompt", "Distance: 3.14 meters", "3.14"), 1.0)
-        self.assertEqual(self.reward("prompt", "Temperature is -5.5°C", "-5.5"), 1.0)
+    def test_call_within_tolerance(self):
+        """Test __call__ with answers within tolerance."""
+        # Default tolerance is 1e-6
+        self.assertEqual(
+            self.reward("prompt", "<answer>42.0000001</answer>", "42"), 1.0
+        )
+        self.assertEqual(
+            self.reward("prompt", "<answer>3.1400001</answer>", "3.14"), 1.0
+        )
+
+        # Custom tolerance
+        self.assertEqual(
+            self.custom_reward("prompt", "<answer>42.0001</answer>", "42"), 1.0
+        )
+        self.assertEqual(
+            self.custom_reward("prompt", "<answer>3.141</answer>", "3.14"), 1.0
+        )
+
+    def test_call_outside_tolerance(self):
+        """Test __call__ with answers outside tolerance."""
+        self.assertEqual(self.reward("prompt", "<answer>42.1</answer>", "42"), 0.0)
+        self.assertEqual(self.reward("prompt", "<answer>3.15</answer>", "3.14"), 0.0)
+        self.assertEqual(
+            self.custom_reward("prompt", "<answer>42.01</answer>", "42"), 0.0
+        )
+
+    def test_call_partial_credit_target_in_response(self):
+        """Test __call__ with partial credit when target appears in response."""
+        response = "The calculation shows 42 but I put <answer>43</answer>"
+        self.assertEqual(self.reward("prompt", response, "42"), 0.1)
+
+        response = "Let me work through this: 42 + 1 = 43. <answer>43</answer>"
+        self.assertEqual(self.reward("prompt", response, "42"), 0.1)
+
+    def test_call_partial_credit_custom_value(self):
+        """Test __call__ with custom partial credit value."""
+        response = "The calculation shows 42 but I put <answer>43</answer>"
+        self.assertEqual(self.custom_reward("prompt", response, "42"), 0.2)
+
+    def test_call_no_partial_credit_with_answer_tags(self):
+        """Test __call__ doesn't give partial credit if target is only in answer tags."""
+        response = "Let me solve this. <answer>42</answer>"
+        # Target 100 is not elsewhere in response, so no partial credit
+        self.assertEqual(self.reward("prompt", response, "100"), 0.0)
+
+    def test_call_integer_target_formatting(self):
+        """Test __call__ with integer targets formatted correctly."""
+        # Integer targets should be formatted without decimal point
+        response = "I calculated and got 117 as the answer. <answer>118</answer>"
+        self.assertEqual(self.reward("prompt", response, "117"), 0.1)
+
+        # Should work with 117.0 in target too
+        self.assertEqual(self.reward("prompt", response, "117.0"), 0.1)
+
+    def test_call_float_target_formatting(self):
+        """Test __call__ with float targets."""
+        response = "I calculated and got 3.14 as the answer. <answer>3.15</answer>"
+        self.assertEqual(self.reward("prompt", response, "3.14"), 0.1)
+
+    def test_call_invalid_target(self):
+        """Test __call__ with invalid target values."""
+        self.assertEqual(self.reward("prompt", "<answer>42</answer>", "invalid"), 0.0)
+        self.assertEqual(self.reward("prompt", "<answer>42</answer>", ""), 0.0)
+        self.assertEqual(
+            self.reward("prompt", "<answer>42</answer>", "not a number"), 0.0
+        )
+
+    def test_call_no_answer_tags(self):
+        """Test __call__ with response that has no answer tags."""
+        # Should still check for partial credit
+        self.assertEqual(self.reward("prompt", "The answer is 42", "42"), 0.1)
+        self.assertEqual(self.reward("prompt", "No matching number", "42"), 0.0)
+
+    def test_call_invalid_answer_in_tags(self):
+        """Test __call__ with invalid answer in tags."""
+        response = "<answer>not a number</answer> but 42 is correct"
+        self.assertEqual(self.reward("prompt", response, "42"), 0.1)
+
+    def test_call_zero_values(self):
+        """Test __call__ with zero values."""
+        self.assertEqual(self.reward("prompt", "<answer>0</answer>", "0"), 1.0)
+        self.assertEqual(self.reward("prompt", "<answer>0.0</answer>", "0"), 1.0)
+
+    def test_call_negative_values(self):
+        """Test __call__ with negative values."""
+        self.assertEqual(self.reward("prompt", "<answer>-42</answer>", "-42"), 1.0)
+        self.assertEqual(self.reward("prompt", "<answer>-3.14</answer>", "-3.14"), 1.0)
+
+    def test_call_large_numbers(self):
+        """Test __call__ with large numbers."""
+        self.assertEqual(
+            self.reward("prompt", "<answer>1000000</answer>", "1000000"), 1.0
+        )
+        self.assertEqual(self.reward("prompt", "<answer>1e6</answer>", "1000000"), 1.0)
+
+    def test_call_small_numbers(self):
+        """Test __call__ with very small numbers."""
+        self.assertEqual(
+            self.reward("prompt", "<answer>0.000001</answer>", "0.000001"), 1.0
+        )
+        self.assertEqual(
+            self.reward("prompt", "<answer>1e-6</answer>", "0.000001"), 1.0
+        )
+
+    def test_call_multiple_answer_tags(self):
+        """Test __call__ with multiple answer tags (should use first one)."""
+        response = "First answer: <answer>42</answer> Second: <answer>43</answer>"
+        self.assertEqual(self.reward("prompt", response, "42"), 1.0)
+        self.assertEqual(self.reward("prompt", response, "43"), 0.0)
+
+        # Test case where target appears outside answer tags for partial credit
+        response_with_partial = (
+            "I think the answer is 43. <answer>42</answer> But 43 might be better."
+        )
+        self.assertEqual(self.reward("prompt", response_with_partial, "43"), 0.1)
 
 
 if __name__ == "__main__":
