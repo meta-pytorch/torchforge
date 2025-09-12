@@ -206,9 +206,7 @@ class RLTrainer(ForgeActor):
             self.engine.checkpointer.close()
 
 
-def _qwen3_hf_to_vllm(
-    sd: dict[str, torch.Tensor], num_layers: int
-) -> dict[str, torch.Tensor]:
+def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tensor]:
     """Convert transformers state dict to vLLM format. Specifically, this fuses
     QKV projection and MLP gate_up_proj layers.
 
