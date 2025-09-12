@@ -40,7 +40,7 @@ class _SetupActor(Actor):
 
 
 class GpuManager:
-    """Tracks and assigns GPU devices on a host mesh.
+    """Tracks and assigns GPU devices on a host.
 
     This currently mimics the `gpu_manager` in system_controllers - we will
     consolidate as part of the "proper HostMesh integration" work.
@@ -48,7 +48,6 @@ class GpuManager:
     """
 
     def __init__(self):
-        # TODO - extend this to support multiple HostMeshes too
         self.available_gpus = set(range(0, 8))
 
     def get_available_gpus(self) -> list[str]:
