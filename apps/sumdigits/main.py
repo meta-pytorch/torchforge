@@ -5,9 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-import getpass
 import os
-import uuid
 
 from apps.sumdigits.sum_digits_data_loader import SumDigitsDataLoader
 
@@ -18,16 +16,8 @@ from forge.actors.policy_v1 import Policy
 
 from forge.data_models.experience import from_scored_completions
 from forge.data_models.minibatch import from_experiences
+from forge.util.metric_logging import get_metric_logger
 from monarch._src.actor.proc_mesh import proc_mesh as local_proc_mesh
-from torch.utils.tensorboard import SummaryWriter
-
-
-def _local_root_dir() -> str:
-    local_runs_root = os.path.expanduser("~/forge_local_runs")
-    job_name = f"rl_loca_run_{uuid.uuid4().hex}"
-    path = os.path.join(local_runs_root, job_name)
-    os.makedirs(path, exist_ok=True)
-    return os.path.abspath(path)
 
 
 async def main() -> None:
@@ -35,11 +25,15 @@ async def main() -> None:
     master_addr = "localhost"
     os.environ["MASTER_ADDR"] = master_addr
     os.environ["MASTER_PORT"] = str(master_port)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
-    model_name = "Qwen/Qwen3-1.7B-Base"
-    log_dir = f"{_local_root_dir()}/tb"
-    writer = SummaryWriter(log_dir=log_dir)
-    print(f"To launch a TensorBoard: tensorboard --logdir {log_dir}")
+    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    # ---- Setup WandB Logger ---- #
+    logger = get_metric_logger(
+        "wandb",
+        freq=1,
+        project="Qwen2.5-0.5B-Instruct-reinforce-training",
+    )
+
     learner_proc_mesh = await local_proc_mesh(
         hosts=1,
         gpus=1,
@@ -48,7 +42,7 @@ async def main() -> None:
 
     # change the master-port for policy mesh
     os.environ["MASTER_PORT"] = str(master_port + 1)
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "5,6,7"
     policy_proc_mesh = await local_proc_mesh(
         hosts=1,
         gpus=1,
@@ -103,11 +97,11 @@ async def main() -> None:
         mean_loss = total_loss / loss_count if loss_count > 0 else 0.0
         mean_score = total_score / score_count if score_count > 0 else 0.0
 
-        # Log to TensorBoard
-        writer.add_scalar("Loss/Mean", mean_loss, step)
-        writer.add_scalar("Score/Mean", mean_score, step)
-        writer.add_scalar("Metrics/Total_Prompts", total_prompts, step)
-        writer.add_scalar("Metrics/Total_Completions", total_completions, step)
+        # Log to wandb
+        logger.log("Loss/Mean", mean_loss, step)
+        logger.log("Score/Mean", mean_score, step)
+        logger.log("Metrics/Total_Prompts", total_prompts, step)
+        logger.log("Metrics/Total_Prompts", total_prompts, step)
 
         print(
             f"Step {step + 1}: Mean Loss: {mean_loss:.4f} | Mean Score: {mean_score:.4f} | Total Prompts: {total_prompts} | Total Completions: {total_completions}"
@@ -116,9 +110,6 @@ async def main() -> None:
         await trainer_mesh.apply_gradients.call_one()
         weights_buffer = await trainer_mesh.snapshot_weights.call_one()
         await policy_mesh.update_weights.call_one(weights_buffer)
-
-    # Close the writer when done
-    writer.close()
 
 
 if __name__ == "__main__":
