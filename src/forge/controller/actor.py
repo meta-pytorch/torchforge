@@ -59,10 +59,22 @@ class ForgeActor(Actor):
     @endpoint
     async def set_env(self, addr: str, port: str):
         """A temporary workaround to set master addr/port.
-        TODO - issues/144
+
+        TODO - issues/144. This should be done in proc_mesh creation.
+        The ideal path:
+        - Create a host mesh
+        - Grab a host from host mesh, from proc 0 spawn an actor that
+          gets addr/port
+        - Spawn procs on the HostMesh with addr/port, setting the
+          addr/port in bootstrap.
+
+        We can't currently do this because HostMesh only supports single
+        proc_mesh creation at the moment. This will be possible once
+        we have "proper HostMesh support".
+
         """
         import os
-        logger.info(f"Setting addr: {addr} and port: {port} ")
+
         os.environ["MASTER_ADDR"] = addr
         os.environ["MASTER_PORT"] = port
 

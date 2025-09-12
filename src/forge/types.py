@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, TypedDict, Union
 
 
 class Message(TypedDict):
@@ -94,10 +94,6 @@ class ProcessConfig:
     num_procs: int = 1
     with_gpus: bool = False
     num_hosts: int | None = None
-    # The following is mast specific.
-    oncall: str = "torchtune"
-    identity: str = "pytorch_distributed"
-    image: str = "forge_workspace:latest"
 
 
 @dataclass
