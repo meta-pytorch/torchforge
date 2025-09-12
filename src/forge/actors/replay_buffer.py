@@ -6,12 +6,11 @@
 
 import random
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
-from forge.data import Episode
 
 
 @dataclass
@@ -21,6 +20,7 @@ class ReplayBuffer(ForgeActor):
     batch_size: int
     max_policy_age: int
     seed: int | None = None
+    collate: Callable = lambda batch: batch
 
     @endpoint
     async def setup(self) -> None:
@@ -31,7 +31,7 @@ class ReplayBuffer(ForgeActor):
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, episode: Episode) -> None:
+    async def add(self, episode: "Episode") -> None:
         self.buffer.append(episode)
 
     @endpoint
@@ -60,7 +60,7 @@ class ReplayBuffer(ForgeActor):
             idx_to_sample, reverse=True
         )  # Sort in desc order to avoid shifting idxs
         sampled_episodes = [self.buffer.pop(i) for i in sorted_idxs]
-        return sampled_episodes
+        return self.collate(sampled_episodes)
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:

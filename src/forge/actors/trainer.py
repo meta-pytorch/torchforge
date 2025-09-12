@@ -10,10 +10,10 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from typing import Callable
 
-import torch
-from torch import nn
 from monarch.actor import current_rank, current_size, endpoint
+from torch import Tensor
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -32,7 +32,7 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
-from forge.data import Episode
+from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,6 +52,7 @@ class RLTrainer(ForgeActor):
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
+    loss: Callable = lambda logits, **targets: logits
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -94,20 +95,12 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
+        engine_config.pop("loss")  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
-        # Add Support for full GRPO Loss
-        self.loss = SimpleGRPOLoss()
         self.engine.optimizers.zero_grad()
 
-    def forward_backward(
-        self, 
-        request: torch.Tensor,
-        response: torch.Tensor,
-        ref_logprobs: torch.Tensor,
-        advantages: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward_backward(self, inputs: dict[Tensor], targets: dict[Tensor]) -> Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
 
@@ -162,39 +155,18 @@ class RLTrainer(ForgeActor):
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
-                    input_ids = torch.cat([request, response], dim=1)
-                    logits = model_parts[0](input_ids)
-                    logprobs = compute_logprobs(logits, response)
-                    print(logprobs.shape)
-                    del logits
-
-                    # compute loss
-                    loss = self.loss(logprobs, ref_logprobs, advantages, mask)
+                    logits = model_parts[0](**inputs)
+                    loss = self.loss(logits, **targets)
                 # need to free to before bwd to avoid peaking memory
-                del logprobs
+                del logits
                 loss.backward()
 
         return loss
 
     @endpoint
-    def train_step(self, batch: list[Episode]) -> None:
-        # TODO: move batch logic to buffer
-        pad_id = batch[0].pad_id
-
-        # prepare batch
-        device = self.engine.device
-        request = [e.request_tensor for e in batch]
-        request = torch.stack(request).to(device)  # [b x s]
-
-        response = [e.response_tensor for e in batch]
-        response = torch.stack(response).to(device)  # [b x s]
-
-        ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).to(device).squeeze()  # [b x s]
-
-        advantages = [e.advantage for e in batch]
-        advantages = torch.tensor(advantages).to(device).unsqueeze(-1)  # [b x 1]
-        del batch
+    def train_step(self, inputs: dict[Tensor], targets: dict[Tensor]) -> None:
+        batch_to_device(inputs, self.engine.device)
+        batch_to_device(targets, self.engine.device)
 
         # compute policy logprobs
         # TODO implement gradient accumulation
@@ -203,8 +175,7 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        mask = response != pad_id
-        loss = self.forward_backward(request, response, ref_logprobs, advantages, mask)
+        loss = self.forward_backward(inputs, targets)
 
         # # Gradient clipping (optional but recommended for stability)
         # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -221,7 +192,6 @@ class RLTrainer(ForgeActor):
 
         return {"loss": loss.item()}
 
-
     @endpoint
     def push_weights(self) -> None:
         pass
@@ -230,43 +200,3 @@ class RLTrainer(ForgeActor):
     async def cleanup(self) -> None:
         if self.engine.checkpointer:
             self.engine.checkpointer.close()
-
-
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
-
-
-class SimpleGRPOLoss(nn.Module):
-    """Simplified GRPO Loss for simplified single step updates
-    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
-    """
-
-    def __init__(self, epsilon=0.1, beta=0.1):
-        super().__init__()
-        self.epsilon = epsilon
-        self.beta = beta
-
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        per_token_kl = (
-            torch.exp(ref_logprobs.detach() - logprobs)
-            - (ref_logprobs.detach() - logprobs)
-            - 1
-        )
-        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-        per_token_loss = -(per_token_policy_loss - self.beta * per_token_kl)
-        loss = (
-            (per_token_loss * padding_mask).sum(dim=1)
-            / (padding_mask.sum(dim=1) + 1e-8)
-        ).mean()
-        return loss

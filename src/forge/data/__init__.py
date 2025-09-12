@@ -5,6 +5,5 @@
 # LICENSE file in the root directory of this source tree.
 from .collate import collate_packed
 from .utils import CROSS_ENTROPY_IGNORE_IDX
-from .episode import Episode
 
-__all__ = ["collate_packed", "CROSS_ENTROPY_IGNORE_IDX", "Episode"]
+__all__ = ["collate_packed", "CROSS_ENTROPY_IGNORE_IDX"]
