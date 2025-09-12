@@ -7,7 +7,7 @@
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, List
 
 from monarch.actor import endpoint
 
@@ -34,9 +34,6 @@ class ReplayBuffer(ForgeActor):
 
     @endpoint
     async def add(self, episode) -> None:
-        await self._add(episode)
-
-    async def _add(self, episode) -> None:
         key = f"rb_{uuid.uuid4().hex}"
         await self.store.put(key, episode)
 
@@ -56,13 +53,12 @@ class ReplayBuffer(ForgeActor):
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
-        await self._evict(curr_policy_version)
+        keys = await self.store.keys()
+        await self._evict(curr_policy_version, keys)
 
         total_available = await self.store.numel()
         if total_samples > total_available:
             return None
-
-        keys = await self.store.keys()
 
         # TODO: Make this more efficient
         idx_to_sample = self.sampler(range(len(keys)), k=total_samples)
@@ -86,23 +82,18 @@ class ReplayBuffer(ForgeActor):
         Args:
             curr_policy_version (int): The current policy version.
         """
-        await self._evict(curr_policy_version)
+        await self._evict(curr_policy_version, keys=await self.store.keys())
 
-    async def _evict(self, curr_policy_version: int) -> None:
-        keys = await self.store.keys()
+    async def _evict(self, curr_policy_version: int, keys: List[str]) -> None:
         for key in keys:
             episode = await self.store.get(key)
+            # TODO: Could store keys as policy_version+uuid to evict without fetching each episode
             if (curr_policy_version - episode.policy_version) > self.max_policy_age:
                 await self.store.delete(key)
 
     @endpoint
     async def _getitem(self, key: str):
         return await self.store.get(key)
-
-    @endpoint
-    async def items(self) -> list[tuple[str, Any]]:
-        keys = await self.store.keys()
-        return [(k, await self.store.get(k)) for k in keys]
 
     @endpoint
     async def _numel(self) -> int:

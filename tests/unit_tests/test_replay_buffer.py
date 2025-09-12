@@ -70,9 +70,6 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
 
-        # Capture the original key → episode mapping
-        original_kv = dict(replay_buffer.items.call_one().get())
-
         # Save state dict
         state_dict = replay_buffer.state_dict.call_one().get()
 
@@ -84,11 +81,11 @@ class TestReplayBuffer:
         await replay_buffer.load_state_dict.call_one(state_dict)
         assert replay_buffer._numel.call_one().get() == 2
 
-        # Capture the loaded key → episode mapping
-        loaded_kv = dict(replay_buffer.items.call_one().get())
+        # Save state again
+        restored_state_dict = replay_buffer.state_dict.call_one().get()
 
-        # Check that the mappings are identical
-        assert original_kv == loaded_kv
+        # Check equality (buffer contents + rng_state + seed)
+        assert state_dict == restored_state_dict
 
         replay_buffer.clear.call_one().get()
 
