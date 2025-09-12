@@ -255,6 +255,7 @@ class TestIntegration:
                         42  # curr_policy_version
                     )
                     if sampled_trajectory is not None:
+                        sampled_trajectory = sampled_trajectory[0]
                         sampled_trajectories.append(sampled_trajectory[0])
                         samples_collected += 1
 
