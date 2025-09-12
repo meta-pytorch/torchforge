@@ -25,7 +25,7 @@ Optional: By default, the packages installation uses conda. If user wants to ins
 After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
 
 ```
-python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml  --config apps/grpo/qwen3_1_7b.yaml
+python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml
 ```
 
 If you need to re-build the wheels for whatever reason, you can do so with:
