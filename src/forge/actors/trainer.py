@@ -106,7 +106,7 @@ class RLTrainer(ForgeActor):
         response: torch.Tensor,
         ref_logprobs: torch.Tensor,
         advantages: torch.Tensor,
-        mask: torch.Tensor
+        mask: torch.Tensor,
     ) -> torch.Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
@@ -165,10 +165,10 @@ class RLTrainer(ForgeActor):
                     input_ids = torch.cat([request, response], dim=1)
                     logits = model_parts[0](input_ids)
                     logprobs = compute_logprobs(logits, response)
+                    print(logprobs.shape)
                     del logits
 
                     # compute loss
-                    mask = response != pad_id
                     loss = self.loss(logprobs, ref_logprobs, advantages, mask)
                 # need to free to before bwd to avoid peaking memory
                 del logprobs
@@ -182,17 +182,18 @@ class RLTrainer(ForgeActor):
         pad_id = batch[0].pad_id
 
         # prepare batch
+        device = self.engine.device
         request = [e.request_tensor for e in batch]
-        request = torch.stack(request).to(self.device)  # [b x s]
+        request = torch.stack(request).to(device)  # [b x s]
 
         response = [e.response_tensor for e in batch]
-        response = torch.stack(response).to(self.device)  # [b x s]
+        response = torch.stack(response).to(device)  # [b x s]
 
         ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).to(self.device).squeeze()  # [b x s x v]
+        ref_logprobs = torch.stack(ref_logprobs).to(device).squeeze()  # [b x s]
 
         advantages = [e.advantage for e in batch]
-        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
+        advantages = torch.tensor(advantages).to(device).unsqueeze(-1)  # [b x 1]
         del batch
 
         # compute policy logprobs
@@ -202,7 +203,8 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        loss = self.forward_backward(request, response, ref_logprobs, advantages)
+        mask = response != pad_id
+        loss = self.forward_backward(request, response, ref_logprobs, advantages, mask)
 
         # # Gradient clipping (optional but recommended for stability)
         # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)

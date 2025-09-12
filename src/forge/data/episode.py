@@ -2,6 +2,7 @@ from typing import Any, Optional
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 
 @dataclass
 class Episode:

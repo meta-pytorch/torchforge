@@ -29,7 +29,7 @@ logger.setLevel(logging.INFO)
 async def run(cfg: DictConfig):
     trainer, replay_buffer = await asyncio.gather(
         spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=4),
+            ServiceConfig(procs_per_replica=4, with_gpus=True, num_replicas=1),
             RLTrainer,
             **cfg.trainer,
         ),
@@ -54,10 +54,10 @@ async def run(cfg: DictConfig):
             response_len=256,
             request_tokens=torch.randint(64_000, (req_len,), generator=g),
             response_tokens=torch.randint(64_000, (res_len,), generator=g),
-            ref_logprobs=torch.randn((512, 64_000), generator=g),
+            ref_logprobs=torch.randn((256,), generator=g),
             advantage=torch.randn((1,), generator=g)
         )
-        replay_buffer.add.choose(e)
+        await replay_buffer.add.choose(e)
 
     print("Train step...")
     batch = await replay_buffer.sample.choose(curr_policy_version=0)
