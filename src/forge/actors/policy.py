@@ -243,9 +243,6 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
-        return await self._generate(prompt, priority)
-
-    async def _generate(self, prompt: str, priority: int = 0) -> RequestOutput:
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
