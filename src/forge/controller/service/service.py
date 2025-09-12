@@ -145,7 +145,7 @@ class Service:
             **kwargs,
         )
 
-        class ConfiguredService(cls):
+        class ConfiguredService(Service):
             def __init__(self):
                 # Only store cfg; actor_def comes later in as_service
                 super().__init__(cfg, actor_def=None, actor_kwargs={})
