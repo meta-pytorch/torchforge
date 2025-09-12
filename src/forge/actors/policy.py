@@ -13,9 +13,9 @@ from copy import copy
 from dataclasses import asdict, dataclass, field, fields
 
 import torch
+import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM
+from torchstore.state_dict_utils import DELIM
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -107,14 +107,13 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
-    store: MultiProcessStore | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.weights_version: int = 0
-        self.running: bool = False
+        self.running = False
         if isinstance(self.engine_config, Mapping):
             self.engine_config = EngineConfig.from_dict(self.engine_config)
         if isinstance(self.sampling_config, Mapping):
@@ -128,7 +127,6 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
-        store: MultiProcessStore | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -161,7 +159,6 @@ class Policy(PolicyInterface):
             sampling_config=sampling_config,
             available_devices=available_devices,
             policy_worker=workers,
-            store=store,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -189,7 +186,7 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call(store=self.store)
+        await self.policy_worker.setup.call()
 
         self.request_id = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
@@ -343,9 +340,8 @@ class Policy(PolicyInterface):
 
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
-                    if request_output.request_id in self.requests:
-                        _, fut = self.requests.pop(request_output.request_id)
-                        fut.set_result(request_output)
+                    _, fut = self.requests.pop(request_output.request_id)
+                    fut.set_result(request_output)
 
     @endpoint
     async def update_weights(self):
@@ -403,8 +399,8 @@ class PolicyWorker(ForgeActor):
         self.vllm_args = self.vllm_args.create_engine_config(UsageContext.LLM_CLASS)
 
     @endpoint
-    async def setup(self, store: MultiProcessStore = None):
-        self.torchstore = store
+    async def setup(self):
+        self.store = await ts.initialize()
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -428,7 +424,7 @@ class PolicyWorker(ForgeActor):
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.torchstore.get(
+            stored_tensor = await self.store.get(
                 f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
@@ -440,7 +436,7 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        if self.torchstore is None:
+        if self.store is None:
             raise Exception("No torchstore configured, skipping model update")
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model

@@ -13,7 +13,7 @@ dataset:
   revision: "main"
   data_split: "train"
   streaming: true
-  tokenizer: ${model}
+  model: ${model}
   service:
     procs_per_replica: 1
     num_replicas: 1

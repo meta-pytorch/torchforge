@@ -14,9 +14,11 @@ from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
+import torchstore as ts
 from datasets import load_dataset
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
@@ -26,8 +28,7 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from src.forge.data.utils import exclude_service
 from torch import nn
-from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import DELIM, push_state_dict
+from torchstore.state_dict_utils import DELIM, put_state_dict
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -144,12 +145,11 @@ class Trainer(ForgeActor):
     learning_rate: float = 1e-5
     beta: float = 0.1
     device: torch.device | None = None
-    store: MultiProcessStore | None = None
     state_dict_key: str = "model_state_dict"
     dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
 
     @endpoint
-    def setup(self):
+    async def setup(self):
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -167,45 +167,9 @@ class Trainer(ForgeActor):
 
         self.loss = SimpleGRPOLoss(self.beta)
 
+        self.store = await ts.initialize()
+
         self.logger.info(f"Trainer model initialized on {self.device}")
-
-    def _qwen3_hf_to_vllm(self, saved_sd):
-        """Convert transformers state dict to vLLM format."""
-        load_sd = {}
-        num_layers = 28  # For Qwen3-1.7B
-
-        # Copy over directly mapped keys
-        for k in saved_sd:
-            if any(
-                x in k
-                for x in [
-                    "down_proj",
-                    "input_layernorm",
-                    "post_attention_layernorm",
-                    "o_proj",
-                    "norm.weight",
-                    "embed_tokens.weight",
-                    "lm_head.weight",
-                ]
-            ):
-                load_sd[k] = saved_sd[k]
-
-        # Fuse QKV and gate_up_proj
-        for i in range(num_layers):
-            prefix = f"model.layers.{i}."
-
-            # QKV fusion
-            q = saved_sd[prefix + "self_attn.q_proj.weight"]
-            k = saved_sd[prefix + "self_attn.k_proj.weight"]
-            v = saved_sd[prefix + "self_attn.v_proj.weight"]
-            load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
-
-            # MLP gate_up_proj fusion
-            gate = saved_sd[prefix + "mlp.gate_proj.weight"]
-            up = saved_sd[prefix + "mlp.up_proj.weight"]
-            load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-
-        return load_sd
 
     @endpoint
     async def train_step(self, batch: list[list[Episode]]):
@@ -238,16 +202,16 @@ class Trainer(ForgeActor):
         loss.backward()
         self.optimizer.step()
 
-        return loss.detach()
+        return loss.item()
 
     @endpoint
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
         start_time = time.time()
-        assert self.store is not None, "Store must be provided to save weights"
+        assert self.store is not None, "Store must be initialized to save weights"
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
-        new_sd = self._qwen3_hf_to_vllm(self.model.state_dict())
-        await push_state_dict(self.store, new_sd, key)
+        new_sd = _qwen3_hf_to_vllm(self.model.state_dict(), num_layers=28)
+        await put_state_dict(self.store, new_sd, key)
         end_time = time.time()
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
@@ -322,11 +286,11 @@ class DatasetActor(ForgeActor):
     revision: str = "main"
     data_split: str = "train"
     streaming: bool = True
-    tokenizer: str = "Qwen/Qwen3-1.7B"
+    model: str = "Qwen/Qwen3-1.7B"
 
     @endpoint
     def setup(self):
-        self._tokenizer = get_tokenizer(self.tokenizer)
+        self._tokenizer = get_tokenizer(self.model)
 
         def gsm8k_transform(sample):
             system_prompt = """
@@ -380,7 +344,6 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
-    store = await MultiProcessStore.create_store()
     (
         dataloader,
         policy,
@@ -399,13 +362,11 @@ async def main(cfg: DictConfig):
             ServiceConfig(**cfg.policy.service),
             Policy,
             **exclude_service(cfg.policy),
-            store=store,
         ),
         spawn_service(
             ServiceConfig(**cfg.trainer.service),
             Trainer,
             **exclude_service(cfg.trainer),
-            store=store,
         ),
         spawn_service(
             ServiceConfig(**cfg.replay_buffer.service),
