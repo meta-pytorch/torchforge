@@ -63,29 +63,34 @@ class Episode:
         return tensor
 
 
-def collate(batch: list[Episode]):
-    request = [e.request_tensor for e in batch]
-    request = torch.stack(request)  # [b x s]
+def collate(batches: list[list[Episode]]):
+    inputs = []
+    targets = []
+    for batch in batches:
+        request = [e.request_tensor for e in batch]
+        request = torch.stack(request)  # [b x s]
 
-    response = [e.response_tensor for e in batch]
-    response = torch.stack(response)  # [b x s]
+        response = [e.response_tensor for e in batch]
+        response = torch.stack(response)  # [b x s]
 
-    ref_logprobs = [e.ref_logprobs for e in batch]
-    ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
 
-    advantages = [e.advantage for e in batch]
-    advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
+        advantages = [e.advantage for e in batch]
+        advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
 
-    pad_id = batch[0].pad_id
-    mask = response != pad_id
+        pad_id = batch[0].pad_id
+        mask = response != pad_id
 
-    inputs = {"tokens": torch.cat([request, response], dim=1)}
-    targets = {
-        "response": response,
-        "ref_logprobs": ref_logprobs,
-        "advantages": advantages,
-        "padding_mask": mask,
-    }
+        input = {"tokens": torch.cat([request, response], dim=1)}
+        target = {
+            "response": response,
+            "ref_logprobs": ref_logprobs,
+            "advantages": advantages,
+            "padding_mask": mask,
+        }
+        inputs.append(input)
+        targets.append(target)
     return inputs, targets
 
 
@@ -148,7 +153,8 @@ async def run(cfg: DictConfig):
 
     print("Collecting Data...")
     g = torch.manual_seed(0)
-    for i in range(cfg.replay_buffer.batch_size):
+    global_batch_size = cfg.replay_buffer.batch_size * cfg.replay_buffer.dp_size
+    for i in range(global_batch_size):
         req_len, res_len = torch.randint(64, 256, (2,), generator=g).tolist()
         e = Episode(
             episode_id=i,

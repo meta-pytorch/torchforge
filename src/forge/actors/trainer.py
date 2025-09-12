@@ -164,7 +164,11 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    def train_step(self, inputs: dict[Tensor], targets: dict[Tensor]) -> None:
+    def train_step(
+        self, inputs: list[dict[Tensor]], targets: list[dict[Tensor]]
+    ) -> None:
+        inputs = inputs[self.engine.dp_rank]
+        targets = targets[self.engine.dp_rank]
         batch_to_device(inputs, self.engine.device)
         batch_to_device(targets, self.engine.device)
 

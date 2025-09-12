@@ -35,7 +35,7 @@ trainer:
 
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: -1
+    data_parallel_shard_degree: 4
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -59,4 +59,4 @@ replay_buffer:
   batch_size: 4
   max_policy_age: 2
   seed: None
-
+  dp_size: 4

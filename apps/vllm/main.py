@@ -6,94 +6,33 @@
 
 """To run:
 export HF_HUB_DISABLE_XET=1
-python -m apps.vllm.main --guided-decoding --num-samples 3
-
+python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
 """
 
-import argparse
 import asyncio
-from argparse import Namespace
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.policy import Policy
+from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+
+from omegaconf import DictConfig
+from src.forge.data.utils import exclude_service
 from vllm.outputs import RequestOutput
-from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
-async def main():
-    """Main application for running vLLM policy inference."""
-    args = parse_args()
+async def run(cfg: DictConfig):
 
-    # Create configuration objects
-    policy_config, service_config = get_configs(args)
+    if (prompt := cfg.get("prompt")) is None:
+        gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
+        prompt = "What is 3+5?" if gd else "Tell me a joke"
 
-    # Resolve the Prompts
-    if args.prompt is None:
-        prompt = "What is 3+5?" if args.guided_decoding else "Tell me a joke"
-    else:
-        prompt = args.prompt
-
-    # format prompt
-    tokenizer = get_tokenizer(policy_config.worker_params.model)
-    messages = [{"role": "user", "content": prompt}]
-    prompt = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-
-    # Run the policy
-    await run_vllm(service_config, policy_config, prompt)
-
-
-def parse_args() -> Namespace:
-    parser = argparse.ArgumentParser(description="VLLM Policy Inference Application")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="Qwen/Qwen3-1.7B",  # "meta-llama/Llama-3.1-8B-Instruct",
-        help="Model to use",
-    )
-    parser.add_argument(
-        "--num-samples", type=int, default=2, help="Number of samples to generate"
-    )
-    parser.add_argument(
-        "--guided-decoding", action="store_true", help="Enable guided decoding"
-    )
-    parser.add_argument(
-        "--prompt", type=str, default=None, help="Custom prompt to use for generation"
-    )
-    return parser.parse_args()
-
-
-def get_configs(args: Namespace) -> (PolicyConfig, ServiceConfig):
-
-    worker_size = 2
-    worker_params = WorkerConfig(
-        model=args.model,
-        tensor_parallel_size=worker_size,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-        vllm_args=None,
-    )
-
-    sampling_params = SamplingOverrides(
-        n=args.num_samples,
-        guided_decoding=args.guided_decoding,
-        max_tokens=16,
-    )
-
-    policy_config = PolicyConfig(
-        worker_params=worker_params, sampling_params=sampling_params
-    )
-    service_config = ServiceConfig(
-        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
-    )
-
-    return policy_config, service_config
-
-
-async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: str):
     print("Spawning service...")
-    policy = await spawn_service(service_config, Policy, config=config)
+
+    policy = await spawn_service(
+        ServiceConfig(**cfg.policy.service),
+        Policy,
+        **exclude_service(cfg.policy),
+    )
 
     async with policy.session():
         print("Requesting generation...")
@@ -112,5 +51,10 @@ async def run_vllm(service_config: ServiceConfig, config: PolicyConfig, prompt: 
     await shutdown_service(policy)
 
 
+@parse
+def recipe_main(cfg: DictConfig) -> None:
+    asyncio.run(run(cfg))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    recipe_main()

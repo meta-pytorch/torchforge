@@ -1,0 +1,75 @@
+# GRPO Training Configuration
+
+# Global configuration
+group_size: 4
+batch_size: 4
+max_req_tokens: 512
+max_res_tokens: 128
+model: "Qwen/Qwen3-1.7B-Base"
+
+# Dataset configuration
+dataset:
+  path: "openai/gsm8k"
+  revision: "main"
+  data_split: "train"
+  streaming: true
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+
+# Policy configuration
+policy:
+  engine_config:
+    model: ${model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: true
+  sampling_config:
+    n: 4
+    max_tokens: 128
+    temperature: 1.0
+    top_p: 1.0
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: true
+
+# Trainer configuration
+trainer:
+  learning_rate: 1e-5
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: true
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${batch_size}
+  max_policy_age: 0
+  dp_size: 1
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+
+# Compute advantages configuration
+compute_advantages:
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+
+# Reference model configuration
+ref_model:
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: true
+
+# Reward actor configuration
+reward_actor:
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
