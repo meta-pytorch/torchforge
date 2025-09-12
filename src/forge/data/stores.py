@@ -49,16 +49,13 @@ class KVStore(StoreInterface):
         # Remove and return a key-value pair (get + delete)
         return self._store.pop(key)
 
-    async def delete_all(self, prefix: str | None = None) -> int:
+    async def delete_all(self, prefix: str | None = None) -> None:
         # Delete all key-value pairs matching the given prefix
         if prefix is None:
             # Optimize for deleting all keys
-            count = len(self._store)
             self._store = {}
-            return count
         else:
             # Delete only keys matching the prefix
             keys_to_delete = await self.keys(prefix)
             for key in keys_to_delete:
                 del self._store[key]
-            return len(keys_to_delete)

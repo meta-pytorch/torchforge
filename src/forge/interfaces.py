@@ -319,7 +319,7 @@ class StoreInterface(ABC):
 
     # TODO: support this in torchstore.
     @abstractmethod
-    async def delete_all(self, prefix=None) -> int:
+    async def delete_all(self, prefix=None) -> None:
         """
         Delete all key-value pairs from the store matching the given prefix.
         The prefix matching follows reverse domain name notation convention.
@@ -330,8 +330,7 @@ class StoreInterface(ABC):
                 Note: None is the prefix of all keys, while "" is the prefix of keys
                 starting with "." and "" itself.
 
-        Returns:
-            int: The number of keys deleted from the store.
+        Returns: None
         """
         pass
 
