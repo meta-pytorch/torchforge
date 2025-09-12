@@ -22,7 +22,8 @@ conda activate forge
 
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices) (you need a minimum 3 GPU devices).
+After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
+
 ```
 python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml  --config apps/grpo/qwen3_1_7b.yaml
 ```
