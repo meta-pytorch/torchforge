@@ -35,6 +35,7 @@ If you need to re-build the wheels for whatever reason, you can do so with:
 For your information, since the vLLM wheel is too large for GitHub, we uploaded it as a release in the `install.sh` script:
 ```
 $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
+```
 
 ### Meta Internal Build (Alternative Route)
 
