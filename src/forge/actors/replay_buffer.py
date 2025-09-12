@@ -9,10 +9,10 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, List
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
 from forge.interfaces import StoreInterface
+
+from monarch.actor import endpoint
 
 
 @dataclass
@@ -52,8 +52,10 @@ class ReplayBuffer(ForgeActor):
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
+
+        await self._evict(curr_policy_version)
+
         keys = await self.store.keys()
-        await self._evict(curr_policy_version, keys)
 
         total_available = await self.store.numel()
         if total_samples > total_available:
@@ -81,9 +83,10 @@ class ReplayBuffer(ForgeActor):
         Args:
             curr_policy_version (int): The current policy version.
         """
-        await self._evict(curr_policy_version, keys=await self.store.keys())
+        await self._evict(curr_policy_version)
 
-    async def _evict(self, curr_policy_version: int, keys: List[str]) -> None:
+    async def _evict(self, curr_policy_version: int) -> None:
+        keys = await self.store.keys()
         for key in keys:
             episode = await self.store.get(key)
             # TODO: Could store keys as policy_version+uuid to evict without fetching each episode
