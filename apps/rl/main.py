@@ -57,12 +57,13 @@ async def run(cfg: DictConfig):
             ref_logprobs=torch.randn((512, 64_000), generator=g),
             advantage=torch.randn((1,), generator=g)
         )
-        replay_buffer.add(e)
+        replay_buffer.add.choose(e)
 
     print("Train step...")
     batch = await replay_buffer.sample.choose(curr_policy_version=0)
-    loss = await trainer.train_step.choose(batch)["loss"]
-    print("Loss: ", loss)
+    output = await trainer.train_step.choose(batch)
+    print(output) # philip
+    #print("Loss: ", output["loss"])
 
 
     print("Shutting down...")
