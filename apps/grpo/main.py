@@ -28,7 +28,7 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from src.forge.data.utils import exclude_service
 from torch import nn
-from torchstore.state_dict_utils import DELIM, put_state_dict
+from torchstore.state_dict_utils import DELIM
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -167,8 +167,6 @@ class Trainer(ForgeActor):
 
         self.loss = SimpleGRPOLoss(self.beta)
 
-        self.store = await ts.initialize()
-
         self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
@@ -207,11 +205,10 @@ class Trainer(ForgeActor):
     @endpoint
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
-        start_time = time.time()
-        assert self.store is not None, "Store must be initialized to save weights"
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(self.model.state_dict(), num_layers=28)
-        await put_state_dict(self.store, new_sd, key)
+        start_time = time.time()
+        await ts.put_state_dict(new_sd, key)
         end_time = time.time()
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
@@ -344,6 +341,7 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
+    await ts.initialize()
     (
         dataloader,
         policy,

@@ -400,7 +400,6 @@ class PolicyWorker(ForgeActor):
 
     @endpoint
     async def setup(self):
-        self.store = await ts.initialize()
         # TODO: remove ["gpus"] when monarch implements a flat rank
         self.rank = current_rank()["gpus"]
         self.worker = self.setup_worker()
@@ -424,7 +423,7 @@ class PolicyWorker(ForgeActor):
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await self.store.get(
+            stored_tensor = await ts.get(
                 f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
             )
             sharding.load_from_source_to_target(
@@ -436,8 +435,6 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        if self.store is None:
-            raise Exception("No torchstore configured, skipping model update")
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
