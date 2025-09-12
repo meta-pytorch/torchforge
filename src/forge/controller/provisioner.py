@@ -85,7 +85,9 @@ class Provisioner:
             self._this_host_id: GpuManager(),
         }
 
-    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
+    async def create_host_mesh(
+        self, name: str, num_hosts: int, num_gpus: int
+    ) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
         logger.debug(f"Creating remote server for alloc {name}")
@@ -97,7 +99,7 @@ class Provisioner:
             # We got this with sinfo
             role.resource.memMB = 2062607
             role.resource.cpu = 128
-            role.resource.gpu = 8
+            role.resource.gpu = num_gpus
 
         # TODO - multi scheduler support
         server_config = Config(
@@ -132,8 +134,11 @@ class Provisioner:
             server_name = None
             if num_hosts is not None and num_hosts > 0:
                 created_hosts = len(self._server_names)
+                # Assumes that you want a host mesh because you want its GPUs...
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=f"alloc-{created_hosts}", num_hosts=num_hosts
+                    name=f"alloc-{created_hosts}",
+                    num_hosts=num_hosts,
+                    num_gpus=num_procs,
                 )
                 host_id = uuid.uuid1()
                 gpu_manager = GpuManager()
