@@ -25,8 +25,7 @@ class ReplayBuffer(ForgeActor):
     dp_size: int = 1
     seed: int | None = None
 
-    @endpoint
-    async def setup(self) -> None:
+    def __post_init__(self):
         if self.seed is None:
             self.seed = random.randint(0, 2**32)
         random.seed(self.seed)

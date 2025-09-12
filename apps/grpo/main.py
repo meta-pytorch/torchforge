@@ -21,6 +21,7 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.data.stores import KVStore
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -377,6 +378,7 @@ async def main(cfg: DictConfig):
         spawn_service(
             ServiceConfig(**cfg.replay_buffer.service),
             ReplayBuffer,
+            store=KVStore(),
             **exclude_service(cfg.replay_buffer),
         ),
         spawn_service(

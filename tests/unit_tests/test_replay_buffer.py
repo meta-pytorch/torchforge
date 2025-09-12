@@ -28,7 +28,6 @@ class TestReplayBuffer:
             max_policy_age=1,
             dp_size=1,
         )
-        await replay_buffer.setup.call()
         return replay_buffer
 
     @pytest.mark.asyncio
@@ -158,7 +157,6 @@ class TestReplayBuffer:
             max_policy_age=1,
             dp_size=3,
         )
-        await replay_buffer.setup.call()
 
         # Add enough trajectories to sample
         for i in range(10):

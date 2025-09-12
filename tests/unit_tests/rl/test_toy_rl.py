@@ -217,7 +217,6 @@ class TestIntegration:
             max_policy_age=1,
             dp_size=1,
         )
-        await replay_buffer.setup.call()
         collector = await proc.spawn(
             "collector",
             Collector,
