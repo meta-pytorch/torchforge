@@ -7,12 +7,12 @@
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any
+
+from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
 from forge.interfaces import StoreInterface
-
-from monarch.actor import endpoint
 
 
 @dataclass
