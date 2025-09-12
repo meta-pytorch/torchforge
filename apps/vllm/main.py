@@ -52,8 +52,8 @@ async def run(cfg: DictConfig):
                 print(f"Assistant: {response.text}")
                 print("-" * 80)
 
-            print("\nShutting down...")
     finally:
+        print("\nShutting down...")
         await shutdown_service(policy)
         await shutdown()
 
