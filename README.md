@@ -6,7 +6,7 @@
 
 ## Installation
 
-### Basic
+### Build Script
 
 Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. For convenience,
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
@@ -37,9 +37,7 @@ Since the vLLM wheel is too large for GitHub, we uploaded it as a release:
 $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
 ```
 
-### Meta Internal Build
-
-1. Build uv package
+### UV Build
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -47,33 +45,6 @@ git clone https://github.com/pytorch-labs/forge
 cd forge
 uv sync --all-extras
 source .venv/bin/activate
-```
-
-2. Setup CUDA on local machine
-
-```bash
-# feature install if you don't have /user/local/cuda-12.8
-feature install --persist cuda_12_9
-
-# add env variables
-export CUDA_VERSION=12.9
-export NVCC=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_HOME=/usr/local/cuda-$CUDA_VERSION
-export PATH="$CUDA_HOME/bin:$PATH"
-export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
-export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-```
-
-3. Build vllm from source
-
-```bash
-git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
-cd vllm
-python use_existing_torch.py
-uv pip install -r requirements/build.txt
-uv pip install --no-build-isolation -e .
 ```
 
 > [!WARNING]
