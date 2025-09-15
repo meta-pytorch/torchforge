@@ -142,6 +142,7 @@ class Provisioner:
             else:
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
+                host_mesh._host_id = self._this_host_id
 
             if with_gpus:
                 # The ideal path here:
