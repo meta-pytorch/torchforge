@@ -149,8 +149,10 @@ def validate_loaded_tensors_equals_original(
                 atol=1e-3,
             ):
                 logger.warning(
-                    f"Loaded tensor {param_name} does not equal original. \ndtype = {loaded_tensor.dtype} vs {expected_tensor.dtype}\n"
-                    f"shape= {loaded_tensor.shape} vs {expected_tensor.shape}\n, values = {copy_of_loaded_tensor} vs {copy_of_expected_tensor}"
+                    f"Loaded tensor {param_name} does not equal original.\n"
+                    f"dtype = {loaded_tensor.dtype} vs {expected_tensor.dtype}\n"
+                    f"shape= {loaded_tensor.shape} vs {expected_tensor.shape}\n,"
+                    f"values = {loaded_tensor.copy()} vs {expected_tensor.copy()}"
                 )
                 raise ValueError(
                     f"Loaded tensor {param_name} does not equal original "
@@ -227,7 +229,7 @@ async def run_rl_trainer(worker_size) -> None:
         **cfg.trainer,
     )
     # Push the weights to torchstore
-    await rl_trainer.push_weights.choose()
+    await rl_trainer.push_weights.choose(policy_version=0)
 
 
 async def run_policy_integration(worker_size) -> Dict[str, torch.Tensor]:

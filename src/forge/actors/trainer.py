@@ -8,17 +8,16 @@
 import logging
 import math
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict
 
 import torch
-
 import torchstore as ts
-from forge.controller import ForgeActor
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
-from torch.distributed.checkpoint.state_dict_saver import _stateful_to_state_dict
+from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -34,6 +33,8 @@ from torchtitan.config.job_config import (
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
+
+from forge.controller import ForgeActor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -53,6 +54,7 @@ class RLTrainer(ForgeActor):
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
+    state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -264,34 +266,29 @@ class RLTrainer(ForgeActor):
     #     return {"loss": avg_loss, "groups_processed": num_groups_processed}
 
     @endpoint
-    async def push_weights(self) -> None:
-        # save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
-        # TODOs:
+    async def push_weights(self, policy_version: int) -> None:
+        # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
+        # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
         # 2. Unify CheckpointManager and TorchStore weights save control path.
-        print(f"Getting keys from checkpointer state and pushing to TS ...")
-        assert (
-            "model" in self.engine.checkpointer.states
-        ), "Model state not found in checkpointer state"
+        if "model" not in self.engine.checkpointer.states:
+            raise RuntimeError("Model state not found in checkpointer state")
         sd = self.engine.checkpointer.states["model"].state_dict()
-
         flattened_state_dict, _ = flatten_state_dict(sd)
-        # Save the state dict using HF format.
-        # 1. Use the torch.titan adaptor's 'to_hf' routines to convert the state dict.
-        # 2. Missing conversions ( QKV, MLP fusion) is done using custom code. Probably
-        #    we should move that code to 'to_hf' function.
-
-        assert (
-            self.engine.checkpointer.sd_adapter is not None
-        ), "trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+        if self.engine.checkpointer.sd_adapter is None:
+            raise RuntimeError(
+                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+            )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-
-        vllm_ready_hf_sd = llama3_hf_to_vllm(hf_trainer_sd=hf_state_dict)
-
-        await ts.put_state_dict(
-            state_dict=vllm_ready_hf_sd,
-            key=f"model_state_dict/{self.current_step}",
+        # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
+        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+        key = f"{self.state_dict_key}{DELIM}{policy_version}"
+        start_time = time.time()
+        await ts.put_state_dict(state_dict=vllm_ready_hf_sd, key=key)
+        end_time = time.time()
+        self.logger.debug(
+            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
 
     @endpoint
