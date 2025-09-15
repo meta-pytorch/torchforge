@@ -22,12 +22,13 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
+from forge.controller.provisioner import shutdown
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.data.utils import exclude_service
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
-from src.forge.data.utils import exclude_service
 from torch import nn
 from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import Model as TitanJobModelConfig
@@ -483,7 +484,11 @@ async def main(cfg: DictConfig):
             shutdown_service(compute_advantages),
             shutdown_service(ref_model),
             shutdown_service(reward_actor),
+            return_exceptions=True,
         )
+        # TODO - add a global shutdown that implicitly shuts down all services
+        # and remote allocations
+        await shutdown()
 
 
 if __name__ == "__main__":

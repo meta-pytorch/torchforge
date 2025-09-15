@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
@@ -91,6 +93,7 @@ class EngineConfig(EngineArgs):
     tensor_parallel_size: int = 1
     pipeline_parallel_size: int = 1
     enforce_eager: bool = False
+    enable_expert_parallel: bool = False
 
     # Original method returns False when not run in the main thread
     _is_v1_supported_oracle = lambda *_: True
@@ -103,7 +106,8 @@ class EngineConfig(EngineArgs):
         return cls(**valid_args)
 
     def create_vllm_config(self) -> VllmConfig:
-        # This is not a typo: EngineArgs.create_engine_config
+        """Converts the current EngineConfig into vLLM's vLLMConfig."""
+        # Note: EngineArgs.create_engine_config
         # creates a VllmConfig
         return self.create_engine_config(UsageContext.LLM_CLASS)
 
@@ -144,9 +148,15 @@ class Policy(PolicyInterface):
         # automatically.
         worker_procs = await get_proc_mesh(process_config=process_config)
 
-        # TODO - we will want to ensure colocation with workers
+        # TODO - issues/144 we will want to ensure colocation with workers
+        # We're currently locating the Policy on the local host proc mesh
+        # vLLM initialization without setting env variables at proc_mesh creation
+        # level leads to issues.
+        # Once we can create multiple proc meshes on a host mesh, we can ensure
+        # host colocation
         policy_proc_config = copy(process_config)
         policy_proc_config.num_procs = 1
+        policy_proc_config.num_hosts = None
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
@@ -201,7 +211,7 @@ class Policy(PolicyInterface):
         await self.policy_worker.setup.call()
 
         self.request_id = 0
-        self.requests: Dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
         # Setup sampling params
@@ -461,10 +471,6 @@ class PolicyWorker(ForgeActor):
         self.worker.compile_or_warm_up_model()
         self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
         return kv_cache_config
-
-    @endpoint
-    async def get_vllm_config(self) -> VllmConfig:
-        return self.vllm_config
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:

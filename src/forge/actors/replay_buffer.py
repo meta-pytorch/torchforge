@@ -6,7 +6,7 @@
 
 import random
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from monarch.actor import endpoint
 
@@ -21,6 +21,7 @@ class ReplayBuffer(ForgeActor):
     max_policy_age: int
     dp_size: int = 1
     seed: int | None = None
+    collate: Callable = lambda batch: batch
 
     @endpoint
     async def setup(self) -> None:
@@ -31,7 +32,7 @@ class ReplayBuffer(ForgeActor):
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, episode) -> None:
+    async def add(self, episode: "Episode") -> None:
         self.buffer.append(episode)
 
     @endpoint
@@ -55,7 +56,7 @@ class ReplayBuffer(ForgeActor):
         if total_samples > len(self.buffer):
             return None
 
-        # TODO: Make this more efficient
+        # TODO: prefetch samples in advance
         idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
         # Pop episodes in descending order to avoid shifting issues
         popped = [self.buffer.pop(i) for i in sorted(idx_to_sample, reverse=True)]
@@ -71,7 +72,7 @@ class ReplayBuffer(ForgeActor):
             for dp_idx in range(self.dp_size)
         ]
 
-        return reshaped_episodes
+        return self.collate(reshaped_episodes)
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:
