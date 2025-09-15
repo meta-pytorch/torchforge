@@ -358,7 +358,7 @@ EOF
     log_info "Installation completed successfully!"
     echo ""
     log_info "Re-activate the conda environment to make the changes take effect:"
-    log_info "  conda activate $CONDA_DEFAULT_ENV"
+    log_info "  conda deactivate && conda activate $CONDA_DEFAULT_ENV"
 }
 
 main "$@"
