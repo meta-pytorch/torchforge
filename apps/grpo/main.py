@@ -21,6 +21,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
+from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.data.utils import exclude_service
 from forge.util.metric_logging import get_metric_logger
