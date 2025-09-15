@@ -18,6 +18,7 @@ import torch
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
+from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
@@ -64,6 +65,8 @@ class SamplingConfig:
     n: int = 1
     guided_decoding: bool = False
     max_tokens: int = 512
+    temperature: float = 1.0
+    top_p: float = 1.0
 
     def __post_init__(self):
         gd_params = None
@@ -92,6 +95,9 @@ class EngineConfig(EngineArgs):
     enforce_eager: bool = False
     enable_expert_parallel: bool = False
 
+    # Original method returns False when not run in the main thread
+    _is_v1_supported_oracle = lambda *_: True
+
     @classmethod
     def from_dict(cls, d: Mapping):
         d = dict(d)
@@ -99,15 +105,11 @@ class EngineConfig(EngineArgs):
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
 
-    @classmethod
-    def as_engine_args(cls, config: Mapping | EngineConfig) -> EngineConfig:
-        if isinstance(config, Mapping):
-            config = EngineConfig.from_dict(config)
-
-        # Original method returns False when not run in the main thread
-        config._is_v1_supported_oracle = lambda *_: True
-        # Build Config
-        return config.create_engine_config(UsageContext.LLM_CLASS)
+    def create_vllm_config(self) -> VllmConfig:
+        """Converts the current EngineConfig into vLLM's vLLMConfig."""
+        # Note: EngineArgs.create_engine_config
+        # creates a VllmConfig
+        return self.create_engine_config(UsageContext.LLM_CLASS)
 
 
 @dataclass
@@ -162,12 +164,13 @@ class Policy(PolicyInterface):
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
-        if isinstance(engine_config, Mapping):
-            sampling_config = SamplingConfig(**sampling_config)
-
+        vllm_config = engine_config.create_vllm_config()
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_args=engine_config
+            "vllm_worker", PolicyWorker, vllm_config=vllm_config
         )
+
+        if isinstance(sampling_config, Mapping):
+            sampling_config = SamplingConfig(**sampling_config)
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
@@ -209,23 +212,23 @@ class Policy(PolicyInterface):
 
         self.request_id = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.vllm_args = EngineConfig.as_engine_args(self.engine_config)
+        self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_args, overrides=asdict(self.sampling_config)
+            self.vllm_config, overrides=asdict(self.sampling_config)
         )
 
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
         tokenizer = init_tokenizer_from_configs(
-            model_config=self.vllm_args.model_config,
-            scheduler_config=self.vllm_args.scheduler_config,
-            lora_config=self.vllm_args.lora_config,
+            model_config=self.vllm_config.model_config,
+            scheduler_config=self.vllm_config.scheduler_config,
+            lora_config=self.vllm_config.lora_config,
         )
         self.processor = Processor(
-            vllm_config=self.vllm_args, tokenizer=tokenizer, mm_registry=None
+            vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
@@ -233,12 +236,12 @@ class Policy(PolicyInterface):
         # TODO: Add support for `log_stats`
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         kv_cache_config = kv_cache_configs._values[0]
-        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_args.cache_config.num_cpu_blocks = 0
+        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_config.cache_config.num_cpu_blocks = 0
 
-        structured_output_manager = StructuredOutputManager(self.vllm_args)
+        structured_output_manager = StructuredOutputManager(self.vllm_config)
         self.scheduler = Scheduler(
-            vllm_config=self.vllm_args,
+            vllm_config=self.vllm_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
             include_finished_set=False,
@@ -273,7 +276,7 @@ class Policy(PolicyInterface):
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
-            self.vllm_args.model_config.max_model_len,
+            self.vllm_config.model_config.max_model_len,
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
@@ -335,7 +338,7 @@ class Policy(PolicyInterface):
     async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
-        parallel_config = self.vllm_args.parallel_config
+        parallel_config = self.vllm_config.parallel_config
         output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
         while self.running:
@@ -390,23 +393,8 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    vllm_args: EngineConfig | Mapping = EngineConfig()
+    vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
-
-    def __post_init__(self):
-        """Build vLLM Arguments
-
-        vLLM specific TODOS
-        - output format
-        - check_health
-        - _aggregate workers output
-        - register_failure_callback
-
-        Testing
-        - all LLM generate methods, verify against LLM inputs
-        - all executor methods verify no changes
-        """
-        self.vllm_args = EngineConfig.as_engine_args(self.vllm_args)
 
     @endpoint
     async def setup(self):
@@ -425,7 +413,7 @@ class PolicyWorker(ForgeActor):
         Load full state dict from torchstore into tensor parallel model with deterministic sharding.
         """
         sharding = VLLMSharding(
-            self.vllm_args.parallel_config.tensor_parallel_size, self.rank
+            self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
 
         for param_name in current_state_dict.keys():
@@ -468,16 +456,16 @@ class PolicyWorker(ForgeActor):
 
         # Get the kv cache tensor size
         kv_cache_config = get_kv_cache_config(
-            self.vllm_args, kv_cache_spec, available_gpu_memory
+            self.vllm_config, kv_cache_spec, available_gpu_memory
         )
         # TODO: unify configs across TorchStore
         # unify_kv_cache_configs(kv_cache_configs)
-        self.vllm_args.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_args.cache_config.num_cpu_blocks = 0
+        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_config.cache_config.num_cpu_blocks = 0
 
         # Initialize kv cache and warmup the execution:
         # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
-        kv_cache_configs = [None] * self.vllm_args.parallel_config.world_size
+        kv_cache_configs = [None] * self.vllm_config.parallel_config.world_size
         kv_cache_configs[self.rank] = kv_cache_config
         self.worker.initialize_from_config(kv_cache_configs)
         self.worker.compile_or_warm_up_model()
@@ -497,7 +485,7 @@ class PolicyWorker(ForgeActor):
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
-        parallel_config = self.vllm_args.parallel_config
+        parallel_config = self.vllm_config.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
         distributed_init_method = get_distributed_init_method(ip, port)
@@ -505,13 +493,13 @@ class PolicyWorker(ForgeActor):
         local_rank = self.rank % torch.accelerator.device_count()
         is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
         all_kwargs[self.rank] = {
-            "vllm_config": self.vllm_args,
+            "vllm_config": self.vllm_config,
             "local_rank": local_rank,
             "rank": self.rank,
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
-        worker = WorkerWrapperBase(self.vllm_args, self.rank)
+        worker = WorkerWrapperBase(self.vllm_config, self.rank)
         worker.init_worker(all_kwargs)
         worker.init_device()
         worker.load_model()
