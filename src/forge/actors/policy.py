@@ -418,6 +418,7 @@ class PolicyWorker(ForgeActor):
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
+
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
             stored_tensor = await ts.get(
