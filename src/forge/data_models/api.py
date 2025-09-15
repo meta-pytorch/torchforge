@@ -7,8 +7,11 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Tuple
 
+from forge.data_models.completion import Completion
+
 from forge.data_models.loss import LossOutput
 from forge.data_models.minibatch import Minibatch
+from forge.data_models.prompt import Prompt
 
 
 # TODO: This file needs should NOT be in the data_models folder/package
@@ -133,5 +136,40 @@ class Trainer(ABC):
         The returned buffer can be used to transfer weights between components or for checkpointing.
         Returns:
             WeightsBuffer: A handle or reference to the stored weights buffer.
+        """
+        pass
+
+
+class Generator(ABC):
+    """
+    Abstract base class for a model generator in RL or sequence modeling workflows.
+    This class defines the interface for any generator implementation, which is responsible
+    for producing completions (e.g., text, actions) given a prompt, and for updating its
+    internal model weights. Subclasses should implement the actual logic for generation
+    and weight updates, which may vary depending on the underlying model or framework.
+    """
+
+    @abstractmethod
+    def generate(self, prompt: Prompt) -> list[Completion]:
+        """
+        Generate completions given a prompt.
+        This method should use the current model to produce one or more completions
+        (e.g., text outputs, actions) based on the provided prompt.
+        Args:
+            prompt (Prompt): The input prompt or context for generation.
+        Returns:
+            list[Completion]: A list of generated completions corresponding to the prompt.
+        """
+        pass
+
+    @abstractmethod
+    def update_weights(self, weights_handle: WeightsBuffer) -> None:
+        """
+        Update the weights of the model using the provided weights buffer.
+        This method should update the generator's internal model parameters using
+        the weights stored in the given WeightsBuffer (which may be local or remote).
+        Args:
+            weights_handle (WeightsBuffer): A handle or reference to the weights buffer
+                                            containing the new model weights.
         """
         pass
