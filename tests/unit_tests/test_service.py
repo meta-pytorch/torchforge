@@ -64,7 +64,7 @@ class Counter(ForgeActor):
 async def test_actor_def_type_validation():
     """Test that .options() rejects classes that are not ForgeActor subclasses."""
 
-    # Only spawn ForgeActor subclasses has options method
+    # Only `ForgeActor`s can be spawned as services
     class InvalidActor(Actor):
         def __init__(self):
             pass
