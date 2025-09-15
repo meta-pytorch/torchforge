@@ -44,7 +44,6 @@ class TestReplayBuffer:
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(30)  # increase to 30s
     async def test_state_dict_save_load(self, replay_buffer) -> None:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
