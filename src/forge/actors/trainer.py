@@ -11,11 +11,16 @@ import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
-from typing import Any, Dict
+from typing import Callable
 
 import torch
 import torchstore as ts
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+
 from monarch.actor import current_rank, current_size, endpoint
+from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
 from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import (
@@ -33,8 +38,6 @@ from torchtitan.config.job_config import (
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -54,6 +57,7 @@ class RLTrainer(ForgeActor):
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
+    loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
 
     def __post_init__(self):
@@ -96,25 +100,19 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
-        engine_config = {
-            f.name: getattr(self, f.name)
-            for f in fields(self)
-            if f.name != "state_dict_key"  # TODO: Make this less hardcoded
-        }
+        engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
+        for key in {"loss", "state_dict_key"}:
+            engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
         self.engine.optimizers.zero_grad()
 
-    def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
-    ) -> torch.Tensor:
+    def forward_backward(self, inputs: dict[Tensor], targets: dict[Tensor]) -> Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
-        inputs = input_dict["tokens"]
-
         if getattr(self.engine.model_args, "use_flex_attn", False):
             cp_mesh = (
                 parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
@@ -164,30 +162,34 @@ class RLTrainer(ForgeActor):
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
-                    pred = model_parts[0](inputs)
-                    loss = self.engine.loss_fn(pred, labels)
+                    logits = model_parts[0](**inputs)
+                    loss = self.loss(logits, **targets)
                 # need to free to before bwd to avoid peaking memory
-                del pred
+                del logits
                 loss.backward()
 
         return loss
 
     @endpoint
-    def train_step(self, batch) -> None:
-        # Move tensors to the appropriate device
-        for k, v in batch.items():
-            if isinstance(v, torch.Tensor):
-                batch[k] = v.to("cuda")  # TODO: hardcoded for now
+    def train_step(
+        self, inputs: list[dict[Tensor]], targets: list[dict[Tensor]]
+    ) -> None:
+        inputs = inputs[self.engine.dp_rank]
+        targets = targets[self.engine.dp_rank]
+        batch_to_device(inputs, self.engine.device)
+        batch_to_device(targets, self.engine.device)
 
+        # compute policy logprobs
         # TODO implement gradient accumulation
         # with GradientAccumulation(
         #     self.gradient_accumulation_steps,
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        # TODO: convert to GRPO Loss
-        labels = batch.pop("labels")
-        loss = self.forward_backward(batch, labels)
+        loss = self.forward_backward(inputs, targets)
+
+        # # Gradient clipping (optional but recommended for stability)
+        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
@@ -199,75 +201,7 @@ class RLTrainer(ForgeActor):
             last_step=self.current_step == self.num_training_steps,
         )
 
-    # TODO: integrate the grpo app step with the above step
-    # def train_step(self, self, batch: list(Episode)):
-    #     total_loss = 0.0
-    #     num_groups_processed = 0
-    #
-    #     for episode in batch:
-    #         groups = episode.groups
-    #
-    #         # Collect all response texts and corresponding data
-    #         response_texts = []
-    #         ref_logprobs_list = []
-    #         advantages_list = []
-    #
-    #         for group in groups:
-    #             response_texts.append(group.response)
-    #             ref_logprobs_list.append(group.ref_logprobs)
-    #             advantages_list.append(group.advantage)
-    #
-    #         # Tokenize all responses in batch
-    #         tokenized = self.tokenizer(
-    #             response_texts,
-    #             padding=True,
-    #             truncation=True,
-    #             return_tensors="pt",
-    #             max_length=512,  # Adjust based on your needs
-    #         )
-    #
-    #         input_ids = tokenized["input_ids"].to(self.device)
-    #         attention_mask = tokenized["attention_mask"].to(self.device)
-    #
-    #         # Compute current policy log probabilities using the model
-    #         current_logprobs = compute_sequence_logprobs(
-    #             self.model, input_ids, attention_mask, requires_grad=True
-    #         )
-    #
-    #         # Convert ref_logprobs and advantages to tensors
-    #         ref_logprobs_tensor = torch.stack(ref_logprobs_list).to(self.device)
-    #         advantages_tensor = torch.tensor(advantages_list, dtype=torch.float32).to(
-    #             self.device
-    #         )
-    #
-    #         # Compute GRPO loss components
-    #         # Ratio between current policy and reference policy
-    #         ratio = torch.exp(current_logprobs - ref_logprobs_tensor)
-    #
-    #         # Policy gradient loss weighted by advantages
-    #         pg_loss = -torch.mean(ratio * advantages_tensor)
-    #
-    #         # KL penalty to prevent policy from deviating too far from reference
-    #         kl_penalty = self.beta * torch.mean(
-    #             (current_logprobs - ref_logprobs_tensor) ** 2
-    #         )
-    #
-    #         # Total GRPO loss
-    #         loss = pg_loss + kl_penalty
-    #         total_loss += loss.item()
-    #         num_groups_processed += len(groups)
-    #
-    #         self.optimizer.zero_grad()
-    #         loss.backward()
-    #
-    #         # Gradient clipping (optional but recommended for stability)
-    #         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-    #
-    #         self.optimizer.step()
-    #
-    #     avg_loss = total_loss / len(batch) if batch else 0.0
-    #
-    #     return {"loss": avg_loss, "groups_processed": num_groups_processed}
+        return {"loss": loss.item()}
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
@@ -301,32 +235,7 @@ class RLTrainer(ForgeActor):
             self.engine.checkpointer.close()
 
 
-def llama3_hf_to_vllm(hf_trainer_sd: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert HF formatted state-dict to VLLM format. Ideally this conversion
-    should not be needed, if the VLLM fully supports the loading of
-    HF formatted llama3 model.
-    """
-    for i in range(32):  # number of layers in llama3 8B model.
-        prefix = f"model.layers.{i}."
-        # QKV fusion
-        q = hf_trainer_sd.pop(prefix + "self_attn.q_proj.weight")
-        k = hf_trainer_sd.pop(prefix + "self_attn.k_proj.weight")
-        v = hf_trainer_sd.pop(prefix + "self_attn.v_proj.weight")
-        hf_trainer_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat(
-            [q, k, v], dim=0
-        )
-        # MLP gate_up_proj fusion
-        gate = hf_trainer_sd.pop(prefix + "mlp.gate_proj.weight")
-        up = hf_trainer_sd.pop(prefix + "mlp.up_proj.weight")
-        hf_trainer_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-
-    return hf_trainer_sd
-
-
-def _qwen3_hf_to_vllm(
-    sd: dict[str, torch.Tensor], num_layers: int
-) -> dict[str, torch.Tensor]:
+def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tensor]:
     """Convert transformers state dict to vLLM format. Specifically, this fuses
     QKV projection and MLP gate_up_proj layers.
 
