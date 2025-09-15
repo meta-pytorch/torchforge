@@ -9,6 +9,7 @@
 import pytest
 import pytest_asyncio
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.data.stores import KVStore
 from forge.types import Trajectory
 
 from monarch.actor import proc_mesh
@@ -18,10 +19,15 @@ class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
         mesh = await proc_mesh(gpus=1)
+        backend = KVStore()
         replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
+            "replay_buffer",
+            ReplayBuffer,
+            backend=backend,
+            batch_size=2,
+            max_policy_age=1,
+            dp_size=1,
         )
-        await replay_buffer.setup.call()
         return replay_buffer
 
     @pytest.mark.asyncio
@@ -29,7 +35,12 @@ class TestReplayBuffer:
         trajectory = Trajectory(policy_version=0)
         await replay_buffer.add.call_one(trajectory)
         assert replay_buffer._numel.call_one().get() == 1
-        assert replay_buffer._getitem.call_one(0).get() == trajectory
+        assert (
+            replay_buffer.sample.call_one(curr_policy_version=1, batch_size=1).get()[0][
+                0
+            ]
+            == trajectory
+        )
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -39,19 +50,42 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
         assert replay_buffer._numel.call_one().get() == 2
-        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
-        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
+        sampled = replay_buffer.sample.call_one(
+            curr_policy_version=1, batch_size=2
+        ).get()
+        flat_sampled = [ep for dp in sampled for ep in dp]
+        assert all(ep in [trajectory_0, trajectory_1] for ep in flat_sampled)
+
+        # By curr_policy_version = 2, t0 should be evicted (age > 1)
+        result = replay_buffer.sample.call_one(curr_policy_version=2).get()
+        assert result is None  # not enough episodes left (only t1 remains)
+
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_state_dict_save_load(self, replay_buffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        trajectory_0 = Trajectory(policy_version=0)
+        trajectory_1 = Trajectory(policy_version=1)
+        await replay_buffer.add.call_one(trajectory_0)
+        await replay_buffer.add.call_one(trajectory_1)
+
+        # Save state dict
         state_dict = replay_buffer.state_dict.call_one().get()
+
+        # Clear the buffer
         replay_buffer.clear.call_one().get()
         assert replay_buffer._numel.call_one().get() == 0
+
+        # Load state dict
         await replay_buffer.load_state_dict.call_one(state_dict)
-        assert replay_buffer._numel.call_one().get() == 1
+        assert replay_buffer._numel.call_one().get() == 2
+
+        # Save state again
+        restored_state_dict = replay_buffer.state_dict.call_one().get()
+
+        # Check equality (buffer contents + rng_state + seed)
+        assert state_dict == restored_state_dict
+
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
@@ -113,11 +147,16 @@ class TestReplayBuffer:
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
         mesh = await proc_mesh(gpus=1)
+        backend = KVStore()
         # Create replay buffer with dp_size=3
         replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1, dp_size=3
+            "replay_buffer",
+            ReplayBuffer,
+            backend=backend,
+            batch_size=2,
+            max_policy_age=1,
+            dp_size=3,
         )
-        await replay_buffer.setup.call()
 
         # Add enough trajectories to sample
         for i in range(10):

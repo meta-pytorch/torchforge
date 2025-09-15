@@ -17,6 +17,8 @@ import torch
 from forge.actors.collector import Collector
 
 from forge.actors.replay_buffer import ReplayBuffer
+
+from forge.data.stores import KVStore
 from forge.interfaces import Environment, Policy
 from forge.types import Action, Observation, State
 from monarch.actor import endpoint, proc_mesh
@@ -141,8 +143,10 @@ async def main():
     replay_buffer = await replay_procs.spawn(
         "replay_buffer",
         ReplayBuffer,
-        SAMPLES_PER_BATCH,  # batch_size
-        float("inf"),  # max_policy_age
+        backend=KVStore(),
+        batch_size=SAMPLES_PER_BATCH,
+        max_policy_age=float("inf"),
+        dp_size=1,
     )
 
     # TODO - add in an example of a "vLLM executor" and "vLLM controller"

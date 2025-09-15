@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from forge.actors import ReplayBuffer, RLTrainer
 from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.data.stores import KVStore
 from omegaconf import DictConfig
 from torch import Tensor
 
@@ -145,6 +146,7 @@ async def run(cfg: DictConfig):
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             ReplayBuffer,
+            backend=KVStore(),
             collate=collate,
             **cfg.replay_buffer,
         ),

@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
+from typing import Any, List, Mapping
 
 from monarch.actor import endpoint
 
@@ -205,6 +205,133 @@ class Reward(ABC):
     @abstractmethod
     def __call__(self, observation: Observation) -> float:
         """Compute a reward for an observation."""
+        pass
+
+
+class StoreInterface(ABC):
+    """
+    Abstract base class for a KV store. This closely follows the interface of
+    torchstore.
+    """
+
+    # TODO: support this in torchstore.
+    @abstractmethod
+    async def numel(self, prefix=None) -> int:
+        """Return the number of keys starting with the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+        Returns:
+            int: The number of keys matching the prefix in the store.
+        """
+        pass
+
+    @abstractmethod
+    async def keys(self, prefix=None) -> List[str]:
+        """Return an iterable of all keys in the store matching the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+        prefix (str): The prefix to match against stored keys.
+            For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+            Note: None is the prefix of all keys, while "" is the prefix of keys
+            starting with "." and "" itself.
+
+        Returns:
+            Iterable[K]: An iterable containing all keys in the buffer.
+        """
+        pass
+
+    @abstractmethod
+    async def put(self, key: str, value: Any) -> None:
+        """
+        Add a key-value pair to the buffer.
+
+        Args:
+            key (K): The key to store the value under
+            val (V): The value to store in the buffer
+
+        Returns:
+            None
+        """
+        pass
+
+    @abstractmethod
+    async def get(self, key: str) -> Any:
+        """
+        Get a key-value pair from the store.
+
+        Args:
+            key (K): The key to get
+
+        Returns:
+            V: The value stored under the key
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+        pass
+
+    @abstractmethod
+    async def exists(self, key: str) -> bool:
+        """
+        Check if a key exists in the store.
+        """
+        pass
+
+    # TODO: support this in torchstore.
+    @abstractmethod
+    async def pop(self, key: str) -> Any:
+        """
+        Get a key-value pair from the store, and delete it from the store.
+
+        Args:
+            key (K): The key to get
+
+        Returns:
+            V: The value stored under the key
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+
+    # TODO: support this in torchstore.
+    @abstractmethod
+    async def delete(self, key: str) -> None:
+        """
+        Delete a key-value pair from the store.
+
+        Args:
+            key (K): The key to delete
+
+        Returns:
+            None
+
+        Raises:
+            KeyError: If the key does not exist in the store
+        """
+        pass
+
+    # TODO: support this in torchstore.
+    @abstractmethod
+    async def delete_all(self, prefix=None) -> None:
+        """
+        Delete all key-value pairs from the store matching the given prefix.
+        The prefix matching follows reverse domain name notation convention.
+
+        Args:
+            prefix (str): The prefix to match against stored keys.
+                For example, "xyz" matches "xyz.abc.def" but "xy" does not.
+                Note: None is the prefix of all keys, while "" is the prefix of keys
+                starting with "." and "" itself.
+
+        Returns: None
+        """
         pass
 
 
