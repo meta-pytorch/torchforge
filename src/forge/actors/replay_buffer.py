@@ -7,7 +7,7 @@
 import random
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from forge.controller import ForgeActor
 from forge.interfaces import StoreInterface
@@ -24,6 +24,7 @@ class ReplayBuffer(ForgeActor):
     max_policy_age: int
     dp_size: int = 1
     seed: int | None = None
+    collate: Callable = lambda batch: batch
 
     def __post_init__(self):
         if self.seed is None:
@@ -32,7 +33,7 @@ class ReplayBuffer(ForgeActor):
         self.sampler = random.sample
 
     @endpoint
-    async def add(self, episode) -> None:
+    async def add(self, episode: "Episode") -> None:
         key = f"rb_{uuid.uuid4().hex}"
         await self.backend.put(key, episode)
 
@@ -61,7 +62,7 @@ class ReplayBuffer(ForgeActor):
         if total_samples > total_available:
             return None
 
-        # TODO: Make this more efficient
+        # TODO: prefetch samples in advance
         idx_to_sample = self.sampler(range(len(keys)), k=total_samples)
 
         # Fetch and remove the sampled episodes
@@ -73,7 +74,7 @@ class ReplayBuffer(ForgeActor):
             for dp_idx in range(self.dp_size)
         ]
 
-        return reshaped_episodes
+        return self.collate(reshaped_episodes)
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:

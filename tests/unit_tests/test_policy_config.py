@@ -44,6 +44,7 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertEqual(policy.engine_config.tensor_parallel_size, 1)
         self.assertEqual(policy.engine_config.pipeline_parallel_size, 1)
         self.assertFalse(policy.engine_config.enforce_eager)
+        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
         # Sampling defaults
         self.assertEqual(policy.sampling_config.n, 1)
@@ -91,6 +92,7 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertEqual(policy.engine_config.tensor_parallel_size, 7777)
         self.assertEqual(policy.engine_config.pipeline_parallel_size, 8888)
         self.assertTrue(policy.engine_config.enforce_eager)
+        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
         self.assertEqual(policy.sampling_config.n, 1357)
         # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
@@ -143,6 +145,7 @@ class TestPolicyConfig(unittest.TestCase):
             self.assertEqual(policy.engine_config.tensor_parallel_size, 1234)
             self.assertEqual(policy.engine_config.pipeline_parallel_size, 5678)
             self.assertTrue(policy.engine_config.enforce_eager)
+            self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
             self.assertEqual(policy.sampling_config.n, 2468)
             # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
