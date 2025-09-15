@@ -45,22 +45,45 @@ class ForgeActor(Actor):
 
     @classmethod
     def options(
-        cls, *, num_replicas: int, procs_per_replica: int, **service_kwargs
+        cls,
+        *,
+        service_config: ServiceConfig | None = None,
+        num_replicas: int | None = None,
+        procs_per_replica: int | None = None,
+        **service_kwargs,
     ) -> Type["ConfiguredService"]:
         """
         Returns a ConfiguredService class that wraps this ForgeActor in a Service.
 
-        Usage:
-            service = await MyForgeActor.options(num_replicas=1, procs_per_replica=2).as_service(...)
+        Usage (choose ONE of the following forms):
+            # Option A: construct ServiceConfig implicitly
+            service = await MyForgeActor.options(
+                num_replicas=1,
+                procs_per_replica=2,
+            ).as_service(...)
             await service.shutdown()
+
+            # Option B: provide an explicit ServiceConfig
+            cfg = ServiceConfig(num_replicas=1, procs_per_replica=2, scheduling="round_robin")
+            service = await MyForgeActor.options(service_config=cfg).as_service(...)
+            await service.shutdown()
+
         """
         from forge.controller.service import Service, ServiceInterface
 
-        cfg = ServiceConfig(
-            num_replicas=num_replicas,
-            procs_per_replica=procs_per_replica,
-            **service_kwargs,
-        )
+        if service_config is not None:
+            # Use the provided config directly
+            cfg = service_config
+        else:
+            if num_replicas is None or procs_per_replica is None:
+                raise ValueError(
+                    "Must provide either `service_config` or (num_replicas + procs_per_replica)."
+                )
+            cfg = ServiceConfig(
+                num_replicas=num_replicas,
+                procs_per_replica=procs_per_replica,
+                **service_kwargs,
+            )
 
         class ConfiguredService:
             """
