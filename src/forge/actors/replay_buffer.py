@@ -17,8 +17,9 @@ from forge.controller import ForgeActor
 class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
-    batch_size: int = 4
-    max_policy_age: int = 0
+    batch_size: int
+    max_policy_age: int
+    dp_size: int = 1
     seed: int | None = None
 
     @endpoint
@@ -43,23 +44,34 @@ class ReplayBuffer(ForgeActor):
                 passed in at initialization.
 
         Returns:
-            A list of sampled episodes or None if there are not enough episodes in the buffer.
+            A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
         bsz = batch_size if batch_size is not None else self.batch_size
+        total_samples = self.dp_size * bsz
 
         # Evict old episodes
         self._evict(curr_policy_version)
 
-        if bsz > len(self.buffer):
+        if total_samples > len(self.buffer):
             return None
 
         # TODO: Make this more efficient
-        idx_to_sample = self.sampler(range(len(self.buffer)), k=bsz)
-        sorted_idxs = sorted(
-            idx_to_sample, reverse=True
-        )  # Sort in desc order to avoid shifting idxs
-        sampled_episodes = [self.buffer.pop(i) for i in sorted_idxs]
-        return sampled_episodes
+        idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
+        # Pop episodes in descending order to avoid shifting issues
+        popped = [self.buffer.pop(i) for i in sorted(idx_to_sample, reverse=True)]
+
+        # Reorder popped episodes to match the original random sample order
+        sorted_idxs = sorted(idx_to_sample, reverse=True)
+        idx_to_popped = dict(zip(sorted_idxs, popped))
+        sampled_episodes = [idx_to_popped[i] for i in idx_to_sample]
+
+        # Reshape into (dp_size, bsz, ...)
+        reshaped_episodes = [
+            sampled_episodes[dp_idx * bsz : (dp_idx + 1) * bsz]
+            for dp_idx in range(self.dp_size)
+        ]
+
+        return reshaped_episodes
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:

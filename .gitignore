@@ -15,6 +15,10 @@ __pycache__/
 # Cython debug symbols
 cython_debug/
 
+# SLURM logs
+slogs/
+slurm-*
+
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
