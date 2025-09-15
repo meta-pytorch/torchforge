@@ -34,7 +34,7 @@ async def run(cfg: DictConfig):
         spawn_service(
             ServiceConfig(procs_per_replica=1, num_replicas=1),
             ReplayBuffer,
-            store=KVStore(),
+            backend=KVStore(),
             **cfg.replay_buffer,
         ),
     )

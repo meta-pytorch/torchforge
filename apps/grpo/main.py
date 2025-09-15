@@ -378,7 +378,7 @@ async def main(cfg: DictConfig):
         spawn_service(
             ServiceConfig(**cfg.replay_buffer.service),
             ReplayBuffer,
-            store=KVStore(),
+            backend=KVStore(),
             **exclude_service(cfg.replay_buffer),
         ),
         spawn_service(

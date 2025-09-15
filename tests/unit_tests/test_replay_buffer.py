@@ -19,11 +19,11 @@ class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
         mesh = await proc_mesh(gpus=1)
-        store = KVStore()
+        backend = KVStore()
         replay_buffer = await mesh.spawn(
             "replay_buffer",
             ReplayBuffer,
-            store=store,
+            backend=backend,
             batch_size=2,
             max_policy_age=1,
             dp_size=1,
@@ -147,12 +147,12 @@ class TestReplayBuffer:
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
         mesh = await proc_mesh(gpus=1)
-        store = KVStore()
+        backend = KVStore()
         # Create replay buffer with dp_size=3
         replay_buffer = await mesh.spawn(
             "replay_buffer",
             ReplayBuffer,
-            store=store,
+            backend=backend,
             batch_size=2,
             max_policy_age=1,
             dp_size=3,

@@ -9,17 +9,17 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
 from forge.interfaces import StoreInterface
+
+from monarch.actor import endpoint
 
 
 @dataclass
 class ReplayBuffer(ForgeActor):
     """Simple in-memory replay buffer implementation."""
 
-    store: StoreInterface
+    backend: StoreInterface
     batch_size: int
     max_policy_age: int
     dp_size: int = 1
@@ -34,7 +34,7 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def add(self, episode) -> None:
         key = f"rb_{uuid.uuid4().hex}"
-        await self.store.put(key, episode)
+        await self.backend.put(key, episode)
 
     @endpoint
     async def sample(self, curr_policy_version: int, batch_size: int | None = None):
@@ -55,9 +55,9 @@ class ReplayBuffer(ForgeActor):
         # TODO: _evict() before keys() isn't concurrency-safe; may need async lock or refactor. See PR #147.
         await self._evict(curr_policy_version)
 
-        keys = await self.store.keys()
+        keys = await self.backend.keys()
 
-        total_available = await self.store.numel()
+        total_available = await self.backend.numel()
         if total_samples > total_available:
             return None
 
@@ -65,7 +65,7 @@ class ReplayBuffer(ForgeActor):
         idx_to_sample = self.sampler(range(len(keys)), k=total_samples)
 
         # Fetch and remove the sampled episodes
-        sampled_episodes = [await self.store.pop(keys[i]) for i in idx_to_sample]
+        sampled_episodes = [await self.backend.pop(keys[i]) for i in idx_to_sample]
 
         # Reshape into (dp_size, bsz, ...)
         reshaped_episodes = [
@@ -86,21 +86,21 @@ class ReplayBuffer(ForgeActor):
         await self._evict(curr_policy_version)
 
     async def _evict(self, curr_policy_version: int) -> None:
-        keys = await self.store.keys()
+        keys = await self.backend.keys()
         for key in keys:
-            episode = await self.store.get(key)
+            episode = await self.backend.get(key)
             # TODO: Could store keys as policy_version+uuid to evict without fetching each episode
             if (curr_policy_version - episode.policy_version) > self.max_policy_age:
-                await self.store.delete(key)
+                await self.backendpc.delete(key)
 
     @endpoint
     async def _getitem(self, key: str):
-        return await self.store.get(key)
+        return await self.backendpc.get(key)
 
     @endpoint
     async def _numel(self) -> int:
         """Number of elements (episodes) in the replay buffer."""
-        return await self.store.numel()
+        return await self.backendpc.numel()
 
     @endpoint
     async def clear(self) -> None:
@@ -108,12 +108,12 @@ class ReplayBuffer(ForgeActor):
         await self._clear()
 
     async def _clear(self) -> None:
-        await self.store.delete_all()
+        await self.backendpc.delete_all()
 
     @endpoint
     async def state_dict(self) -> dict[str, Any]:
-        keys = await self.store.keys()
-        episodes = [(k, await self.store.get(k)) for k in keys]
+        keys = await self.backendpc.keys()
+        episodes = [(k, await self.backendpc.get(k)) for k in keys]
         return {
             "buffer": episodes,
             "rng_state": random.getstate(),
@@ -124,6 +124,6 @@ class ReplayBuffer(ForgeActor):
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         await self._clear()
         for k, ep in state_dict["buffer"]:
-            await self.store.put(k, ep)
+            await self.backendpc.put(k, ep)
         random.setstate(state_dict["rng_state"])
         self.seed = state_dict["seed"]

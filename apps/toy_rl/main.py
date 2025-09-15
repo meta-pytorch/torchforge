@@ -143,7 +143,7 @@ async def main():
     replay_buffer = await replay_procs.spawn(
         "replay_buffer",
         ReplayBuffer,
-        store=KVStore(),
+        backend=KVStore(),
         batch_size=SAMPLES_PER_BATCH,
         max_policy_age=float("inf"),
         dp_size=1,

@@ -212,7 +212,7 @@ class TestIntegration:
         replay_buffer = await proc.spawn(
             "replay_buffer",
             ReplayBuffer,
-            store=KVStore(),
+            backend=KVStore(),
             batch_size=1,
             max_policy_age=1,
             dp_size=1,
