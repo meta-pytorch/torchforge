@@ -18,7 +18,7 @@ import torchstore as ts
 from datasets import load_dataset
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import _qwen3_hf_to_vllm
+from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
@@ -139,84 +139,6 @@ class Group:
 
 
 @dataclass
-class Trainer(ForgeActor):
-    """GRPO Trainer implementation for policy optimization."""
-
-    model_name: str
-    learning_rate: float = 1e-5
-    beta: float = 0.1
-    device: torch.device | None = None
-    state_dict_key: str = "model_state_dict"
-    dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
-
-    @endpoint
-    async def setup(self):
-        if self.device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(self.device)
-        self.model.train()
-
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.learning_rate
-        )
-        self.optimizer.zero_grad()
-
-        self.loss = SimpleGRPOLoss(self.beta)
-
-        self.logger.info(f"Trainer model initialized on {self.device}")
-
-    @endpoint
-    async def train_step(self, batch: list[list[Episode]]):
-        microbatch = batch[self.dp_rank]
-        pad_id = microbatch[0].pad_id
-
-        # prepare batch
-        request = [e.request_tensor for e in microbatch]
-        request = torch.stack(request).to(self.device)  # [b x s]
-
-        response = [e.response_tensor for e in microbatch]
-        response = torch.stack(response).to(self.device)  # [b x s]
-
-        ref_logprobs = [e.ref_logprobs for e in microbatch]
-        ref_logprobs = torch.stack(ref_logprobs).to(self.device).squeeze()  # [b x s]
-
-        advantages = [e.advantage for e in microbatch]
-        advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
-        del batch
-
-        input_ids = torch.cat([request, response], dim=1)
-        mask = input_ids != pad_id
-        logits = self.model(input_ids=input_ids, attention_mask=mask).logits
-        logprobs = compute_logprobs(logits, response)
-        del logits
-
-        mask = response != pad_id
-        loss = self.loss(logprobs, ref_logprobs, advantages, mask)
-        loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
-
-        return loss.item()
-
-    @endpoint
-    async def push_weights(self, version: int):
-        """Update policy model weights with trainer's current weights."""
-        key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
-        new_sd = _qwen3_hf_to_vllm(self.model.state_dict(), num_layers=28)
-        start_time = time.time()
-        await ts.put_state_dict(new_sd, key)
-        end_time = time.time()
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
-
-
-@dataclass
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
 
@@ -242,38 +164,6 @@ class ComputeAdvantages(ForgeActor):
         std = rewards.std(1, keepdim=True)
         advantages = (rewards - mean) / (std + 1e-4)
         return advantages.squeeze(0).tolist()
-
-
-class RefModel(ForgeActor):
-    def __init__(self, model_name, device: torch.device | None = None):
-        super().__init__()
-        self.model_name = model_name
-
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(self.device)
-        self.model.eval()
-
-        self.logger.info(f"Model initialized on {self.device}")
-
-    @endpoint
-    async def forward(self, episode: Episode) -> torch.Tensor:
-        req, res = episode.request_tensor, episode.response_tensor
-        input_ids = torch.cat([req, res]).to(self.device).unsqueeze(0)
-        mask = input_ids != episode.pad_id
-
-        with torch.inference_mode():
-            logits = self.model(input_ids=input_ids, attention_mask=mask).logits
-
-        input_ids = input_ids[:, len(req) :]
-        return compute_logprobs(logits, input_ids)
 
 
 @dataclass
@@ -364,7 +254,7 @@ async def main(cfg: DictConfig):
         ),
         spawn_service(
             ServiceConfig(**cfg.trainer.service),
-            Trainer,
+            RLTrainer,
             **exclude_service(cfg.trainer),
         ),
         spawn_service(

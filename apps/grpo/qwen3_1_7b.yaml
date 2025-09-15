@@ -38,10 +38,44 @@ policy:
 
 # Trainer configuration
 trainer:
-  model_name: ${model}
-  learning_rate: 1e-5
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: 1
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 5
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 4
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: false
+  checkpoint:
+    enable: true
+    folder: ./saved_checkpoints
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 500
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
   service:
-    procs_per_replica: 1
+    procs_per_replica: ${trainer.parallelism.data_parallel_shard_degree}
     num_replicas: 1
     with_gpus: true
 
