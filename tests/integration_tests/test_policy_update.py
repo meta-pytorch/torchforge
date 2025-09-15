@@ -12,7 +12,7 @@ import pytest_asyncio
 import torch
 
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig
 from forge.data.sharding import VLLMSharding
 from torchstore import MultiProcessStore
 from torchstore._state_dict_utils import push_state_dict
@@ -207,7 +207,9 @@ async def run_policy_integration(
     policy_config, service_config = get_configs(
         worker_size=1, model_name="meta-llama/Llama-3.1-8B-Instruct"
     )
-    policy = await spawn_service(service_config, Policy, store=store, **policy_config)
+    policy = await Policy.options(service_config=service_config).as_service(
+        **policy_config
+    )
 
     # Policy engine start with default version 0 that gets incremented.
     print("Calling Policy.update() to load weights from torchstore...")
@@ -219,6 +221,7 @@ async def run_policy_integration(
     results = await policy._get_model_params.call()
     assert len(results) == 1
     print("Successfully got model state dict after update")
+    await policy.shutdown()
     return results[0]
 
 

@@ -19,7 +19,6 @@ from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
@@ -358,40 +357,20 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        spawn_service(
-            ServiceConfig(**cfg.dataset.service),
-            DatasetActor,
-            **exclude_service(cfg.dataset),
+        DatasetActor.options(**cfg.dataset.service).as_service(
+            **exclude_service(cfg.dataset)
         ),
-        spawn_service(
-            ServiceConfig(**cfg.policy.service),
-            Policy,
-            **exclude_service(cfg.policy),
+        Policy.options(**cfg.policy.service).as_service(**exclude_service(cfg.policy)),
+        Trainer.options(**cfg.trainer.service).as_service(
+            model_name=model, **exclude_service(cfg.trainer)
         ),
-        spawn_service(
-            ServiceConfig(**cfg.trainer.service),
-            Trainer,
-            model_name=model,
-            **exclude_service(cfg.trainer),
+        ReplayBuffer.options(**cfg.replay_buffer.service).as_service(
+            **exclude_service(cfg.replay_buffer)
         ),
-        spawn_service(
-            ServiceConfig(**cfg.replay_buffer.service),
-            ReplayBuffer,
-            **exclude_service(cfg.replay_buffer),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.compute_advantages.service),
-            ComputeAdvantages,
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.ref_model.service),
-            RefModel,
-            model_name=model,
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.reward_actor.service),
-            RewardActor,
-            reward_functions=[MathReward(), ThinkingReward()],
+        ComputeAdvantages.options(**cfg.compute_advantages.service).as_service(),
+        RefModel.options(**cfg.ref_model.service).as_service(model_name=model),
+        RewardActor.options(**cfg.reward_actor.service).as_service(
+            reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
 
@@ -473,13 +452,13 @@ async def main(cfg: DictConfig):
     finally:
         print("Shutting down...")
         await asyncio.gather(
-            shutdown_service(policy),
-            shutdown_service(trainer),
-            shutdown_service(replay_buffer),
-            shutdown_service(dataloader),
-            shutdown_service(compute_advantages),
-            shutdown_service(ref_model),
-            shutdown_service(reward_actor),
+            dataloader.shutdown(),
+            policy.shutdown(),
+            trainer.shutdown(),
+            replay_buffer.shutdown(),
+            compute_advantages.shutdown(),
+            ref_model.shutdown(),
+            reward_actor.shutdown(),
         )
 
 
