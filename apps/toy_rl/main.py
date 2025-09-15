@@ -208,7 +208,7 @@ async def main():
                         )  # Update with true policy version when available
                     )
                     if trajectory is not None:
-                        trajectories += trajectory
+                        trajectories += trajectory[0]
 
                 # Most of the rest of this is just boilerplate for pretty printing.
                 if not trajectories:

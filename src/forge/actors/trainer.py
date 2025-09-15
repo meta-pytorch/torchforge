@@ -268,3 +268,49 @@ class RLTrainer(ForgeActor):
     async def cleanup(self) -> None:
         if self.engine.checkpointer:
             self.engine.checkpointer.close()
+
+
+def _qwen3_hf_to_vllm(
+    sd: dict[str, torch.Tensor], num_layers: int
+) -> dict[str, torch.Tensor]:
+    """Convert transformers state dict to vLLM format. Specifically, this fuses
+    QKV projection and MLP gate_up_proj layers.
+
+    Args:
+        sd (dict): State dict from HF model.
+        num_layers (int): Number of layers in the model.
+
+    Returns:
+        dict: State dict in vLLM format.
+    """
+    load_sd = {}
+
+    # Copy over directly mapped keys
+    for k in sd:
+        if any(
+            x in k
+            for x in [
+                "down_proj",
+                "input_layernorm",
+                "post_attention_layernorm",
+                "o_proj",
+                "norm.weight",
+                "embed_tokens.weight",
+                "lm_head.weight",
+            ]
+        ):
+            load_sd[k] = sd[k]
+
+    for i in range(num_layers):
+        prefix = f"model.layers.{i}."
+        # QKV fusion
+        q = sd[prefix + "self_attn.q_proj.weight"]
+        k = sd[prefix + "self_attn.k_proj.weight"]
+        v = sd[prefix + "self_attn.v_proj.weight"]
+        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+        # MLP gate_up_proj fusion
+        gate = sd[prefix + "mlp.gate_proj.weight"]
+        up = sd[prefix + "mlp.up_proj.weight"]
+        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+
+    return load_sd
