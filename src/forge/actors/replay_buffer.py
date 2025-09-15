@@ -52,7 +52,7 @@ class ReplayBuffer(ForgeActor):
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
-
+        # TODO: _evict() before keys() isn't concurrency-safe; may need async lock or refactor. See PR #147.
         await self._evict(curr_policy_version)
 
         keys = await self.store.keys()
