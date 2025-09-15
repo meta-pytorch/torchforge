@@ -355,7 +355,7 @@ async def main(cfg: DictConfig):
         ),
         Policy.options(**cfg.policy.service).as_service(**exclude_service(cfg.policy)),
         Trainer.options(**cfg.trainer.service).as_service(
-            model_name=model, **exclude_service(cfg.trainer)
+            **exclude_service(cfg.trainer)
         ),
         ReplayBuffer.options(**cfg.replay_buffer.service).as_service(
             **exclude_service(cfg.replay_buffer)
