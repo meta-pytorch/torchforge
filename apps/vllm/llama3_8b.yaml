@@ -8,7 +8,9 @@ policy:
     n: 2
     guided_decoding: false
     max_tokens: 512
-  service:
+
+services:
+  policy:
     procs_per_replica: 2
     num_replicas: 1
     with_gpus: true

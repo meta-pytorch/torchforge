@@ -18,7 +18,6 @@ from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
 from omegaconf import DictConfig
-from src.forge.data.utils import exclude_service
 from vllm.outputs import RequestOutput
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
@@ -32,9 +31,7 @@ async def run(cfg: DictConfig):
         prompt = "What is 3+5?" if gd else "Tell me a joke"
 
     print("Spawning service...")
-    policy = await Policy.options(**cfg.policy.service).as_service(
-        **exclude_service(cfg.policy)
-    )
+    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
     try:
         async with policy.session():

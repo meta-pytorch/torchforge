@@ -24,7 +24,6 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.data.utils import exclude_service
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -354,19 +353,15 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.dataset.service).as_service(
-            **exclude_service(cfg.dataset)
+        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
+        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
+            **cfg.replay_buffer
         ),
-        Policy.options(**cfg.policy.service).as_service(**exclude_service(cfg.policy)),
-        Trainer.options(**cfg.trainer.service).as_service(
-            **exclude_service(cfg.trainer)
-        ),
-        ReplayBuffer.options(**cfg.replay_buffer.service).as_service(
-            **exclude_service(cfg.replay_buffer)
-        ),
-        ComputeAdvantages.options(**cfg.compute_advantages.service).as_service(),
-        RefModel.options(**cfg.ref_model.service).as_service(model_name=model),
-        RewardActor.options(**cfg.reward_actor.service).as_service(
+        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        RefModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
