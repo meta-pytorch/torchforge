@@ -275,50 +275,50 @@ class TestWeightSync:
         )
 
 
-@pytest.mark.asyncio
-@requires_cuda
-async def test_policy_update_tp(self, trainer_cfg_fsdp):
-    """
-    1. Init RLTrainer over multiple workers with selected parallelism strategy.
-    2. Push weights in to torchstore.
-    3. Initializes Policy over multiple workers, and calls update_weights() to load weights from torchstore.
-    4. Validate the policy weights against manually loaded origina HF weights. -- we never called the train step.
-    """
+    @pytest.mark.asyncio
+    @requires_cuda
+    async def test_policy_update_tp(self, trainer_cfg_tp):
+        """
+        1. Init RLTrainer over multiple workers with selected parallelism strategy.
+        2. Push weights in to torchstore.
+        3. Initializes Policy over multiple workers, and calls update_weights() to load weights from torchstore.
+        4. Validate the policy weights against manually loaded origina HF weights. -- we never called the train step.
+        """
 
-    if torch.cuda.device_count() < 2:
-        pytest.skip(
-            f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+        if torch.cuda.device_count() < 2:
+            pytest.skip(
+                f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+            )
+        trainer_worker_size = 2
+        # 1. Initialize TS
+        await ts.initialize()
+        # 2. Trainer push
+        rl_trainer = await spawn_service(
+            ServiceConfig(
+                procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
+            ),
+            RLTrainer,
+            **trainer_cfg_tp,
         )
-    trainer_worker_size = 2
-    # 1. Initialize TS
-    await ts.initialize()
-    # 2. Trainer push
-    rl_trainer = await spawn_service(
-        ServiceConfig(
-            procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
-        ),
-        RLTrainer,
-        **trainer_cfg_fsdp,
-    )
-    await rl_trainer.push_weights.call(policy_version=0)
-    # 3. Policy pull weights
-    policy_worker_size = 4
-    policy_config, service_config = get_configs(
-        worker_size=policy_worker_size, model_name=self.model
-    )
-    policy = await spawn_service(service_config, Policy, **policy_config)
-    await policy.update_weights.call()
+        await rl_trainer.push_weights.call(policy_version=0)
+        # 3. Policy pull weights
+        policy_worker_size = 4
+        policy_config, service_config = get_configs(
+            worker_size=policy_worker_size, model_name=self.model
+        )
+        policy = await spawn_service(service_config, Policy, **policy_config)
+        await policy.update_weights.call()
 
-    # validate loaded shard of each worker againt manually calculated shard (expected shard).
+        # validate loaded shard of each worker againt manually calculated shard (expected shard).
 
-    # 4. Validate weights.
-    loaded_state_dict = await policy._get_model_params.call()
+        # 4. Validate weights.
+        loaded_state_dict = await policy._get_model_params.call()
 
-    # validation logic needs to be updated.
-    # validate_loaded_tensors_equals_original(
-    #    loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
-    # )
+        # validation logic needs to be updated.
+        # validate_loaded_tensors_equals_original(
+        #    loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
+        # )
 
-    print(
-        "Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
-    )
+        print(
+            "Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
+        )
