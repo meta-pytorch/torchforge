@@ -131,26 +131,6 @@ async def test_service_default_config():
         await service.shutdown()
 
 
-@pytest.mark.timeout(5)
-@pytest.mark.asyncio
-async def test_as_service_default_configs():
-    """Test that .as_service() uses default configuration."""
-
-    # Spawn Counter with default as_service (1 replica, 1 proc)
-    service = await Counter.as_service(v=42)
-    try:
-        # Confirm the service config has defaults
-        cfg = service._service._cfg
-        assert cfg.num_replicas == 1
-        assert cfg.procs_per_replica == 1
-
-        # Confirm actor received the constructor argument
-        assert await service.value.choose() == 42
-
-    finally:
-        await service.shutdown()
-
-
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_basic_service_operations():
