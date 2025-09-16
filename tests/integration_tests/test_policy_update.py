@@ -31,7 +31,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-# Run tests: pytest tests/integration_tests/test_policy_update.py::<test_name>
+# Run tests: pytest tests/integration_tests/test_policy_update.py::TestWeightSync::<test_name>
 
 
 def convert_state_dict(saved_sd):
@@ -273,7 +273,6 @@ class TestWeightSync:
         validate_loaded_tensors_equals_original(
             loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
         )
-
 
     @pytest.mark.asyncio
     @requires_cuda
