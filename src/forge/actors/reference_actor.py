@@ -14,16 +14,11 @@ from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
-from typing import Any
-
 import torch
 from monarch.actor import current_rank, current_size, endpoint
-from omegaconf import DictConfig, OmegaConf
-from torch import nn
 
-from torchtitan.components.lr_scheduler import LRSchedulersContainer
-from torchtitan.config.job_config import Comm, Model, Parallelism
-from torchtitan.distributed import ParallelDims, utils as dist_utils
+from torchtitan.config.job_config import Model, Parallelism
+from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from transformers import AutoModelForCausalLM
@@ -334,10 +329,8 @@ class ReferenceActor(ForgeActor):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
 
-        # Spawn the RefModel
-        self.ref_model = await spawn_service(
-            default_service_cfg,
-            HuggingFaceRefModel,
+        # Spawn the RefModel with default service config
+        self.ref_model = HuggingFaceRefModel.as_service(
             model_name=self.model.name,
             device=self.device,
         )

@@ -13,9 +13,13 @@ import pytest_asyncio
 import torch
 import torchstore as ts
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+<<<<<<< HEAD
 
 from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig, spawn_service
+=======
+from forge.controller.service import ServiceConfig
+>>>>>>> e595fbd08afd2e941f8ea8fc7057a8dd6e0cf38d
 from forge.data.sharding import VLLMSharding
 
 from transformers import AutoModelForCausalLM
