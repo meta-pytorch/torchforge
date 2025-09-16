@@ -54,6 +54,7 @@ async def run(cfg: DictConfig):
         await policy.shutdown()
         await shutdown()
 
+
 @parse
 def recipe_main(cfg: DictConfig) -> None:
     asyncio.run(run(cfg))

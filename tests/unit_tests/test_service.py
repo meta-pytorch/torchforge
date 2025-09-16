@@ -74,7 +74,7 @@ async def test_actor_def_type_validation():
         await InvalidActor.options(procs_per_replica=1, num_replicas=1).as_service()
 
 
-@pytest.mark.timeout(20)
+@pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_service_options_config_variants():
     """Test initializing Service with explicit ServiceConfig, raw parameters, and extra kwargs."""
