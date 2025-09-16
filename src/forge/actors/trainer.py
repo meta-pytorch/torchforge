@@ -32,7 +32,6 @@ from torchtitan.config.job_config import (
     Parallelism,
     Training,
 )
-from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
