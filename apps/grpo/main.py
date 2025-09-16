@@ -26,6 +26,7 @@ from forge.controller.provisioner import shutdown
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.data.utils import exclude_service
+from forge.util import compute_logprobs
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -34,21 +35,6 @@ from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
-
-
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
 
 
 class SimpleGRPOLoss(nn.Module):

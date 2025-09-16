@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from forge.actors import ReplayBuffer, RLTrainer
 from forge.cli.config import parse
 from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+from forge.util import compute_logprobs
 from omegaconf import DictConfig
 from torch import Tensor
 
@@ -92,21 +93,6 @@ def collate(batches: list[list[Episode]]):
         inputs.append(input)
         targets.append(target)
     return inputs, targets
-
-
-def compute_logprobs(
-    logits: Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
 
 
 def simple_grpo_loss(
