@@ -111,7 +111,7 @@ class ForgeActor(Actor):
             # dynamically create a configured subclass for consistency
             cls = type(f"{cls.__name__}Configured", (cls,), {"_service_config": cfg})
 
-        logger.info(("Spawning Service Actor for %s", cls.__name__))
+        logger.info("Spawning Service Actor for %s", cls.__name__)
         service = Service(cfg, cls, actor_kwargs)
         await service.__initialize__()
         return ServiceInterface(service, cls)
