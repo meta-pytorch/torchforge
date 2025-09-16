@@ -74,44 +74,61 @@ async def test_actor_def_type_validation():
         await InvalidActor.options(procs_per_replica=1, num_replicas=1).as_service()
 
 
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_service_options_config_variants():
-    """Test initializing Service with explicit ServiceConfig, raw parameters, and extra kwargs."""
-
-    # Case 1: provide a ServiceConfig directly
+async def test_service_with_explicit_service_config():
+    """Case 1: Provide a ServiceConfig directly."""
     cfg = ServiceConfig(procs_per_replica=2, num_replicas=3)
-    service1 = await Counter.options(service_config=cfg).as_service(v=10)
+    service = await Counter.options(service_config=cfg).as_service(v=10)
     try:
-        # It should use the same cfg object
-        assert service1._service_interface._service._cfg is cfg
-        assert service1._service_interface._service._cfg.num_replicas == 3
-        assert service1._service_interface._service._cfg.procs_per_replica == 2
-        # Confim if ForgeActor's config is set correctly
-        assert await service1.value.choose() == 10
+        assert service._service._cfg is cfg
+        assert service._service._cfg.num_replicas == 3
+        assert service._service._cfg.procs_per_replica == 2
+        assert await service.value.choose() == 10
     finally:
-        await service1.shutdown()
+        await service.shutdown()
 
-    # Case 2: construct ServiceConfig implicitly from kwargs
-    service2 = await Counter.options(
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_service_with_kwargs_config():
+    """Case 2: Construct ServiceConfig implicitly from kwargs."""
+    service = await Counter.options(
         num_replicas=4,
         procs_per_replica=1,
         health_poll_rate=0.5,
     ).as_service(v=20)
     try:
-        cfg2 = service2._service_interface._service._cfg
-        assert isinstance(cfg2, ServiceConfig)
-        assert cfg2.num_replicas == 4
-        assert cfg2.procs_per_replica == 1
-        assert (
-            cfg2.health_poll_rate == 0.5
-        )  # Passed implicitly with additional service_kwargs
+        cfg = service._service._cfg
+        assert isinstance(cfg, ServiceConfig)
+        assert cfg.num_replicas == 4
+        assert cfg.procs_per_replica == 1
+        assert cfg.health_poll_rate == 0.5
+        assert await service.value.choose() == 20
     finally:
-        await service2.shutdown()
+        await service.shutdown()
 
-    # Case 3: error if neither service_config nor required args are provided
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_service_options_missing_args_raises():
+    """Case 3: Error if neither service_config nor required args are provided."""
     with pytest.raises(ValueError, match="Must provide either"):
         await Counter.options().as_service()  # no args, should raise before service spawn
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_service_default_config():
+    """Case 4: Construct with default configuration using as_service directly."""
+    service = await Counter.as_service(v=10)
+    try:
+        cfg = service._service._cfg
+        assert cfg.num_replicas == 1
+        assert cfg.procs_per_replica == 1
+        assert await service.value.choose() == 10
+    finally:
+        await service.shutdown()
 
 
 @pytest.mark.timeout(5)
@@ -123,7 +140,7 @@ async def test_as_service_default_configs():
     service = await Counter.as_service(v=42)
     try:
         # Confirm the service config has defaults
-        cfg = service._service_interface._service._cfg
+        cfg = service._service._cfg
         assert cfg.num_replicas == 1
         assert cfg.procs_per_replica == 1
 
