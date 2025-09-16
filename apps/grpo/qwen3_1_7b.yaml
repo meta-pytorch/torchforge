@@ -98,8 +98,27 @@ compute_advantages:
 
 # Reference model configuration
 ref_model:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 4
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: false
+  checkpoint:
+    enable: true
+    folder: ./saved_checkpoints
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
   service:
-    procs_per_replica: 1
+    procs_per_replica: ${ref_model.parallelism.data_parallel_shard_degree}
     num_replicas: 1
     with_gpus: true
 
