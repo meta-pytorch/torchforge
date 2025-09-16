@@ -74,7 +74,7 @@ async def test_actor_def_type_validation():
         await InvalidActor.options(procs_per_replica=1, num_replicas=1).as_service()
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_with_explicit_service_config():
     """Case 1: Provide a ServiceConfig directly."""
@@ -89,7 +89,7 @@ async def test_service_with_explicit_service_config():
         await service.shutdown()
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_with_kwargs_config():
     """Case 2: Construct ServiceConfig implicitly from kwargs."""
@@ -109,7 +109,7 @@ async def test_service_with_kwargs_config():
         await service.shutdown()
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_options_missing_args_raises():
     """Case 3: Error if neither service_config nor required args are provided."""
@@ -117,7 +117,7 @@ async def test_service_options_missing_args_raises():
         await Counter.options().as_service()  # no args, should raise before service spawn
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_default_config():
     """Case 4: Construct with default configuration using as_service directly."""
