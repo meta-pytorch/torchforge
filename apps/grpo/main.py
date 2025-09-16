@@ -134,14 +134,9 @@ def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
     context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
     logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
     logprobs = torch.log_softmax(logits / temperature, dim=-1)
     logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
     return logprobs
 
 
@@ -152,20 +147,14 @@ def simple_grpo_loss(
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
     beta: float = 0.1,
-):
-    """Simplified GRPO Loss for simplified single step updates
-    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
-    """
+) -> torch.Tensor:
     logprobs = compute_logprobs(logits, response)
-    per_token_kl = (
-        torch.exp(ref_logprobs.detach() - logprobs)
-        - (ref_logprobs.detach() - logprobs)
-        - 1
-    )
+    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * per_token_kl)
+    per_token_loss = -(per_token_policy_loss - beta * kl)
     loss = (
-        (per_token_loss * padding_mask).sum(dim=1) / (padding_mask.sum(dim=1) + 1e-8)
+        ((per_token_loss * padding_mask).sum(dim=1))
+        / (padding_mask.sum(dim=1).clamp(min=1.0))
     ).mean()
     return loss
 
