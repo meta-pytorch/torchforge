@@ -7,7 +7,6 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -17,7 +16,7 @@ import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
 from forge.actors.policy import Policy
-from forge.actors.reference_model import ReferenceModel  # noqa: F401
+from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
@@ -29,47 +28,7 @@ from forge.data.utils import exclude_service
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
-from torch import nn
-from torchstore.state_dict_utils import DELIM
-from torchtitan.config.job_config import Model as TitanJobModelConfig
-from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
-
-
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
-
-
-class SimpleGRPOLoss(nn.Module):
-    """Simplified GRPO Loss for simplified single step updates
-    Inspired by the Hugging Face TRL implementation:
-        https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624.
-    """
-
-    def __init__(self, beta: float = 0.1):
-        super().__init__()
-        self.beta = beta
-
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-        per_token_loss = -(per_token_policy_loss - self.beta * kl)
-        loss = (
-            ((per_token_loss * padding_mask).sum(dim=1))
-            / (padding_mask.sum(dim=1).clamp(min=1.0))
-        ).mean()
-        return loss
 
 
 @dataclass
@@ -138,6 +97,77 @@ class Group:
                 )
             )
         return cls(str(group_id), episodes)
+
+
+def collate(batches: list[list[Episode]]):
+    inputs = []
+    targets = []
+    for batch in batches:
+        request = [e.request_tensor for e in batch]
+        request = torch.stack(request)  # [b x s]
+
+        response = [e.response_tensor for e in batch]
+        response = torch.stack(response)  # [b x s]
+
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
+
+        advantages = [e.advantage for e in batch]
+        advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
+
+        pad_id = batch[0].pad_id
+        mask = response != pad_id
+
+        input = {"tokens": torch.cat([request, response], dim=1)}
+        target = {
+            "response": response,
+            "ref_logprobs": ref_logprobs,
+            "advantages": advantages,
+            "padding_mask": mask,
+        }
+        inputs.append(input)
+        targets.append(target)
+    return inputs, targets
+
+
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    context_length = logits.shape[1] - input_ids.shape[1]
+
+    # Truncate request logits and drop last
+    logits = logits[:, context_length - 1 : -1]
+
+    # Compute logprobs
+    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+
+    return logprobs
+
+
+def simple_grpo_loss(
+    logits: torch.Tensor,
+    response: torch.Tensor,
+    ref_logprobs: torch.Tensor,
+    advantages: torch.Tensor,
+    padding_mask: torch.Tensor,
+    beta: float = 0.1,
+):
+    """Simplified GRPO Loss for simplified single step updates
+    Copied from https://github.com/pytorch/torchtune/blob/main/torchtune/dev/grpo/loss.py.
+    """
+    logprobs = compute_logprobs(logits, response)
+    per_token_kl = (
+        torch.exp(ref_logprobs.detach() - logprobs)
+        - (ref_logprobs.detach() - logprobs)
+        - 1
+    )
+    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+    per_token_loss = -(per_token_policy_loss - beta * per_token_kl)
+    loss = (
+        (per_token_loss * padding_mask).sum(dim=1) / (padding_mask.sum(dim=1) + 1e-8)
+    ).mean()
+    return loss
 
 
 @dataclass
@@ -222,10 +252,7 @@ class DatasetActor(ForgeActor):
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    titan_model = TitanJobModelConfig(name="qwen3", flavor="1.7B")
-    # Get parameters from config with fallbacks
     group_size = cfg.group_size
-    model = cfg.model
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
     mlogger = get_metric_logger(
@@ -258,11 +285,13 @@ async def main(cfg: DictConfig):
         spawn_service(
             ServiceConfig(**cfg.trainer.service),
             RLTrainer,
+            loss=simple_grpo_loss,
             **exclude_service(cfg.trainer),
         ),
         spawn_service(
             ServiceConfig(**cfg.replay_buffer.service),
             ReplayBuffer,
+            collate=collate,
             **exclude_service(cfg.replay_buffer),
         ),
         spawn_service(
@@ -271,14 +300,9 @@ async def main(cfg: DictConfig):
         ),
         spawn_service(
             ServiceConfig(**cfg.ref_model.service),
-            RefModel,
-            model_name=model,
+            ReferenceModel,
+            **exclude_service(cfg.ref_model),
         ),
-        # spawn_service(
-        #     ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-        #     ReferenceModel,
-        #     model=titan_model,
-        # ),
         spawn_service(
             ServiceConfig(**cfg.reward_actor.service),
             RewardActor,
@@ -346,7 +370,8 @@ async def main(cfg: DictConfig):
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch)
+                inputs, targets = batch
+                loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.call(policy_version)

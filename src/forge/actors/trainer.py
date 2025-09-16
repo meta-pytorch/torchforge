@@ -107,31 +107,34 @@ class RLTrainer(ForgeActor):
         self.engine.checkpointer.load(step=self.current_step)
         self.engine.optimizers.zero_grad()
 
-    def forward_backward(self, inputs: dict[Tensor], targets: dict[Tensor]) -> Tensor:
+    def forward_backward(
+        self, inputs: dict[str, Tensor], targets: dict[str, Tensor]
+    ) -> Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
-        if getattr(self.engine.model_args, "use_flex_attn", False):
-            cp_mesh = (
-                parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
-            )
-            init_attention_mask(
-                inputs, self.engine.tokenizer.base_tokenizer.eos_id, cp_mesh
-            )
+        # if getattr(self.engine.model_args, "use_flex_attn", False):
+        #     cp_mesh = (
+        #         parallel_dims.world_mesh["cp"] if parallel_dims.cp_enabled else None
+        #     )
+        #     init_attention_mask(
+        #         inputs, self.engine.tokenizer.base_tokenizer.eos_id, cp_mesh
+        #     )
 
-        optional_context_parallel_ctx = (
-            dist_utils.create_context_parallel_ctx(
-                cp_mesh=parallel_dims.world_mesh["cp"],
-                cp_buffers=[inputs, labels] + [m.freqs_cis for m in model_parts],
-                cp_seq_dims=[1, 1] + [0 for _ in model_parts],
-                cp_no_restore_buffers={inputs, labels},
-                cp_rotate_method=self.job_config.parallelism.context_parallel_rotate_method,
-            )
-            if parallel_dims.cp_enabled
-            else None
-        )
+        # optional_context_parallel_ctx = (
+        #     dist_utils.create_context_parallel_ctx(
+        #         cp_mesh=parallel_dims.world_mesh["cp"],
+        #         cp_buffers=[inputs, targets] + [m.freqs_cis for m in model_parts],
+        #         cp_seq_dims=[1, 1] + [0 for _ in model_parts],
+        #         cp_no_restore_buffers={inputs, targets},
+        #         cp_rotate_method=self.job_config.parallelism.context_parallel_rotate_method,
+        #     )
+        #     if parallel_dims.cp_enabled
+        #     else None
+        # )
+        optional_context_parallel_ctx = None
 
         if parallel_dims.pp_enabled:
             raise NotImplementedError("PP not implemented yet")
@@ -172,12 +175,12 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     def train_step(
-        self, inputs: list[dict[Tensor]], targets: list[dict[Tensor]]
-    ) -> None:
-        inputs = inputs[self.engine.dp_rank]
-        targets = targets[self.engine.dp_rank]
-        batch_to_device(inputs, self.engine.device)
-        batch_to_device(targets, self.engine.device)
+        self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
+    ) -> float:
+        local_inputs = inputs[self.engine.dp_rank]
+        local_targets = targets[self.engine.dp_rank]
+        batch_to_device(local_inputs, self.engine.device)
+        batch_to_device(local_targets, self.engine.device)
 
         # compute policy logprobs
         # TODO implement gradient accumulation
@@ -186,7 +189,7 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        loss = self.forward_backward(inputs, targets)
+        loss = self.forward_backward(local_inputs, local_targets)
 
         # # Gradient clipping (optional but recommended for stability)
         # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -201,7 +204,7 @@ class RLTrainer(ForgeActor):
             last_step=self.current_step == self.num_training_steps,
         )
 
-        return {"loss": loss.item()}
+        return loss.item()
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:

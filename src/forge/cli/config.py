@@ -10,6 +10,8 @@ import sys
 from argparse import Namespace
 from typing import Any, Callable
 
+from huggingface_hub import snapshot_download
+
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -98,6 +100,56 @@ def _merge_yaml_and_cli_args(yaml_args: Namespace, cli_args: list[str]) -> DictC
     return OmegaConf.merge(yaml_conf, cli_conf)
 
 
+def auto_convert_hf_hub_components(cfg: DictConfig) -> DictConfig:
+    """
+    Converts any components specified in the config that are in the form of
+    hf://<path> to the full path. This is useful for specifying components in
+    the config that are stored in the HuggingFace Hub.
+
+    Args:
+        cfg (DictConfig): OmegaConf DictConfig containing args from config file, components
+            should have _component_ fields
+
+    Returns:
+        DictConfig: OmegaConf DictConfig with updated components
+    """
+
+    def _get_hf_hub_component_path(path: str) -> str:
+        repo_name = path.replace("hf://", "")
+        local_dir = snapshot_download(repo_name)
+        return local_dir
+
+    def _recursively_convert_hf_paths(obj: Any) -> Any:
+        """Recursively convert hf:// paths in nested data structures."""
+        if isinstance(obj, str) and obj.startswith("hf://"):
+            return _get_hf_hub_component_path(obj)
+        elif isinstance(obj, dict):
+            return {k: _recursively_convert_hf_paths(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_recursively_convert_hf_paths(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(_recursively_convert_hf_paths(item) for item in obj)
+        elif isinstance(obj, DictConfig):
+            # Handle OmegaConf DictConfig objects by converting to dict first
+            return _recursively_convert_hf_paths(
+                OmegaConf.to_container(obj, resolve=True)
+            )
+        elif hasattr(obj, "__dict__"):
+            # Handle objects with __dict__ (like other objects)
+            for attr, value in vars(obj).items():
+                setattr(obj, attr, _recursively_convert_hf_paths(value))
+            return obj
+        else:
+            # Return as-is for other types (int, float, bool, None, etc.)
+            return obj
+
+    # Convert OmegaConf to container with resolved variables, process it, then convert back
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    converted_dict = _recursively_convert_hf_paths(cfg_dict)
+
+    return OmegaConf.create(converted_dict)
+
+
 class ForgeRecipeArgParser(argparse.ArgumentParser):
     """
     A helpful utility subclass of the ``argparse.ArgumentParser`` that
@@ -176,6 +228,7 @@ def parse(recipe_main: Any) -> Callable[..., Any]:
         # Get user-specified args from config and CLI and create params for recipe
         yaml_args, cli_args = parser.parse_known_args()
         conf = _merge_yaml_and_cli_args(yaml_args, cli_args)
+        conf = auto_convert_hf_hub_components(conf)
 
         sys.exit(recipe_main(conf))
 
