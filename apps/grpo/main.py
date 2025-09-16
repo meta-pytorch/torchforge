@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
 from forge.actors.policy import Policy
+from forge.actors.reference_model import ReferenceModel  # noqa: F401
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
@@ -29,6 +30,7 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from torch import nn
 from torchstore.state_dict_utils import DELIM
+from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -329,6 +331,7 @@ class DatasetActor(ForgeActor):
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
+    titan_model = TitanJobModelConfig(name="qwen3", flavor="1.7B")
     # Get parameters from config with fallbacks
     group_size = cfg.group_size
     model = cfg.model
