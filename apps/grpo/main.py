@@ -24,10 +24,10 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
-from torch import nn
 from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import Model as TitanJobModelConfig
 from transformers import AutoModelForCausalLM
@@ -47,27 +47,6 @@ def compute_logprobs(
     logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
 
     return logprobs
-
-
-class SimpleGRPOLoss(nn.Module):
-    """Simplified GRPO Loss for simplified single step updates
-    Inspired by the Hugging Face TRL implementation:
-        https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624.
-    """
-
-    def __init__(self, beta: float = 0.1):
-        super().__init__()
-        self.beta = beta
-
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-        per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-        per_token_loss = -(per_token_policy_loss - self.beta * kl)
-        loss = (
-            ((per_token_loss * padding_mask).sum(dim=1))
-            / (padding_mask.sum(dim=1).clamp(min=1.0))
-        ).mean()
-        return loss
 
 
 @dataclass

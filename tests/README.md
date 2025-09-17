@@ -17,7 +17,6 @@ Ensure you have all development dependencies installed:
 
 ```bash
 pip install -r dev-requirements.txt
-pip install -r requirements.txt
 ```
 
 ### Running Integration Tests
