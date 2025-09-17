@@ -135,7 +135,7 @@ def compute_logprobs(
 ) -> torch.Tensor:
     context_length = logits.shape[1] - input_ids.shape[1]
     logits = logits[:, context_length - 1 : -1]
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
+    logprobs = torch.log_softmax(logits / temperature, dim=-1).to(input_ids.device)
     logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
     return logprobs
 
@@ -324,30 +324,37 @@ async def main(cfg: DictConfig):
                 target=target,
             )
 
-            # TODO: Parallelize the following calculation
-            for episode, response in zip(group.episodes, responses.outputs):
+            input_ids = torch.ones(
+                (group_size, max_req_tokens + max_req_tokens),
+                dtype=torch.long,
+                device="cuda",
+            )
+            # Populate episode info and calculate rewards
+            for i, (episode, response) in enumerate(
+                zip(group.episodes, responses.outputs)
+            ):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-
-                # Calculating reference logprobs (very slow right now)
-                input_ids = torch.cat(
-                    [episode.request_tensor, episode.response_tensor]
-                ).unsqueeze(0)
-                ref_logits = await ref_model.forward.choose(input_ids)
-                episode.ref_logprobs = compute_logprobs(
-                    ref_logits, input_ids[:, episode.request_tensor.size(-1) :]
-                )
-
+                input_ids[i, :max_req_tokens] = episode.request_tensor
+                input_ids[i, max_req_tokens:] = episode.response_tensor
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
 
+            # Calculate reference logprobs
+            ref_logits = await ref_model.forward.choose(input_ids)
+            ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
+            for i, episode in enumerate(group.episodes):
+                episode.ref_logprobs = ref_logprobs[i]
+
+            # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.choose(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
 
+            # Log metrics
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, fields
 
 import torch
 from monarch.actor import current_rank, current_size, endpoint
+from torch.distributed.tensor import DTensor
 
 from torchtitan.config.job_config import Checkpoint, Compile, Model, Parallelism
 from torchtitan.experiments.forge.engine import ForgeEngine
@@ -94,4 +95,7 @@ class ReferenceModel(ForgeActor):
             # (jackkhuu) Not sure if either context are needed for inference here
             with self.engine.train_context(optional_context_parallel_ctx):
                 with self.engine.maybe_enable_amp:
-                    return model_parts[0](input_ids)
+                    logits = model_parts[0](input_ids)
+        if isinstance(logits, DTensor):
+            logits = logits.full_tensor()
+        return logits

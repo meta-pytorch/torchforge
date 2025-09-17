@@ -184,9 +184,7 @@ class RLTrainer(ForgeActor):
         #     self.data_parallel_size,
         # ) as grad_acc:
         loss = self.forward_backward(local_inputs, local_targets)
-
-        # # Gradient clipping (optional but recommended for stability)
-        # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        torch.distributed.all_reduce(loss)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
