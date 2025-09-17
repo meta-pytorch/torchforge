@@ -7,7 +7,11 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from vllm.outputs import RequestOutput
+try:
+    from vllm.outputs import RequestOutput
+except ImportError as e:
+    print(f"Failed to import RequestOutput from vllm.outputs: {e}")
+    RequestOutput = "RequestOutput"
 
 from forge.controller.service.interface import ServiceInterface
 
