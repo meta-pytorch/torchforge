@@ -6,12 +6,14 @@
 
 from .interface import ServiceInterface, Session, SessionContext
 from .metrics import ServiceMetrics
-from .replica import Replica, ReplicaMetrics
+from .replica import Replica, ReplicaMetrics, ReplicaState
+from .router import LeastLoadedRouter, RoundRobinRouter, SessionRouter
 from .service import Service, ServiceActor, ServiceConfig
 
 __all__ = [
     "Replica",
     "ReplicaMetrics",
+    "ReplicaState",
     "Service",
     "ServiceConfig",
     "ServiceInterface",
@@ -19,4 +21,7 @@ __all__ = [
     "Session",
     "SessionContext",
     "ServiceActor",
+    "LeastLoadedRouter",
+    "RoundRobinRouter",
+    "SessionRouter",
 ]

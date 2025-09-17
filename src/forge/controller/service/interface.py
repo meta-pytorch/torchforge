@@ -14,7 +14,7 @@ import contextvars
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, List, ParamSpec, TypeVar
+from typing import Dict, Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
@@ -287,7 +287,10 @@ class Router(ABC):
 
     @abstractmethod
     def get_replica(
-        self, replicas: List[Replica], sess_id: str | None = None
+        self,
+        replicas: List[Replica],
+        sess_id: str | None = None,
+        session_map: Dict[str, int] | None = None,
     ) -> Replica:
         """Select a replica from the list based on routing logic."""
         pass

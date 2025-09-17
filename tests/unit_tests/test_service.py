@@ -13,8 +13,15 @@ import logging
 
 import pytest
 from forge.controller import ForgeActor
-
-from forge.controller.service import ServiceConfig
+from forge.controller.service import (
+    LeastLoadedRouter,
+    Replica,
+    ReplicaState,
+    RoundRobinRouter,
+    ServiceConfig,
+    SessionRouter,
+)
+from forge.types import ProcessConfig
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
@@ -54,6 +61,19 @@ class Counter(ForgeActor):
         logger.info(f"adding {amount} with {multiplier}")
         self.v += amount * multiplier
         return self.v
+
+
+def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
+    """Helper to build a replica with specified state and load."""
+    replica = Replica(
+        idx=idx,
+        proc_config=ProcessConfig(),
+        actor_def=Counter,
+        actor_kwargs={},
+    )
+    replica.state = ReplicaState.HEALTHY if healthy else ReplicaState.UNHEALTHY
+    replica.active_requests = load
+    return replica
 
 
 # Core Functionality Tests
@@ -637,6 +657,82 @@ async def test_broadcast_call_vs_choose():
 
 
 # Rounter Tests
+
+
+@pytest.mark.asyncio
+async def test_least_loaded_router_basic():
+    """LeastLoadedRouter picks the replica with lowest load."""
+    replicas = [
+        make_replica(0, load=5),
+        make_replica(1, load=1),
+        make_replica(2, load=3),
+    ]
+    router = LeastLoadedRouter()
+    chosen = router.get_replica(replicas)
+    assert chosen.idx == 1  # lowest load
+
+
+@pytest.mark.asyncio
+async def test_session_router_assigns_and_updates_session_map():
+    """SessionRouter updates session_map and preserves sticky sessions."""
+    replicas = [make_replica(0), make_replica(1)]
+    session_map = {}
+    fallback = LeastLoadedRouter()
+    router = SessionRouter(fallback)
+
+    # First request assigns via fallback
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    assert session_map["sess1"] == r1.idx
+
+    # Second request should stick
+    r2 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    assert r1.idx == r2.idx
+
+
+@pytest.mark.asyncio
+async def test_session_router_removes_unhealthy_session_mapping():
+    """If mapped replica becomes unhealthy, SessionRouter deletes entry and reassigns."""
+    replicas = [make_replica(0, healthy=False), make_replica(1, healthy=True)]
+    session_map = {"sess1": 0}
+    fallback = LeastLoadedRouter()
+    router = SessionRouter(fallback)
+
+    # Replica 0 unhealthy → deleted from session_map → reassigned to 1
+    r = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    assert r.idx == 1
+    assert session_map["sess1"] == 1
+
+
+@pytest.mark.asyncio
+async def test_session_router_with_round_robin_fallback():
+    """Switch fallback router to round-robin and verify assignment order."""
+    # Choose RoundRobinRouter as fallback, r1 and r2 should be assigned to different replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = RoundRobinRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx != r2.idx
+    assert set(session_map.values()) == {0, 1}
+
+    # If LeastLoadedRouter as fallback, r1 and r2 should be assigned to same replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = LeastLoadedRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx == r2.idx == 0
+
+
+# Router integeration tests
+
+
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_round_robin_router_distribution():
@@ -657,6 +753,91 @@ async def test_round_robin_router_distribution():
         # - 2 increments per replica (since 3 replicas, 6 calls)
         final_values = results[-1]  # last snapshot
         assert sorted(final_values) == [2, 2, 2]
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_session_router_assigns_and_updates_session_map_in_service():
+    """Integration: Service with SessionRouter preserves sticky sessions."""
+    # Use LeastLoaded as default, SessionRouter (with fallback) is always active
+    service = await Counter.options(
+        procs_per_replica=1,
+        num_replicas=2,
+    ).as_service(v=0)
+
+    try:
+        # First call with sess_id -> assign a replica
+        await service.incr.choose(sess_id="sess1")
+        values1 = await service.value.call()
+
+        # Second call with same sess_id -> must hit same replica
+        await service.incr.choose(sess_id="sess1")
+        values2 = await service.value.call()
+
+        # Difference should only be on one replica (sticky session)
+        diffs = [v2 - v1 for v1, v2 in zip(values1, values2)]
+        assert (
+            sum(diffs) == 1
+        ), f"Expected exactly one replica to increment, got {diffs}"
+        assert max(diffs) == 1 and min(diffs) == 0
+
+        # Session map in service should reflect assigned replica
+        assigned_idx = service._session_replica_map["sess1"]
+        assert values2[assigned_idx] == values1[assigned_idx] + 1
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def integration_router_test_default_setting():
+    """Verify SessionRouter falls back to RoundRobinRouter correctly for new sessions."""
+    # Initialize Counter as a real service with 3 replicas
+    service = await Counter.options(
+        procs_per_replica=1,
+        num_replicas=3,
+    ).as_service(v=0)
+
+    try:
+        session_map = service._session_replica_map
+
+        # Create new sessions and assign replicas via session router
+        sess_ids = ["sess1", "sess2", "sess3"]
+        assigned_indices = []
+
+        for sess_id in sess_ids:
+            replica = await service._session_router.get_replica(
+                service._replicas, sess_id=sess_id, session_map=session_map
+            )
+            assigned_indices.append(replica.idx)
+
+        # Should assign in round-robin order: 0,1,2
+        assert assigned_indices == [
+            0,
+            1,
+            2,
+        ], f"Expected round-robin assignment, got {assigned_indices}"
+
+        # Reuse a session, should stick to the same replica
+        replica_again = await service._session_router.get_replica(
+            service._replicas, sess_id="sess2", session_map=session_map
+        )
+        assert replica_again.idx == 1
+
+        # Test that making calls through the service works
+        for sess_id in sess_ids:
+            await service.incr.choose(sess_id=sess_id)
+
+        # Verify counters updated correctly per session
+        values = []
+        for sess_id in sess_ids:
+            val = await service.value.choose(sess_id=sess_id)
+            values.append(val)
+        assert sorted(values) == [1, 1, 1]
 
     finally:
         await service.shutdown()

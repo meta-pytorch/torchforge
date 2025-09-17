@@ -36,16 +36,20 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Type
 
 from monarch.actor import Actor, endpoint
 
-from forge.controller.service.interface import _session_context, Session
+from forge.controller.service.interface import _session_context, Router, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
 
-from forge.controller.service.router import RoundRobinRouter
+from forge.controller.service.router import (
+    LeastLoadedRouter,
+    RoundRobinRouter,
+    SessionRouter,
+)
 from forge.types import ServiceConfig
 
 logger = logging.getLogger(__name__)
@@ -64,6 +68,13 @@ class Service:
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
+        router_cls (Type[Router], optional): Router class used for non-session
+            calls. Defaults to RoundRobinRouter. Examples include RoundRobinRouter
+            or LeastLoadedRouter. The router is instantiated internally.
+        fallback_router_cls: Router class used as a fallback when a session
+                             cannot be mapped to an existing replica. Defaults
+                             to LeastLoadedRouter.
+
 
     Attributes:
         _cfg: Service configuration
@@ -73,16 +84,24 @@ class Service:
         _endpoints: Dynamically registered actor endpoints
     """
 
-    def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):
+    def __init__(
+        self,
+        cfg: ServiceConfig,
+        actor_def,
+        actor_kwargs: dict,
+        router_cls: Type["Router"] = RoundRobinRouter,
+        fallback_router_cls: Type["Router"] = LeastLoadedRouter,
+    ):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
         self._actor_kwargs = actor_kwargs
+        self.router_cls = router_cls
+        self.fallback_router_cls = fallback_router_cls
 
         self._active_sessions = []
         self._id_session_map = {}
         self._session_replica_map: Dict[str, int] = {}
-        self._router = RoundRobinRouter()
 
         # Initialize metrics collection
         self._metrics = ServiceMetrics()
@@ -95,6 +114,12 @@ class Service:
     async def __initialize__(self):
         """Initializes the service and starts the health loop."""
         logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
+
+        # Initialize the routers
+        self._default_router = self.router_cls()
+        self._session_router = SessionRouter(fallback_router=self.fallback_router_cls())
+
+        # Initialize all replicas
         replicas = []
         num_replicas = self._cfg.num_replicas
         for i in range(num_replicas):
@@ -457,36 +482,15 @@ class Service:
 
             await asyncio.sleep(poll_rate_s)
 
-    def _get_least_loaded_replica(self) -> "Replica":
-        """Get the replica with the lowest load."""
-        healthy_replicas = [r for r in self._replicas if r.healthy]
-        if not healthy_replicas:
-            raise RuntimeError("No healthy replicas available for session assignment")
-
-        # Use the replica's current_load property
-        return min(healthy_replicas, key=lambda replica: replica.current_load)
-
     async def _get_replica(self, sess_id: str | None) -> "Replica":
         """Get a replica for the given session ID."""
         if sess_id is None:
             # No session, use the default router
-            return self._router.get_replica(self._replicas)
+            return self._default_router.get_replica(self._replicas)
 
-        # Session-based routing
-        if sess_id in self._session_replica_map:
-            replica_idx = self._session_replica_map[sess_id]
-            # Find the replica with this index
-            for replica in self._replicas:
-                if replica.idx == replica_idx and replica.healthy:
-                    return replica
-            # If the replica is no longer healthy, remove from session map and reassign
-            del self._session_replica_map[sess_id]
-
-        # New session, assign to least loaded replica
-        replica = self._get_least_loaded_replica()
-        self._session_replica_map[sess_id] = replica.idx
-        logger.debug("Assigning session %s to replica %d", sess_id, replica.idx)
-        return replica
+        return self._session_router.get_replica(
+            self._replicas, sess_id, self._session_replica_map
+        )
 
     async def stop(self):
         logger.debug("Stopping service...")
