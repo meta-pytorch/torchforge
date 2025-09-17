@@ -329,10 +329,20 @@ async def main(cfg: DictConfig):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-                episode.ref_logprobs = await ref_model.forward.choose(episode)
+
+                # Calculating reference logprobs (very slow right now)
+                input_ids = torch.cat(
+                    [episode.request_tensor, episode.response_tensor]
+                ).unsqueeze(0)
+                ref_logits = await ref_model.forward.choose(input_ids)
+                episode.ref_logprobs = compute_logprobs(
+                    ref_logits, input_ids[:, episode.request_tensor.size(-1) :]
+                )
+
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
+
             advantages = await compute_advantages.compute.choose(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage

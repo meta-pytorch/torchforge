@@ -4,8 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-
-import logging
 import math
 import os
 import time
@@ -37,9 +35,6 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 @dataclass
