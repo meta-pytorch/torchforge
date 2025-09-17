@@ -38,13 +38,15 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
+
+from forge.controller.service.router import RoundRobinRouter
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -80,7 +82,7 @@ class Service:
         self._active_sessions = []
         self._id_session_map = {}
         self._session_replica_map: Dict[str, int] = {}
-        self._next_replica_idx = 0  # For round-robin load balancing
+        self._router = RoundRobinRouter()
 
         # Initialize metrics collection
         self._metrics = ServiceMetrics()
@@ -455,16 +457,6 @@ class Service:
 
             await asyncio.sleep(poll_rate_s)
 
-    def _get_next_replica(self) -> "Replica":
-        """Get the next replica using round-robin selection."""
-        healthy_replicas = [r for r in self._replicas if r.healthy]
-        if not healthy_replicas:
-            raise RuntimeError("No healthy replicas available for load balancing")
-
-        # Simple round-robin
-        self._next_replica_idx = (self._next_replica_idx + 1) % len(healthy_replicas)
-        return healthy_replicas[self._next_replica_idx]
-
     def _get_least_loaded_replica(self) -> "Replica":
         """Get the replica with the lowest load."""
         healthy_replicas = [r for r in self._replicas if r.healthy]
@@ -477,9 +469,8 @@ class Service:
     async def _get_replica(self, sess_id: str | None) -> "Replica":
         """Get a replica for the given session ID."""
         if sess_id is None:
-            # No session, use round-robin load balancing
-            replica = self._get_next_replica()
-            return replica
+            # No session, use the default router
+            return self._router.get_replica(self._replicas)
 
         # Session-based routing
         if sess_id in self._session_replica_map:
@@ -592,7 +583,6 @@ class Service:
                 for replica in self._replicas
             ],
             # Load balancing state
-            "next_replica_idx": self._next_replica_idx,
             # Service-level state
             "total_replicas": len(self._replicas),
             "healthy_replica_count": sum(1 for r in self._replicas if r.healthy),

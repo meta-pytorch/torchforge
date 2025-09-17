@@ -634,3 +634,29 @@ async def test_broadcast_call_vs_choose():
 
     finally:
         await service.shutdown()
+
+
+# Rounter Tests
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_round_robin_router_distribution():
+    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
+    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
+
+    try:
+        # Make multiple sessionless calls using choose()
+        results = []
+        for _ in range(6):
+            await service.incr.choose()
+            values = await service.value.call()
+            print(values)
+            results.append(values)
+        print("results: ", results)
+        # Verify that requests were distributed round-robin
+        # Each call increments a single replica, so after 6 calls we expect:
+        # - 2 increments per replica (since 3 replicas, 6 calls)
+        final_values = results[-1]  # last snapshot
+        assert sorted(final_values) == [2, 2, 2]
+
+    finally:
+        await service.shutdown()

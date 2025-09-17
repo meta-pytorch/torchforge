@@ -12,10 +12,13 @@ including session management, context propagation, and dynamic endpoint registra
 
 import contextvars
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
+
+from .replica import Replica
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -277,3 +280,14 @@ class ServiceInterfaceV2:
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
+
+
+class Router(ABC):
+    """Abstract base class for routing logic."""
+
+    @abstractmethod
+    def get_replica(
+        self, replicas: List[Replica], sess_id: str | None = None
+    ) -> Replica:
+        """Select a replica from the list based on routing logic."""
+        pass
