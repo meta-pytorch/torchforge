@@ -4,16 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
-
 import pytest
 import torch
-import torch.nn as nn
 from forge.losses.grpo_loss import SimpleGRPOLoss
 
 
 class TestSimpleGRPOLoss:
-
     @pytest.fixture
     def loss_fn(self):
         """Create a GRPO loss instance with default beta."""
