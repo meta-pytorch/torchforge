@@ -59,7 +59,7 @@ class LLMJudge:
 
         return matching > (len(outputs.outputs) // 2)
 
-    async def _first_sample(self, response: str, outputs: RequestOutput) -> float:
+    async def _first_sample(self, response: str, outputs: RequestOutput) -> bool:
         """
         Returns whether there is a match to the first output
         """
@@ -69,7 +69,7 @@ class LLMJudge:
 
         return output_normalized == response_normalized
 
-    async def _pass_n(self, response: str, outputs: RequestOutput) -> float:
+    async def _pass_n(self, response: str, outputs: RequestOutput) -> bool:
         """
         Return whether any of the outputs match the response
         """
