@@ -16,6 +16,9 @@ from typing import Callable
 import torch
 import torchstore as ts
 
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -35,9 +38,6 @@ from torchtitan.config.job_config import (
 from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -271,9 +271,34 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         k = sd[prefix + "self_attn.k_proj.weight"]
         v = sd[prefix + "self_attn.v_proj.weight"]
         load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+
+        # QKV fusion - handle bias if present
+        q_bias_key = prefix + "self_attn.q_proj.bias"
+        k_bias_key = prefix + "self_attn.k_proj.bias"
+        v_bias_key = prefix + "self_attn.v_proj.bias"
+
+        if all(key in sd for key in [q_bias_key, k_bias_key, v_bias_key]):
+            q_bias = sd[q_bias_key]
+            k_bias = sd[k_bias_key]
+            v_bias = sd[v_bias_key]
+            load_sd[prefix + "self_attn.qkv_proj.bias"] = torch.cat(
+                [q_bias, k_bias, v_bias], dim=0
+            )
+
         # MLP gate_up_proj fusion
         gate = sd[prefix + "mlp.gate_proj.weight"]
         up = sd[prefix + "mlp.up_proj.weight"]
         load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+
+        # MLP gate_up_proj fusion - handle bias if present
+        gate_bias_key = prefix + "mlp.gate_proj.bias"
+        up_bias_key = prefix + "mlp.up_proj.bias"
+
+        if all(key in sd for key in [gate_bias_key, up_bias_key]):
+            gate_bias = sd[gate_bias_key]
+            up_bias = sd[up_bias_key]
+            load_sd[prefix + "mlp.gate_up_proj.bias"] = torch.cat(
+                [gate_bias, up_bias], dim=0
+            )
 
     return load_sd
