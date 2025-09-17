@@ -67,10 +67,6 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
-  service:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: true
 
 # Replay buffer configuration
 replay_buffer:
@@ -108,7 +104,7 @@ services:
     num_replicas: 1
     with_gpus: true
   trainer:
-    procs_per_replica: ${trainer.parallelism.data_parallel_shard_degree} * ${trainer.parallelism.tensor_parallel_degree}
+    procs_per_replica: 1
     num_replicas: 1
     with_gpus: true
   replay_buffer:
@@ -116,7 +112,7 @@ services:
     num_replicas: 1
     with_gpus: false
   ref_model:
-    procs_per_replica: ${ref_model.parallelism.data_parallel_shard_degree} * ${ref_model.parallelism.tensor_parallel_degree}
+    procs_per_replica: 1
     num_replicas: 1
     with_gpus: true
   compute_advantages:
