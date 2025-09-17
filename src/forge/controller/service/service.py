@@ -36,11 +36,11 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List, Type
+from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
-from forge.controller.service.interface import _session_context, Router, Session
+from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
@@ -68,12 +68,6 @@ class Service:
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-        router_cls (Type[Router], optional): Router class used for non-session
-            calls. Defaults to RoundRobinRouter. Examples include RoundRobinRouter
-            or LeastLoadedRouter. The router is instantiated internally.
-        fallback_router_cls: Router class used as a fallback when a session
-                             cannot be mapped to an existing replica. Defaults
-                             to LeastLoadedRouter.
 
 
     Attributes:
@@ -89,15 +83,11 @@ class Service:
         cfg: ServiceConfig,
         actor_def,
         actor_kwargs: dict,
-        router_cls: Type["Router"] = RoundRobinRouter,
-        fallback_router_cls: Type["Router"] = LeastLoadedRouter,
     ):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
         self._actor_kwargs = actor_kwargs
-        self.router_cls = router_cls
-        self.fallback_router_cls = fallback_router_cls
 
         self._active_sessions = []
         self._id_session_map = {}
@@ -116,8 +106,8 @@ class Service:
         logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
 
         # Initialize the routers
-        self._default_router = self.router_cls()
-        self._session_router = SessionRouter(fallback_router=self.fallback_router_cls())
+        self._default_router = RoundRobinRouter()
+        self._session_router = SessionRouter(fallback_router=LeastLoadedRouter())
 
         # Initialize all replicas
         replicas = []
