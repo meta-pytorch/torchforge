@@ -22,9 +22,7 @@ from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.data.utils import exclude_service
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -261,44 +259,20 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        spawn_service(
-            ServiceConfig(**cfg.dataset.service),
-            DatasetActor,
-            **exclude_service(cfg.dataset),
+        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        RLTrainer.options(**cfg.services.trainer).as_service(
+            **cfg.trainer, loss=simple_grpo_loss
         ),
-        spawn_service(
-            ServiceConfig(**cfg.policy.service),
-            Policy,
-            **exclude_service(cfg.policy),
+        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
+            **cfg.replay_buffer, collate=collate
         ),
-        spawn_service(
-            ServiceConfig(**cfg.trainer.service),
-            RLTrainer,
-            loss=simple_grpo_loss,
-            **exclude_service(cfg.trainer),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.replay_buffer.service),
-            ReplayBuffer,
-            collate=collate,
-            **exclude_service(cfg.replay_buffer),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.compute_advantages.service),
-            ComputeAdvantages,
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.ref_model.service),
-            ReferenceModel,
-            **exclude_service(cfg.ref_model),
-        ),
-        spawn_service(
-            ServiceConfig(**cfg.reward_actor.service),
-            RewardActor,
-            reward_functions=[MathReward(), ThinkingReward()],
+        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        RewardActor.options(**cfg.services.reward_actor).as_service(
+            reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
-
     print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
@@ -398,14 +372,13 @@ async def main(cfg: DictConfig):
     finally:
         print("Shutting down...")
         await asyncio.gather(
-            shutdown_service(policy),
-            shutdown_service(trainer),
-            shutdown_service(replay_buffer),
-            shutdown_service(dataloader),
-            shutdown_service(compute_advantages),
-            shutdown_service(ref_model),
-            shutdown_service(reward_actor),
-            return_exceptions=True,
+            dataloader.shutdown(),
+            policy.shutdown(),
+            trainer.shutdown(),
+            replay_buffer.shutdown(),
+            compute_advantages.shutdown(),
+            ref_model.shutdown(),
+            reward_actor.shutdown(),
         )
         # TODO - add a global shutdown that implicitly shuts down all services
         # and remote allocations

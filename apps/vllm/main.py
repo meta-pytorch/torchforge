@@ -16,10 +16,8 @@ import os
 from forge.actors.policy import Policy
 from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
 
 from omegaconf import DictConfig
-from src.forge.data.utils import exclude_service
 from vllm.outputs import RequestOutput
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
@@ -33,11 +31,7 @@ async def run(cfg: DictConfig):
         prompt = "What is 3+5?" if gd else "Tell me a joke"
 
     print("Spawning service...")
-    policy = await spawn_service(
-        ServiceConfig(**cfg.policy.service),
-        Policy,
-        **exclude_service(cfg.policy),
-    )
+    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
     try:
         async with policy.session():
@@ -54,7 +48,7 @@ async def run(cfg: DictConfig):
 
     finally:
         print("\nShutting down...")
-        await shutdown_service(policy)
+        await policy.shutdown()
         await shutdown()
 
 
