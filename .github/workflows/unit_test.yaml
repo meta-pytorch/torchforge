@@ -54,7 +54,7 @@ jobs:
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
           # Install torchtitan
-          pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu129
+          pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu126
 
           # Install dependencies
           python -m pip install --no-build-isolation -e ".[dev]"
