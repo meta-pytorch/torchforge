@@ -50,7 +50,12 @@ jobs:
 
           # Install torchstore
           eval "$(ssh-agent -s)"
-          ssh-add - <<< '${SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE}'
+          echo '${SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE}' >> torchstore_ssh_key
+          chmod 600 torchstore_ssh_key
+          # Print the first and last 2 lines of the key to make sure it's valid
+          head -2 torchstore_ssh_key
+          tail -2 torchstore_ssh_key
+          ssh-add torchstore_ssh_key
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
           # Install torchtitan
