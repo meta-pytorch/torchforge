@@ -167,10 +167,12 @@ def validate_loaded_tensors_equals_original(
     )
 
 
-def get_configs(worker_size: int, model_name: str) -> tuple[dict, ServiceConfig]:
+def get_configs(
+    worker_size: int, tp_size: int, model_name: str
+) -> tuple[dict, ServiceConfig]:
     engine_config = EngineConfig(
         model=model_name,
-        tensor_parallel_size=worker_size,
+        tensor_parallel_size=tp_size,
         pipeline_parallel_size=1,
         enforce_eager=True,
     )
@@ -212,14 +214,14 @@ class TestWeightSync:
         }
 
     @pytest_asyncio.fixture
-    def trainer_cfg_tp(self):
+    def trainer_cfg_tp(self, tp_size):
         cached_dir = snapshot_download(repo_id=self.model)
         return {
             "model": {
                 "name": "qwen3",
                 "flavor": "1.7B",
             },
-            "parallelism": {"tensor_parallel_degree": 2},
+            "parallelism": {"tensor_parallel_degree": tp_size},
             "checkpoint": {
                 "enable": True,
                 "folder": "/tmp/saved_checkpoints",
@@ -262,7 +264,7 @@ class TestWeightSync:
         await rl_trainer.push_weights.choose(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
-            worker_size=worker_size, model_name=self.model
+            worker_size=worker_size, tp_size=worker_size, model_name=self.model
         )
         policy = await spawn_service(service_config, Policy, **policy_config)
         await policy.update_weights.call()
@@ -298,12 +300,12 @@ class TestWeightSync:
                 procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
             ),
             RLTrainer,
-            **trainer_cfg_tp,
+            **trainer_cfg_tp(tp_size),
         )
         await rl_trainer.push_weights.call(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
-            worker_size=policy_worker_size, model_name=self.model
+            worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
         )
         policy = await spawn_service(service_config, Policy, **policy_config)
         await policy.update_weights.call()
