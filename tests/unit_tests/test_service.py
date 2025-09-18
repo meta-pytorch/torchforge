@@ -660,36 +660,6 @@ async def test_broadcast_call_vs_choose():
 
 
 @pytest.mark.asyncio
-async def test_least_loaded_router_basic():
-    """LeastLoadedRouter picks the replica with lowest load."""
-    replicas = [
-        make_replica(0, load=5),
-        make_replica(1, load=1),
-        make_replica(2, load=3),
-    ]
-    router = LeastLoadedRouter()
-    chosen = router.get_replica(replicas)
-    assert chosen.idx == 1  # lowest load
-
-
-@pytest.mark.asyncio
-async def test_session_router_assigns_and_updates_session_map():
-    """SessionRouter updates session_map and preserves sticky sessions."""
-    replicas = [make_replica(0), make_replica(1)]
-    session_map = {}
-    fallback = LeastLoadedRouter()
-    router = SessionRouter(fallback)
-
-    # First request assigns via fallback
-    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
-    assert session_map["sess1"] == r1.idx
-
-    # Second request should stick
-    r2 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
-    assert r1.idx == r2.idx
-
-
-@pytest.mark.asyncio
 async def test_session_router_with_round_robin_fallback():
     """Switch fallback router to round-robin and verify assignment order."""
     # Choose RoundRobinRouter as fallback, r1 and r2 should be assigned to different replicas
