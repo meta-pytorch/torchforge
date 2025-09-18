@@ -19,6 +19,9 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
+from monarch.tools.components.meta import hyperactor
+from torchx.specs.fb.component_helpers import Packages
+
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -83,44 +86,69 @@ class Provisioner:
         self._host_gpu_map = {
             self._this_host_id: GpuManager(),
         }
+        self.server_info = None
+
+    async def connect_job(self, job_name, config, alloc_factory):
+        self.server_info = await commands.get_or_create(job_name, config)
+        self.alloc_factory = alloc_factory
+        
+        print("job_name")
+        print(f"{self.server_info.name=}")
+        
+        return self.server_info
+
 
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
         logger.debug(f"Creating remote server for alloc {name}")
-        appdef = hyperactor.host_mesh(
-            image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
-        )
-        for role in appdef.roles:
-            # Note - this is hardcoded to SLURM
-            # We got this with sinfo
-            role.resource.memMB = 2062607
-            role.resource.cpu = 128
-            role.resource.gpu = 8
+        # appdef = hyperactor.host_mesh(
+        #     image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
+        # )
+        # for role in appdef.roles:
+        #     # Note - this is hardcoded to SLURM
+        #     # We got this with sinfo
+        #     role.resource.memMB = 2062607
+        #     role.resource.cpu = 128
+        #     role.resource.gpu = 8
 
-        # TODO - multi scheduler support
-        server_config = Config(
-            scheduler="slurm",
-            appdef=appdef,
-            workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
-        )
-        server_info = await commands.get_or_create(
-            "forge_job",
-            server_config,
-            force_restart=False,
-        )
-        alloc = RemoteAllocator(
-            world_id=name,
-            initializer=TorchXRemoteAllocInitializer(server_info.server_handle),
-        )
-        server_name = f"slurm:///{server_info.name}"
+        # # TODO - multi scheduler support
+        # server_config = Config(
+        #     scheduler="slurm",
+        #     appdef=appdef,
+        #     workspace=None,
+        # )
+        assert self.server_info is not None
+        alloc, alloc_constraints = self.alloc_factory(self.server_info)
+        # alloc = RemoteAllocator(
+        #     world_id=name,
+        #     initializer=TorchXRemoteAllocInitializer(self.server_info.server_handle),
+        # )
+
+        server_name = f"{self.server_info.scheduler}:///{self.server_info.name}"
+
+        # shape = Shape(["hosts"], NDSlice.new_row_major([num_hosts]))
+        # host_mesh = HostMesh(
+        #     shape=shape,
+        #     allocator=allocator,
+        #     alloc_constraints=AllocConstraints({MastAllocator.ALLOC_LABEL_TASK_GROUP: task_group})
+        # )
+
+
         return (
-            HostMesh(Shape(["hosts"], NDSlice.new_row_major([num_hosts])), alloc),
+            HostMesh(
+                shape=Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints
+            ),
             server_name,
         )
 
     async def get_proc_mesh(
-        self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
+        self,
+        num_procs: int,
+        with_gpus: bool = False,
+        num_hosts: int | None = None,
     ):
         """Gets a proc mesh.
 
@@ -128,8 +156,8 @@ class Provisioner:
 
         """
         async with self._lock:
-            server_name = None
-            if num_hosts is not None and num_hosts > 0:
+            # if num_hosts is not None and num_hosts > 0:
+            if True: #testing
                 created_hosts = len(self._server_names)
                 host_mesh, server_name = await self.create_host_mesh(
                     name=f"alloc-{created_hosts}",

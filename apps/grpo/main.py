@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from forge.controller import provisioner
 import torch
 import torch.nn.functional as F
 import torchstore as ts
@@ -330,8 +331,14 @@ class DatasetActor(ForgeActor):
         return self._tokenizer.pad_token_id
 
 
+from forge.controller.provisioner import _get_provisioner
+
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
+
+    provisioner = _get_provisioner()
+    await provisioner.connect_job("lpasqualin_forge", 1)
+
     titan_model = TitanJobModelConfig(name="qwen3", flavor="1.7B")
     # Get parameters from config with fallbacks
     group_size = cfg.group_size
