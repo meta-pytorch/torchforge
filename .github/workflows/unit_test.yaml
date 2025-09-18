@@ -5,64 +5,65 @@ on:
 
 
 jobs:
-  unit_tests:
-    runs-on: 4-core-ubuntu-gpu-t4
-    timeout-minutes: 15
+  build-and-test:
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
-    steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
-      - name: Setup conda env
-        uses: conda-incubator/setup-miniconda@v3.2.0
-        with:
-          auto-update-conda: true
-          miniconda-version: "latest"
-          activate-environment: test
-          python-version: ${{ matrix.python-version }}
-      - name: Update pip
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          python -m pip install --upgrade pip
-      - name: Install pytorch
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu129
-      - name: Install monarch
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
-      - name: Add GitHub.com to known_hosts
-        run: ssh-keyscan github.com >> ~/.ssh/known_hosts
-      - name: Install torchstore
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
-          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
-      - name: Install torchtitan
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu126
-      - name: Install dependencies
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          python -m pip install --no-build-isolation -e ".[dev]"
-      - uses: Jimver/cuda-toolkit@master
-        id: cuda-toolkit
-        with:
-          cuda: '12.9.0'
-          log-file-suffix: '${{matrix.python-version}}.txt'
-      - name: Check CUDA version
-        run: |
-          sudo chmod -R 777 $CUDA_PATH
-          $CUDA_PATH/bin/nvcc --version
-          nvidia-smi
-      - name: Run unit tests with coverage
-        # TODO add all tests
-        run: |
-          source .github/workflows/activate_conda_env.sh
-          pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
+    # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    secrets: inherit  # Pass all secrets
+    with:
+      runner: linux.aws.h100.8
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.9"
+      docker-image: pytorch/almalinux-builder:cuda12.9-main
+      repository: meta-pytorch/forge
+      upload-artifact: "coverage-report"
+    script: |
+        set -eux
+
+        # Log CUDA driver version for debugging.
+        DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 || true)
+        echo "CUDA driver version: ${DRIVER_VERSION}"
+
+        conda create -n test python="${{ matrix.python-version }}" -y
+
+        conda activate test
+
+        pip config --user set global.progress_bar off
+
+        # Upgrade pip
+        python -m pip install --upgrade pip
+
+        # Install pytorch
+        python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu129
+
+        # Install monarch
+        python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
+
+        # Install torchstore
+        eval "$(ssh-agent -s)"
+        ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
+        python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
+
+        # Install torchtitan
+        pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu129
+
+        # Install dependencies
+        python -m pip install --no-build-isolation -e ".[dev]"
+
+        # Run unit tests with coverage
+        pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+    upload-coverage:
+      needs: build-and-test
+      runs-on: ubuntu-latest
+      steps:
+        - name: Download coverage artifact
+          uses: actions/download-artifact@v4
+          with:
+            name: coverage-report
+        - name: Upload coverage to Codecov
+          uses: codecov/codecov-action@v4
+          with:
+            files: coverage.xml
+            token: ${{ secrets.CODECOV_TOKEN }}
