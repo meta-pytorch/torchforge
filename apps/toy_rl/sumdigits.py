@@ -37,19 +37,53 @@ from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
+def selective_log_softmax(logits, index) -> torch.Tensor:
+    """
+    A memory-efficient implementation of the common `log_softmax -> gather` operation.
+
+    This function is equivalent to the following naive implementation:
+    ```python
+    logps = torch.gather(logits.log_softmax(-1), dim=-1, index=index.unsqueeze(-1)).squeeze(-1)
+    ```
+
+    Args:
+        logits (`torch.Tensor`):
+            Logits tensor of shape `(..., num_classes)`.
+        index (`torch.Tensor`):
+            Index tensor of shape `(...)`, specifying the positions to gather from the log-softmax output.
+
+    Returns:
+        `torch.Tensor`:
+            Gathered log probabilities with the same shape as `index`.
+    """
+    if logits.dtype in [torch.float32, torch.float64]:
+        selected_logits = torch.gather(
+            logits, dim=-1, index=index.unsqueeze(-1)
+        ).squeeze(-1)
+        # loop to reduce peak mem consumption
+        logsumexp_values = torch.stack([torch.logsumexp(lg, dim=-1) for lg in logits])
+        per_token_logps = (
+            selected_logits - logsumexp_values
+        )  # log_softmax(x_i) = x_i - logsumexp(x)
+    else:
+        # logsumexp approach is unstable with bfloat16, fall back to slightly less efficient approach
+        per_token_logps = []
+        for row_logits, row_labels in zip(
+            logits, index
+        ):  # loop to reduce peak mem consumption
+            row_logps = F.log_softmax(row_logits, dim=-1)
+            row_per_token_logps = row_logps.gather(
+                dim=-1, index=row_labels.unsqueeze(-1)
+            ).squeeze(-1)
+            per_token_logps.append(row_per_token_logps)
+        per_token_logps = torch.stack(per_token_logps)
+    return per_token_logps
+
+
 def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-
-    # Truncate request logits and drop last
-    logits = logits[:, context_length - 1 : -1]
-
-    # Compute logprobs
-    logprobs = torch.log_softmax(logits / temperature, dim=-1)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-
-    return logprobs
+    return selective_log_softmax(logits, input_ids)
 
 
 @dataclass
@@ -71,16 +105,34 @@ class Episode:
     advantage: float | None = None
 
     @property
-    def request_tensor(self):
-        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+    def request_tensor(self, slice_obj=None):
+        """Returns the full request tensor"""
+        return self.get_request_tensor()
+
+    @property
+    def response_tensor(self):
+        """Returns the full response tensor"""
+        return self.get_response_tensor()
+
+    def get_request_tensor(self, slice_obj=None):
+        tokens = (
+            self.request_tokens[slice_obj]
+            if slice_obj is not None
+            else self.request_tokens
+        )
+        tensor = torch.tensor(tokens, dtype=torch.long)
         if tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
             tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
         return tensor
 
-    @property
-    def response_tensor(self):
-        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+    def get_response_tensor(self, slice_obj=None):
+        tokens = (
+            self.response_tokens[slice_obj]
+            if slice_obj is not None
+            else self.response_tokens
+        )
+        tensor = torch.tensor(tokens, dtype=torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
@@ -133,6 +185,12 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def setup(self):
+        # import debugpy
+
+        # debugpy.listen(5681)
+        # print("[LEARNER MESH] Waiting for VS Code debugger to attach...")
+        # debugpy.wait_for_client()
+        # print("Attached!")
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -162,7 +220,7 @@ class Trainer(ForgeActor):
         request = [e.request_tensor for e in microbatch]
         request = torch.stack(request).to(self.device)  # [b x s]
 
-        response = [e.response_tensor for e in microbatch]
+        response = [e.get_response_tensor(slice(None, -1)) for e in microbatch]
         response = torch.stack(response).to(self.device)  # [b x s]
 
         ref_logprobs = [e.ref_logprobs for e in microbatch]
@@ -172,14 +230,64 @@ class Trainer(ForgeActor):
         advantages = torch.tensor(advantages).to(self.device).unsqueeze(-1)  # [b x 1]
         del batch
 
-        input_ids = torch.cat([request, response], dim=1)
-        mask = input_ids != pad_id
-        logits = self.model(input_ids=input_ids, attention_mask=mask).logits
-        logprobs = compute_logprobs(logits, response)
-        del logits
+        # prompt_ids = torch.LongTensor(microbatch[0].request_tokens)
+        # token_ids = torch.LongTensor(microbatch[0].response_tokens)
+        # ids = torch.cat([prompt_ids, token_ids])
+        # input_ids = ids[:-1]
+        # diff = 128 - input_ids.size(0)
+        # input_ids = (
+        #     F.pad(input_ids, (0, diff), value=pad_id).to(self.device).unsqueeze(0)
+        # )
 
-        mask = response != pad_id
-        loss = self.loss(logprobs, ref_logprobs, advantages, mask)
+        # mask = input_ids != pad_id
+        # logits = self.model(input_ids=input_ids, attention_mask=mask).logits
+
+        # target_ids = ids[1:]
+        # diff = 128 - target_ids.size(0)
+        # target_ids = (
+        #     F.pad(target_ids, (0, diff), value=pad_id).to(self.device).unsqueeze(0)
+        # )
+
+        # logprobs = compute_logprobs(logits, target_ids)
+        # del logits
+
+        # mask = target_ids != pad_id
+        # loss = self.loss(logprobs, ref_logprobs, advantages, mask)
+
+        # Process all microbatches
+        batch_input_ids = []
+        batch_target_ids = []
+        batch_masks = []
+        for microbatch_item in microbatch:
+            prompt_ids = torch.LongTensor(microbatch_item.request_tokens)
+            token_ids = torch.LongTensor(microbatch_item.response_tokens)
+            ids = torch.cat([prompt_ids, token_ids])
+
+            input_ids = ids[:-1]
+            diff = 128 - input_ids.size(0)
+            input_ids = F.pad(input_ids, (0, diff), value=pad_id)
+
+            target_ids = ids[1:]
+            diff = 128 - target_ids.size(0)
+            target_ids = F.pad(target_ids, (0, diff), value=pad_id)
+
+            batch_input_ids.append(input_ids)
+            batch_target_ids.append(target_ids)
+        # Stack into batched tensors
+        input_ids = torch.stack(batch_input_ids).to(self.device)  # [batch_size, 128]
+        target_ids = torch.stack(batch_target_ids).to(self.device)  # [batch_size, 128]
+        # Create attention mask
+        mask = input_ids != pad_id
+        # Forward pass
+        logits = self.model(input_ids=input_ids, attention_mask=mask).logits
+        # Compute logprobs
+        logprobs = compute_logprobs(logits, target_ids)
+        del logits
+        # Create target mask for loss computation
+        target_mask = target_ids != pad_id
+        # Compute loss
+
+        loss = self.loss(logprobs, ref_logprobs, advantages, target_mask)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
@@ -205,7 +313,17 @@ class Trainer(ForgeActor):
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
 
-    reward_functions: list[Callable]
+    # reward_functions: list[Callable]
+
+    def __init__(self, reward_functions: list[Callable]):
+        super().__init__()
+        # import debugpy
+
+        # debugpy.listen(5687)
+        # print("[Reward] Waiting for VS Code debugger to attach...")
+        # debugpy.wait_for_client()
+        # print("Attached!")
+        self.reward_functions = reward_functions
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
@@ -224,7 +342,8 @@ class ComputeAdvantages(ForgeActor):
         # TODO: add batch processing
         rewards = torch.tensor([[e.reward for e in group.episodes]])
         mean = rewards.mean(1, keepdim=True)
-        std = rewards.std(1, keepdim=True)
+        # Use unbiased=False to disable Bessel's correction
+        std = rewards.std(1, keepdim=True, unbiased=False)
         advantages = (rewards - mean) / (std + 1e-4)
         return advantages.squeeze(0).tolist()
 
@@ -276,7 +395,6 @@ class SumDigitsDataset(IterableDataset):
             answer = str(sum(int(x) for x in data))
             system_prompt = """
             A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant only gives very concise answers.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
             """
             request: str = f"What is the sum of the digits of {data}"
             as_chat = [
@@ -367,11 +485,17 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
         RefModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+            reward_functions=[MathReward()]
         ),
     )
 
     print("All services initialized successfully!")
+    import debugpy
+
+    debugpy.listen(5678)
+    print("Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -419,6 +543,7 @@ async def main(cfg: DictConfig):
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
+            # print(f"avg_reward/rollout_count: {avg_reward} at {rollout_count}")
 
             rollout_count += 1
 
@@ -436,11 +561,12 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at {training_step}")
-                if training_step % 50 == 0:
+                if training_step % 10 == 0:
                     # push weights after every 35 training steps
                     await trainer.push_weights.call(policy_version)
                     policy_version += 1
                     await policy.update_weights.call()
+                    await replay_buffer.clear.call()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it
