@@ -31,8 +31,10 @@ jobs:
           DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 || true)
           echo "CUDA driver version: ${DRIVER_VERSION}"
 
-          CONDA_ENV=$(conda env list --json | jq -r ".envs | .[-1]")
-          conda activate "${CONDA_ENV}"
+          conda init
+          conda create -n testenv python=3.10 -y
+          conda activate testenv
+          echo "python binary: $(which python)"
 
           # Test the existence of secrets and abort if they are not available
           echo "$(ssh-agent -s)"
