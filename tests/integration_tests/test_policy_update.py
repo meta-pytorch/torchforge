@@ -214,14 +214,15 @@ class TestWeightSync:
         }
 
     @pytest_asyncio.fixture
-    def trainer_cfg_tp(self, tp_size):
+    def trainer_cfg_tp(self):
+        # NB: TP size is set to  2.
         cached_dir = snapshot_download(repo_id=self.model)
         return {
             "model": {
                 "name": "qwen3",
                 "flavor": "1.7B",
             },
-            "parallelism": {"tensor_parallel_degree": tp_size},
+            "parallelism": {"tensor_parallel_degree": 2},
             "checkpoint": {
                 "enable": True,
                 "folder": "/tmp/saved_checkpoints",
@@ -300,7 +301,7 @@ class TestWeightSync:
                 procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
             ),
             RLTrainer,
-            **trainer_cfg_tp(tp_size),
+            **trainer_cfg_tp,
         )
         await rl_trainer.push_weights.call(policy_version=0)
         # 3. Policy pull weights
