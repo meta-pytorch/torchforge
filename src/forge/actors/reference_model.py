@@ -95,7 +95,8 @@ class ReferenceModel(ForgeActor):
             # (jackkhuu) Not sure if either context are needed for inference here
             with self.engine.train_context(optional_context_parallel_ctx):
                 with self.engine.maybe_enable_amp:
-                    logits = model_parts[0](input_ids)
+                    with torch.inference_mode():
+                        logits = model_parts[0](input_ids)
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
         return logits
