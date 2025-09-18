@@ -55,6 +55,9 @@ jobs:
         # Run unit tests with coverage
         pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
     upload-coverage:
+      strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
       needs: build-and-test
       runs-on: ubuntu-latest
       steps:
