@@ -14,10 +14,6 @@ dataset:
   data_split: "train"
   streaming: true
   model: ${model}
-  service:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: false
 
 # Policy configuration
 policy:
@@ -31,47 +27,48 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
-  service:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: true
 
 # Trainer configuration
 trainer:
   model_name: ${model}
   learning_rate: 1e-5
-  service:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: true
+
+# Reference model configuration
+ref_model:
+  model_name: ${model}
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${batch_size}
   max_policy_age: 1 # Async by 1
   dp_size: 1
-  service:
+
+services:
+  dataset:
     procs_per_replica: 1
     num_replicas: 1
     with_gpus: false
-
-# Compute advantages configuration
-compute_advantages:
-  service:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: false
-
-# Reference model configuration
-ref_model:
-  service:
+  policy:
     procs_per_replica: 1
     num_replicas: 1
     with_gpus: true
-
-# Reward actor configuration
-reward_actor:
-  service:
+  trainer:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: true
+  replay_buffer:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+  ref_model:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: true
+  compute_advantages:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+  reward_actor:
     procs_per_replica: 1
     num_replicas: 1
     with_gpus: false

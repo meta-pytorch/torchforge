@@ -13,7 +13,8 @@ import logging
 
 import pytest
 from forge.controller import ForgeActor
-from forge.controller.service import ServiceConfig, shutdown_service, spawn_service
+
+from forge.controller.service import ServiceConfig
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
@@ -61,18 +62,73 @@ class Counter(ForgeActor):
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_actor_def_type_validation():
-    """Test that spawn_service validates actor_def is a subclass of ForgeActor."""
+    """Test that .options() rejects classes that are not ForgeActor subclasses."""
 
-    # Service can only spawn ForgeActor subclasses
+    # Only `ForgeActor`s can be spawned as services
     class InvalidActor(Actor):
         def __init__(self):
             pass
 
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
+    # Expect AttributeError when calling .options() on a non-ForgeActor class
+    with pytest.raises(AttributeError, match="has no attribute 'options'"):
+        await InvalidActor.options(procs_per_replica=1, num_replicas=1).as_service()
 
-    # Test that TypeError is raised when actor_def is not a ForgeActor subclass
-    with pytest.raises(TypeError, match="actor_def must be a subclass of ForgeActor"):
-        await spawn_service(service_cfg=cfg, actor_def=InvalidActor)
+
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+async def test_service_with_explicit_service_config():
+    """Case 1: Provide a ServiceConfig directly."""
+    cfg = ServiceConfig(procs_per_replica=2, num_replicas=3)
+    service = await Counter.options(service_config=cfg).as_service(v=10)
+    try:
+        assert service._service._cfg is cfg
+        assert service._service._cfg.num_replicas == 3
+        assert service._service._cfg.procs_per_replica == 2
+        assert await service.value.choose() == 10
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+async def test_service_with_kwargs_config():
+    """Case 2: Construct ServiceConfig implicitly from kwargs."""
+    service = await Counter.options(
+        num_replicas=4,
+        procs_per_replica=1,
+        health_poll_rate=0.5,
+    ).as_service(v=20)
+    try:
+        cfg = service._service._cfg
+        assert isinstance(cfg, ServiceConfig)
+        assert cfg.num_replicas == 4
+        assert cfg.procs_per_replica == 1
+        assert cfg.health_poll_rate == 0.5
+        assert await service.value.choose() == 20
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+async def test_service_options_missing_args_raises():
+    """Case 3: Error if neither service_config nor required args are provided."""
+    with pytest.raises(ValueError, match="Must provide either"):
+        await Counter.options().as_service()  # no args, should raise before service spawn
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.asyncio
+async def test_service_default_config():
+    """Case 4: Construct with default configuration using as_service directly."""
+    service = await Counter.as_service(v=10)
+    try:
+        cfg = service._service._cfg
+        assert cfg.num_replicas == 1
+        assert cfg.procs_per_replica == 1
+        assert await service.value.choose() == 10
+    finally:
+        await service.shutdown()
 
 
 @pytest.mark.timeout(10)
@@ -80,7 +136,7 @@ async def test_actor_def_type_validation():
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
     cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(service_config=cfg).as_service(v=0)
 
     try:
         # Test session creation and uniqueness
@@ -104,16 +160,14 @@ async def test_basic_service_operations():
         assert session1 not in state["session_replica_map"]
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_sessionless_calls():
     """Test sessionless calls with round robin load balancing."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
     try:
         # Test sessionless calls
         await service.incr.choose()
@@ -139,16 +193,14 @@ async def test_sessionless_calls():
         assert result == 11  # 1 + 10
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_session_context_manager():
     """Test session context manager functionality."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
-
+    service = await Counter.options(procs_per_replica=1, num_replicas=1).as_service(v=0)
     try:
         # Test context manager usage
         async with service.session():
@@ -178,7 +230,7 @@ async def test_session_context_manager():
         assert len(state["session_replica_map"]) == 0
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 # Fault Tolerance Tests
@@ -188,8 +240,9 @@ async def test_session_context_manager():
 @pytest.mark.asyncio
 async def test_recovery_state_transitions():
     """Test replica state transitions during failure and recovery."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1, health_poll_rate=0.1)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(
+        procs_per_replica=1, num_replicas=1, health_poll_rate=0.1
+    ).as_service(v=0)
 
     try:
         # Initially replica should be healthy
@@ -262,15 +315,14 @@ async def test_recovery_state_transitions():
         logger.info(f"Final replica state: {replica_state['state']}")
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create session and cause failure
@@ -303,7 +355,7 @@ async def test_replica_failure_and_recovery():
         assert assigned_replica["healthy"]
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 # Metrics and Monitoring Tests
@@ -313,8 +365,7 @@ async def test_replica_failure_and_recovery():
 @pytest.mark.asyncio
 async def test_metrics_collection():
     """Test metrics collection."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create sessions and make requests
@@ -356,7 +407,7 @@ async def test_metrics_collection():
         assert total_failed == 1
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 # Load Balancing and Session Management Tests
@@ -366,8 +417,7 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
 
     try:
         session = await service.start_session()
@@ -390,15 +440,14 @@ async def test_session_stickiness():
         assert result == 4
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create sessions with some load to trigger distribution
@@ -439,17 +488,14 @@ async def test_load_balancing_multiple_sessions():
         assert total_requests == 4  # All requests processed
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=2)
-    service = await spawn_service(
-        service_cfg=cfg, actor_def=Counter, name="counter", v=0
-    )
+    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
 
     try:
         # Mix of session and sessionless calls
@@ -479,7 +525,7 @@ async def test_concurrent_operations():
         assert total_requests == 4
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 # `call` endpoint tests
@@ -489,8 +535,9 @@ async def test_concurrent_operations():
 @pytest.mark.asyncio
 async def test_broadcast_call_basic():
     """Test basic broadcast call functionality."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=10)
+    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(
+        v=10
+    )
 
     try:
         # Test broadcast call to all replicas
@@ -512,15 +559,14 @@ async def test_broadcast_call_basic():
         assert all(value == 11 for value in values)
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_broadcast_call_with_failed_replica():
     """Test broadcast call behavior when some replicas fail."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
 
     try:
         # First, cause one replica to fail by calling fail_me on a specific session
@@ -551,15 +597,14 @@ async def test_broadcast_call_with_failed_replica():
         assert all(value == 1 for value in values)
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_broadcast_call_vs_choose():
     """Test that broadcast call hits all replicas while choose hits only one."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=3)
-    service = await spawn_service(service_cfg=cfg, actor_def=Counter, v=0)
+    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
 
     try:
         # Use broadcast call to increment all replicas
@@ -588,4 +633,4 @@ async def test_broadcast_call_vs_choose():
         assert total_requests == 10
 
     finally:
-        await shutdown_service(service)
+        await service.shutdown()

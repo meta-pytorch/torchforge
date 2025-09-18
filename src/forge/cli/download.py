@@ -13,10 +13,10 @@ import traceback
 
 from pathlib import Path
 
-from forge.cli.subcommand import Subcommand
-
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
+
+from forge.cli.subcommand import Subcommand
 
 # TODO: update this
 REPO_ID_FNAME = "original_repo_id"

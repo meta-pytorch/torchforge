@@ -167,6 +167,12 @@ class ServiceInterface:
         """Terminates an active session and cleans up associated resources."""
         return await self._service.terminate_session(sess_id)
 
+    async def shutdown(self) -> None:
+        """
+        Shut down the underlying Service.
+        """
+        await self._service.stop()
+
     def session(self) -> "SessionContext":
         """Returns a context manager for session-based calls."""
         return SessionContext(self)

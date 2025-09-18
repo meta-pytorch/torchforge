@@ -15,7 +15,7 @@ import torchstore as ts
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 
 from forge.actors.trainer import RLTrainer
-from forge.controller.service import ServiceConfig, spawn_service
+from forge.controller.service import ServiceConfig
 from forge.data.sharding import VLLMSharding
 
 from transformers import AutoModelForCausalLM
@@ -255,19 +255,18 @@ class TestWeightSync:
         # 1. Initialize TS
         await ts.initialize()
         # 2. Trainer push
-        rl_trainer = await spawn_service(
-            ServiceConfig(
-                procs_per_replica=worker_size, with_gpus=True, num_replicas=1
-            ),
-            RLTrainer,
-            **trainer_cfg,
-        )
+        rl_trainer = await RLTrainer.options(
+            procs_per_replica=worker_size, with_gpus=True, num_replicas=1
+        ).as_service(**trainer_cfg)
+
         await rl_trainer.push_weights.choose(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
             worker_size=worker_size, tp_size=worker_size, model_name=self.model
         )
-        policy = await spawn_service(service_config, Policy, **policy_config)
+        policy = await Policy.options(service_config=service_config).as_service(
+            **policy_config
+        )
         await policy.update_weights.call()
         # 4. Validate weights
         loaded_state_dict = await policy._get_model_params.choose()
