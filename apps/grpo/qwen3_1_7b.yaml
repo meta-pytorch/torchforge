@@ -72,7 +72,7 @@ trainer:
 replay_buffer:
   batch_size: ${batch_size}
   max_policy_age: ${off_by_n}
-  dp_size: ${trainer.parallelism.data_parallel_shard_degree}
+  dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
 
 # Reference model configuration
 ref_model:

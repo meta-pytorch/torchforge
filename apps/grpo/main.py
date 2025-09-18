@@ -321,6 +321,7 @@ async def main(cfg: DictConfig):
             ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
+            del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.choose(group)
