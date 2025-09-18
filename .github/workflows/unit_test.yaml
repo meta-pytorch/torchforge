@@ -50,7 +50,7 @@ jobs:
 
           # Install torchstore
           eval "$(ssh-agent -s)"
-          ssh-add - <<< '${FORGE_GITHUB_CI_FOR_TORCHSTORE}'
+          ssh-add - <<< '${SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE}'
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
           # Install torchtitan
