@@ -1,10 +1,10 @@
 # Toy app Training Configuration
 
 # Global configuration
-group_size: 8
-batch_size: 16
-max_req_tokens: 512
-max_res_tokens: 512
+group_size: 6
+batch_size: 12
+max_req_tokens: 64
+max_res_tokens: 64
 model: "Qwen/Qwen2.5-0.5B-Instruct"
 
 # Dataset configuration
@@ -60,3 +60,7 @@ services:
     procs_per_replica: 1
     num_replicas: 1
     with_gpus: false
+  ref_model:
+      procs_per_replica: 1
+      num_replicas: 1
+      with_gpus: true
