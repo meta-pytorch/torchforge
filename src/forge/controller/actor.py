@@ -89,7 +89,7 @@ class ForgeActor(Actor):
             )
 
         return type(
-            f"{cls.__name__}Configured",
+            f"{cls.__name__}Service",
             (cls,),
             {"_service_config": cfg},
         )
@@ -109,7 +109,7 @@ class ForgeActor(Actor):
         if cfg is None:
             cfg = ServiceConfig(num_replicas=1, procs_per_replica=1)
             # dynamically create a configured subclass for consistency
-            cls = type(f"{cls.__name__}Configured", (cls,), {"_service_config": cfg})
+            cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
 
         logger.info("Spawning Service Actor for %s", cls.__name__)
         service = Service(cfg, cls, actor_kwargs)
