@@ -76,6 +76,8 @@ jobs:
           # Install dependencies
           python -m pip install --no-build-isolation -e ".[dev]"
 
+          export CUDA_LIB_DIR=/usr/lib64
+
           # Run unit tests with coverage
           pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
   upload-coverage:
