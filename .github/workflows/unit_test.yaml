@@ -50,7 +50,7 @@ jobs:
           python -m pip install --upgrade pip
 
           # Install pytorch
-          python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
+          python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 
           # Install torchtitan
           mkdir -p deps/torchtitan
