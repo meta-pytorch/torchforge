@@ -6,18 +6,25 @@ on:
 
 jobs:
   build-and-test:
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    secrets: inherit  # Pass all secrets
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.10', '3.11', '3.12']
+        include:
+          - name: 4xlargegpu
+            runs-on: linux.g5.4xlarge.nvidia.gpu
+            torch-spec: '--pre torch --index-url https://download.pytorch.org/whl/nightly/cu126'
+            gpu-arch-type: "cuda"
+            gpu-arch-version: "12.6"
     # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
-    secrets: inherit  # Pass all secrets
     with:
-      runner: linux.aws.h100.8
-      gpu-arch-type: cuda
-      gpu-arch-version: "12.9"
-      docker-image: pytorch/almalinux-builder:cuda12.9-main
-      repository: meta-pytorch/forge
+      timeout: 120
+      runner: ${{ matrix.runs-on }}
+      gpu-arch-type: ${{ matrix.gpu-arch-type }}
+      gpu-arch-version: ${{ matrix.gpu-arch-version }}
+      submodules: recursive
       upload-artifact: "coverage-report"
       script: |
           set -eux
@@ -36,14 +43,14 @@ jobs:
           python -m pip install --upgrade pip
 
           # Install pytorch
-          python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu129
+          python -m pip install ${{ matrix.torch-spec }}
 
           # Install monarch
           python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
 
           # Install torchstore
           eval "$(ssh-agent -s)"
-          ssh-add - <<< '$FORGE_GITHUB_CI_FOR_TORCHSTORE'
+          ssh-add - <<< '${FORGE_GITHUB_CI_FOR_TORCHSTORE}'
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
           # Install torchtitan
