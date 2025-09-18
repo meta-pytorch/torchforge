@@ -165,7 +165,8 @@ class SumDigitsDataset(IterableDataset):
         for data in self.data:
             answer = str(sum(int(x) for x in data))
             system_prompt = """
-            A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant only gives very concise answers.
+            A conversation between User and Assistant. The user asks a question, and the Assistant solves it.
+            The assistant only gives very concise answers.
             """
             request: str = f"What is the sum of the digits of {data}"
             as_chat = [
@@ -219,7 +220,7 @@ class DatasetActor(ForgeActor):
 
 
 async def main(cfg: DictConfig):
-    """Main GRPO training loop with rollout and training processes."""
+    """Main Sumgits app training loop with rollout and training processes."""
     # Get parameters from config with fallbacks
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
@@ -230,17 +231,9 @@ async def main(cfg: DictConfig):
         project="sumdigits-training",
     )
 
-    print("Started setup services!")
-
     # ---- Setup services ---- #
     await ts.initialize()
-    (
-        dataloader,
-        policy,
-        trainer,
-        replay_buffer,
-        reward_actor,
-    ) = await asyncio.gather(
+    (dataloader, policy, trainer, replay_buffer, reward_actor,) = await asyncio.gather(
         DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
@@ -325,7 +318,7 @@ async def main(cfg: DictConfig):
                     await policy.update_weights.call()
                     await replay_buffer.clear.call()
 
-    print("Starting GRPO training loops...")
+    print("Starting training loop.")
     # TODO: Start multiple rollouts once all serivces support it
     rollout_task = asyncio.create_task(continuous_rollouts())
     training_task = asyncio.create_task(continuous_training())
