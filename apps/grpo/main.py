@@ -16,6 +16,7 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
+import torch.distributed.checkpoint as dcp
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel  # noqa: F401
 from forge.actors.replay_buffer import ReplayBuffer
@@ -127,6 +128,8 @@ class Trainer(ForgeActor):
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
     dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
+    use_dcp: bool = True
+
 
     @endpoint
     async def setup(self):
@@ -188,7 +191,12 @@ class Trainer(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(self.model.state_dict(), num_layers=28)
         start_time = time.time()
-        await ts.put_state_dict(new_sd, key)
+        if self.use_dcp:
+            metadata = dcp.save(checkpoint_id=key, state_dict=new_sd)
+            await ts.put(key, metadata)
+        else:
+            await ts.put_state_dict(new_sd, key)
+        
         end_time = time.time()
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"

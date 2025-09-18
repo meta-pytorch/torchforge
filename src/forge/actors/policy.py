@@ -18,6 +18,7 @@ import torch
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
+import torch.distributed.checkpoint as dcp
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
@@ -122,6 +123,7 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    use_dcp: bool = True
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -416,14 +418,27 @@ class PolicyWorker(ForgeActor):
             self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
 
+        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        dcp_metadata = None
+        if self.use_dcp:
+            dcp_metadata = await ts.get()
+
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await ts.get(
-                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
-            )
+            if self.use_dcp:
+                tensor_meta = dcp_metadata.state_dict_metadata[param_name]
+                stored_tensor = torch.empty(size=tensor_meta.size, dtype=tensor_meta.properties.dtype)
+                dcp.load(
+                    checkpoint_id=checkpoint_id,
+                    state_dict={param_name: stored_tensor}
+                )
+            else:
+                stored_tensor = await ts.get(
+                    f"{checkpoint_id}{DELIM}{param_name}"
+                )
             sharding.load_from_source_to_target(
                 param_name,
                 stored_tensor,
