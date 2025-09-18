@@ -12,7 +12,7 @@ import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -166,6 +166,8 @@ class Trainer(ForgeActor):
     async def train_step(self, batch: list[list[Episode]]):
         microbatch = batch[self.dp_rank]
         pad_id = microbatch[0].pad_id
+        pad_id = 0
+        max_seq_len = microbatch[0].request_len + microbatch[0].response_len
 
         # Process all microbatches
         batch_input_ids = []
@@ -178,12 +180,12 @@ class Trainer(ForgeActor):
             token_ids = torch.LongTensor(microbatch_item.response_tokens)
             ids = torch.cat([prompt_ids, token_ids])
 
-            input_ids = ids[:-1]
-            diff = 128 - input_ids.size(0)
+            input_ids = ids[:-1]  # truncate EOS
+            diff = max_seq_len - input_ids.size(0)
             input_ids = F.pad(input_ids, (0, diff), value=pad_id)
 
-            target_ids = ids[1:]
-            diff = 128 - target_ids.size(0)
+            target_ids = ids[1:]  # truncate BOS
+            diff = max_seq_len - target_ids.size(0)
             target_ids = F.pad(target_ids, (0, diff), value=pad_id)
 
             # Simple loss mask: 0 for prompt, 1 for response
@@ -200,7 +202,7 @@ class Trainer(ForgeActor):
 
             # Get advantage and create weights
             advantage = microbatch_item.reward  # Single float value
-            weights = loss_mask * advantage  # [128]
+            weights = loss_mask * advantage  # [B]
 
             # log probs
             old_log_probs = torch.cat(
@@ -216,7 +218,7 @@ class Trainer(ForgeActor):
             old_log_probs_shifted = old_log_probs[1:]  # Shift log probs
 
             # Pad the loss mask
-            diff = 128 - loss_mask.size(0)
+            diff = max_seq_len - loss_mask.size(0)
             loss_mask = F.pad(
                 loss_mask, (0, diff), value=False
             )  # Pad with False (no loss)
@@ -248,7 +250,9 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        target_ids = torch.stack(batch_target_ids).to(self.device)  # [batch_size, 128]
+        target_ids = torch.stack(batch_target_ids).to(
+            self.device
+        )  # [batch_size, max_seq_len]
 
         # Compute loss only on response tokens
         loss = self.loss(logits, target_ids, loss_masks, weights, old_log_probs)
@@ -462,8 +466,7 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at {training_step}")
-                if training_step % 10 == 0:
-                    # push weights after every 35 training steps
+                if training_step % 5 == 0:
                     await trainer.push_weights.call(policy_version)
                     policy_version += 1
                     await policy.update_weights.call()
