@@ -68,6 +68,11 @@ jobs:
           ssh-add torchstore_ssh_key
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
+          # check if we have the correct version of tomli installed
+          pip freeze | grep tomli
+          # torchtitan requires tomli>=1.1.0
+          pip install "tomli>=1.1.0"
+
           # Install torchtitan
           pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu126
 
