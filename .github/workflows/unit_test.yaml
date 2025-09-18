@@ -37,7 +37,11 @@ jobs:
 
           conda activate test
 
-          pip config --user set global.progress_bar off
+          # Test the existence of secrets and abort if they are not available
+          echo "$(ssh-agent -s)"
+          [[ "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" != "" ]] || (echo "SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE is empty" && exit 1)
+
+          python -m pip config --user set global.progress_bar off
 
           # Upgrade pip
           python -m pip install --upgrade pip
@@ -48,9 +52,6 @@ jobs:
           # Install monarch
           python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
 
-          echo "Installing torchstore"
-          echo "$(ssh-agent -s)"
-          [[ "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" != "" ]] || (echo "SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE is empty" && exit 1)
           # Install torchstore
           eval "$(ssh-agent -s)"
           echo "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" >> torchstore_ssh_key
