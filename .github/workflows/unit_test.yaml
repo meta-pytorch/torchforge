@@ -53,8 +53,11 @@ jobs:
           echo "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" >> torchstore_ssh_key
           chmod 600 torchstore_ssh_key
           # Print the first and last 2 lines of the key to make sure it's valid
+          echo "torchstore_ssh_key contents:"
           head -2 torchstore_ssh_key
+          echo "..."
           tail -2 torchstore_ssh_key
+          echo "End of torchstore_ssh_key contents"
           ssh-add torchstore_ssh_key
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
