@@ -330,7 +330,9 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
-    await ts.initialize()
+    await ts.initialize(
+        strategy=ts.ControllerStorageVolumes()
+    )
     (
         dataloader,
         policy,
