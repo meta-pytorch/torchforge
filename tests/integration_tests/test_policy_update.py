@@ -83,7 +83,6 @@ def convert_state_dict(saved_sd):
 def calculate_expected_shard(
     full_tensor: torch.Tensor,
     param_name: str,
-    expected_shape: torch.Size,
     tensor_parallel_size: int,
     rank: int,
 ) -> torch.Tensor:
@@ -129,19 +128,18 @@ def validate_loaded_tensors_equals_original(
     """
     for param_name, loaded_tensor in loaded_state_dict.items():
         if param_name in original_state_dict:
-            expected_tensor = original_state_dict[param_name]
+            original_tensor = original_state_dict[param_name]
 
             if tensor_parallel_size > 1:
-                expected_shard = calculate_expected_shard(
-                    expected_tensor,
+                original_shard = calculate_expected_shard(
+                    original_tensor,
                     param_name,
-                    loaded_tensor.shape,
                     tensor_parallel_size,
                     rank,
                 )
-                tensor_to_compare = expected_shard.cpu().float()
+                tensor_to_compare = original_shard.cpu().float()
             else:
-                tensor_to_compare = expected_tensor.cpu().float()
+                tensor_to_compare = original_tensor.cpu().float()
 
             # Training trainer emitted and loaded tensors are of type bfloat16,
             # where as a HF model loaded(expected) tensor has type float16.
@@ -153,9 +151,9 @@ def validate_loaded_tensors_equals_original(
             ):
                 logger.warning(
                     f"Loaded tensor {param_name} does not equal original.\n"
-                    f"dtype = {loaded_tensor.dtype} vs {expected_tensor.dtype}\n"
-                    f"shape= {loaded_tensor.shape} vs {expected_tensor.shape}\n,"
-                    f"values = {loaded_tensor} vs {expected_tensor}"
+                    f"dtype = {loaded_tensor.dtype} vs {original_tensor.dtype}\n"
+                    f"shape= {loaded_tensor.shape} vs {original_tensor.shape}\n,"
+                    f"values = {loaded_tensor} vs {original_tensor}"
                 )
                 raise ValueError(
                     f"Loaded tensor {param_name} does not equal original "
@@ -276,19 +274,22 @@ class TestWeightSync:
 
     @pytest.mark.asyncio
     @requires_cuda
-    async def test_policy_update_tp(self, trainer_cfg_tp):
+    async def test_policy_update_tp(self, expected_sd, trainer_cfg_tp):
         """
-        1. Init RLTrainer over multiple workers with selected parallelism strategy.
+        1. Init RLTrainer over multiple workers with TP parallelism strategy.
         2. Push weights in to torchstore.
         3. Initializes Policy over multiple workers, and calls update_weights() to load weights from torchstore.
-        4. Validate the policy weights against manually loaded origina HF weights. -- we never called the train step.
+        4. Validate the policy weights against manually loaded origina HF weights.
         """
+        # test configs/paralleism
+        trainer_worker_size = 2
+        policy_worker_size = 2
+        tp_size = 2
 
         if torch.cuda.device_count() < 2:
             pytest.skip(
                 f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
             )
-        trainer_worker_size = 2
         # 1. Initialize TS
         await ts.initialize()
         # 2. Trainer push
@@ -301,7 +302,6 @@ class TestWeightSync:
         )
         await rl_trainer.push_weights.call(policy_version=0)
         # 3. Policy pull weights
-        policy_worker_size = 4
         policy_config, service_config = get_configs(
             worker_size=policy_worker_size, model_name=self.model
         )
@@ -310,14 +310,12 @@ class TestWeightSync:
 
         # validate loaded shard of each worker againt manually calculated shard (expected shard).
 
-        # 4. Validate weights.
-        loaded_state_dict = await policy._get_model_params.call()
-
-        # validation logic needs to be updated.
-        # validate_loaded_tensors_equals_original(
-        #    loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
-        # )
-
-        print(
-            "Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
+        # 4. Validate weight shards. We compare vLLM loades shard content with
+        #    Directly loaded HF shard content.
+        sharded_state_dicts = await policy._get_model_params.call()
+        validate_loaded_tensors_equals_original(
+            sharded_state_dicts[0][0], expected_sd, tensor_parallel_size=tp_size, rank=0
+        )
+        validate_loaded_tensors_equals_original(
+            sharded_state_dicts[0][1], expected_sd, tensor_parallel_size=tp_size, rank=1
         )
