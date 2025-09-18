@@ -22,11 +22,10 @@ class RoundRobinRouter(Router):
 
     def get_replica(
         self,
-        replicas: List[Replica],
+        healthy_replicas: List[Replica],
         sess_id: str | None = None,
         session_map: Dict[str, int] | None = None,
     ) -> Replica:
-        healthy_replicas = [r for r in replicas if r.healthy]
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for load balancing")
 
@@ -41,11 +40,10 @@ class LeastLoadedRouter(Router):
 
     def get_replica(
         self,
-        replicas: List["Replica"],
+        healthy_replicas: List[Replica],
         sess_id: str | None = None,
         session_map: Dict[str, int] | None = None,
-    ) -> "Replica":
-        healthy_replicas = [r for r in replicas if r.healthy]
+    ) -> Replica:
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for session assignment")
         return min(healthy_replicas, key=lambda r: r.current_load)
@@ -59,10 +57,10 @@ class SessionRouter(Router):
 
     def get_replica(
         self,
-        replicas: List["Replica"],
+        healthy_replicas: List[Replica],
         sess_id: str | None = None,
         session_map: Dict[str, int] | None = None,
-    ) -> "Replica":
+    ) -> Replica:
         if sess_id is None:
             raise ValueError("SessionRouter requires a session ID")
 
@@ -73,14 +71,16 @@ class SessionRouter(Router):
         if sess_id in session_map:
             replica_idx = session_map[sess_id]
             # Find the replica with this index
-            for r in replicas:
-                if r.idx == replica_idx and r.healthy:
+            for r in healthy_replicas:
+                if r.idx == replica_idx:
                     return r
             # If the replica is no longer healthy, remove from session map and reassign
             del session_map[sess_id]
 
         # Use fallback router to assign a new replica
-        replica = self.fallback_router.get_replica(replicas, sess_id, session_map)
+        replica = self.fallback_router.get_replica(
+            healthy_replicas, sess_id, session_map
+        )
         session_map[sess_id] = replica.idx
         logger.debug(
             "Assigning session %s to replica %d",

@@ -288,7 +288,7 @@ class Router(ABC):
     @abstractmethod
     def get_replica(
         self,
-        replicas: List[Replica],
+        healthy_replicas: List[Replica],
         sess_id: str | None = None,
         session_map: Dict[str, int] | None = None,
     ) -> Replica:

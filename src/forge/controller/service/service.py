@@ -474,12 +474,13 @@ class Service:
 
     async def _get_replica(self, sess_id: str | None) -> "Replica":
         """Get a replica for the given session ID."""
+        healthy_replicas = [r for r in self._replicas if r.healthy]
         if sess_id is None:
             # No session, use the default router
-            return self._default_router.get_replica(self._replicas)
+            return self._default_router.get_replica(healthy_replicas)
 
         return self._session_router.get_replica(
-            self._replicas, sess_id, self._session_replica_map
+            healthy_replicas, sess_id, self._session_replica_map
         )
 
     async def stop(self):

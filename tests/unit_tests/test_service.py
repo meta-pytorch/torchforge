@@ -656,7 +656,7 @@ async def test_broadcast_call_vs_choose():
         await service.shutdown()
 
 
-# Rounter Tests
+# Router Tests
 
 
 @pytest.mark.asyncio
@@ -687,20 +687,6 @@ async def test_session_router_assigns_and_updates_session_map():
     # Second request should stick
     r2 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
     assert r1.idx == r2.idx
-
-
-@pytest.mark.asyncio
-async def test_session_router_removes_unhealthy_session_mapping():
-    """If mapped replica becomes unhealthy, SessionRouter deletes entry and reassigns."""
-    replicas = [make_replica(0, healthy=False), make_replica(1, healthy=True)]
-    session_map = {"sess1": 0}
-    fallback = LeastLoadedRouter()
-    router = SessionRouter(fallback)
-
-    # Replica 0 unhealthy → deleted from session_map → reassigned to 1
-    r = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
-    assert r.idx == 1
-    assert session_map["sess1"] == 1
 
 
 @pytest.mark.asyncio
