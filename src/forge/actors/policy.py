@@ -16,6 +16,12 @@ from dataclasses import asdict, dataclass, field, fields
 
 import torch
 import torchstore as ts
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -40,12 +46,6 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
 
 @dataclass
 class SamplingConfig:
@@ -67,6 +67,7 @@ class SamplingConfig:
     max_tokens: int = 512
     temperature: float = 1.0
     top_p: float = 1.0
+    logprobs: int = 1
 
     def __post_init__(self):
         gd_params = None
