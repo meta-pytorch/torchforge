@@ -54,7 +54,7 @@ jobs:
 
           # Install torchtitan
           python -m pip install -r https://raw.githubusercontent.com/pytorch/torchtitan/refs/heads/main/.ci/docker/requirements.txt
-          python -m pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
+          python -m pip install git+ssh://git@github.com/pytorch/torchtitan.git
           # Install monarch
           python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
 
