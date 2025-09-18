@@ -4,8 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, TypedDict, Union
+
+import torch
+import torch.nn.functional as F
 
 
 class Message(TypedDict):
@@ -123,3 +127,182 @@ class ServiceConfig:
 
 
 Scalar = Union[int, float]
+
+
+@dataclass
+class Episode:
+    # TODO: add adtional layer for multi-turn
+    episode_id: str
+    request: str
+    policy_version: int
+    pad_id: int
+    request_len: int
+    response_len: int
+    target: Any | None = None
+    # processed data
+    response: str | None = None
+    request_tokens: list[int] | None = None
+    response_tokens: list[int] | None = None
+    ref_logprobs: torch.Tensor | None = None
+    reward: float | None = None
+    advantage: float | None = None
+    response_logprobs: torch.Tensor | None = None
+
+    @property
+    def request_tensor(self):
+        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.request_len:  # left pad
+            diff = self.request_len - tensor.shape[0]
+            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
+        return tensor
+
+    @property
+    def response_tensor(self):
+        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+        if tensor.shape[0] < self.response_len:  # right pad
+            diff = self.response_len - tensor.shape[0]
+            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
+        return tensor
+
+    @property
+    def max_seq_len(self) -> int:
+        """
+        Get maximum sequence length for this episode.
+
+        Returns:
+            int: Total length (request_len + response_len) before any truncation
+        """
+        return self.request_len + self.response_len
+
+    @property
+    def episode_ids(self) -> torch.Tensor:
+        """
+        Get complete episode trajectory as concatenated token sequence.
+
+        Returns:
+            torch.Tensor: Full sequence [request_tokens + response_tokens].
+                         Shape: [request_len + response_len]
+        """
+        prompt_ids = torch.LongTensor(self.request_tokens)
+        token_ids = torch.LongTensor(self.response_tokens)
+        ids = torch.cat([prompt_ids, token_ids])
+        return ids
+
+    @property
+    def input_ids(self) -> torch.Tensor:
+        """
+        Get model input tokens for next-token prediction.
+
+        Returns:
+            torch.Tensor: Episode trajectory with EOS truncated for model input.
+                         Shape: [max_seq_len - 1]
+        """
+        input_ids = self.episode_ids[:-1]  # truncate EOS
+        return input_ids
+
+    @property
+    def target_ids(self) -> torch.Tensor:
+        """
+        Get target tokens for next-token prediction training.
+
+        Returns:
+            torch.Tensor: Episode trajectory shifted by 1 position (BOS truncated).
+                         Aligned with input_ids for teacher forcing.
+                         Shape: [max_seq_len - 1]
+        """
+        target_ids = self.episode_ids[1:]  # truncate BOS
+        return target_ids
+
+    @property
+    def loss_mask(self) -> torch.Tensor:
+        """
+        Get mask for computing loss only on response tokens.
+
+        Returns:
+            torch.Tensor: Binary mask (0 for prompt, 1 for response) shifted to align
+                         with target_ids. Shape: [max_seq_len - 1]
+        """
+        prompt_ids = torch.LongTensor(self.request_tokens)
+        token_ids = torch.LongTensor(self.response_tokens)
+        loss_mask = torch.cat(
+            [
+                torch.zeros(
+                    len(prompt_ids), dtype=torch.float32
+                ),  # Don't compute loss on prompt
+                torch.ones(
+                    len(token_ids), dtype=torch.float32
+                ),  # Compute loss on response
+            ]
+        )
+
+        loss_mask = loss_mask[1:]  # Shift to align with target_ids (truncates BOS)
+        return loss_mask
+
+    @property
+    def sampling_log_probs(self) -> torch.Tensor:
+        """
+        Get log probabilities from the sampling policy (for importance sampling).
+
+        Returns:
+            torch.Tensor: Log probabilities from policy that generated the response,
+                         with zeros for prompt positions. Shifted to align with target_ids.
+                         Shape: [max_seq_len - 1]
+        """
+        if self.response_logprobs is None:
+            return torch.zeros(self.max_seq_len - 1, dtype=torch.float32)
+        prompt_ids = torch.LongTensor(self.request_tokens)
+        sampling_log_probs = torch.cat(
+            [
+                torch.zeros(prompt_ids.shape, dtype=torch.float32),
+                self.response_logprobs,
+            ]
+        )
+        sampling_log_probs = sampling_log_probs[1:]  # Shift log probs
+        return sampling_log_probs
+
+    @property
+    def weighted_advantages(self) -> torch.Tensor:
+        """
+        Get advantages weighted by loss mask for REINFORCE training.
+
+        Returns:
+            torch.Tensor: Advantage values masked to response tokens only.
+                         Zero for prompt positions, advantage value for response positions.
+                         Shape: [max_seq_len - 1]
+        """
+        if self.advantage is None:
+            return torch.zeros_like(self.loss_mask)
+        return self.loss_mask * self.advantage
+
+
+@dataclass
+class Group:
+    group_id: str
+    episodes: list[Episode]
+
+    @classmethod
+    def new_group(
+        cls,
+        group_id: int,
+        group_size: int,
+        request: str,
+        policy_version: int,
+        pad_id: int,
+        request_len: int,
+        response_len: int,
+        target: Any = None,
+    ):
+        episodes = []
+        for _ in range(group_size):
+            episodes.append(
+                Episode(
+                    episode_id=str(uuid.uuid4()),
+                    request=request,
+                    policy_version=policy_version,
+                    pad_id=pad_id,
+                    request_len=request_len,
+                    response_len=response_len,
+                    target=target,
+                )
+            )
+        return cls(str(group_id), episodes)

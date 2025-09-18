@@ -9,7 +9,6 @@
 import asyncio
 import random
 import time
-import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -25,6 +24,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 
 from forge.losses.reinforce_loss import ReinforceLoss
+from forge.types import Episode, Group
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -36,78 +36,13 @@ from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
 @dataclass
-class Episode:
-    # TODO: add adtional layer for multi-turn
-    episode_id: str
-    request: str
-    policy_version: int
-    pad_id: int
-    request_len: int
-    response_len: int
-    target: Any | None = None
-    # processed data
-    response: str | None = None
-    request_tokens: list[int] | None = None
-    response_tokens: list[int] | None = None
-    ref_logprobs: torch.Tensor | None = None
-    reward: float | None = None
-    advantage: float | None = None
-    response_logprobs: torch.Tensor | None = None
-
-    @property
-    def request_tensor(self, slice_obj=None):
-        """Returns the full request tensor"""
-        return self.get_request_tensor()
-
-    @property
-    def response_tensor(self):
-        """Returns the full response tensor"""
-        return self.get_response_tensor()
-
-
-@dataclass
-class Group:
-    group_id: str
-    episodes: list[Episode]
-
-    @classmethod
-    def new_group(
-        cls,
-        group_id: int,
-        group_size: int,
-        request: str,
-        policy_version: int,
-        pad_id: int,
-        request_len: int,
-        response_len: int,
-        target: Any = None,
-    ):
-        episodes = []
-        for _ in range(group_size):
-            episodes.append(
-                Episode(
-                    episode_id=str(uuid.uuid4()),
-                    request=request,
-                    policy_version=policy_version,
-                    pad_id=pad_id,
-                    request_len=request_len,
-                    response_len=response_len,
-                    target=target,
-                )
-            )
-        return cls(str(group_id), episodes)
-
-
-@dataclass
 class Trainer(ForgeActor):
-    """GRPO Trainer implementation for policy optimization."""
+    """Reinforce Loss Trainer implementation for policy optimization."""
 
     model_name: str
     learning_rate: float = 1e-5
-    beta: float = 0.1
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
-    dp_rank: int = 0  # TODO: support data parallelism, hard code it for now
 
     @endpoint
     async def setup(self):
@@ -125,90 +60,47 @@ class Trainer(ForgeActor):
             self.model.parameters(), lr=self.learning_rate
         )
         self.optimizer.zero_grad()
-
         self.loss = ReinforceLoss()
-        self._tokenizer = get_tokenizer("Qwen/Qwen2.5-0.5B-Instruct")
-
         self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
-    async def train_step(self, batch: list[list[Episode]]):
-        microbatch = batch[self.dp_rank]
-        pad_id = microbatch[0].pad_id
-        max_seq_len = microbatch[0].request_len + microbatch[0].response_len - 1
+    def train_step(self, episodes: list[Episode]) -> float:
+        pad_id = episodes[0].pad_id
 
-        # Process all microbatches
+        # Calculate batch maximum length
+        max_seq_len = max(ep.max_seq_len - 1 for ep in episodes)
         batch_input_ids = []
         batch_target_ids = []
         batch_loss_masks = []
         batch_weights = []
-        batch_old_log_probs = []
-        for microbatch_item in microbatch:
-            prompt_ids = torch.LongTensor(microbatch_item.request_tokens)
-            token_ids = torch.LongTensor(microbatch_item.response_tokens)
-            ids = torch.cat([prompt_ids, token_ids])
-
-            input_ids = ids[:-1]  # truncate EOS
-            diff = max_seq_len - input_ids.size(0)
-            input_ids = F.pad(input_ids, (0, diff), value=pad_id)
-
-            target_ids = ids[1:]  # truncate BOS
-            diff = max_seq_len - target_ids.size(0)
-            target_ids = F.pad(target_ids, (0, diff), value=pad_id)
-
-            # Simple loss mask: 0 for prompt, 1 for response
-            loss_mask = torch.cat(
-                [
-                    torch.zeros(
-                        len(prompt_ids), dtype=torch.float32
-                    ),  # Don't compute loss on prompt
-                    torch.ones(
-                        len(token_ids), dtype=torch.float32
-                    ),  # Compute loss on response
-                ]
+        batch_sampling_log_probs = []
+        for episode in episodes:
+            input_ids = self.pad_sequence(episode.input_ids, max_seq_len, pad_id)
+            target_ids = self.pad_sequence(episode.target_ids, max_seq_len, pad_id)
+            loss_mask = self.pad_sequence(episode.loss_mask, max_seq_len, 0.0)
+            sampling_log_probs = self.pad_sequence(
+                episode.sampling_log_probs, max_seq_len, 0.0
             )
-
-            # Get advantage and create weights
-            advantage = microbatch_item.reward  # Single float value
-            weights = loss_mask * advantage  # [B]
-
-            # log probs
-            old_log_probs = torch.cat(
-                [
-                    torch.zeros(prompt_ids.shape, dtype=torch.float32),
-                    microbatch_item.response_logprobs,
-                ]
-            )
-
-            # Handle shifting (target_ids = ids[1:])
-            loss_mask = loss_mask[1:]  # Shift to align with target_ids
-            weights_shifted = weights[1:]  # Shift weights
-            old_log_probs_shifted = old_log_probs[1:]  # Shift log probs
-
-            # Pad the loss mask
-            diff = max_seq_len - loss_mask.size(0)
-            loss_mask = F.pad(loss_mask, (0, diff), value=0.0)  # Pad with 0.0
-            weights_shifted = F.pad(weights_shifted, (0, diff), value=0.0)
-            old_log_probs_shifted = F.pad(old_log_probs_shifted, (0, diff), value=0.0)
+            weights = self.pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
 
             # Exclude padded response tokens from loss
             valid_mask = target_ids != pad_id
             loss_mask = loss_mask * valid_mask.float()
-            weights_shifted = weights_shifted * valid_mask.float()
-            old_log_probs_shifted = old_log_probs_shifted * valid_mask.float()
+            weights = weights * valid_mask.float()
+            sampling_log_probs = sampling_log_probs * valid_mask.float()
 
             batch_input_ids.append(input_ids)
             batch_target_ids.append(target_ids)
             batch_loss_masks.append(loss_mask)
-            batch_weights.append(weights_shifted)
-            batch_old_log_probs.append(old_log_probs_shifted)
+            batch_weights.append(weights)
+            batch_sampling_log_probs.append(sampling_log_probs)
 
         # Stack into batched tensors
         input_ids = torch.stack(batch_input_ids).to(self.device)
         target_ids = torch.stack(batch_target_ids).to(self.device)
         loss_masks = torch.stack(batch_loss_masks).to(self.device)
         weights = torch.stack(batch_weights).to(self.device)
-        old_log_probs = torch.stack(batch_old_log_probs).to(self.device)
+        sampling_log_probs = torch.stack(batch_sampling_log_probs).to(self.device)
 
         # Create attention mask
         attention_mask = input_ids != pad_id
@@ -217,7 +109,7 @@ class Trainer(ForgeActor):
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
         # Compute loss only on response tokens
-        loss = self.loss(logits, target_ids, loss_masks, weights, old_log_probs)
+        loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -239,6 +131,14 @@ class Trainer(ForgeActor):
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
+
+    def pad_sequence(
+        self, tensor: torch.Tensor, target_len: int, pad_value: float = 0.0
+    ) -> torch.Tensor:
+        diff = target_len - tensor.size(0)
+        if diff > 0:
+            return F.pad(tensor, (0, diff), value=pad_value)
+        return tensor
 
 
 @dataclass
@@ -299,11 +199,7 @@ class SumDigitsDataset(IterableDataset):
 class DatasetActor(ForgeActor):
     """Actor wrapper for HuggingFace dataset to provide async interface."""
 
-    path: str = "openai/gsm8k"
-    revision: str = "main"
-    data_split: str = "train"
-    streaming: bool = True
-    model: str = "Qwen/Qwen3-1.7B"
+    model: str = "Qwen/Qwen2.5-0.5B-Instruct"
 
     @endpoint
     def setup(self):
@@ -355,12 +251,6 @@ async def main(cfg: DictConfig):
     )
 
     print("All services initialized successfully!")
-    # import debugpy
-
-    # debugpy.listen(5678)
-    # print("Waiting for VS Code debugger to attach...")
-    # debugpy.wait_for_client()
-    # print("Attached!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -402,6 +292,7 @@ async def main(cfg: DictConfig):
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
+                episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
                 await replay_buffer.add.choose(episode)
 
@@ -409,11 +300,8 @@ async def main(cfg: DictConfig):
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.choose()
-            mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
-            # print(f"avg_reward/rollout_count: {avg_reward} at {rollout_count}")
 
             rollout_count += 1
 
@@ -427,7 +315,7 @@ async def main(cfg: DictConfig):
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch)
+                loss = await trainer.train_step.choose(batch[0])
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at {training_step}")
