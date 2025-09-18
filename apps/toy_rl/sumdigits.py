@@ -64,30 +64,6 @@ class Episode:
         """Returns the full response tensor"""
         return self.get_response_tensor()
 
-    def get_request_tensor(self, slice_obj=None):
-        tokens = (
-            self.request_tokens[slice_obj]
-            if slice_obj is not None
-            else self.request_tokens
-        )
-        tensor = torch.tensor(tokens, dtype=torch.long)
-        if tensor.shape[0] < self.request_len:  # left pad
-            diff = self.request_len - tensor.shape[0]
-            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
-        return tensor
-
-    def get_response_tensor(self, slice_obj=None):
-        tokens = (
-            self.response_tokens[slice_obj]
-            if slice_obj is not None
-            else self.response_tokens
-        )
-        tensor = torch.tensor(tokens, dtype=torch.long)
-        if tensor.shape[0] < self.response_len:  # right pad
-            diff = self.response_len - tensor.shape[0]
-            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
-        return tensor
-
 
 @dataclass
 class Group:
@@ -135,12 +111,6 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def setup(self):
-        # import debugpy
-
-        # debugpy.listen(5681)
-        # print("[LEARNER MESH] Waiting for VS Code debugger to attach...")
-        # debugpy.wait_for_client()
-        # print("Attached!")
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -156,7 +126,6 @@ class Trainer(ForgeActor):
         )
         self.optimizer.zero_grad()
 
-        # self.loss = SimpleGRPOLoss(self.beta)
         self.loss = ReinforceLoss()
         self._tokenizer = get_tokenizer("Qwen/Qwen2.5-0.5B-Instruct")
 
@@ -166,8 +135,7 @@ class Trainer(ForgeActor):
     async def train_step(self, batch: list[list[Episode]]):
         microbatch = batch[self.dp_rank]
         pad_id = microbatch[0].pad_id
-        pad_id = 0
-        max_seq_len = microbatch[0].request_len + microbatch[0].response_len
+        max_seq_len = microbatch[0].request_len + microbatch[0].response_len - 1
 
         # Process all microbatches
         batch_input_ids = []
@@ -192,10 +160,10 @@ class Trainer(ForgeActor):
             loss_mask = torch.cat(
                 [
                     torch.zeros(
-                        len(prompt_ids), dtype=torch.bool
+                        len(prompt_ids), dtype=torch.float32
                     ),  # Don't compute loss on prompt
                     torch.ones(
-                        len(token_ids), dtype=torch.bool
+                        len(token_ids), dtype=torch.float32
                     ),  # Compute loss on response
                 ]
             )
@@ -219,15 +187,13 @@ class Trainer(ForgeActor):
 
             # Pad the loss mask
             diff = max_seq_len - loss_mask.size(0)
-            loss_mask = F.pad(
-                loss_mask, (0, diff), value=False
-            )  # Pad with False (no loss)
+            loss_mask = F.pad(loss_mask, (0, diff), value=0.0)  # Pad with 0.0
             weights_shifted = F.pad(weights_shifted, (0, diff), value=0.0)
             old_log_probs_shifted = F.pad(old_log_probs_shifted, (0, diff), value=0.0)
 
             # Exclude padded response tokens from loss
             valid_mask = target_ids != pad_id
-            loss_mask = loss_mask & valid_mask
+            loss_mask = loss_mask * valid_mask.float()
             weights_shifted = weights_shifted * valid_mask.float()
             old_log_probs_shifted = old_log_probs_shifted * valid_mask.float()
 
@@ -250,13 +216,12 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        target_ids = torch.stack(batch_target_ids).to(
-            self.device
-        )  # [batch_size, max_seq_len]
-
         # Compute loss only on response tokens
         loss = self.loss(logits, target_ids, loss_masks, weights, old_log_probs)
         loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
         return loss.item()
@@ -290,8 +255,8 @@ class RewardActor(ForgeActor):
 @dataclass
 class SumDigitsDataset(IterableDataset):
     def __init__(self, tokenizer, max_samples=1000):
-        self.min_digit_length = 2  # TODO: needs to come from config/argument
-        self.max_digit_length = 3  # TODO: needs to come from config/argument
+        self.min_digit_length = 2
+        self.max_digit_length = 3
         self.max_numbers = max_samples
         self.data = self.generate_random_number()
         self._tokenizer = tokenizer

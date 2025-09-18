@@ -5,8 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+import torch.nn.functional as F
 from torch import nn
-from trl.trainer import utils as trl_utils
 
 
 class ReinforceLoss(nn.Module):
@@ -28,7 +28,7 @@ class ReinforceLoss(nn.Module):
     def forward(
         self, trainer_logits, target_ids, target_mask, target_weights, target_log_probs
     ):
-        trainer_log_probs = trl_utils.selective_log_softmax(trainer_logits, target_ids)
+        trainer_log_probs = self.selective_log_softmax(trainer_logits, target_ids)
         target_mask = target_mask.detach()
         target_weights = target_weights
         target_mask_sum = target_mask.sum()
@@ -37,13 +37,13 @@ class ReinforceLoss(nn.Module):
         )
         sampler_log_probs = target_log_probs
 
-        use_importance_sampling_ratio = True  # TODO: needs to come from config
-        if use_importance_sampling_ratio:
-            logp_diff = trainer_log_probs - sampler_log_probs.detach()
-            importance_weights = torch.exp(logp_diff).detach()
-            target_weights *= importance_weights
+        # Importance sampling ratio
+        logp_diff = trainer_log_probs - sampler_log_probs.detach()
+        importance_weights = torch.exp(logp_diff).detach()
+        importance_weights = torch.clamp(importance_weights, min=0.1, max=10.0)
+        weighted_advantages = target_weights * importance_weights
 
-        numerator = (-trainer_log_probs * target_weights * target_mask).sum()
+        numerator = (-trainer_log_probs * weighted_advantages * target_mask).sum()
 
         denominator = target_mask_sum
         return numerator / denominator
