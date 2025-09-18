@@ -27,8 +27,6 @@ jobs:
       script: |
           set -eux
 
-          conda init
-          source ~/.bashrc
           conda create -n testenv python=3.10 --yes
           conda activate testenv
           echo "python version: $(python --version)"
