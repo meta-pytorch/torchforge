@@ -736,7 +736,7 @@ async def test_round_robin_router_distribution():
         print("results: ", results)
         # Verify that requests were distributed round-robin
         # Each call increments a single replica, so after 6 calls we expect:
-        # - 2 increments per replica (since 3 replicas, 6 calls)
+        # 2 increments per replica (since 3 replicas, 6 calls)
         final_values = results[-1]  # last snapshot
         assert sorted(final_values) == [2, 2, 2]
 
