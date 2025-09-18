@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-test:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     secrets: inherit  # Pass all secrets
     strategy:
       fail-fast: false
