@@ -50,7 +50,7 @@ jobs:
 
           # Install torchstore
           eval "$(ssh-agent -s)"
-          echo '${SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE}' >> torchstore_ssh_key
+          echo "${SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE}" >> torchstore_ssh_key
           chmod 600 torchstore_ssh_key
           # Print the first and last 2 lines of the key to make sure it's valid
           head -2 torchstore_ssh_key
