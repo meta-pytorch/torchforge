@@ -15,7 +15,6 @@ jobs:
         include:
           - name: 4xlargegpu
             runs-on: linux.g5.4xlarge.nvidia.gpu
-            torch-spec: '--pre torch --index-url https://download.pytorch.org/whl/nightly/cu126'
             gpu-arch-type: "cuda"
             gpu-arch-version: "12.6"
     # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
@@ -46,7 +45,7 @@ jobs:
           python -m pip install --upgrade pip
 
           # Install pytorch
-          python -m pip install ${{ matrix.torch-spec }}
+          python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 
           # Install monarch
           python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
