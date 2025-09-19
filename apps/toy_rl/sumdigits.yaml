@@ -61,6 +61,6 @@ services:
     num_replicas: 1
     with_gpus: false
   ref_model:
-      procs_per_replica: 1
-      num_replicas: 1
-      with_gpus: true
+    procs: 1
+    num_replicas: 1
+    with_gpus: true
