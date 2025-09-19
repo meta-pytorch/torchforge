@@ -78,7 +78,7 @@ jobs:
 
           export CUDA_LIB_DIR=/usr/lib64
           # monarch wheel is built with a newer glibc version. hopefully this doesn't break everything else.
-          apt-get -y update && apt-get -y install libc6
+          yum update -y && yum update glibc
           # Run unit tests with coverage
           pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
   upload-coverage:
