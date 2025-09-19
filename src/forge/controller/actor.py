@@ -49,6 +49,7 @@ class ForgeActor(Actor):
         cls: Type[T],
         *,
         service_config: ServiceConfig | None = None,
+        process_config: ProcessConfig | None = None,
         num_replicas: int | None = None,
         procs_per_replica: int | None = None,
         **service_kwargs,
@@ -57,7 +58,11 @@ class ForgeActor(Actor):
         Returns a subclass of this ForgeActor with a bound ServiceConfig.
         The returned subclass can later be launched via `.as_service()`.
 
-        Usage (choose ONE of the following forms):
+        Usage modes:
+
+        ---- Service Mode (default) ----
+        Use when deploying a replicated service (multiple replicas, each with N procs).
+
             # Option A: construct ServiceConfig implicitly
             service = await MyForgeActor.options(
                 num_replicas=1,
@@ -73,10 +78,42 @@ class ForgeActor(Actor):
             # Option C: skip options, use the default service config with num_replicas=1, procs_per_replica=1
             service = await MyForgeActor.as_service(...)
             await service.shutdown()
+
+        ---- Single Actor Mode ----
+        Use when launching just one actor directly (without Service abstraction).
+        Must provide a ProcessConfig.
+
+            cfg = ProcessConfig(...)
+            actor = await MyForgeActor.options(process_config=cfg).as_actor(...)
+            await actor.shutdown()
+
+        ---- Notes ----
+        - If `process_config` is passed, we bind to an actor configuration
+          and expect `.as_actor(...)` to be called later.
+        - Otherwise (default), we bind to a service configuration and expect
+          `.as_service(...)` to be called later.
+        - Passing both `service_config` and `process_config` is invalid.
         """
 
-        if service_config is not None:
+        if service_config is not None and process_config is not None:
+            raise ValueError(
+                "Cannot pass both `service_config` and `process_config`. "
+                "Use either `service_config` for service mode or `process_config` for single actor mode."
+            )
+
+        if process_config is not None:
+            return type(
+                f"{cls.__name__}Actor",
+                (cls,),
+                {"_process_config": process_config},
+            )
+        elif service_config is not None:
             cfg = service_config
+            return type(
+                f"{cls.__name__}Service",
+                (cls,),
+                {"_service_config": cfg},
+            )
         else:
             if num_replicas is None or procs_per_replica is None:
                 raise ValueError(
@@ -88,11 +125,11 @@ class ForgeActor(Actor):
                 **service_kwargs,
             )
 
-        return type(
-            f"{cls.__name__}Service",
-            (cls,),
-            {"_service_config": cfg},
-        )
+            return type(
+                f"{cls.__name__}Service",
+                (cls,),
+                {"_service_config": cfg},
+            )
 
     @classmethod
     async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
@@ -178,6 +215,23 @@ class ForgeActor(Actor):
             host, port = proc_mesh._hostname, proc_mesh._port
             await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
+        return actor
+
+    @classmethod
+    async def as_actor(cls: Type[T], **actor_kwargs) -> T:
+        """
+        Spawns a single actor using the ProcessConfig bound in `.options()`.
+        Example:
+            cfg = ProcessConfig(...)
+            actor = await MyForgeActor.options(process_config=cfg).as_actor(...)
+        """
+        cfg = getattr(cls, "_process_config", None)
+        if cfg is None:
+            raise ValueError(
+                "No process_config found. Use `.options(process_config=...)` before calling `.as_actor()`."
+            )
+        logger.info("Spawning single actor %s", cls.__name__)
+        actor = await cls.launch(process_config=cfg, **actor_kwargs)
         return actor
 
     @classmethod
