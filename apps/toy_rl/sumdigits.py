@@ -25,7 +25,7 @@ from forge.controller.provisioner import shutdown
 from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.util.metric_logging import get_metric_logger
 
-from forge.util.model_utils import selective_log_softmax
+from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 
@@ -271,7 +271,9 @@ class Trainer(ForgeActor):
             self.model.parameters(), lr=self.learning_rate
         )
         self.optimizer.zero_grad()
-        self.loss = SimpleGRPOLoss(0.1)
+
+        # beta = 0.01 for quicker convergence
+        self.loss = SimpleGRPOLoss(0.01)
         self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
