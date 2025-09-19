@@ -46,7 +46,8 @@ trainer:
     local_batch_size: ${batch_size}
     seq_len: 2048
     max_norm: 1.0
-    steps: 5
+    steps: 1000000
+    dtype: bfloat16
   compile:
     enable: false
   parallelism:
@@ -80,6 +81,8 @@ ref_model:
     name: qwen3
     flavor: 1.7B
     hf_assets_path: hf://${model}
+  training:
+    dtype: bfloat16
   compile:
     enable: false
   parallelism:
