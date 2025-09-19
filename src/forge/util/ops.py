@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 
-def selective_log_softmax(logits, index) -> torch.Tensor:
+def selective_log_softmax(logits: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
     """
     A memory-efficient implementation of the common `log_softmax -> gather` operation.
 
