@@ -17,7 +17,6 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
@@ -40,11 +39,17 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
+from forge.util.async_utils import make_sync_generator
 
 
 @dataclass
@@ -364,7 +369,7 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self, policy_version: int):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
@@ -372,8 +377,8 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.call(version=self.weights_version)
-        self.weights_version += 1
+        await self.policy_worker.update.call(version=policy_version)
+        self.weights_version = policy_version
         self.logger.info(f"Weight update completed (now v{self.weights_version})")
 
     @endpoint
@@ -395,7 +400,6 @@ class Policy(PolicyInterface):
 @dataclass
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
-    state_dict_key: str = "model_state_dict"
 
     @endpoint
     async def setup(self):
@@ -407,41 +411,26 @@ class PolicyWorker(ForgeActor):
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
 
-    async def _load_tensor_parallel_state_dict(
-        self, current_state_dict: dict, version: int
-    ):
-        """
-        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
-        """
-        sharding = VLLMSharding(
-            self.vllm_config.parallel_config.tensor_parallel_size, self.rank
-        )
-
-        for param_name in current_state_dict.keys():
-            current_tensor = current_state_dict[param_name]
-
-            # Load the full tensor from torchstore
-            # TODO: only get the part of the tensor that is needed
-            stored_tensor = await ts.get(
-                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
-            )
-            sharding.load_from_source_to_target(
-                param_name,
-                stored_tensor,
-                current_tensor,
-            )
-
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
-        current_state_dict = model.state_dict()
-        start = time.time()
-        await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        self.logger.debug(
-            f"Loaded state dict from {key} in {time.time() - start} seconds"
-        )
+        prefix = get_param_prefix(version)
+        self.logger.debug(f"{prefix=}")
+        matching_keys = await ts.keys(prefix)
+        self.logger.debug(f"{matching_keys=}")
+        # TODO: find a way to save the original huggingface parameter names.
+        hf_names = [extract_param_name(key) for key in matching_keys]
+        self.logger.debug(f"{hf_names=}")
+        loaded_weights = set()
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        for name in hf_names:
+            param = await ts.get(get_param_key(version, name))
+            loaded = model.load_weights([(name, param)])
+            del param
+            loaded_weights.update(loaded)
+        self.logger.info(f"Updated {len(loaded_weights)} parameters")
 
     @endpoint
     async def setup_kv_cache(self):

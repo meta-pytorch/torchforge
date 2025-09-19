@@ -19,6 +19,7 @@ from datasets import load_dataset
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel  # noqa: F401
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.actors.torchstore_utils import get_param_key
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
@@ -185,14 +186,13 @@ class Trainer(ForgeActor):
     @endpoint
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
-        key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
-        new_sd = _qwen3_hf_to_vllm(self.model.state_dict(), num_layers=28)
-        start_time = time.time()
-        await ts.put_state_dict(new_sd, key)
-        end_time = time.time()
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
+        start_time = time.perf_counter()
+        hf_state_dict = self.model.state_dict()
+        for name, param in hf_state_dict.items():
+            key = get_param_key(version, name)
+            await ts.put(key, param)
+        end_time = time.perf_counter()
+        self.logger.debug(f"Pushed weights in {end_time - start_time:.2f} seconds")
 
 
 @dataclass
@@ -318,7 +318,7 @@ async def main(cfg: DictConfig):
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
-        project="grpo-training",
+        project="yuxuanh-grpo-training-debug",
     )
 
     # ---- Setup services ---- #
@@ -397,20 +397,28 @@ async def main(cfg: DictConfig):
 
     async def continuous_training():
         training_step = 0
-        policy_version = 0
         while True:
-            batch = await replay_buffer.sample.choose(
-                curr_policy_version=policy_version
-            )
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 loss = await trainer.train_step.choose(batch)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(policy_version)
-                policy_version += 1
-                await policy.update_weights.call()
+                start_time = time.perf_counter()
+                await trainer.push_weights.call(training_step)
+                mlogger.log(
+                    "push_weights_time/training_step",
+                    time.perf_counter() - start_time,
+                    training_step,
+                )
+                start_time = time.perf_counter()
+                await policy.update_weights.call(training_step)
+                mlogger.log(
+                    "update_weights_time/training_step",
+                    time.perf_counter() - start_time,
+                    training_step,
+                )
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it
