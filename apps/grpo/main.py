@@ -104,6 +104,9 @@ def collate(batches: list[list[Episode]]):
         request = [e.request_tensor for e in batch]
         request = torch.stack(request)  # [b x s]
 
+        response = [e.response_tensor for e in batch]
+        response = torch.stack(response)  # [b x s]
+
         ref_logprobs = [e.ref_logprobs for e in batch]
         ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
 
