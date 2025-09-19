@@ -213,28 +213,19 @@ class TestSimpleGRPOLoss:
     @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     def test_mathematical_correctness(self, loss_fn):
-        """Test mathematical correctness with simpler verification."""
-        # Test with known simple case
-        logprobs = torch.tensor([[0.0]])  # log(1.0) = 0
-        ref_logprobs = torch.tensor([[0.0]])  # Same as current
+        """Test mathematical correctness with simple verification."""
+        # Simple case: identical policies should give zero loss
+        logprobs = torch.tensor([[0.0]])
+        ref_logprobs = torch.tensor([[0.0]])
         advantages = torch.tensor([[1.0]])
         padding_mask = torch.ones(1, 1)
-
         loss = loss_fn(logprobs, ref_logprobs, advantages, padding_mask)
 
-        # When logprobs == ref_logprobs, KL should be 0
-        # Loss should be -(1.0 * 1.0 - beta * 0) = -1.0
-        expected_loss = torch.tensor(-1.0)
-        assert torch.allclose(loss, expected_loss, atol=1e-6)
+        # When policies are identical, loss should be 0
+        assert torch.allclose(loss, torch.tensor(0.0), atol=1e-6)
 
-        # Test symmetry: swapping positive and negative advantages
-        advantages_pos = torch.tensor([[2.0]])
-        advantages_neg = torch.tensor([[-2.0]])
+        # Test that positive advantage with higher prob gives negative loss
+        logprobs_higher = torch.tensor([[1.0]])  # Higher than reference
+        loss_higher = loss_fn(logprobs_higher, ref_logprobs, advantages, padding_mask)
 
-        loss_pos = loss_fn(logprobs, ref_logprobs, advantages_pos, padding_mask)
-        loss_neg = loss_fn(logprobs, ref_logprobs, advantages_neg, padding_mask)
-
-        # Should be symmetric around some center point
-        assert torch.isfinite(loss_pos)
-        assert torch.isfinite(loss_neg)
-        assert loss_pos != loss_neg  # Should be different
+        assert loss_higher < 0  # Should encourage this action

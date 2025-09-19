@@ -10,7 +10,6 @@ import asyncio
 import random
 import time
 import uuid
-from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -374,7 +373,7 @@ class SumDigitsDataset:
 
         system_prompt = """
         A conversation between User and Assistant. The user asks a question, and the Assistant solves it.
-        The assistant only gives very concise answers.
+        The assistant only gives very concise answers (just the number, no explanation).
         """
         request: str = f"What is the sum of the digits of {data}"
         as_chat = [
@@ -516,6 +515,10 @@ async def main(cfg: DictConfig):
                 episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
                 await replay_buffer.add.choose(episode)
+            avg_response_len = (
+                sum(len(e.response_tokens) for e in group.episodes) / group_size
+            )
+            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 

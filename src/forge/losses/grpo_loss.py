@@ -32,14 +32,6 @@ class SimpleGRPOLoss(nn.Module):
     """
 
     def __init__(self, beta: float = 0.1):
-        """
-        Initialize GRPO loss function.
-
-        Args:
-            beta (float): KL divergence penalty coefficient. Higher values prevent
-                         the policy from deviating too far from the reference policy.
-                         Typical range: 0.01 - 0.5
-        """
         super().__init__()
         self.beta = beta
 
