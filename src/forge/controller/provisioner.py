@@ -120,7 +120,7 @@ class Provisioner:
         )
 
     async def get_proc_mesh(
-        self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
+        self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None,
     ):
         """Gets a proc mesh.
 

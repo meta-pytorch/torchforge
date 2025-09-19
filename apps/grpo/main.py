@@ -27,6 +27,11 @@ from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
+import torch.distributed.checkpoint as dcp
+import os
+
+os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
+os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
 
 @dataclass
@@ -249,7 +254,9 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
-    await ts.initialize()
+    await ts.initialize(
+        strategy=ts.ControllerStorageVolumes()
+    )
     (
         dataloader,
         policy,
@@ -334,6 +341,7 @@ async def main(cfg: DictConfig):
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
             buffer_size = await replay_buffer._numel.choose()
+            print("pushed to replay buffer, buffer size: ", buffer_size)
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
@@ -354,9 +362,12 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
+                print("Pushing weights...")
                 await trainer.push_weights.call(policy_version)
                 policy_version += 1
+                print("Asking policy to update weights...")
                 await policy.update_weights.call()
+                print("done with step")
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

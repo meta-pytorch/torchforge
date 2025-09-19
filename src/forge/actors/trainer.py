@@ -13,6 +13,7 @@ from typing import Callable
 
 import torch
 import torchstore as ts
+import pprint
 
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
@@ -35,6 +36,11 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+import torch.distributed.checkpoint as dcp
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 @dataclass
@@ -61,6 +67,7 @@ class RLTrainer(ForgeActor):
         in monarch for now.
 
         """
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -94,12 +101,14 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
+        logger.info(f"Setting up trainer: {pprint.pformat(dict(os.environ), width=120, compact=True)}")
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         for key in {"loss", "state_dict_key"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.current_step)
         self.engine.optimizers.zero_grad()
+        logger.info("Done setting up trainer")
 
     def forward_backward(
         self, inputs: dict[str, Tensor], targets: dict[str, Tensor]
@@ -171,6 +180,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+        logger.info(f"Got dp rank {self.engine.dp_rank} with {len(inputs)} inputs and {len(targets)} outputs")
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -196,6 +206,8 @@ class RLTrainer(ForgeActor):
             last_step=self.current_step == self.num_training_steps,
         )
 
+        print("done with train step")
+
         return loss.item()
 
     @endpoint
@@ -205,24 +217,54 @@ class RLTrainer(ForgeActor):
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
         # 2. Unify CheckpointManager and TorchStore weights save control path.
+
+        def mem_str():
+            allocated = torch.cuda.memory_allocated() / 1024**3  # GB
+            reserved = torch.cuda.memory_reserved() / 1024**3   # GB
+            return f"(allocated: {allocated:.2f}GB, reserved: {reserved:.2f} GB)"
+
+        logger.info(f"pushing weights: {mem_str()}")
+
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
+
         sd = self.engine.checkpointer.states["model"].state_dict()
+        logger.info(f"after get state dict: {mem_str()}")
+
         flattened_state_dict, _ = flatten_state_dict(sd)
+        logger.info(f"after flattened state dict: {mem_str()}")
+
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
+
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+        logger.info(f"Created hf state dict: {mem_str()}")
+
+        del flattened_state_dict
+
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=36)
+        logger.info(f"Created vllm state dict: {mem_str()}")
+
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
-        await ts.put_state_dict(state_dict=vllm_ready_hf_sd, key=key)
+        metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
+        await ts.put(key, metadata)
+
+        del hf_state_dict
+        del vllm_ready_hf_sd
+        torch.cuda.empty_cache()
+
+        logger.info(f"After deleting the HF and vLLM state dict: {mem_str()}")
+
+        # await ts.put_state_dict(state_dict=vllm_ready_hf_sd, key=key)
         end_time = time.time()
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
+        logger.debug(
+            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds: {mem_str()}"
         )
+        logger.info(f"Peak GPU memory usage: {torch.cuda.max_memory_allocate() / 1024**3:.2f}GB")
 
     @endpoint
     async def cleanup(self) -> None:

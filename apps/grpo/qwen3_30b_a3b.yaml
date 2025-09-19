@@ -1,13 +1,11 @@
-# Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.qwen3_1_7b --config apps/grpo/qwen3_1_7b.yaml
+# GRPO Training Configuration
 
 # Global configuration
 group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-1.7B"
-off_by_n: 1 # Off by one by default
+model: "Qwen/Qwen3-30B-A3B"
 
 # Dataset configuration
 dataset:
@@ -16,12 +14,16 @@ dataset:
   data_split: "train"
   streaming: true
   model: ${model}
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
 
 # Policy configuration
 policy:
   engine_config:
     model: ${model}
-    tensor_parallel_size: 1
+    tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:
@@ -29,12 +31,16 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+  service:
+    procs_per_replica: 4
+    num_replicas: 1
+    with_gpus: true
 
 # Trainer configuration
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
+    flavor: 30B-A3B 
     hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
@@ -51,7 +57,7 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: -1
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -67,62 +73,56 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  service:
+    procs_per_replica: 8
+    num_replicas: 1
+    hosts_per_replica: 1
+    with_gpus: true
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${batch_size}
-  max_policy_age: ${off_by_n}
-  dp_size: ${trainer.parallelism.data_parallel_shard_degree}
+  max_policy_age: 1 # Async by 1
+  dp_size: ${trainer.parallelism.data_parallel_replicate_degree}
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
+
+# Compute advantages configuration
+compute_advantages:
+  service:
+    procs_per_replica: 1
+    num_replicas: 1
+    with_gpus: false
 
 # Reference model configuration
 ref_model:
   model:
     name: qwen3
-    flavor: 1.7B
+    flavor: 30B-A3B
     hf_assets_path: hf://${model}
   compile:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    tensor_parallel_degree: 8
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
+    disable_loss_parallel: false
   checkpoint:
     initial_load_path: hf://${model}
     initial_load_in_hf: true
+  service:
+    hosts_per_replica: 1
+    procs_per_replica: 8
+    num_replicas: 1
+    with_gpus: true
 
-# All resource allocations
-services:
-  dataset:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: false
-  policy:
-    procs_per_replica: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
-    # hosts_per_replica: 1
-    with_gpus: true
-  trainer:
-    procs_per_replica: 1
-    # hosts_per_replica: 1
-    num_replicas: 1
-    with_gpus: true
-  replay_buffer:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: false
-  ref_model:
-    procs_per_replica: 1
-    # hosts_per_replica: 1
-    num_replicas: 1
-    with_gpus: true
-  compute_advantages:
-    procs_per_replica: 1
-    num_replicas: 1
-    with_gpus: false
-  reward_actor:
+# Reward actor configuration
+reward_actor:
+  service:
     procs_per_replica: 1
     num_replicas: 1
     with_gpus: false

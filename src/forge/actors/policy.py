@@ -45,6 +45,8 @@ from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
+import torch.distributed.checkpoint as dcp
+
 
 
 @dataclass
@@ -370,10 +372,12 @@ class Policy(PolicyInterface):
             self.logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
+        print(f"Starting weight update on {self.__class__.__name__}")
         self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
         await self.policy_worker.update.call(version=self.weights_version)
         self.weights_version += 1
         self.logger.info(f"Weight update completed (now v{self.weights_version})")
+        print(f"Weight update completed (now v{self.weights_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:
@@ -415,15 +419,24 @@ class PolicyWorker(ForgeActor):
         sharding = VLLMSharding(
             self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
+        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        dcp_metadata = await ts.get(checkpoint_id)
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await ts.get(
-                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
+            # stored_tensor = await ts.get(
+            #     f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
+            # )
+            tensor_meta = dcp_metadata.state_dict_metadata[param_name]
+            stored_tensor = torch.empty(size=tensor_meta.size, dtype=tensor_meta.properties.dtype)
+            dcp.load(
+                checkpoint_id=checkpoint_id,
+                state_dict={param_name: stored_tensor}
             )
+
             sharding.load_from_source_to_target(
                 param_name,
                 stored_tensor,

@@ -9,8 +9,11 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from monarch.actor import endpoint
-
+import logging
 from forge.controller import ForgeActor
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 @dataclass
@@ -50,7 +53,7 @@ class ReplayBuffer(ForgeActor):
             A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
         bsz = batch_size if batch_size is not None else self.batch_size
-        total_samples = self.dp_size * bsz
+        total_samples = abs(self.dp_size) * bsz
 
         # Evict old episodes
         self._evict(curr_policy_version)

@@ -1,0 +1,62 @@
+# Config for GRPO finetuning using a Llama3.1 8B Instruct model
+#
+# This config assumes that you've run the following command before launching
+# this run:
+#   export HF_HUB_DISABLE_XET=1
+#   hf download Qwen/Qwen3-30B-A3B --local-dir /tmp/Qwen3-30B-A3B
+
+
+trainer:
+  comm:
+    trace_buf_size: 0
+
+  model:
+    name: qwen3
+    flavor: 30B-A3B
+    hf_assets_path: /tmp/Qwen3-30B-A3B
+
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+
+  lr_scheduler:
+    warmup_steps: 1
+
+  training:
+    local_batch_size: 1
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 5
+    dataset: "c4"
+
+  compile:
+    enable: false
+
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 4
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: false
+
+  checkpoint:
+    enable: true
+    folder: /tmp/Qwen3-30B-A3B
+    initial_load_path: /tmp/Qwen3-30B-A3B
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 500
+    async_mode: "disabled"
+
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+replay_buffer:
+  batch_size: 4
+  max_policy_age: 2
+  seed: None
+  dp_size: 4
