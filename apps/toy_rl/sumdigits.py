@@ -397,7 +397,13 @@ async def main(cfg: DictConfig):
 
     # ---- Setup services ---- #
     await ts.initialize()
-    (dataloader, policy, trainer, replay_buffer, reward_actor,) = await asyncio.gather(
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        reward_actor,
+    ) = await asyncio.gather(
         DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
@@ -464,21 +470,18 @@ async def main(cfg: DictConfig):
 
     async def continuous_training():
         training_step = 0
-        policy_version = 0
         while True:
-            batch = await replay_buffer.sample.choose(
-                curr_policy_version=policy_version
-            )
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 loss = await trainer.train_step.choose(batch[0])
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                print(f"loss/training_step: {loss} at {training_step}")
-                await trainer.push_weights.call(policy_version)
-                policy_version += 1
-                await policy.update_weights.call()
+                print(f"loss/training_step: {loss} at training step {training_step}")
+                await trainer.push_weights.call(training_step)
+                await policy.update_weights.call(training_step)
+                # TODO: remove this line? this clears the buffer so it's always on-policy
                 await replay_buffer.clear.call()
 
     print("Starting training loop.")

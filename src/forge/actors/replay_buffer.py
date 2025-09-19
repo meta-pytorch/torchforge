@@ -8,9 +8,9 @@ import random
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 
 @dataclass
@@ -87,11 +87,18 @@ class ReplayBuffer(ForgeActor):
         self._evict(curr_policy_version)
 
     def _evict(self, curr_policy_version: int) -> None:
+        buffer_len_before_evict = len(self.buffer)
         self.buffer = [
             trajectory
             for trajectory in self.buffer
             if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
         ]
+        buffer_len_after_evict = len(self.buffer)
+
+        print(
+            f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
+            f"{buffer_len_before_evict - buffer_len_after_evict} episodes expired, {buffer_len_after_evict} episodes left"
+        )
 
     @endpoint
     async def _getitem(self, idx: int):
@@ -106,6 +113,7 @@ class ReplayBuffer(ForgeActor):
     async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all episodes."""
         self.buffer.clear()
+        print("replay buffer cleared")
 
     @endpoint
     async def state_dict(self) -> dict[str, Any]:
