@@ -8,9 +8,9 @@ import random
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from forge.controller import ForgeActor
-
 from monarch.actor import endpoint
+
+from forge.controller import ForgeActor
 
 
 @dataclass
