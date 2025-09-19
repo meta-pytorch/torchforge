@@ -397,13 +397,7 @@ async def main(cfg: DictConfig):
 
     # ---- Setup services ---- #
     await ts.initialize()
-    (
-        dataloader,
-        policy,
-        trainer,
-        replay_buffer,
-        reward_actor,
-    ) = await asyncio.gather(
+    (dataloader, policy, trainer, replay_buffer, reward_actor,) = await asyncio.gather(
         DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
