@@ -397,7 +397,13 @@ async def main(cfg: DictConfig):
 
     # ---- Setup services ---- #
     await ts.initialize()
-    (dataloader, policy, trainer, replay_buffer, reward_actor,) = await asyncio.gather(
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        reward_actor,
+    ) = await asyncio.gather(
         DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
@@ -475,7 +481,7 @@ async def main(cfg: DictConfig):
                 print(f"loss/training_step: {loss} at training step {training_step}")
                 await trainer.push_weights.call(training_step)
                 await policy.update_weights.call(training_step)
-                # TODO: remove this line? this clears the buffer so it's always on-policy
+                # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.call()
 
     print("Starting training loop.")

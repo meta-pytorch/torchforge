@@ -27,6 +27,9 @@ class ReplayBuffer(ForgeActor):
     seed: int | None = None
     collate: Callable = lambda batch: batch
 
+    def __post_init__(self):
+        super().__init__()
+
     @endpoint
     async def setup(self) -> None:
         self.buffer: list = []
@@ -99,7 +102,7 @@ class ReplayBuffer(ForgeActor):
         ]
         buffer_len_after_evict = len(self.buffer)
 
-        logger.info(
+        logger.debug(
             f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
             f"{buffer_len_before_evict - buffer_len_after_evict} episodes expired, {buffer_len_after_evict} episodes left"
         )
@@ -117,7 +120,7 @@ class ReplayBuffer(ForgeActor):
     async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all episodes."""
         self.buffer.clear()
-        logger.info("replay buffer cleared")
+        logger.debug("replay buffer cleared")
 
     @endpoint
     async def state_dict(self) -> dict[str, Any]:
@@ -131,6 +134,3 @@ class ReplayBuffer(ForgeActor):
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.buffer = state_dict["buffer"]
         random.setstate(state_dict["rng_state"])
-
-    def __post_init__(self):
-        super().__init__()
