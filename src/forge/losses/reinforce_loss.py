@@ -5,9 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from torch import nn
 
-from forge.util.model_utils import selective_log_softmax
+from forge.util.ops import selective_log_softmax
+from torch import nn
 
 
 class ReinforceLoss(nn.Module):

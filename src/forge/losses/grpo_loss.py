@@ -19,8 +19,7 @@ class SimpleGRPOLoss(nn.Module):
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
-        log_ration = ref_logprobs - logprobs
-        kl = torch.exp(log_ration) - (log_ration) - 1
+        kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
         per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
         per_token_loss = -(per_token_policy_loss - self.beta * kl)
         loss = (
