@@ -136,11 +136,11 @@ def simple_grpo_loss(
 
 async def run(cfg: DictConfig):
     trainer = await RLTrainer.options(
-        procs_per_replica=1, with_gpus=True, num_replicas=4
+        procs=1, with_gpus=True, num_replicas=4
     ).as_service(**cfg.trainer)
-    replay_buffer = await ReplayBuffer.options(
-        procs_per_replica=1, num_replicas=1
-    ).as_service(**cfg.replay_buffer)
+    replay_buffer = await ReplayBuffer.options(procs=1, num_replicas=1).as_service(
+        **cfg.replay_buffer
+    )
 
     print("Services initialized....")
 

@@ -91,19 +91,19 @@ async def test_actor_def_type_validation():
 
     # Expect AttributeError when calling .options() on a non-ForgeActor class
     with pytest.raises(AttributeError, match="has no attribute 'options'"):
-        await InvalidActor.options(procs_per_replica=1, num_replicas=1).as_service()
+        await InvalidActor.options(procs=1, num_replicas=1).as_service()
 
 
 @pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_with_explicit_service_config():
     """Case 1: Provide a ServiceConfig directly."""
-    cfg = ServiceConfig(procs_per_replica=2, num_replicas=3)
+    cfg = ServiceConfig(procs=2, num_replicas=3)
     service = await Counter.options(service_config=cfg).as_service(v=10)
     try:
         assert service._service._cfg is cfg
         assert service._service._cfg.num_replicas == 3
-        assert service._service._cfg.procs_per_replica == 2
+        assert service._service._cfg.procs == 2
         assert await service.value.choose() == 10
     finally:
         await service.shutdown()
@@ -115,14 +115,14 @@ async def test_service_with_kwargs_config():
     """Case 2: Construct ServiceConfig implicitly from kwargs."""
     service = await Counter.options(
         num_replicas=4,
-        procs_per_replica=1,
+        procs=1,
         health_poll_rate=0.5,
     ).as_service(v=20)
     try:
         cfg = service._service._cfg
         assert isinstance(cfg, ServiceConfig)
         assert cfg.num_replicas == 4
-        assert cfg.procs_per_replica == 1
+        assert cfg.procs == 1
         assert cfg.health_poll_rate == 0.5
         assert await service.value.choose() == 20
     finally:
@@ -145,7 +145,7 @@ async def test_service_default_config():
     try:
         cfg = service._service._cfg
         assert cfg.num_replicas == 1
-        assert cfg.procs_per_replica == 1
+        assert cfg.procs == 1
         assert await service.value.choose() == 10
     finally:
         await service.shutdown()
@@ -155,7 +155,7 @@ async def test_service_default_config():
 @pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
-    cfg = ServiceConfig(procs_per_replica=1, num_replicas=1)
+    cfg = ServiceConfig(procs=1, num_replicas=1)
     service = await Counter.options(service_config=cfg).as_service(v=0)
 
     try:
@@ -187,7 +187,7 @@ async def test_basic_service_operations():
 @pytest.mark.asyncio
 async def test_sessionless_calls():
     """Test sessionless calls with round robin load balancing."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
     try:
         # Test sessionless calls
         await service.incr.choose()
@@ -220,7 +220,7 @@ async def test_sessionless_calls():
 @pytest.mark.asyncio
 async def test_session_context_manager():
     """Test session context manager functionality."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=1).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=1).as_service(v=0)
     try:
         # Test context manager usage
         async with service.session():
@@ -261,7 +261,7 @@ async def test_session_context_manager():
 async def test_recovery_state_transitions():
     """Test replica state transitions during failure and recovery."""
     service = await Counter.options(
-        procs_per_replica=1, num_replicas=1, health_poll_rate=0.1
+        procs=1, num_replicas=1, health_poll_rate=0.1
     ).as_service(v=0)
 
     try:
@@ -342,7 +342,7 @@ async def test_recovery_state_transitions():
 @pytest.mark.asyncio
 async def test_replica_failure_and_recovery():
     """Test replica failure handling and automatic recovery."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create session and cause failure
@@ -385,7 +385,7 @@ async def test_replica_failure_and_recovery():
 @pytest.mark.asyncio
 async def test_metrics_collection():
     """Test metrics collection."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create sessions and make requests
@@ -437,7 +437,7 @@ async def test_metrics_collection():
 @pytest.mark.asyncio
 async def test_session_stickiness():
     """Test that sessions stick to the same replica."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
         session = await service.start_session()
@@ -467,7 +467,7 @@ async def test_session_stickiness():
 @pytest.mark.asyncio
 async def test_load_balancing_multiple_sessions():
     """Test load balancing across multiple sessions using least-loaded assignment."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
         # Create sessions with some load to trigger distribution
@@ -515,7 +515,7 @@ async def test_load_balancing_multiple_sessions():
 @pytest.mark.asyncio
 async def test_concurrent_operations():
     """Test concurrent operations across sessions and sessionless calls."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=2).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
         # Mix of session and sessionless calls
@@ -555,9 +555,7 @@ async def test_concurrent_operations():
 @pytest.mark.asyncio
 async def test_broadcast_call_basic():
     """Test basic broadcast call functionality."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(
-        v=10
-    )
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=10)
 
     try:
         # Test broadcast call to all replicas
@@ -586,7 +584,7 @@ async def test_broadcast_call_basic():
 @pytest.mark.asyncio
 async def test_broadcast_call_with_failed_replica():
     """Test broadcast call behavior when some replicas fail."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
 
     try:
         # First, cause one replica to fail by calling fail_me on a specific session
@@ -624,7 +622,7 @@ async def test_broadcast_call_with_failed_replica():
 @pytest.mark.asyncio
 async def test_broadcast_call_vs_choose():
     """Test that broadcast call hits all replicas while choose hits only one."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
 
     try:
         # Use broadcast call to increment all replicas
@@ -693,7 +691,7 @@ async def test_session_router_with_round_robin_fallback():
 @pytest.mark.asyncio
 async def test_round_robin_router_distribution():
     """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
-    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
 
     try:
         # Make multiple sessionless calls using choose()
@@ -720,7 +718,7 @@ async def test_session_router_assigns_and_updates_session_map_in_service():
     """Integration: Service with SessionRouter preserves sticky sessions."""
     # Use LeastLoaded as default, SessionRouter (with fallback) is always active
     service = await Counter.options(
-        procs_per_replica=1,
+        procs=1,
         num_replicas=2,
     ).as_service(v=0)
 
