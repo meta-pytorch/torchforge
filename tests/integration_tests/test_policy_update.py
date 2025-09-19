@@ -295,19 +295,18 @@ class TestWeightSync:
         # 1. Initialize TS
         await ts.initialize()
         # 2. Trainer push
-        rl_trainer = await spawn_service(
-            ServiceConfig(
-                procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
-            ),
-            RLTrainer,
-            **trainer_cfg_tp,
-        )
+        rl_trainer = await RLTrainer.options(
+            procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
+        ).as_service(**trainer_cfg_tp)
+
         await rl_trainer.push_weights.call(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
             worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
         )
-        policy = await spawn_service(service_config, Policy, **policy_config)
+        policy = await Policy.options(service_config=service_config).as_service(
+            **policy_config
+        )
         await policy.update_weights.call()
 
         # validate loaded shard of each worker againt manually calculated shard (expected shard).
