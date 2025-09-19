@@ -13,8 +13,15 @@ import logging
 
 import pytest
 from forge.controller import ForgeActor
-
-from forge.controller.service import ServiceConfig
+from forge.controller.service import (
+    LeastLoadedRouter,
+    Replica,
+    ReplicaState,
+    RoundRobinRouter,
+    ServiceConfig,
+    SessionRouter,
+)
+from forge.types import ProcessConfig
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
@@ -54,6 +61,19 @@ class Counter(ForgeActor):
         logger.info(f"adding {amount} with {multiplier}")
         self.v += amount * multiplier
         return self.v
+
+
+def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
+    """Helper to build a replica with specified state and load."""
+    replica = Replica(
+        idx=idx,
+        proc_config=ProcessConfig(),
+        actor_def=Counter,
+        actor_kwargs={},
+    )
+    replica.state = ReplicaState.HEALTHY if healthy else ReplicaState.UNHEALTHY
+    replica.active_requests = load
+    return replica
 
 
 # Core Functionality Tests
@@ -631,6 +651,98 @@ async def test_broadcast_call_vs_choose():
         )
         # incr.call() (3 requests) + value.call() (3 requests) + incr.choose() (1 request) + value.call() (3 requests) = 10 total
         assert total_requests == 10
+
+    finally:
+        await service.shutdown()
+
+
+# Router Tests
+
+
+@pytest.mark.asyncio
+async def test_session_router_with_round_robin_fallback():
+    """Switch fallback router to round-robin and verify assignment order."""
+    # Choose RoundRobinRouter as fallback, r1 and r2 should be assigned to different replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = RoundRobinRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx != r2.idx
+    assert set(session_map.values()) == {0, 1}
+
+    # If LeastLoadedRouter as fallback, r1 and r2 should be assigned to same replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = LeastLoadedRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx == r2.idx == 0
+
+
+# Router integeration tests
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_round_robin_router_distribution():
+    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
+    service = await Counter.options(procs_per_replica=1, num_replicas=3).as_service(v=0)
+
+    try:
+        # Make multiple sessionless calls using choose()
+        results = []
+        for _ in range(6):
+            await service.incr.choose()
+            values = await service.value.call()
+            print(values)
+            results.append(values)
+        print("results: ", results)
+        # Verify that requests were distributed round-robin
+        # Each call increments a single replica, so after 6 calls we expect:
+        # 2 increments per replica (since 3 replicas, 6 calls)
+        final_values = results[-1]  # last snapshot
+        assert sorted(final_values) == [2, 2, 2]
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_session_router_assigns_and_updates_session_map_in_service():
+    """Integration: Service with SessionRouter preserves sticky sessions."""
+    # Use LeastLoaded as default, SessionRouter (with fallback) is always active
+    service = await Counter.options(
+        procs_per_replica=1,
+        num_replicas=2,
+    ).as_service(v=0)
+
+    try:
+        # First call with sess_id -> assign a replica
+        await service.incr.choose(sess_id="sess1")
+        values1 = await service.value.call()
+
+        # Second call with same sess_id -> must hit same replica
+        await service.incr.choose(sess_id="sess1")
+        values2 = await service.value.call()
+
+        # Difference should only be on one replica (sticky session)
+        diffs = [v2 - v1 for v1, v2 in zip(values1, values2)]
+        assert (
+            sum(diffs) == 1
+        ), f"Expected exactly one replica to increment, got {diffs}"
+        assert max(diffs) == 1 and min(diffs) == 0
+
+        # Session map in service should reflect assigned replica
+        assigned_idx = service._session_replica_map["sess1"]
+        assert values2[assigned_idx] == values1[assigned_idx] + 1
 
     finally:
         await service.shutdown()

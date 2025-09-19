@@ -10,7 +10,42 @@ import sys
 from argparse import Namespace
 from typing import Any, Callable
 
+from huggingface_hub import snapshot_download
+from huggingface_hub.utils import LocalEntryNotFoundError
+
 from omegaconf import DictConfig, OmegaConf
+
+
+def _has_component(node: Any) -> bool:
+    """Check if a node has a _component_ field."""
+    return (OmegaConf.is_dict(node) or isinstance(node, dict)) and "_component_" in node
+
+
+def _remove_key_by_dotpath(nested_dict: dict[str, Any], dotpath: str) -> None:
+    """
+    Removes a key specified by dotpath from a nested dict. Errors should be handled by
+    the calling function.
+
+    Args:
+        nested_dict (dict[str, Any]): nested dict to remove key from
+        dotpath (str): dotpath of key to remove, e.g., "a.b.c"
+    """
+    path = dotpath.split(".")
+
+    def delete_non_component(d: dict[str, Any], key: str) -> None:
+        if _has_component(d[key]):
+            raise ValueError(
+                f"Removing components from CLI is not supported: ~{dotpath}"
+            )
+        del d[key]
+
+    # Traverse to the parent of the final key
+    current = nested_dict
+    for key in path[:-1]:
+        current = current[key]
+
+    # Delete the final key
+    delete_non_component(current, path[-1])
 
 
 # TODO: this is all just a copy-paste hack for now
@@ -98,6 +133,99 @@ def _merge_yaml_and_cli_args(yaml_args: Namespace, cli_args: list[str]) -> DictC
     return OmegaConf.merge(yaml_conf, cli_conf)
 
 
+def resolve_hf_hub_paths(cfg: DictConfig) -> DictConfig:
+    """
+    Resolves HuggingFace Hub URLs in configuration by downloading models and
+    replacing "hf://repository_name" paths with local cache paths.
+
+    This function uses the official HuggingFace Hub cache management functions
+    to efficiently handle model downloads and caching. It first checks if the
+    model is already cached using try_to_load_from_cache(), and only downloads
+    if necessary using snapshot_download().
+
+    Args:
+        cfg (DictConfig): OmegaConf DictConfig containing configuration values.
+            Any string value starting with "hf://" will be processed.
+
+    Returns:
+        DictConfig: OmegaConf DictConfig with hf:// URLs replaced by local paths.
+
+    Raises:
+        ValueError: If cfg is None or not a valid OmegaConf config object.
+        Exception: If model download fails (network issues, invalid repository, etc.)
+
+    Examples:
+        >>> config = OmegaConf.create({
+        ...     "model": "hf://meta-llama/Llama-2-7b-hf",
+        ...     "tokenizer": "hf://microsoft/DialoGPT-medium"
+        ... })
+        >>> resolved = resolve_hf_hub_paths(config)
+        >>> print(resolved.model)  # /home/user/.cache/huggingface/hub/models--meta-llama--Llama-2-7b-hf
+    """
+    if cfg is None:
+        raise ValueError("Configuration cannot be None")
+
+    if not OmegaConf.is_config(cfg):
+        raise ValueError(f"Input must be an OmegaConf config object, got {type(cfg)}")
+
+    def _resolve_hf_model_path(hf_url: str) -> str:
+        """Resolve HuggingFace model URL to local path using snapshot_download."""
+        if not hf_url.startswith("hf://"):
+            raise ValueError(f"Invalid HuggingFace URL format: {hf_url}")
+
+        repo_name = hf_url.replace("hf://", "")
+        if not repo_name:
+            raise ValueError("Empty repository name in HuggingFace URL")
+
+        try:
+            # First, try to get from cache only (local_files_only=True)
+            # This checks if the model is already cached without downloading
+            try:
+                local_dir = snapshot_download(
+                    repo_name, revision="main", local_files_only=True
+                )
+                return local_dir
+            except LocalEntryNotFoundError:
+                # Model not in cache, download it (local_files_only=False)
+                local_dir = snapshot_download(
+                    repo_name, revision="main", local_files_only=False
+                )
+                return local_dir
+
+        except Exception as e:
+            raise Exception(
+                f"Failed to resolve HuggingFace model '{repo_name}': {e}"
+            ) from e
+
+    def _recursively_resolve_paths(obj: Any) -> Any:
+        """Recursively resolve hf:// paths in nested data structures."""
+        if isinstance(obj, str) and obj.startswith("hf://"):
+            return _resolve_hf_model_path(obj)
+        elif isinstance(obj, dict):
+            return {k: _recursively_resolve_paths(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_recursively_resolve_paths(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(_recursively_resolve_paths(item) for item in obj)
+        elif isinstance(obj, DictConfig):
+            # Handle nested DictConfig objects by converting to dict first
+            return _recursively_resolve_paths(OmegaConf.to_container(obj, resolve=True))
+        elif hasattr(obj, "__dict__"):
+            # Handle objects with __dict__ by modifying their attributes
+            for attr, value in vars(obj).items():
+                setattr(obj, attr, _recursively_resolve_paths(value))
+            return obj
+        else:
+            # Return as-is for other types (int, float, bool, None, etc.)
+            return obj
+
+    # Convert OmegaConf to container with resolved variables, process it, then convert back
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    resolved_dict = _recursively_resolve_paths(cfg_dict)
+
+    return OmegaConf.create(resolved_dict)
+
+
 class ForgeRecipeArgParser(argparse.ArgumentParser):
     """
     A helpful utility subclass of the ``argparse.ArgumentParser`` that
@@ -176,6 +304,7 @@ def parse(recipe_main: Any) -> Callable[..., Any]:
         # Get user-specified args from config and CLI and create params for recipe
         yaml_args, cli_args = parser.parse_known_args()
         conf = _merge_yaml_and_cli_args(yaml_args, cli_args)
+        conf = resolve_hf_hub_paths(conf)
 
         sys.exit(recipe_main(conf))
 

@@ -36,7 +36,9 @@ class ReplayBuffer(ForgeActor):
         self.buffer.append(episode)
 
     @endpoint
-    async def sample(self, curr_policy_version: int, batch_size: int | None = None):
+    async def sample(
+        self, curr_policy_version: int, batch_size: int | None = None
+    ) -> tuple[tuple[Any, ...], ...] | None:
         """Sample from the replay buffer.
 
         Args:
