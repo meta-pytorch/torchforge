@@ -20,6 +20,7 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
+from forge.util import compute_logprobs
 
 
 @dataclass
@@ -73,7 +74,9 @@ class ReferenceModel(ForgeActor):
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
 
     @endpoint
-    async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    async def forward(
+        self, input_ids: torch.Tensor, max_req_tokens: int
+    ) -> torch.Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
@@ -99,4 +102,6 @@ class ReferenceModel(ForgeActor):
                         logits = model_parts[0](input_ids)
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
-        return logits
+        logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+
+        return logprobs
