@@ -123,7 +123,6 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
-    use_dcp: bool = True
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
@@ -397,6 +396,7 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
+    use_dcp: bool = True
 
     @endpoint
     async def setup(self):
@@ -421,7 +421,7 @@ class PolicyWorker(ForgeActor):
         checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
         dcp_metadata = None
         if self.use_dcp:
-            dcp_metadata = await ts.get()
+            dcp_metadata = await ts.get(checkpoint_id)
 
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
