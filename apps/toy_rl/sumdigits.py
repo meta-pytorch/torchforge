@@ -395,8 +395,8 @@ class SumDigitsDataset:
         }
 
     def generate_one(self, step: int) -> str:
-        """Generate number based on training step for curriculum learning."""
-        number = random.randint(10, 999)
+        """Generate number based on training step for learning."""
+        number = random.randint(10, 99)
         return str(number)
 
 
