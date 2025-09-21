@@ -21,8 +21,8 @@ class Role(Enum):
 class Message:
     """A single message in a conversation."""
 
-    chunks: Sequence[str]
     role: Role
+    content: str
 
 
 @dataclass
@@ -48,9 +48,9 @@ def prompt_to_messages(
     """Convert a prompt to a sequence of messages."""
     messages = []
     if system_instruction is not None:
-        messages.append(Message(chunks=[system_instruction], role=Role.SYSTEM))
+        messages.append(Message(content=system_instruction, role=Role.SYSTEM))
     messages.append(
-        Message(chunks=[prompt], role=Role.USER),
+        Message(content=prompt, role=Role.USER),
     )
     return messages
 

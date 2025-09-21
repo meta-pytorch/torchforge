@@ -33,9 +33,6 @@ class Episode:
     # for generation part it's computed from the Generator/Sampler.
     log_probs: Optional[torch.Tensor] = None
 
-    # TODO: add more fields as required
-    state: str = ""
-
 
 def from_scored_completion(scored_completion: ScoredCompletion) -> Episode:
     """Converts a ScoredCompletion to an Episode."""
