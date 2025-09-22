@@ -233,6 +233,19 @@ class RLTrainer(ForgeActor):
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
 
+    def _cleanup_old_weights(self, policy_version: int) -> None:
+        if policy_version > 1:
+            if self.rank == 0:
+                old_file = f"{self.state_dict_key}{DELIM}{policy_version - 1}"
+                logger.info(f"Trying to delete {old_file}")
+                try:
+                    logger.info(f"Deleting old file {old_file}")
+                    shutil.rmtree(old_file, ignore_errors=True)
+                except FileNotFoundError:
+                    logger.info(f"File {old_file} not found, skipping deletion")
+                except OSError as e:
+                    logger.info(f"Error deleting file {old_file}: {e}")
+
     @endpoint
     async def cleanup(self) -> None:
         if self.engine.checkpointer:
