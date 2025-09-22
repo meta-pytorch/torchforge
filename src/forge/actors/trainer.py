@@ -12,11 +12,11 @@ from dataclasses import dataclass, field, fields
 from typing import Callable
 
 import torch
+import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
-import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
 from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import (
@@ -209,7 +209,7 @@ class RLTrainer(ForgeActor):
         # 2. Unify CheckpointManager and TorchStore weights save control path.
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
-        
+
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
         if self.engine.checkpointer.sd_adapter is None:
@@ -219,7 +219,7 @@ class RLTrainer(ForgeActor):
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
-        
+
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         if self.use_dcp:
@@ -228,7 +228,7 @@ class RLTrainer(ForgeActor):
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
-        
+
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
