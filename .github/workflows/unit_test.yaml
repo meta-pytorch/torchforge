@@ -72,6 +72,11 @@ jobs:
           ssh-add torchstore_ssh_key
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
 
+          # Manually install some monarch dependencies
+          dnf update -y
+          dnf install clang-devel libunwind libunwind-devel -y
+          dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+
           # Install monarch nightly
           git clone https://github.com/meta-pytorch/monarch deps/monarch
           python deps/monarch/scripts/install_nightly.py
