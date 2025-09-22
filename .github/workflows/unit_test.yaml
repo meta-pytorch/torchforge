@@ -36,6 +36,17 @@ jobs:
           DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 || true)
           echo "CUDA driver version: ${DRIVER_VERSION}"
 
+          export CUDA_LIB_DIR=/usr/lib64
+          export CUDA_VERSION=12.8
+          export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+          export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+          export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
+          export PATH="${CUDA_HOME}/bin:$PATH"
+          export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
+          export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
+          export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+          export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+
           # Test the existence of secrets and abort if they are not available
           echo "$(ssh-agent -s)"
           [[ "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" != "" ]] || (echo "SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE is empty" && exit 1)
@@ -84,7 +95,6 @@ jobs:
           # Install dependencies
           python -m pip install --no-build-isolation -e ".[dev]"
 
-          export CUDA_LIB_DIR=/usr/lib64
           # monarch wheel is built with a newer glibc version. hopefully this doesn't break everything else.
           echo $(ldd --version)
           yum update -y
