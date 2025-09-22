@@ -91,9 +91,9 @@ class State:
 class ProcessConfig:
     """A proc_mesh config for the torchx scheduler."""
 
-    num_procs: int = 1
+    procs: int = 1
     with_gpus: bool = False
-    num_hosts: int | None = None
+    hosts: int | None = None
 
 
 @dataclass
@@ -121,12 +121,12 @@ class ServiceConfig:
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.
-        Maps procs to num_procs for ProcessConfig.
+        Maps procs to procs for ProcessConfig.
         """
         return ProcessConfig(
-            num_procs=self.procs,
+            procs=self.procs,
             with_gpus=self.with_gpus,
-            num_hosts=self.hosts,
+            hosts=self.hosts,
         )
 
 

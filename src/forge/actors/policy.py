@@ -157,8 +157,8 @@ class Policy(PolicyInterface):
         # Once we can create multiple proc meshes on a host mesh, we can ensure
         # host colocation
         policy_proc_config = copy(process_config)
-        policy_proc_config.num_procs = 1
-        policy_proc_config.num_hosts = None
+        policy_proc_config.procs = 1
+        policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
