@@ -281,8 +281,9 @@ async def main(cfg: DictConfig):
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            rewards = [episode.reward for episode in group.episodes]
-            advantages = compute_advantages(rewards)
+            advantages = compute_advantages(
+                [episode.reward for episode in group.episodes]
+            )
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
