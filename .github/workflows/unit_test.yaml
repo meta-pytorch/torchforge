@@ -13,12 +13,13 @@ jobs:
       matrix:
         include:
           - name: 4xlargegpu
-            runs-on: linux.g5.4xlarge.nvidia.gpu
+            runs-on: linux.aws.h100
             gpu-arch-type: "cuda"
             gpu-arch-version: "12.6"
     # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
     with:
       timeout: 120
+      docker-image: pytorch/manylinuxaarch64-builder:cuda12.6-90d6edd9f3d25230ddc0d36f2bfaf4b9fe4b53b4
       runner: ${{ matrix.runs-on }}
       gpu-arch-type: ${{ matrix.gpu-arch-type }}
       gpu-arch-version: ${{ matrix.gpu-arch-version }}
@@ -79,8 +80,8 @@ jobs:
           export CUDA_LIB_DIR=/usr/lib64
           # monarch wheel is built with a newer glibc version. hopefully this doesn't break everything else.
           echo $(ldd --version)
-          yum update -y
-          yum update glibc
+          # yum update -y
+          # yum update glibc
           echo $(ldd --version)
           # Run unit tests with coverage
           pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
