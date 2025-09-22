@@ -259,6 +259,9 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         """Unwrap a DTensor to a Tensor."""
         return t.full_tensor() if isinstance(t, torch.distributed.tensor.DTensor) else t
 
+    for key in sd.keys():
+        sd[key] = unwrap(sd[key]).cpu()
+
     # Copy over directly mapped keys
     for k in sd:
         if any(
@@ -278,9 +281,9 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
     for i in range(num_layers):
         prefix = f"model.layers.{i}."
         # QKV fusion
-        q = unwrap(sd[prefix + "self_attn.q_proj.weight"]).cpu()
-        k = unwrap(sd[prefix + "self_attn.k_proj.weight"]).cpu()
-        v = unwrap(sd[prefix + "self_attn.v_proj.weight"]).cpu()
+        q = sd[prefix + "self_attn.q_proj.weight"]
+        k = sd[prefix + "self_attn.k_proj.weight"]
+        v = sd[prefix + "self_attn.v_proj.weight"]
         load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
 
         # QKV fusion - handle bias if present
@@ -289,16 +292,16 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         v_bias_key = prefix + "self_attn.v_proj.bias"
 
         if all(key in sd for key in [q_bias_key, k_bias_key, v_bias_key]):
-            q_bias = unwrap(sd[q_bias_key]).cpu()
-            k_bias = unwrap(sd[k_bias_key]).cpu()
-            v_bias = unwrap(sd[v_bias_key]).cpu()
+            q_bias = sd[q_bias_key]
+            k_bias = sd[k_bias_key]
+            v_bias = sd[v_bias_key]
             load_sd[prefix + "self_attn.qkv_proj.bias"] = torch.cat(
                 [q_bias, k_bias, v_bias], dim=0
             )
 
         # MLP gate_up_proj fusion
-        gate = unwrap(sd[prefix + "mlp.gate_proj.weight"]).cpu()
-        up = unwrap(sd[prefix + "mlp.up_proj.weight"]).cpu()
+        gate = sd[prefix + "mlp.gate_proj.weight"]
+        up = sd[prefix + "mlp.up_proj.weight"]
         load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
 
         # MLP gate_up_proj fusion - handle bias if present
@@ -306,8 +309,8 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         up_bias_key = prefix + "mlp.up_proj.bias"
 
         if all(key in sd for key in [gate_bias_key, up_bias_key]):
-            gate_bias = unwrap(sd[gate_bias_key]).cpu()
-            up_bias = unwrap(sd[up_bias_key]).cpu()
+            gate_bias = sd[gate_bias_key]
+            up_bias = sd[up_bias_key]
             load_sd[prefix + "mlp.gate_up_proj.bias"] = torch.cat(
                 [gate_bias, up_bias], dim=0
             )
