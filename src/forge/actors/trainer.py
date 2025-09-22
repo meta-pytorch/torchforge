@@ -48,16 +48,19 @@ def cleanup_old_weight_versions(
     delim: str,
     current_policy_version: int,
 ) -> None:
-    """Delete all old weight versions except the current one.
+    """Delete old weight versions, keeping only current and N-1 versions.
 
     Args:
         state_dict_key: The base key for state dict storage
         delim: The delimiter used between key and version
         current_policy_version: The current policy version to keep
-        logger_func: Function to use for logging debug messages
     """
+    if current_policy_version <= 1:
+        return  # No cleanup needed for versions 0 or 1
+
     prefix = f"{state_dict_key}{delim}"
     current_weights = f"{prefix}{current_policy_version}"
+    previous_weights = f"{prefix}{current_policy_version - 1}"
 
     # Find all weight directories that match our pattern
     parent_dir = os.path.dirname(prefix) or "."
@@ -67,6 +70,7 @@ def cleanup_old_weight_versions(
             if (
                 item.startswith(os.path.basename(prefix))
                 and item != os.path.basename(current_weights)
+                and item != os.path.basename(previous_weights)
                 and os.path.isdir(item_path)
             ):
                 try:
