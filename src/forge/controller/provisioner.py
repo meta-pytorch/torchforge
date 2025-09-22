@@ -156,8 +156,9 @@ class Provisioner:
 
         """
         async with self._lock:
-            # if num_hosts is not None and num_hosts > 0:
-            if True: #testing
+            server_name = None
+            if num_hosts is not None and num_hosts > 0:
+            # if True: #testing
                 created_hosts = len(self._server_names)
                 host_mesh, server_name = await self.create_host_mesh(
                     name=f"alloc{created_hosts}",
