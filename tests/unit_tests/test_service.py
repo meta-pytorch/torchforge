@@ -76,7 +76,76 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
     return replica
 
 
-# Core Functionality Tests
+# Actor Tests
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_as_actor_with_process_config():
+    """Test spawning a single actor with explicit ProcessConfig."""
+    cfg = ProcessConfig(procs=2)
+    actor = await Counter.options(process_config=cfg).as_actor(v=1)
+
+    try:
+        assert await actor.value.choose() == 1
+    finally:
+        await actor.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_as_actor_with_kwargs_config():
+    """Test spawning a single actor with passing configs through kwargs."""
+    actor = await Counter.options(procs=1).as_actor(v=5)
+    try:
+        assert await actor.value.choose() == 5
+
+        # Test increment
+        await actor.incr.choose()
+        assert await actor.value.choose() == 6
+
+    finally:
+        await actor.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_as_actor_default_config():
+    """Test spawning a single actor using default ProcessConfig via as_actor."""
+    actor = await Counter.as_actor(v=3)
+    try:
+        # Should use default ProcessConfig
+        cfg = actor._class._process_config
+        assert cfg.procs == 1
+        assert cfg.with_gpus is False
+        assert cfg.hosts is None
+        assert await actor.value.choose() == 3
+    finally:
+        await actor.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_as_actor_fallback_from_service_config():
+    """Test that as_actor falls back to ProcessConfig derived from ServiceConfig."""
+    # Provide only a ServiceConfig
+    service_cfg = ServiceConfig(procs=3, num_replicas=1, with_gpus=True)
+    actor = await Counter.options(service_config=service_cfg).as_actor(v=7)
+
+    try:
+        # Check that the ProcessConfig was derived correctly
+        cfg = actor._class._process_config
+        assert cfg.procs == 3
+        assert cfg.with_gpus is True
+
+        # Check initial value
+        assert await actor.value.choose() == 7
+
+    finally:
+        await actor.shutdown()
+
+
+# Service Config Tests
 
 
 @pytest.mark.timeout(10)
@@ -132,8 +201,8 @@ async def test_service_with_kwargs_config():
 @pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_service_options_missing_args_raises():
-    """Case 3: Error if neither service_config nor required args are provided."""
-    with pytest.raises(ValueError, match="Must provide either"):
+    """Case 3: Error if none of service_config, process_config, or procs are provided."""
+    with pytest.raises(ValueError, match="Must provide `procs`"):
         await Counter.options().as_service()  # no args, should raise before service spawn
 
 
@@ -149,6 +218,9 @@ async def test_service_default_config():
         assert await service.value.choose() == 10
     finally:
         await service.shutdown()
+
+
+# Core Functionality Tests
 
 
 @pytest.mark.timeout(10)
