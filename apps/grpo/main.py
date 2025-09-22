@@ -28,7 +28,7 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
-from .algorithms import compute_advantages, compute_logprobs, simple_grpo_loss
+from apps.grpo.algorithms import compute_advantages, compute_logprobs, simple_grpo_loss
 
 
 @dataclass
