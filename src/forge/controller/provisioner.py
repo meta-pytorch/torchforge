@@ -12,9 +12,6 @@ import socket
 import uuid
 
 import monarch
-
-from forge.controller.metric_actors import GlobalLoggingActor, LocalLoggingActor
-from forge.types import ProcessConfig
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import (
@@ -28,6 +25,8 @@ from monarch.actor import (
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
+
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -194,23 +193,33 @@ class Provisioner:
 
             # Spawn local logging actor on each process and register with global logger
             try:
-                local_logging_actor = await procs.spawn(
-                    "local_logging_actor", LocalLoggingActor
+                from forge.controller.v3.metric_actors import (
+                    GlobalLoggingActor,
+                    LocalFetcherActor,
                 )
-                procs._local_logger = local_logging_actor
+
+                local_fetcher_actor = await procs.spawn(
+                    "local_fetcher_actor", LocalFetcherActor
+                )
+                procs._local_fetcher = local_fetcher_actor
 
                 # Register with global logger
                 global_logger = await get_or_spawn_controller(
                     "global_logger", GlobalLoggingActor
                 )
                 process_name = f"proc_mesh_{id(procs)}"
-                await global_logger.register.call_one(local_logging_actor, process_name)
+                await global_logger.register_fetcher.call_one(
+                    local_fetcher_actor, process_name
+                )
 
                 logger.debug(
-                    f"Spawned and registered LocalLoggingActor for {process_name}"
+                    f"Spawned and registered LocalFetcherActor for {process_name}"
                 )
             except Exception as e:
-                logger.warning(f"Failed to spawn LocalLoggingActor: {e}")
+                logger.warning(f"Failed to spawn LocalFetcherActor: {e}")
+                import traceback
+
+                traceback.print_stack()
 
             # If we created a server, track so we can tear it down later.
             if server_name:
@@ -223,8 +232,10 @@ class Provisioner:
         """Stops a proc mesh."""
         async with self._lock:
             # Deregister local logger from global logger
-            if hasattr(proc_mesh, "_local_logger"):
+            if hasattr(proc_mesh, "_local_fetcher"):
                 try:
+                    from forge.controller.v3.metric_actors import GlobalLoggingActor
+
                     global_logger = await get_or_spawn_controller(
                         "global_logger", GlobalLoggingActor
                     )
