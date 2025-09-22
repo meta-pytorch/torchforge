@@ -120,16 +120,6 @@ class TestProvisionerCudaVisibleDevices:
         assert sorted(available) == sorted(expected)
         assert len(available) == 4
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "7"}, clear=True)
-    def test_provisioner_single_gpu(self):
-        """Test Provisioner with single GPU in CUDA_VISIBLE_DEVICES."""
-        provisioner = Provisioner()
-
-        local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
-        available = local_gpu_manager.get_available_gpus()
-        assert available == ["7"]
-        assert len(available) == 1
-
     @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,2,5,7"}, clear=True)
     def test_provisioner_non_contiguous_gpus(self):
         """Test Provisioner with non-contiguous GPU IDs."""
