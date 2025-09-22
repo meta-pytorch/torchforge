@@ -243,7 +243,8 @@ class Replica:
                 result = await endpoint_func.call(*request.args, **request.kwargs)
                 # Unwrap ValueMesh if configured to return first rank result
                 if self.return_first_rank_result:
-                    _, result = next(result.items())
+                    _, first_result = next(result.items())
+                    result = first_result
                 request.future.set_result(result)
             except ActorError as e:
                 logger.warning(f"Got failure on replica {self.idx}. Error:\n{e}")

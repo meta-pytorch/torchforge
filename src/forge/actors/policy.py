@@ -351,15 +351,13 @@ class Policy(PolicyInterface):
     async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
-        parallel_config = self.vllm_config.parallel_config
-        output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
-            worker_output = worker_outputs._values[output_rank]
+            _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
             await asyncio.sleep(0)  # Release control before processing outputs
