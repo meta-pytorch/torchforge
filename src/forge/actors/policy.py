@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import asyncio
+
+import logging
 import os
 import sys
 import time
@@ -25,7 +27,7 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.lora.request import LoRARequest
-from vllm.outputs import RequestOutput
+from vllm.outputs import CompletionOutput, RequestOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
@@ -44,8 +46,14 @@ from vllm.worker.worker_base import WorkerWrapperBase
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 
 from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -71,6 +79,7 @@ class SamplingConfig:
     logprobs: int = 1
 
     def __post_init__(self):
+        super().__init__()
         gd_params = None
         if self.guided_decoding:
             gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
@@ -127,6 +136,7 @@ class Policy(PolicyInterface):
     policy_version: int | None = None
 
     def __post_init__(self):
+        super().__init__()
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
@@ -258,7 +268,7 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> RequestOutput:
+    async def generate(self, prompt: str, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
@@ -362,21 +372,22 @@ class Policy(PolicyInterface):
 
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
+                    completions = self._to_completions(request_output)
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output)
+                    fut.set_result(completions)
 
     @endpoint
     async def update_weights(self, policy_version: int):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
-            self.logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
-        self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
+        logger.debug(f"Starting weight update on {self.__class__.__name__}")
         await self.policy_worker.update.call(version=policy_version)
         self.policy_version = policy_version
-        self.logger.info(f"Weight update completed (now v{self.policy_version})")
+        logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:
@@ -395,6 +406,42 @@ class Policy(PolicyInterface):
     @endpoint
     async def stop(self):
         self.running = False
+
+    def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
+        """Convert a RequestOutput to a list of Completion objects."""
+        completions = []
+        original_prompt = request_output.prompt
+        prompt_token_ids = request_output.prompt_token_ids
+        for output in request_output.outputs:
+            completions.append(
+                Completion(
+                    # TODO: the to_prompt encoding will be different from the original.
+                    # This is okay for now, since I don't see any direct usage of prompt using completion object.
+                    prompt=to_prompt(original_prompt),
+                    stop_reason=output.finish_reason,
+                    text=output.text,
+                    prompt_ids=torch.tensor(prompt_token_ids),
+                    token_ids=torch.tensor(output.token_ids),
+                    logprobs=self._extract_logprobs(output),
+                )
+            )
+
+        return completions
+
+    def _extract_logprobs(self, one_sample: CompletionOutput) -> torch.Tensor | None:
+        """
+        Extract log probabilities from a sample, if available.
+        """
+        if one_sample.logprobs is not None:
+            return torch.tensor(
+                [
+                    top_k_dict[token].logprob
+                    for token, top_k_dict in zip(
+                        one_sample.token_ids, one_sample.logprobs
+                    )
+                ]
+            )
+        return None
 
 
 @dataclass
@@ -457,9 +504,7 @@ class PolicyWorker(ForgeActor):
         current_state_dict = model.state_dict()
         start = time.time()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        self.logger.debug(
-            f"Loaded state dict from {key} in {time.time() - start} seconds"
-        )
+        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
 
     @endpoint
     async def setup_kv_cache(self):

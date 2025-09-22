@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 import os
 import time
@@ -36,6 +37,9 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -73,7 +77,7 @@ class RLTrainer(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        self.current_step = 1  # fragile contract.
+        self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         self.rank = current_rank().rank
@@ -100,7 +104,7 @@ class RLTrainer(ForgeActor):
         for key in {"loss", "state_dict_key", "use_dcp"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
-        self.engine.checkpointer.load(step=self.current_step)
+        self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
     def forward_backward(
@@ -173,6 +177,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+        self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -192,10 +197,10 @@ class RLTrainer(ForgeActor):
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
 
-        self.current_step += 1
+        self.step += 1
         self.engine.checkpointer.save(
-            curr_step=self.current_step,
-            last_step=self.current_step == self.num_training_steps,
+            curr_step=self.step,
+            last_step=self.step == self.num_training_steps,
         )
 
         return loss.item()
@@ -229,9 +234,7 @@ class RLTrainer(ForgeActor):
             await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
 
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
+        logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
 
     @endpoint
     async def cleanup(self) -> None:

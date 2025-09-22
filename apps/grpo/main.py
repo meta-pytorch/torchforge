@@ -305,10 +305,8 @@ async def main(cfg: DictConfig):
                 device="cuda",
             )
             # Populate episode info and calculate rewards
-            for i, (episode, response) in enumerate(
-                zip(group.episodes, responses.outputs)
-            ):
-                episode.request_tokens = responses.prompt_token_ids
+            for i, (episode, response) in enumerate(zip(group.episodes, responses)):
+                episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
                 input_ids[i, :max_req_tokens] = episode.request_tensor

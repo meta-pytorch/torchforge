@@ -17,8 +17,8 @@ from forge.actors.policy import Policy
 from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
+from forge.data_models.completion import Completion
 from omegaconf import DictConfig
-from vllm.outputs import RequestOutput
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
 os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
@@ -36,11 +36,13 @@ async def run(cfg: DictConfig):
     try:
         async with policy.session():
             print("Requesting generation...")
-            response_output: RequestOutput = await policy.generate.choose(prompt=prompt)
+            response_output: list[Completion] = await policy.generate.choose(
+                prompt=prompt
+            )
 
             print("\nGeneration Results:")
             print("=" * 80)
-            for batch, response in enumerate(response_output.outputs):
+            for batch, response in enumerate(response_output):
                 print(f"Sample {batch + 1}:")
                 print(f"User: {prompt}")
                 print(f"Assistant: {response.text}")
