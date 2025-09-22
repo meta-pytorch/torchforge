@@ -28,6 +28,8 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
+from .algorithms import compute_advantages, compute_logprobs, simple_grpo_loss
+
 
 @dataclass
 class Episode:
@@ -40,7 +42,6 @@ class Episode:
     response_len: int
     target: Any | None = None
     # processed data
-    response: str | None = None
     request_tokens: list[int] | None = None
     response_tokens: list[int] | None = None
     ref_logprobs: torch.Tensor | None = None
@@ -128,35 +129,6 @@ def collate(batches: list[list[Episode]]):
     return inputs, targets
 
 
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1]
-    logprobs = torch.log_softmax(logits / temperature, dim=-1).to(input_ids.device)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-    return logprobs
-
-
-def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
-    beta: float = 0.1,
-) -> torch.Tensor:
-    logprobs = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
-    ).mean()
-    return loss
-
-
 @dataclass
 class RewardActor(ForgeActor):
     """Reward actor that uses a list of scoring functions."""
@@ -170,19 +142,6 @@ class RewardActor(ForgeActor):
             reward = reward_fn(prompt, response, target)
             total_rewards += reward
         return total_rewards / len(self.reward_functions)
-
-
-class ComputeAdvantages(ForgeActor):
-    """Compute advantages for GRPO using reward signals."""
-
-    @endpoint
-    async def compute(self, group: Group) -> list[float]:
-        # TODO: add batch processing
-        rewards = torch.tensor([[e.reward for e in group.episodes]])
-        mean = rewards.mean(1, keepdim=True)
-        std = rewards.std(1, keepdim=True)
-        advantages = (rewards - mean) / (std + 1e-4)
-        return advantages.squeeze(0).tolist()
 
 
 @dataclass
@@ -255,7 +214,6 @@ async def main(cfg: DictConfig):
         policy,
         trainer,
         replay_buffer,
-        compute_advantages,
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
@@ -267,7 +225,6 @@ async def main(cfg: DictConfig):
         ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
@@ -310,7 +267,6 @@ async def main(cfg: DictConfig):
             ):
                 episode.request_tokens = responses.prompt_token_ids
                 episode.response_tokens = response.token_ids
-                episode.response = response.text
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
                 episode.reward = await reward_actor.evaluate_response.choose(
@@ -325,19 +281,32 @@ async def main(cfg: DictConfig):
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.choose(group)
+            rewards = [
+                episode.reward
+                for episode in group.episodes
+                if episode.reward is not None
+            ]
+            advantages = compute_advantages(rewards)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
 
             # Log metrics
             avg_response_len = (
-                sum(len(e.response_tokens) for e in group.episodes) / group_size
+                sum(
+                    len(e.response_tokens)
+                    for e in group.episodes
+                    if e.response_tokens is not None
+                )
+                / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
             buffer_size = await replay_buffer._numel.choose()
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
-            avg_reward = sum(e.reward for e in group.episodes) / group_size
+            avg_reward = (
+                sum(e.reward for e in group.episodes if e.reward is not None)
+                / group_size
+            )
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1
@@ -374,7 +343,6 @@ async def main(cfg: DictConfig):
             policy.shutdown(),
             trainer.shutdown(),
             replay_buffer.shutdown(),
-            compute_advantages.shutdown(),
             ref_model.shutdown(),
             reward_actor.shutdown(),
         )
