@@ -45,6 +45,7 @@ from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
+
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 
@@ -363,7 +364,7 @@ class Policy(PolicyInterface):
 
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
-                    completions = self._collect_completions(request_output)
+                    completions = self._to_completions(request_output)
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(completions)
 
@@ -398,24 +399,12 @@ class Policy(PolicyInterface):
     async def stop(self):
         self.running = False
 
-    def _collect_completions(self, request_output: RequestOutput) -> list[Completion]:
+    def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a RequestOutput to a list of Completion objects."""
         completions = []
         original_prompt = request_output.prompt
         prompt_token_ids = request_output.prompt_token_ids
         for output in request_output.outputs:
-            logprobs = None
-            if output.logprobs is not None:
-                logprobs = torch.tensor(
-                    [
-                        top_k_dict[token].logprob
-                        for token, top_k_dict in zip(
-                            output.token_ids,
-                            output.logprobs,
-                        )
-                    ]
-                )
-
             completions.append(
                 Completion(
                     # TODO: the to_prompt encoding will be different from the original.
@@ -425,7 +414,7 @@ class Policy(PolicyInterface):
                     text=output.text,
                     prompt_ids=torch.tensor(prompt_token_ids),
                     token_ids=torch.tensor(output.token_ids),
-                    log_probs=logprobs,
+                    logprobs=self._extract_logprobs(output),
                 )
             )
 

@@ -490,7 +490,7 @@ async def main(cfg: DictConfig):
                 episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-                episode.response_logprobs = response.log_probs
+                episode.response_logprobs = response.logprobs
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
