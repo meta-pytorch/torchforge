@@ -12,10 +12,13 @@ including session management, context propagation, and dynamic endpoint registra
 
 import contextvars
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, List, ParamSpec, TypeVar
+from typing import Dict, Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
+
+from .replica import Replica
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -167,6 +170,12 @@ class ServiceInterface:
         """Terminates an active session and cleans up associated resources."""
         return await self._service.terminate_session(sess_id)
 
+    async def shutdown(self) -> None:
+        """
+        Shut down the underlying Service.
+        """
+        await self._service.stop()
+
     def session(self) -> "SessionContext":
         """Returns a context manager for session-based calls."""
         return SessionContext(self)
@@ -271,3 +280,17 @@ class ServiceInterfaceV2:
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
+
+
+class Router(ABC):
+    """Abstract base class for routing logic."""
+
+    @abstractmethod
+    def get_replica(
+        self,
+        healthy_replicas: List[Replica],
+        sess_id: str | None = None,
+        session_map: Dict[str, int] | None = None,
+    ) -> Replica:
+        """Select a replica from the list based on routing logic."""
+        pass

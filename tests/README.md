@@ -13,11 +13,10 @@ This directory contains tests for the forge project, including unit tests and in
 
 ### Prerequisites
 
-Ensure you have all development dependencies installed:
+Ensure you have all development dependencies installed (run from forge root):
 
 ```bash
-pip install -r dev-requirements.txt
-pip install -r requirements.txt
+pip install .[dev]
 ```
 
 ### Running Integration Tests

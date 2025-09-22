@@ -15,6 +15,7 @@ from copy import copy
 from dataclasses import asdict, dataclass, field, fields
 
 import torch
+import torch.distributed.checkpoint as dcp
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
@@ -67,6 +68,7 @@ class SamplingConfig:
     max_tokens: int = 512
     temperature: float = 1.0
     top_p: float = 1.0
+    logprobs: int = 1
 
     def __post_init__(self):
         gd_params = None
@@ -122,12 +124,12 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
+    policy_version: int | None = None
 
     def __post_init__(self):
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
-        self.weights_version: int = 0
         self.running = False
         if isinstance(self.engine_config, Mapping):
             self.engine_config = EngineConfig.from_dict(self.engine_config)
@@ -211,6 +213,7 @@ class Policy(PolicyInterface):
         await self.policy_worker.setup.call()
 
         self.request_id = 0
+        self.policy_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
@@ -363,7 +366,7 @@ class Policy(PolicyInterface):
                     fut.set_result(request_output)
 
     @endpoint
-    async def update_weights(self):
+    async def update_weights(self, policy_version: int):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
@@ -371,20 +374,23 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.call(version=self.weights_version)
-        self.weights_version += 1
-        self.logger.info(f"Weight update completed (now v{self.weights_version})")
+        await self.policy_worker.update.call(version=policy_version)
+        self.policy_version = policy_version
+        self.logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:
         """Get the current model parameters. Only for testing purposes."""
-        model_params = await self.policy_worker._get_model_params.choose()
-        return model_params
+        val_mesh = await self.policy_worker._get_model_params.call()
+        sharded_state_dicts = {}
+        for idx, val in val_mesh.items():
+            sharded_state_dicts[idx["gpus"]] = val
+        return sharded_state_dicts
 
     @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
-        return self.weights_version
+        return self.policy_version
 
     @endpoint
     async def stop(self):
@@ -395,6 +401,7 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
+    use_dcp: bool = True
 
     @endpoint
     async def setup(self):
@@ -416,14 +423,26 @@ class PolicyWorker(ForgeActor):
             self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
 
+        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        dcp_metadata = None
+        if self.use_dcp:
+            dcp_metadata = await ts.get(checkpoint_id)
+
         for param_name in current_state_dict.keys():
             current_tensor = current_state_dict[param_name]
 
             # Load the full tensor from torchstore
             # TODO: only get the part of the tensor that is needed
-            stored_tensor = await ts.get(
-                f"{self.state_dict_key}{DELIM}{version}{DELIM}{param_name}"
-            )
+            if self.use_dcp:
+                tensor_meta = dcp_metadata.state_dict_metadata[param_name]
+                stored_tensor = torch.empty(
+                    size=tensor_meta.size, dtype=tensor_meta.properties.dtype
+                )
+                dcp.load(
+                    checkpoint_id=checkpoint_id, state_dict={param_name: stored_tensor}
+                )
+            else:
+                stored_tensor = await ts.get(f"{checkpoint_id}{DELIM}{param_name}")
             sharding.load_from_source_to_target(
                 param_name,
                 stored_tensor,

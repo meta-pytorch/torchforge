@@ -8,14 +8,17 @@ import logging
 
 import math
 import sys
+from typing import Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
-from forge.types import ProcessConfig
+
+from forge.types import ProcessConfig, ServiceConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+T = TypeVar("T", bound="ForgeActor")
 
 
 class ForgeActor(Actor):
@@ -40,6 +43,78 @@ class ForgeActor(Actor):
         self.logger.root.setLevel(logging.INFO)
         self.logger.root.addHandler(stdout_handler)
         super().__init__(*args, **kwargs)
+
+    @classmethod
+    def options(
+        cls: Type[T],
+        *,
+        service_config: ServiceConfig | None = None,
+        num_replicas: int | None = None,
+        procs: int | None = None,
+        **service_kwargs,
+    ) -> Type[T]:
+        """
+        Returns a subclass of this ForgeActor with a bound ServiceConfig.
+        The returned subclass can later be launched via `.as_service()`.
+
+        Usage (choose ONE of the following forms):
+            # Option A: construct ServiceConfig implicitly
+            service = await MyForgeActor.options(
+                num_replicas=1,
+                procs=2,
+            ).as_service(...)
+            await service.shutdown()
+
+            # Option B: provide an explicit ServiceConfig
+            cfg = ServiceConfig(num_replicas=1, procs=2, ..)
+            service = await MyForgeActor.options(service_config=cfg).as_service(...)
+            await service.shutdown()
+
+            # Option C: skip options, use the default service config with num_replicas=1, procs=1
+            service = await MyForgeActor.as_service(...)
+            await service.shutdown()
+        """
+
+        if service_config is not None:
+            cfg = service_config
+        else:
+            if num_replicas is None or procs is None:
+                raise ValueError(
+                    "Must provide either `service_config` or (num_replicas + procs)."
+                )
+            cfg = ServiceConfig(
+                num_replicas=num_replicas,
+                procs=procs,
+                **service_kwargs,
+            )
+
+        return type(
+            f"{cls.__name__}Service",
+            (cls,),
+            {"_service_config": cfg},
+        )
+
+    @classmethod
+    async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
+        """
+        Convenience method to spawn this actor as a Service using default configuration.
+        If `.options()` was called, it will use the bound ServiceConfig;
+        otherwise defaults to 1 replica, 1 proc.
+        """
+        # Lazy import to avoid top-level dependency issues
+        from forge.controller.service import Service, ServiceInterface
+
+        # Use _service_config if already set by options(), else default
+        cfg = getattr(cls, "_service_config", None)
+        if cfg is None:
+            cfg = ServiceConfig(num_replicas=1, procs=1)
+            # dynamically create a configured subclass for consistency
+            cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
+
+        logger.info("Spawning Service Actor for %s", cls.__name__)
+        service = Service(cfg, cls, actor_kwargs)
+        await service.__initialize__()
+        return ServiceInterface(service, cls)
 
     @endpoint
     async def setup(self):
