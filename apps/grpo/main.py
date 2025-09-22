@@ -336,9 +336,6 @@ from forge.controller.provisioner import _get_provisioner
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
 
-    provisioner = _get_provisioner()
-    await provisioner.connect_job("lpasqualin_forge", 1)
-
     titan_model = TitanJobModelConfig(name="qwen3", flavor="1.7B")
     # Get parameters from config with fallbacks
     group_size = cfg.group_size
@@ -346,9 +343,9 @@ async def main(cfg: DictConfig):
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
     mlogger = get_metric_logger(
-        "wandb",
+        # "wandb",    
         freq=1,
-        project="grpo-training",
+        # project="grpo-training",
     )
 
     # ---- Setup services ---- #

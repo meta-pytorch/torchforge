@@ -160,7 +160,7 @@ class Provisioner:
             if True: #testing
                 created_hosts = len(self._server_names)
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=f"mesh{created_hosts}",
+                    name=f"alloc{created_hosts}",
                     num_hosts=num_hosts
                 )
                 host_id = uuid.uuid1()
