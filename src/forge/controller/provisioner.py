@@ -12,14 +12,14 @@ import socket
 import uuid
 
 import monarch
+
+from forge.types import ProcessConfig
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
-
-from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -221,9 +221,9 @@ def _get_provisioner():
 
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
     return await _get_provisioner().get_proc_mesh(
-        num_procs=config.num_procs,
+        num_procs=config.procs,
         with_gpus=config.with_gpus,
-        num_hosts=config.num_hosts,
+        num_hosts=config.hosts,
     )
 
 
