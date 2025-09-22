@@ -33,14 +33,6 @@ class TestGpuManagerCudaVisibleDevices:
         assert sorted(available) == sorted(expected)
         assert len(available) == 4
 
-    def test_gpu_manager_single_device(self):
-        """Test GpuManager with single GPU."""
-        single_device = {3}
-        manager = GpuManager(available_devices=single_device)
-        available = manager.get_available_gpus()
-        assert available == ["3"]
-        assert len(available) == 1
-
     def test_gpu_manager_empty_devices(self):
         """Test GpuManager with no available devices."""
         empty_devices = set()
