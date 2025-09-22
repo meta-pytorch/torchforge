@@ -111,12 +111,10 @@ class ForgeActor(Actor):
             class_attrs["num_replicas"] = 1
         cfg = ServiceConfig(**filter_config_params(ServiceConfig, class_attrs))
 
-        service_cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
-
-        logger.info("Spawning Service Actor for %s", service_cls.__name__)
-        service = Service(cfg, service_cls, actor_kwargs)
+        logger.info("Spawning Service Actor for %s", cls.__name__)
+        service = Service(cfg, cls, actor_kwargs)
         await service.__initialize__()
-        return ServiceInterface(service, service_cls)
+        return ServiceInterface(service, cls)
 
     @endpoint
     async def setup(self):
