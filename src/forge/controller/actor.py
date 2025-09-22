@@ -22,6 +22,16 @@ logger.setLevel(logging.DEBUG)
 T = TypeVar("T", bound="ForgeActor")
 
 
+def filter_config_params(cls, kwargs: dict) -> dict:
+    from inspect import signature
+
+    """
+    Filters kwargs to only include parameters that are valid for the given config class.
+    """
+    sig = signature(cls)
+    return {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+
 class ForgeActor(Actor):
     def __init__(self, *args, **kwargs):
         if not hasattr(self, "_rank"):
@@ -49,123 +59,64 @@ class ForgeActor(Actor):
     def options(
         cls: Type[T],
         *,
-        service_config: ServiceConfig | None = None,
-        process_config: ProcessConfig | None = None,
-        num_replicas: int | None = None,
-        procs: int | None = None,
-        **service_kwargs,
+        procs: int,
+        **kwargs,
     ) -> Type[T]:
         """
-        Returns a subclass of this ForgeActor with a bound configuration.
-        The returned subclass will always be named <ActorName>Configured and
-        may hold either `_service_config`, `_process_config`, or both.
+        Returns a dynamically created subclass of this ForgeActor with bound configuration.
 
-        ---- Rules ----
-        - If `service_config` is provided → bind `_service_config`.
-        - If `process_config` is provided → bind `_process_config`.
-        - If neither is provided:
-            * `procs` is required.
-            * If `num_replicas` is provided → build a ServiceConfig from
-            `(num_replicas, procs, **service_kwargs)` and bind `_service_config`.
-            * Otherwise → build a ProcessConfig from `(procs, **service_kwargs)`
-            and bind `_process_config`.
-
-        Later, `.as_service()` and `.as_actor()` will check which config was bound
-        and spawn the appropriate type.
+        This method allows you to pre-configure an actor class before spawning it with
+        `.as_actor()` or `.as_service()`. Each call creates a separate subclass, so
+        multiple different configurations can coexist without interfering with each other.
 
         ---- Usage Examples ----
 
-        # Service Mode (replicated service with multiple replicas/procs)
-        service = await MyForgeActor.options(
-            num_replicas=1,
-            procs=2,
-        ).as_service(...)
+        # Pre-configure a service with multiple replicas
+        service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
         await service.shutdown()
 
-        cfg = ServiceConfig(num_replicas=1, procs=2, ...)
-        service = await MyForgeActor.options(service_config=cfg).as_service(...)
-        await service.shutdown()
-
-        # Default service (1 replica, 1 proc)
+        # Default usage without calling options
         service = await MyForgeActor.as_service(...)
         await service.shutdown()
 
-        # Single Actor Mode (direct actor without Service abstraction)
-        actor = await MyForgeActor.options(
-            procs=2,
-            hosts=1
-        ).as_actor(...)
+        # Pre-configure a single actor
+        actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
         await actor.shutdown()
 
-        cfg = ProcessConfig(...)
-        actor = await MyForgeActor.options(process_config=cfg).as_actor(...)
-        await actor.shutdown()
-
-        # Default actor (1 proc)
+        # Default usage without calling options
         actor = await MyForgeActor.as_actor(...)
         await actor.shutdown()
         """
 
-        cfg_dict = {}
-
-        # Explicit configs
-        if service_config is not None:
-            cfg_dict["_service_config"] = service_config
-        if process_config is not None:
-            cfg_dict["_process_config"] = process_config
-
-        # Auto-construction path
-        if service_config is None and process_config is None:
-            if procs is None:
-                raise ValueError(
-                    "Must provide `procs` when not passing an explicit config."
-                )
-
-            if num_replicas is not None:
-                # Build ServiceConfig
-                svc_cfg = ServiceConfig(
-                    num_replicas=num_replicas,
-                    procs=procs,
-                    **service_kwargs,
-                )
-                cfg_dict["_service_config"] = svc_cfg
-
-            else:
-                # Only build ProcessConfig
-                proc_cfg = ProcessConfig(procs=procs, **service_kwargs)
-                cfg_dict["_process_config"] = proc_cfg
-
-        if "_service_config" in cfg_dict and "_process_config" not in cfg_dict:
-            cfg_dict["_process_config"] = cfg_dict[
-                "_service_config"
-            ].to_process_config()
-
-        return type(f"{cls.__name__}Configured", (cls,), cfg_dict)
+        cfg_dict = {"procs": procs, **kwargs}
+        return type(cls.__name__, (cls,), cfg_dict)
 
     @classmethod
     async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
         """
-        Convenience method to spawn this actor as a Service using default configuration.
-        If `.options()` was called, it will use the bound ServiceConfig;
-        otherwise defaults to 1 replica, 1 proc.
+        Spawns this actor as a Service using the configuration stored in `.options()`,
+        or defaults if `.options()` was not called.
+
+        The configuration values stored in the subclass returned by `.options()` (like
+        `procs` and `num_replicas`) are used to construct a ServiceConfig instance.
+        If no configuration was stored, defaults to a single replica with one process.
         """
         # Lazy import to avoid top-level dependency issues
         from forge.controller.service import Service, ServiceInterface
 
-        # Use _service_config if already set by options(), else default
-        cfg = getattr(cls, "_service_config", None)
-        if cfg is None:
-            cfg = ServiceConfig(num_replicas=1, procs=1)
-            # dynamically create a configured subclass for consistency
-            cls = type(f"{cls.__name__}Configured", (cls,), {"_service_config": cfg})
+        class_attrs = {k: v for k, v in cls.__dict__.items() if not k.startswith("__")}
+        if "procs" not in class_attrs:
+            class_attrs["procs"] = 1
+        if "num_replicas" not in class_attrs:
+            class_attrs["num_replicas"] = 1
+        cfg = ServiceConfig(**filter_config_params(ServiceConfig, class_attrs))
 
-        base_name = cls.__name__[:-10]  # drop "Configured"
-        cls = type(f"{base_name}Service", (cls,), {"_service_config": cfg})
+        service_cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
 
-        logger.info("Spawning Service Actor for %s", cls.__name__)
-        service = Service(cfg, cls, actor_kwargs)
+        logger.info("Spawning Service Actor for %s", service_cls.__name__)
+        service = Service(cfg, service_cls, actor_kwargs)
         await service.__initialize__()
-        return ServiceInterface(service, cls)
+        return ServiceInterface(service, service_cls)
 
     @endpoint
     async def setup(self):
@@ -234,18 +185,14 @@ class ForgeActor(Actor):
     @classmethod
     async def as_actor(cls: Type[T], **actor_kwargs) -> T:
         """
-        Spawns a single actor using the ProcessConfig bound in `.options()`.
-        If only a ServiceConfig is available, we derive a ProcessConfig from it.
-        If neither are set, defaults to ProcessConfig().
+        Spawns a single actor using the configuration stored in `.options()`, or defaults.
+
+        The configuration values stored in the subclass returned by `.options()` (like
+        `procs`) are used to construct a ProcessConfig instance.
+        If no configuration was stored, defaults to a single process with no GPU.
         """
-        cfg = getattr(cls, "_process_config", None)
-        if cfg is None:
-            cfg = ProcessConfig()
-
-            cls = type(f"{cls.__name__}Configured", (cls,), {"_process_config": cfg})
-
-        base_name = cls.__name__[:-10]  # drop "Configured"
-        cls = type(f"{base_name}Actor", (cls,), {"_process_config": cfg})
+        class_attrs = {k: v for k, v in cls.__dict__.items() if not k.startswith("__")}
+        cfg = ProcessConfig(**filter_config_params(ProcessConfig, class_attrs))
 
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(process_config=cfg, **actor_kwargs)

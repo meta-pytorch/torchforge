@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -159,7 +159,7 @@ class Replica:
             logger.debug(f"Launching actor for replica {self.idx}")
 
             self.actor = await self.actor_def.options(
-                process_config=self.proc_config
+                **asdict(self.proc_config)
             ).as_actor(**self.actor_kwargs)
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY

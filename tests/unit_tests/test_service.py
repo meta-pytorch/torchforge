@@ -81,19 +81,6 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
-async def test_as_actor_with_process_config():
-    """Test spawning a single actor with explicit ProcessConfig."""
-    cfg = ProcessConfig(procs=2)
-    actor = await Counter.options(process_config=cfg).as_actor(v=1)
-
-    try:
-        assert await actor.value.choose() == 1
-    finally:
-        await actor.shutdown()
-
-
-@pytest.mark.asyncio
-@pytest.mark.timeout(10)
 async def test_as_actor_with_kwargs_config():
     """Test spawning a single actor with passing configs through kwargs."""
     actor = await Counter.options(procs=1).as_actor(v=5)
@@ -110,37 +97,33 @@ async def test_as_actor_with_kwargs_config():
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
-async def test_as_actor_default_config():
-    """Test spawning a single actor using default ProcessConfig via as_actor."""
-    actor = await Counter.as_actor(v=3)
+async def test_as_actor_default_usage():
+    """Test spawning a single actor directly via .as_actor() using default config."""
+    actor = await Counter.as_actor(v=7)
     try:
-        # Should use default ProcessConfig
-        cfg = actor._class._process_config
-        assert cfg.procs == 1
-        assert cfg.with_gpus is False
-        assert cfg.hosts is None
-        assert await actor.value.choose() == 3
+        # Check initial value
+        assert await actor.value.choose() == 7
+
+        # Test increment
+        await actor.incr.choose()
+        assert await actor.value.choose() == 8
+
     finally:
         await actor.shutdown()
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
-async def test_as_actor_fallback_from_service_config():
-    """Test that as_actor falls back to ProcessConfig derived from ServiceConfig."""
-    # Provide only a ServiceConfig
-    service_cfg = ServiceConfig(procs=3, num_replicas=1, with_gpus=True)
-    actor = await Counter.options(service_config=service_cfg).as_actor(v=7)
+async def test_options_applies_config():
+    """Test config via options class."""
+    actor_cls = Counter.options(procs=1, with_gpus=True, num_replicas=2)
+    assert actor_cls.procs == 1
+    assert actor_cls.with_gpus is True
+    assert actor_cls.num_replicas == 2
 
+    actor = await actor_cls.as_actor(v=3)
     try:
-        # Check that the ProcessConfig was derived correctly
-        cfg = actor._class._process_config
-        assert cfg.procs == 3
-        assert cfg.with_gpus is True
-
-        # Check initial value
-        assert await actor.value.choose() == 7
-
+        assert await actor.value.choose() == 3
     finally:
         await actor.shutdown()
 
@@ -165,23 +148,8 @@ async def test_actor_def_type_validation():
 
 @pytest.mark.timeout(20)
 @pytest.mark.asyncio
-async def test_service_with_explicit_service_config():
-    """Case 1: Provide a ServiceConfig directly."""
-    cfg = ServiceConfig(procs=2, num_replicas=3)
-    service = await Counter.options(service_config=cfg).as_service(v=10)
-    try:
-        assert service._service._cfg is cfg
-        assert service._service._cfg.num_replicas == 3
-        assert service._service._cfg.procs == 2
-        assert await service.value.choose() == 10
-    finally:
-        await service.shutdown()
-
-
-@pytest.mark.timeout(20)
-@pytest.mark.asyncio
 async def test_service_with_kwargs_config():
-    """Case 2: Construct ServiceConfig implicitly from kwargs."""
+    """Construct ServiceConfig implicitly from kwargs."""
     service = await Counter.options(
         num_replicas=4,
         procs=1,
@@ -200,16 +168,8 @@ async def test_service_with_kwargs_config():
 
 @pytest.mark.timeout(20)
 @pytest.mark.asyncio
-async def test_service_options_missing_args_raises():
-    """Case 3: Error if none of service_config, process_config, or procs are provided."""
-    with pytest.raises(ValueError, match="Must provide `procs`"):
-        await Counter.options().as_service()  # no args, should raise before service spawn
-
-
-@pytest.mark.timeout(20)
-@pytest.mark.asyncio
 async def test_service_default_config():
-    """Case 4: Construct with default configuration using as_service directly."""
+    """Construct with default configuration using as_service directly."""
     service = await Counter.as_service(v=10)
     try:
         cfg = service._service._cfg
@@ -220,6 +180,38 @@ async def test_service_default_config():
         await service.shutdown()
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(20)
+async def test_multiple_services_isolated_configs():
+    """Ensure multiple services from the same actor class have independent configs."""
+
+    # Create first service with 2 replicas
+    service1 = await Counter.options(num_replicas=2, procs=1).as_service(v=10)
+
+    # Create second service with 4 replicas
+    service2 = await Counter.options(num_replicas=4, procs=1).as_service(v=20)
+
+    try:
+        # Check that the _service_config objects are independent
+        cfg1 = service1._service._cfg
+        cfg2 = service2._service._cfg
+
+        assert cfg1.num_replicas == 2
+        assert cfg2.num_replicas == 4
+        assert cfg1 is not cfg2  # configs should not be the same object
+
+        # Check actor values
+        val1 = await service1.value.choose()
+        val2 = await service2.value.choose()
+
+        assert val1 == 10
+        assert val2 == 20
+
+    finally:
+        await service1.shutdown()
+        await service2.shutdown()
+
+
 # Core Functionality Tests
 
 
@@ -227,8 +219,7 @@ async def test_service_default_config():
 @pytest.mark.asyncio
 async def test_basic_service_operations():
     """Test basic service creation, sessions, and endpoint calls."""
-    cfg = ServiceConfig(procs=1, num_replicas=1)
-    service = await Counter.options(service_config=cfg).as_service(v=0)
+    service = await Counter.options(procs=1, num_replicas=1).as_service(v=0)
 
     try:
         # Test session creation and uniqueness

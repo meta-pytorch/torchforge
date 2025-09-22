@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+from dataclasses import asdict
 from typing import Callable
 
 import pytest
@@ -17,7 +18,6 @@ from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig
 from forge.data.sharding import VLLMSharding
-
 from transformers import AutoModelForCausalLM
 
 requires_cuda = pytest.mark.skipif(
@@ -262,7 +262,7 @@ class TestWeightSync:
         policy_config, service_config = get_configs(
             worker_size=worker_size, tp_size=worker_size, model_name=self.model
         )
-        policy = await Policy.options(service_config=service_config).as_service(
+        policy = await Policy.options(**asdict(service_config)).as_service(
             **policy_config
         )
         await policy.update_weights.call()
@@ -302,7 +302,7 @@ class TestWeightSync:
         policy_config, service_config = get_configs(
             worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
         )
-        policy = await Policy.options(service_config=service_config).as_service(
+        policy = await Policy.options(**asdict(service_config)).as_service(
             **policy_config
         )
         await policy.update_weights.call()
