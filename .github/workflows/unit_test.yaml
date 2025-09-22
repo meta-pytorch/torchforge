@@ -33,7 +33,7 @@ jobs:
           ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
       - name: Install torchtitan
-        run: python -m pip install torchtitan tyro
+        run: python -m pip install tyro git+ssh://git@github.com/pytorch/torchtitan.git
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
       - name: Run unit tests with coverage
