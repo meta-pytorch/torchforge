@@ -15,9 +15,6 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
-
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -36,6 +33,9 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
 
 
 @dataclass
@@ -73,7 +73,7 @@ class RLTrainer(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        self.current_step = 1  # fragile contract.
+        self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         self.rank = current_rank().rank
@@ -100,7 +100,7 @@ class RLTrainer(ForgeActor):
         for key in {"loss", "state_dict_key", "use_dcp"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
-        self.engine.checkpointer.load(step=self.current_step)
+        self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
     def forward_backward(
@@ -173,7 +173,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
-        self.engine.gc_handler.run(self.current_step)
+        self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -193,10 +193,10 @@ class RLTrainer(ForgeActor):
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
 
-        self.current_step += 1
+        self.step += 1
         self.engine.checkpointer.save(
-            curr_step=self.current_step,
-            last_step=self.current_step == self.num_training_steps,
+            curr_step=self.step,
+            last_step=self.step == self.num_training_steps,
         )
 
         return loss.item()
