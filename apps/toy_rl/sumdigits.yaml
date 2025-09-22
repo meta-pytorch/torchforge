@@ -3,8 +3,7 @@
 # Global configuration
 group_size: 6
 batch_size: 12
-max_req_tokens: 64
-max_res_tokens: 64
+max_seq_len: 64
 model: "Qwen/Qwen2.5-0.5B-Instruct"
 
 # Dataset configuration
@@ -20,7 +19,7 @@ policy:
     enforce_eager: false
   sampling_config:
     n: ${group_size}
-    max_tokens: ${max_res_tokens}
+    max_tokens: ${max_seq_len}
     temperature: 1.0
     top_p: 1.0
 

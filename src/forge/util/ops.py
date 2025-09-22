@@ -49,3 +49,12 @@ def selective_log_softmax(logits: torch.Tensor, index: torch.Tensor) -> torch.Te
             per_token_logps.append(row_per_token_logps)
         per_token_logps = torch.stack(per_token_logps)
     return per_token_logps
+
+
+def pad_sequence(
+    tensor: torch.Tensor, target_len: int, pad_value: float = 0.0
+) -> torch.Tensor:
+    diff = target_len - tensor.size(0)
+    if diff > 0:
+        return F.pad(tensor, (0, diff), value=pad_value)
+    return tensor
