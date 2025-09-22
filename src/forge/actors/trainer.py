@@ -4,8 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 import os
+import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -37,6 +39,42 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+def cleanup_old_weight_versions(
+    state_dict_key: str,
+    delim: str,
+    current_policy_version: int,
+) -> None:
+    """Delete all old weight versions except the current one.
+
+    Args:
+        state_dict_key: The base key for state dict storage
+        delim: The delimiter used between key and version
+        current_policy_version: The current policy version to keep
+        logger_func: Function to use for logging debug messages
+    """
+    prefix = f"{state_dict_key}{delim}"
+    current_weights = f"{prefix}{current_policy_version}"
+
+    # Find all weight directories that match our pattern
+    parent_dir = os.path.dirname(prefix) or "."
+    if os.path.exists(parent_dir):
+        for item in os.listdir(parent_dir):
+            item_path = os.path.join(parent_dir, item)
+            if (
+                item.startswith(os.path.basename(prefix))
+                and item != os.path.basename(current_weights)
+                and os.path.isdir(item_path)
+            ):
+                try:
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    logger.debug(f"Removed old weights at {item_path}")
+                except OSError as e:
+                    logger.debug(f"Error deleting {item_path}: {e}")
+
 
 @dataclass
 class RLTrainer(ForgeActor):
@@ -63,6 +101,7 @@ class RLTrainer(ForgeActor):
         in monarch for now.
 
         """
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -223,8 +262,19 @@ class RLTrainer(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         if self.use_dcp:
+
+            # TODO - DCP should probably be being saved to NFS explicitly?
+            # Right now it will only save everything locally
             metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
             await ts.put(key, metadata)
+
+            # Delete old weight versions if they exist
+            if self.rank == 0:
+                cleanup_old_weight_versions(
+                    state_dict_key=self.state_dict_key,
+                    delim=DELIM,
+                    current_policy_version=policy_version,
+                )
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
@@ -232,19 +282,6 @@ class RLTrainer(ForgeActor):
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
-
-    def _cleanup_old_weights(self, policy_version: int) -> None:
-        if policy_version > 1:
-            if self.rank == 0:
-                old_file = f"{self.state_dict_key}{DELIM}{policy_version - 1}"
-                logger.info(f"Trying to delete {old_file}")
-                try:
-                    logger.info(f"Deleting old file {old_file}")
-                    shutil.rmtree(old_file, ignore_errors=True)
-                except FileNotFoundError:
-                    logger.info(f"File {old_file} not found, skipping deletion")
-                except OSError as e:
-                    logger.info(f"Error deleting file {old_file}: {e}")
 
     @endpoint
     async def cleanup(self) -> None:
