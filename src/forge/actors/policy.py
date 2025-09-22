@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import asyncio
+
+import logging
 import os
 import sys
 import time
@@ -50,6 +52,9 @@ from forge.data_models.prompt import to_prompt
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 @dataclass
 class SamplingConfig:
@@ -74,6 +79,7 @@ class SamplingConfig:
     logprobs: int = 1
 
     def __post_init__(self):
+        super().__init__()
         gd_params = None
         if self.guided_decoding:
             gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
@@ -130,6 +136,7 @@ class Policy(PolicyInterface):
     policy_version: int | None = None
 
     def __post_init__(self):
+        super().__init__()
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
@@ -374,13 +381,13 @@ class Policy(PolicyInterface):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
-            self.logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
-        self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
+        logger.debug(f"Starting weight update on {self.__class__.__name__}")
         await self.policy_worker.update.call(version=policy_version)
         self.policy_version = policy_version
-        self.logger.info(f"Weight update completed (now v{self.policy_version})")
+        logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:
@@ -497,9 +504,7 @@ class PolicyWorker(ForgeActor):
         current_state_dict = model.state_dict()
         start = time.time()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        self.logger.debug(
-            f"Loaded state dict from {key} in {time.time() - start} seconds"
-        )
+        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
 
     @endpoint
     async def setup_kv_cache(self):

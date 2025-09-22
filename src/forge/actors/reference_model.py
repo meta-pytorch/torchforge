@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import logging
 import math
 import os
 
@@ -27,6 +28,9 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 @dataclass
 class ReferenceModel(ForgeActor):
@@ -45,6 +49,7 @@ class ReferenceModel(ForgeActor):
 
     def __post_init__(self):
         """Initializes config types and env variables."""
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
