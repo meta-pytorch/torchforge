@@ -244,10 +244,8 @@ class Replica:
                 # Unwrap ValueMesh if configured to return first rank result
                 if (
                     self.return_first_rank_result
-                    and hasattr(result, "_values")
-                    and result._values
                 ):
-                    result = result._values[0]
+                    result = next(result.items())
                 request.future.set_result(result)
             except ActorError as e:
                 logger.warning(f"Got failure on replica {self.idx}. Error:\n{e}")

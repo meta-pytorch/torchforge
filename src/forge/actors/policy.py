@@ -248,7 +248,7 @@ class Policy(PolicyInterface):
         # Setup scheduler
         # TODO: Add support for `log_stats`
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
-        kv_cache_config = kv_cache_configs._values[0]
+        kv_cache_config = next(kv_cache_configs.items())
         self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_config.cache_config.num_cpu_blocks = 0
 
