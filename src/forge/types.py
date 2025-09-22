@@ -5,13 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, TypedDict, Union
-
-
-class Message(TypedDict):
-    role: str
-    content: str | dict[str, Any]
-    tools: dict[str, Any] | None
+from typing import Any, Union
 
 
 @dataclass

@@ -16,6 +16,14 @@ from dataclasses import asdict, dataclass, field, fields
 
 import torch
 import torchstore as ts
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import Prompt, prompt_to_messages
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -24,7 +32,7 @@ from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.lora.request import LoRARequest
-from vllm.outputs import RequestOutput
+from vllm.outputs import CompletionOutput, RequestOutput
 from vllm.sampling_params import GuidedDecodingParams, RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
@@ -39,12 +47,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 
 @dataclass
@@ -257,7 +259,7 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> RequestOutput:
+    async def generate(self, prompt: Prompt, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
@@ -324,6 +326,12 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
+        completions = await request_fut
+
+        # backfill original prompt.
+        # TODO: better way to handle this.
+        for completion in completions:
+            completion.prompt = prompt
         return await request_fut
 
     # Abstracted to match vllm
@@ -361,8 +369,12 @@ class Policy(PolicyInterface):
 
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
+                    completions = self._collect_completions(
+                        request_output,
+                        Prompt(messages=[]),
+                    )
                     _, fut = self.requests.pop(request_output.request_id)
-                    fut.set_result(request_output)
+                    fut.set_result(completions)
 
     @endpoint
     async def update_weights(self, policy_version: int):
@@ -394,6 +406,52 @@ class Policy(PolicyInterface):
     @endpoint
     async def stop(self):
         self.running = False
+
+    def _collect_completions(
+        self, request_output: RequestOutput, original_prompt: Prompt
+    ) -> list[Completion]:
+        """Convert a RequestOutput to a list of Completion objects."""
+        completions = []
+        for output in request_output.outputs:
+            logprobs = None
+            if output.logprobs is not None:
+                logprobs = torch.tensor(
+                    [
+                        top_k_dict[token].logprob
+                        for token, top_k_dict in zip(
+                            output.token_ids,
+                            output.logprobs,
+                        )
+                    ]
+                )
+
+            completions.append(
+                Completion(
+                    prompt=original_prompt,
+                    stop_reason=output.finish_reason,
+                    text=output.text,
+                    prompt_ids=output.prompt_token_ids,
+                    token_ids=torch.tensor(output.token_ids),
+                    log_probs=logprobs,
+                )
+            )
+
+        return completions
+
+    def _extract_logprobs(self, one_sample: CompletionOutput) -> torch.Tensor | None:
+        """
+        Extract log probabilities from a sample, if available.
+        """
+        if one_sample.logprobs is not None:
+            return torch.tensor(
+                [
+                    top_k_dict[token].logprob
+                    for token, top_k_dict in zip(
+                        one_sample.token_ids, one_sample.logprobs
+                    )
+                ]
+            )
+        return None
 
 
 @dataclass
@@ -511,10 +569,12 @@ class PolicyWorker(ForgeActor):
         return worker
 
 
-def convert_input(prompt=None, prompt_token_ids=None) -> dict:
+def convert_input(
+    prompt: Prompt | None = None, prompt_token_ids: torch.Tensor | None = None
+) -> dict:
     assert (prompt is None) ^ (prompt_token_ids is None)
     if prompt is not None:
-        return {"prompt": prompt}
+        return {"prompt": str(prompt)}
     return {"prompt_token_ids": prompt_token_ids}
 
 
