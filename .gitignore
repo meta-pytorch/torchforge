@@ -19,6 +19,9 @@ cython_debug/
 slogs/
 slurm-*
 
+# DCP checkpoints
+model_state_dict/
+
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -17,6 +18,14 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -41,14 +50,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -383,15 +385,6 @@ class Policy(PolicyInterface):
         self.logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
-    async def _get_model_params(self) -> dict[str, torch.Tensor]:
-        """Get the current model parameters. Only for testing purposes."""
-        val_mesh = await self.policy_worker._get_model_params.call()
-        sharded_state_dicts = {}
-        for idx, val in val_mesh.items():
-            sharded_state_dicts[idx["gpus"]] = val
-        return sharded_state_dicts
-
-    @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
         return self.policy_version
@@ -399,6 +392,18 @@ class Policy(PolicyInterface):
     @endpoint
     async def stop(self):
         self.running = False
+
+    @endpoint
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[Policy] start saving model parameters before update for testing")
+        await self.policy_worker._test_save_model_params.call()
+
+    @endpoint
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[Policy] start validating model parameters post update")
+        return await self.policy_worker._test_validate_model_params.call(validate_fn)
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a RequestOutput to a list of Completion objects."""
@@ -442,6 +447,9 @@ class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+
+    # used for tesing purposes only
+    _test_prev_params = {}
 
     @endpoint
     async def setup(self):
@@ -532,15 +540,19 @@ class PolicyWorker(ForgeActor):
         return kv_cache_config
 
     @endpoint
-    async def _get_model_params(self) -> dict[str, torch.Tensor]:
-        model = self.worker.model_runner.model
-        state_dict = {}
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info(
+            "[PolicyWorker] start saving model parameters before update for testing"
+        )
+        for name, param in self.worker.model_runner.model.named_parameters():
+            self._test_prev_params[name] = param.detach().cpu()
 
-        for name, param in model.named_parameters():
-            if "layers.0" not in name:
-                continue
-            state_dict[name] = param.cpu().detach()
-        return state_dict
+    @endpoint
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[PolicyWorker] start validating model parameters post update")
+        return validate_fn(self._test_prev_params, self.worker.model_runner.model, logger)
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""
