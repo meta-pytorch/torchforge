@@ -11,7 +11,6 @@ from unittest import mock
 
 import pytest
 from forge.controller.provisioner import GpuManager, Provisioner
-from forge.types import ProcessConfig
 
 
 class TestGpuManagerCudaVisibleDevices:
