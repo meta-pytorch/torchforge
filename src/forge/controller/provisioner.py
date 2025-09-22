@@ -177,7 +177,7 @@ class Provisioner:
                 # We can't currently do this because HostMesh only supports single
                 # proc_mesh creation at the moment. This will be possible once
                 # we have "proper HostMesh support".
-                def bootstrap(gpu_ids: int):
+                def bootstrap(gpu_ids: list[int]):
                     # This works for single host, needed for vLLM currently.
                     import os
 
@@ -185,7 +185,10 @@ class Provisioner:
                     os.environ["MASTER_ADDR"] = socket.gethostname()
                     # Multiple actors trying to call _get_port doesn't work
                     # os.environ["MASTER_PORT"] = _get_port()
-                    os.environ["MASTER_PORT"] = "12345"
+
+                    # Setting the last digit to the first GPU id allows us to i.e.
+                    # create multiple vLLM instances on the same local host.
+                    os.environ["MASTER_PORT"] = f"1234{gpu_ids[0]}"
                     os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
