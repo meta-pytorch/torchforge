@@ -154,7 +154,7 @@ class ForgeActor(Actor):
         os.environ["MASTER_PORT"] = port
 
     @classmethod
-    async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "ForgeActor":
+    async def launch(cls, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -167,7 +167,13 @@ class ForgeActor(Actor):
         a homogeneous set of actors on a single proc mesh.
 
         """
-        proc_mesh = await get_proc_mesh(process_config=process_config)
+        # Build process config from class attributes with defaults
+        cfg = ProcessConfig(
+            procs=getattr(cls, "procs", 1),
+            hosts=getattr(cls, "hosts", None),
+            with_gpus=getattr(cls, "with_gpus", False),
+        )
+        proc_mesh = await get_proc_mesh(process_config=cfg)
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
@@ -189,11 +195,8 @@ class ForgeActor(Actor):
         `procs`) are used to construct a ProcessConfig instance.
         If no configuration was stored, defaults to a single process with no GPU.
         """
-        class_attrs = {k: v for k, v in cls.__dict__.items() if not k.startswith("__")}
-        cfg = ProcessConfig(**filter_config_params(ProcessConfig, class_attrs))
-
         logger.info("Spawning single actor %s", cls.__name__)
-        actor = await cls.launch(process_config=cfg, **actor_kwargs)
+        actor = await cls.launch(**actor_kwargs)
 
         # Patch shutdown to bypass endpoint system
         actor.shutdown = types.MethodType(
