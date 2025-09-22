@@ -52,10 +52,6 @@ jobs:
           # # Install pytorch
           # python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cu126
 
-          # Install monarch nightly
-          git clone https://github.com/meta-pytorch/monarch deps/monarch
-          python deps/monarch/scripts/install_nightly.py
-
           # Install torchtitan
           mkdir -p deps/torchtitan
           git clone https://github.com/pytorch/torchtitan deps/torchtitan
@@ -75,6 +71,10 @@ jobs:
           echo "End of torchstore_ssh_key contents"
           ssh-add torchstore_ssh_key
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
+
+          # Install monarch nightly
+          git clone https://github.com/meta-pytorch/monarch deps/monarch
+          python deps/monarch/scripts/install_nightly.py
 
           # Install dependencies
           python -m pip install --no-build-isolation -e ".[dev]"
