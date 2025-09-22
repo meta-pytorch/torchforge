@@ -50,6 +50,8 @@ def cleanup_old_weight_versions(
 ) -> None:
     """Delete old weight versions, keeping only current and N-1 versions.
 
+    TODO - issues/194: provide a more robust way to handle eviction.
+
     Args:
         state_dict_key: The base key for state dict storage
         delim: The delimiter used between key and version
