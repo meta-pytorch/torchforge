@@ -15,7 +15,7 @@ jobs:
           - name: 4xlargegpu
             runs-on: linux.g5.4xlarge.nvidia.gpu
             gpu-arch-type: "cuda"
-            gpu-arch-version: "12.6"
+            gpu-arch-version: "12.8"
     # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
     with:
       timeout: 120
