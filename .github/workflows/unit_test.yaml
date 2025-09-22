@@ -5,37 +5,118 @@ on:
 
 
 jobs:
-  unit_tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  build-and-test:
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    secrets: inherit  # Pass all secrets
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 4xlargegpu
+            runs-on: linux.g5.4xlarge.nvidia.gpu
+            gpu-arch-type: "cuda"
+            gpu-arch-version: "12.8"
+    # adapted from torchtitan/.github/workflows/integration_test_8gpu_h100.yaml
+    with:
+      timeout: 120
+      runner: ${{ matrix.runs-on }}
+      gpu-arch-type: ${{ matrix.gpu-arch-type }}
+      gpu-arch-version: ${{ matrix.gpu-arch-version }}
+      submodules: recursive
+      upload-artifact: "coverage-report"
+      script: |
+          set -eux
+
+          conda create -n testenv python=3.10 --yes
+          conda activate testenv
+          echo "python version: $(python --version)"
+          echo "python path: $(which python)"
+
+          # Log CUDA driver version for debugging.
+          DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 || true)
+          echo "CUDA driver version: ${DRIVER_VERSION}"
+
+          export CUDA_LIB_DIR=/usr/lib64
+          export CUDA_VERSION=12.8
+          export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+          export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
+          export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
+          export PATH="${CUDA_HOME}/bin:$PATH"
+          export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
+          export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
+          export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+          export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/conda/lib
+
+          # Test the existence of secrets and abort if they are not available
+          echo "$(ssh-agent -s)"
+          [[ "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" != "" ]] || (echo "SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE is empty" && exit 1)
+
+          # Add github fingerprint to known hosts
+          mkdir -p ~/.ssh
+          cat .github/workflows/github_fingerprints.txt >> ~/.ssh/known_hosts
+
+          python -m pip config --user set global.progress_bar off
+
+          # Upgrade pip
+          python -m pip install --upgrade pip
+
+          # # Install pytorch
+          # python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cu126
+
+          # Install torchtitan
+          mkdir -p deps/torchtitan
+          git clone https://github.com/pytorch/torchtitan deps/torchtitan
+          python -m pip install -r deps/torchtitan/requirements.txt
+          python -m pip install -r deps/torchtitan/requirements.txt
+
+
+          # Install torchstore
+          eval "$(ssh-agent -s)"
+          echo "$SECRET_FORGE_GITHUB_CI_FOR_TORCHSTORE" >> torchstore_ssh_key
+          chmod 600 torchstore_ssh_key
+          # Print the first and last 2 lines of the key to make sure it's valid
+          echo "torchstore_ssh_key contents:"
+          head -2 torchstore_ssh_key
+          echo "..."
+          tail -2 torchstore_ssh_key
+          echo "End of torchstore_ssh_key contents"
+          ssh-add torchstore_ssh_key
+          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
+
+          # Manually install some monarch dependencies
+          dnf update -y
+          dnf install clang-devel libunwind libunwind-devel -y
+          dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+
+          # Install monarch nightly
+          git clone https://github.com/meta-pytorch/monarch deps/monarch
+          python deps/monarch/scripts/install_nightly.py
+
+          # Install dependencies
+          python -m pip install --no-build-isolation -e ".[dev]"
+
+          # monarch wheel is built with a newer glibc version. hopefully this doesn't break everything else.
+          echo $(ldd --version)
+          yum update -y
+          yum update glibc
+          echo $(ldd --version)
+          # Run unit tests with coverage
+          pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+  upload-coverage:
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
+    needs: build-and-test
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
-      - name: Setup conda env
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
         with:
-          auto-update-conda: true
-          miniconda-version: "latest"
-          activate-environment: test
-          python-version: ${{ matrix.python-version }}
-      - name: Update pip
-        run: python -m pip install --upgrade pip
-      - name: Install pytorch
-        run: python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Install monarch
-        run: python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
-      - name: Install torchstore
-        run: |
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
-          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
-      - name: Install dependencies
-        run: python -m pip install --no-build-isolation -e ".[dev]"
-      - name: Run unit tests with coverage
-        # TODO add all tests
-        run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
+          name: coverage-report
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
