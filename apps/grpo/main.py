@@ -14,6 +14,8 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+
+from apps.grpo.algorithms import compute_advantages, compute_logprobs, simple_grpo_loss
 from datasets import load_dataset
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel
@@ -23,12 +25,11 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.util.assert_not_none import assert_not_none
 from forge.util.metric_logging import get_metric_logger
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
-
-from apps.grpo.algorithms import compute_advantages, compute_logprobs, simple_grpo_loss
 
 
 @dataclass
@@ -281,11 +282,7 @@ async def main(cfg: DictConfig):
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            rewards = [
-                episode.reward
-                for episode in group.episodes
-                if episode.reward is not None
-            ]
+            rewards = [assert_not_none(episode.reward) for episode in group.episodes]
             advantages = compute_advantages(rewards)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
