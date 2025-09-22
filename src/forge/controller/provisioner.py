@@ -92,9 +92,6 @@ class Provisioner:
         self.server_info = await commands.get_or_create(job_name, config)
         self.alloc_factory = alloc_factory
         
-        print("job_name")
-        print(f"{self.server_info.name=}")
-        
         return self.server_info
 
 
@@ -119,7 +116,10 @@ class Provisioner:
         #     workspace=None,
         # )
         assert self.server_info is not None
-        alloc, alloc_constraints = self.alloc_factory(self.server_info)
+        alloc, alloc_constraints = self.alloc_factory(
+            server_handle=self.server_info,
+            task_group=name
+        )
         # alloc = RemoteAllocator(
         #     world_id=name,
         #     initializer=TorchXRemoteAllocInitializer(self.server_info.server_handle),
@@ -160,8 +160,8 @@ class Provisioner:
             if True: #testing
                 created_hosts = len(self._server_names)
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=f"alloc-{created_hosts}",
-                    num_hosts=num_hosts,
+                    name=f"mesh{created_hosts}",
+                    num_hosts=num_hosts
                 )
                 host_id = uuid.uuid1()
                 gpu_manager = GpuManager()
