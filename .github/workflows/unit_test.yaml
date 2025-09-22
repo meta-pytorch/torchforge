@@ -34,11 +34,8 @@ jobs:
           python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
       - name: Install torchtitan
         run: |
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< '${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}'
-          curl -sSL https://raw.githubusercontent.com/pytorch/torchtitan/main/requirements.txt
-          pip install -r requirements.txt
-          python -m pip install tyro git+https://github.com/pytorch/torchtitan.git
+          pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install tyro
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
       - name: Run unit tests with coverage
