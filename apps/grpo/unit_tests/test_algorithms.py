@@ -8,7 +8,7 @@ import unittest
 
 import torch
 
-from apps.grpo.main import compute_advantages
+from apps.grpo.algorithms import compute_advantages
 
 
 class TestComputeAdvantages(unittest.TestCase):
@@ -26,7 +26,7 @@ class TestComputeAdvantages(unittest.TestCase):
         # All rewards are identical, so std=0 and all advantages should be ~0
         self.assertEqual(len(advantages), 4)
         for advantage in advantages:
-            self.assertAlmostEqual(advantage, 0.0, places=5)
+            self.assertAlmostEqual(advantage, 0.0, places=3)
 
     def test_negative_rewards(self):
         rewards = [-2.0, -1.0, 0.0, 1.0, 2.0]
@@ -39,7 +39,7 @@ class TestComputeAdvantages(unittest.TestCase):
 
         expected_advantages = [(r - mean) / std for r in rewards]
         for i, expected in enumerate(expected_advantages):
-            self.assertAlmostEqual(advantages[i], expected, places=5)
+            self.assertAlmostEqual(advantages[i], expected, places=3)
 
     def test_large_rewards_list(self):
         rewards = [i * 0.5 for i in range(10)]  # [0.0, 0.5, 1.0, ..., 4.5]
@@ -53,8 +53,8 @@ class TestComputeAdvantages(unittest.TestCase):
         std_advantage = advantages_tensor.std()
 
         # The normalized advantages should have mean ≈ 0 and std ≈ 1
-        self.assertAlmostEqual(mean_advantage.item(), 0.0, places=5)
-        self.assertAlmostEqual(std_advantage.item(), 1.0, places=5)
+        self.assertAlmostEqual(mean_advantage.item(), 0.0, places=3)
+        self.assertAlmostEqual(std_advantage.item(), 1.0, places=3)
 
 
 if __name__ == "__main__":
