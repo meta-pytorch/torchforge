@@ -10,11 +10,11 @@ import math
 import sys
 from typing import Type, TypeVar
 
-from monarch.actor import Actor, current_rank, current_size, endpoint
-
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
+
+from monarch.actor import Actor, current_rank, current_size, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -95,41 +95,36 @@ class ForgeActor(Actor):
         - Passing both `service_config` and `process_config` is invalid.
         """
 
-        if service_config is not None and process_config is not None:
-            raise ValueError(
-                "Cannot pass both `service_config` and `process_config`. "
-                "Use either `service_config` for service mode or `process_config` for single actor mode."
-            )
+        cfg_dict = {}
 
+        # Explicit configs
+        if service_config is not None:
+            cfg_dict["_service_config"] = service_config
         if process_config is not None:
-            return type(
-                f"{cls.__name__}Actor",
-                (cls,),
-                {"_process_config": process_config},
-            )
-        elif service_config is not None:
-            cfg = service_config
-            return type(
-                f"{cls.__name__}Service",
-                (cls,),
-                {"_service_config": cfg},
-            )
-        else:
-            if num_replicas is None or procs is None:
-                raise ValueError(
-                    "Must provide either `service_config` or (num_replicas + procs)."
-                )
-            cfg = ServiceConfig(
-                num_replicas=num_replicas,
-                procs=procs,
-                **service_kwargs,
-            )
+            cfg_dict["_process_config"] = process_config
 
-            return type(
-                f"{cls.__name__}Service",
-                (cls,),
-                {"_service_config": cfg},
-            )
+        # Auto-construction path
+        if service_config is None and process_config is None:
+            if procs is None:
+                raise ValueError(
+                    "Must provide `procs` when not passing an explicit config."
+                )
+
+            if num_replicas is not None:
+                # Build ServiceConfig
+                svc_cfg = ServiceConfig(
+                    num_replicas=num_replicas,
+                    procs=procs,
+                    **service_kwargs,
+                )
+                cfg_dict["_service_config"] = svc_cfg
+
+            else:
+                # Only build ProcessConfig
+                proc_cfg = ProcessConfig(procs=procs, **service_kwargs)
+                cfg_dict["_process_config"] = proc_cfg
+
+        return type(f"{cls.__name__}Configured", (cls,), cfg_dict)
 
     @classmethod
     async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
