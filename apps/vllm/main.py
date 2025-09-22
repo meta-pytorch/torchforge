@@ -40,7 +40,7 @@ async def run(cfg: DictConfig):
 
             print("\nGeneration Results:")
             print("=" * 80)
-            for batch, response in enumerate(response_output.outputs):
+            for batch, response in enumerate(response_output):
                 print(f"Sample {batch + 1}:")
                 print(f"User: {prompt}")
                 print(f"Assistant: {response.text}")
