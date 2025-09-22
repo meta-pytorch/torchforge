@@ -486,19 +486,11 @@ async def main(cfg: DictConfig):
             )
 
             # TODO: Parallelize the following calculation
-            for episode, response in zip(group.episodes, responses.outputs):
-                episode.request_tokens = responses.prompt_token_ids
+            for episode, response in zip(group.episodes, responses):
+                episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-                episode.response_logprobs = torch.tensor(
-                    [
-                        top_k_dict[token].logprob
-                        for token, top_k_dict in zip(
-                            response.token_ids,
-                            response.logprobs,
-                        )
-                    ]
-                )
+                episode.response_logprobs = response.log_probs
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
