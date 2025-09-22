@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from forge.controller import provisioner
 import torch
 import torch.nn.functional as F
 import torchstore as ts
@@ -237,15 +238,17 @@ class DatasetActor(ForgeActor):
         return self._tokenizer.pad_token_id
 
 
+from forge.controller.provisioner import _get_provisioner
+
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
     mlogger = get_metric_logger(
-        "wandb",
+        # "wandb",    
         freq=1,
-        project="grpo-training",
+        # project="grpo-training",
     )
 
     # ---- Setup services ---- #
