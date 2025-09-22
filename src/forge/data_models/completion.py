@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
+
 from forge.data_models.prompt import Prompt
 
 
@@ -28,4 +29,7 @@ class Completion:
     token_ids: torch.Tensor
 
     # the log probabilities of the target tokens
-    log_probs: Optional[torch.Tensor] = None
+    logprobs: Optional[torch.Tensor] = None
+
+    # the reason for stopping the generation
+    stop_reason: str | None = None

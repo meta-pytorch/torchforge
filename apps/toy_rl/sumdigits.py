@@ -358,7 +358,7 @@ class RewardActor(ForgeActor):
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
-        reward = 1.0 if response.strip() == "10" else 0.0
+        reward = 1.0 if response.strip() == target else 0.0
         return reward
 
 
@@ -396,18 +396,7 @@ class SumDigitsDataset:
 
     def generate_one(self, step: int) -> str:
         """Generate number based on training step for curriculum learning."""
-        if step < 200:
-            # Early training: 2-digit numbers (10-99)
-            min_val, max_val = 10, 99
-        elif step < 1000:
-            # Later training: 1-4 digit numbers (0-1000)
-            min_val, max_val = 0, 1000
-        elif step < 3000:
-            # Later training: 1-6 digit numbers (0-100000)
-            min_val, max_val = 0, 100000
-        else:
-            # Later training: 1-8 digit numbers (0-10000000)
-            min_val, max_val = 0, 10000000
+        min_val, max_val = 10, 100
 
         number = random.randint(min_val, max_val)
         return str(number)
@@ -497,19 +486,11 @@ async def main(cfg: DictConfig):
             )
 
             # TODO: Parallelize the following calculation
-            for episode, response in zip(group.episodes, responses.outputs):
-                episode.request_tokens = responses.prompt_token_ids
+            for episode, response in zip(group.episodes, responses):
+                episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-                episode.response_logprobs = torch.tensor(
-                    [
-                        top_k_dict[token].logprob
-                        for token, top_k_dict in zip(
-                            response.token_ids,
-                            response.logprobs,
-                        )
-                    ]
-                )
+                episode.response_logprobs = response.logprobs
                 episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
