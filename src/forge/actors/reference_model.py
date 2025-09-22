@@ -74,6 +74,7 @@ class ReferenceModel(ForgeActor):
 
     @endpoint
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        self.engine.gc_handler.collect(reason="Periodic GC collection")
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")

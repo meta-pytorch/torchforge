@@ -171,6 +171,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+        self.engine.gc_handler.run(self.current_step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -219,6 +220,7 @@ class RLTrainer(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         await ts.put_state_dict(state_dict=vllm_ready_hf_sd, key=key)
+        del vllm_ready_hf_sd
         end_time = time.time()
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
