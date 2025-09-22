@@ -85,8 +85,12 @@ class Policy(ForgeActor, ABC):
 
     @endpoint
     @abstractmethod
-    async def update_weights(self):
-        """Update the policy weights."""
+    async def update_weights(self, policy_version: int):
+        """Update the policy weights.
+
+        Args:
+            policy_version: The version number to update to.
+        """
         pass
 
 

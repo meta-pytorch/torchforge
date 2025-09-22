@@ -15,7 +15,13 @@ import torch
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 
-from torchtitan.config.job_config import Checkpoint, Compile, Model, Parallelism
+from torchtitan.config.job_config import (
+    Checkpoint,
+    Compile,
+    Model,
+    Parallelism,
+    Training,
+)
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
@@ -29,6 +35,9 @@ class ReferenceModel(ForgeActor):
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     compile: Compile = field(default_factory=Compile)
+    training: Training = field(
+        default_factory=Training
+    )  # Only needed in order to correctly set a lower dtype
 
     # Populated in setup
     # TODO: Commented out since engine_config parsing extracts from class members

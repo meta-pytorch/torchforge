@@ -184,9 +184,7 @@ def get_configs(
         "engine_config": engine_config,
         "sampling_config": sampling_config,
     }
-    service_config = ServiceConfig(
-        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
-    )
+    service_config = ServiceConfig(procs=worker_size, num_replicas=1, with_gpus=True)
     return policy_config, service_config
 
 
@@ -256,7 +254,7 @@ class TestWeightSync:
         await ts.initialize()
         # 2. Trainer push
         rl_trainer = await RLTrainer.options(
-            procs_per_replica=worker_size, with_gpus=True, num_replicas=1
+            procs=worker_size, with_gpus=True, num_replicas=1
         ).as_service(**trainer_cfg)
 
         await rl_trainer.push_weights.choose(policy_version=0)
@@ -296,7 +294,7 @@ class TestWeightSync:
         await ts.initialize()
         # 2. Trainer push
         rl_trainer = await RLTrainer.options(
-            procs_per_replica=trainer_worker_size, with_gpus=True, num_replicas=1
+            procs=trainer_worker_size, with_gpus=True, num_replicas=1
         ).as_service(**trainer_cfg_tp)
 
         await rl_trainer.push_weights.call(policy_version=0)

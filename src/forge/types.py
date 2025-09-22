@@ -98,27 +98,35 @@ class ProcessConfig:
 
 @dataclass
 class ServiceConfig:
-    """A service config."""
+    """
+    A service config.
+    Args:
+        procs (int): Number of processes to launch for each replica of the service.
+        num_replicas (int): Number of replicas to launch for the service.
+        with_gpus (bool, optional): Whether to allocate GPUs for the service processes.
+        hosts (int | None, optional): Number of hosts to allocate for each replica.
+        health_poll_rate (float, optional): Frequency (in seconds) to poll for health status.
+        replica_max_concurrent_requests (int, optional): Maximum number of concurrent requests per replica.
+        return_first_rank_result (bool, optional): Whether to auto-unwrap ValueMesh to the first rank's result.
+    """
 
-    procs_per_replica: int
+    procs: int
     num_replicas: int
     with_gpus: bool = False
-    hosts_per_replica: int | None = None
+    hosts: int | None = None
     # ServiceConfig-specific fields
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
-    return_first_rank_result: bool = (
-        True  # Whether or not to auto-unwrap ValueMesh to first rank's result
-    )
+    return_first_rank_result: bool = True
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.
-        Maps procs_per_replica to num_procs for ProcessConfig.
+        Maps procs to num_procs for ProcessConfig.
         """
         return ProcessConfig(
-            num_procs=self.procs_per_replica,
+            num_procs=self.procs,
             with_gpus=self.with_gpus,
-            num_hosts=self.hosts_per_replica,
+            num_hosts=self.hosts,
         )
 
 

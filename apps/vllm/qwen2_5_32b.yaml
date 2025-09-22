@@ -11,8 +11,8 @@ policy:
 
 services:
   policy:
-    procs_per_replica: 4
-    hosts_per_replica: 1
+    procs: 4
+    hosts: 1
     num_replicas: 1
     with_gpus: true
 
