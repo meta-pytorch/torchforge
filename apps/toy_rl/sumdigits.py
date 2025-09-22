@@ -11,18 +11,19 @@ import random
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
 import torchstore as ts
 from forge.actors.policy import Policy
+from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import _qwen3_hf_to_vllm
+from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.losses.grpo_loss import SimpleGRPOLoss
+from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 
 from forge.util.ops import selective_log_softmax
@@ -207,87 +208,18 @@ class Group:
         return cls(str(group_id), episodes)
 
 
-class RefModel(ForgeActor):
-    def __init__(self, model_name, device: torch.device | None = None):
-        super().__init__()
-        self.model_name = model_name
+def collate(batches: list[list[Episode]]):
+    batch_input_ids = []
+    batch_target_ids = []
+    batch_loss_masks = []
+    batch_weights = []
+    batch_sampling_log_probs = []
+    batch_ref_logprobs = []
 
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(self.device)
-        self.model.eval()
-
-        self.logger.info(f"Model initialized on {self.device}")
-
-    @endpoint
-    async def forward(self, episode: Episode) -> torch.Tensor:
-        input_ids = (
-            pad_sequence(episode.input_ids, episode.max_seq_len - 1, episode.pad_id)
-            .to(self.device)
-            .unsqueeze(0)
-        )
-        target_ids = (
-            pad_sequence(episode.target_ids, episode.max_seq_len - 1, episode.pad_id)
-            .to(self.device)
-            .unsqueeze(0)
-        )
-        mask = input_ids != episode.pad_id
-
-        with torch.inference_mode():
-            logits = self.model(input_ids=input_ids, attention_mask=mask).logits
-
-        return selective_log_softmax(logits, target_ids).squeeze(0)
-
-
-@dataclass
-class Trainer(ForgeActor):
-    """Reinforce Loss Trainer implementation for policy optimization."""
-
-    model_name: str
-    learning_rate: float = 1e-5
-    device: torch.device | None = None
-    state_dict_key: str = "model_state_dict"
-
-    @endpoint
-    async def setup(self):
-        if self.device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(self.device)
-        self.model.train()
-
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.learning_rate
-        )
-        self.optimizer.zero_grad()
-
-        # beta = 0.01 for quicker convergence
-        self.loss = SimpleGRPOLoss(0.01)
-        self.logger.info(f"Trainer model initialized on {self.device}")
-
-    @endpoint
-    def train_step(self, episodes: list[Episode]) -> float:
+    for batch in batches:
+        episodes = batch
         pad_id = episodes[0].pad_id
-
-        # Calculate batch maximum length
         max_seq_len = max(ep.max_seq_len - 1 for ep in episodes)
-        batch_input_ids = []
-        batch_target_ids = []
-        batch_loss_masks = []
-        batch_weights = []
-        batch_sampling_log_probs = []
-        batch_ref_logprobs = []
         for episode in episodes:
             input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
             target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
@@ -303,7 +235,6 @@ class Trainer(ForgeActor):
             loss_mask = loss_mask * valid_mask.float()
             weights = weights * valid_mask.float()
             sampling_log_probs = sampling_log_probs * valid_mask.float()
-
             batch_input_ids.append(input_ids)
             batch_target_ids.append(target_ids)
             batch_loss_masks.append(loss_mask)
@@ -311,55 +242,43 @@ class Trainer(ForgeActor):
             batch_sampling_log_probs.append(sampling_log_probs)
             batch_ref_logprobs.append(ref_logprobs)
 
-        # Stack into batched tensors
-        input_ids = torch.stack(batch_input_ids).to(self.device)
-        target_ids = torch.stack(batch_target_ids).to(self.device)
-        loss_masks = torch.stack(batch_loss_masks).to(self.device)
-        weights = torch.stack(batch_weights).to(self.device)
-        sampling_log_probs = torch.stack(batch_sampling_log_probs).to(self.device)
-        ref_logprobs = torch.stack(batch_ref_logprobs).to(self.device)
+    # Stack into batched tensors
+    input_ids = torch.stack(batch_input_ids)
+    target_ids = torch.stack(batch_target_ids)
+    loss_masks = torch.stack(batch_loss_masks)
+    weights = torch.stack(batch_weights)
+    sampling_log_probs = torch.stack(batch_sampling_log_probs)
+    ref_logprobs = torch.stack(batch_ref_logprobs)
 
-        # Create attention mask
-        attention_mask = input_ids != pad_id
+    inputs = {"tokens": input_ids}
 
-        # Forward pass
-        logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+    targets = {
+        "response": target_ids,
+        "ref_logprobs": ref_logprobs,
+        "advantages": weights,
+        "padding_mask": loss_masks,
+    }
 
-        trainer_log_probs = selective_log_softmax(logits, target_ids)
-        # Compute loss only on response tokens
-        # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
-        loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
-        loss.backward()
-
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-
-        self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
-        return loss.item()
-
-    @endpoint
-    async def push_weights(self, version: int):
-        """Update policy model weights with trainer's current weights."""
-        key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
-        new_sd = _qwen3_hf_to_vllm(
-            self.model.state_dict(), num_layers=self.model.config.num_hidden_layers
-        )
-        start_time = time.time()
-        await ts.put_state_dict(new_sd, key)
-        end_time = time.time()
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
+    return [inputs], [targets]
 
 
-@dataclass
-class RewardActor(ForgeActor):
-    """Reward actor that uses a list of scoring functions."""
-
-    @endpoint
-    async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
-        reward = 1.0 if response.strip() == "10" else 0.0
-        return reward
+def simple_grpo_loss(
+    logits: torch.Tensor,
+    response: torch.Tensor,
+    ref_logprobs: torch.Tensor,
+    advantages: torch.Tensor,
+    padding_mask: torch.Tensor,
+    beta: float = 0.1,
+) -> torch.Tensor:
+    logprobs = selective_log_softmax(logits, response)
+    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+    per_token_loss = -(per_token_policy_loss - beta * kl)
+    loss = (
+        ((per_token_loss * padding_mask).sum(dim=1))
+        / (padding_mask.sum(dim=1).clamp(min=1.0))
+    ).mean()
+    return loss
 
 
 @dataclass
@@ -374,8 +293,8 @@ class SumDigitsDataset:
         answer = str(sum(int(x) for x in data))
 
         system_prompt = """
-        A conversation between User and Assistant. The user asks a question, and the Assistant solves it.
-        The assistant only gives very concise answers (just the number, no explanation).
+        Put all your scratchpad work between <think> and </think> tags.
+        Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
         """
         request: str = f"What is the sum of the digits of {data}"
         as_chat = [
@@ -396,21 +315,25 @@ class SumDigitsDataset:
 
     def generate_one(self, step: int) -> str:
         """Generate number based on training step for curriculum learning."""
-        if step < 200:
-            # Early training: 2-digit numbers (10-99)
-            min_val, max_val = 10, 99
-        elif step < 1000:
-            # Later training: 1-4 digit numbers (0-1000)
-            min_val, max_val = 0, 1000
-        elif step < 3000:
-            # Later training: 1-6 digit numbers (0-100000)
-            min_val, max_val = 0, 100000
-        else:
-            # Later training: 1-8 digit numbers (0-10000000)
-            min_val, max_val = 0, 10000000
+        min_val, max_val = 0, 100
 
         number = random.randint(min_val, max_val)
         return str(number)
+
+
+@dataclass
+class RewardActor(ForgeActor):
+    """Reward actor that uses a list of scoring functions."""
+
+    reward_functions: list[Callable]
+
+    @endpoint
+    async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
+        total_rewards = 0.0
+        for reward_fn in self.reward_functions:
+            reward = reward_fn(prompt, response, target)
+            total_rewards += reward
+        return total_rewards / len(self.reward_functions)
 
 
 @dataclass
@@ -462,15 +385,26 @@ async def main(cfg: DictConfig):
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
-        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
-            **cfg.replay_buffer
+        RLTrainer.options(**cfg.services.trainer).as_service(
+            **cfg.trainer, loss=simple_grpo_loss
         ),
-        RewardActor.options(**cfg.services.reward_actor).as_service(),
-        RefModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
+            **cfg.replay_buffer, collate=collate
+        ),
+        RewardActor.options(**cfg.services.reward_actor).as_service(
+            reward_functions=[MathReward(), ThinkingReward()]
+        ),
+        ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
     )
 
     print("All services initialized successfully!")
+
+    import debugpy
+
+    debugpy.listen(5678)
+    print("[MAIN] Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -510,7 +444,17 @@ async def main(cfg: DictConfig):
                         )
                     ]
                 )
-                episode.ref_logprobs = await ref_model.forward.choose(episode)
+                input_ids = pad_sequence(
+                    episode.input_ids, episode.max_seq_len - 1, episode.pad_id
+                ).unsqueeze(0)
+                target_ids = pad_sequence(
+                    episode.target_ids, episode.max_seq_len - 1, episode.pad_id
+                ).unsqueeze(0)
+                ref_logits = await ref_model.forward.choose(input_ids)
+                episode.ref_logprobs = selective_log_softmax(
+                    ref_logits, target_ids
+                ).squeeze(0)
+
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
@@ -533,13 +477,13 @@ async def main(cfg: DictConfig):
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch[0])
+                inputs, targets = batch
+                loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
                 await trainer.push_weights.call(training_step)
                 await policy.update_weights.call(training_step)
-                # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.call()
 
     print("Starting training loop.")

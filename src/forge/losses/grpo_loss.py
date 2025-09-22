@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+from forge.util.ops import selective_log_softmax
 from torch import nn
 
 
@@ -18,7 +19,8 @@ class SimpleGRPOLoss(nn.Module):
         super().__init__()
         self.beta = beta
 
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
+    def forward(self, logits, target_ids, ref_logprobs, advantages, padding_mask):
+        logprobs = selective_log_softmax(logits, target_ids)
         kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
         per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
         per_token_loss = -(per_token_policy_loss - self.beta * kl)

@@ -1,11 +1,11 @@
 # Toy app Training Configuration
 
 # Global configuration
-group_size: 6
-batch_size: 12
-max_req_tokens: 64
-max_res_tokens: 64
-model: "Qwen/Qwen2.5-0.5B-Instruct"
+group_size: 4
+batch_size: 8
+max_req_tokens: 512
+max_res_tokens: 512
+model: "Qwen/Qwen3-0.6B"
 
 # Dataset configuration
 dataset:
@@ -26,17 +26,68 @@ policy:
 
 # Trainer configuration
 trainer:
-  model_name: ${model}
-  learning_rate: 1e-5
+  model:
+    name: qwen3
+    flavor: 0.6B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: ${batch_size}
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 5000
+    dtype: bfloat16
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 500
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
 
 # Reference model configuration
 ref_model:
-  model_name: ${model}
+  model:
+    name: qwen3
+    flavor: 0.6B
+    hf_assets_path: hf://${model}
+  training:
+    dtype: bfloat16
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${batch_size}
-  max_policy_age: 1 # Async by 1
+  max_policy_age: 5 # Async by 1
   dp_size: 1
 
 services:
