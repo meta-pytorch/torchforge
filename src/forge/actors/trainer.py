@@ -223,7 +223,9 @@ class RLTrainer(ForgeActor):
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+        vllm_ready_hf_sd = _qwen3_hf_to_vllm(
+            sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
+        )
 
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
