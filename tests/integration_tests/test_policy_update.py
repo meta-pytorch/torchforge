@@ -39,6 +39,8 @@ logger.setLevel(logging.INFO)
 
 # Run tests: pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::<test_name>
 
+TEST_MULTIPLIER = 1.5
+
 
 def get_configs(
     worker_size: int, tp_size: int, model_name: str
@@ -64,7 +66,17 @@ def get_configs(
 class MockRLTrainer(RLTrainer):
     @endpoint
     async def mock_train_step(self):
-        """Mock train step. This simply multiplies the model weights by 0.1."""
+        """Mock train step. This simply multiplies the model weights by TEST_MULTIPLIER"""
+        self.engine.optimizers.step()
+        self.engine.optimizers.zero_grad()
+        self.engine.lr_schedulers.step()
+
+        self.current_step += 1
+        self.engine.checkpointer.save(
+            curr_step=self.current_step,
+            last_step=self.current_step == self.num_training_steps,
+        )
+
         sd = self.engine.checkpointer.states["model"].state_dict()
         sd, _ = flatten_state_dict(sd)
         logger.info(f"[MockRLTrainer] mock_train_step(): sd = {sd}")
@@ -74,7 +86,7 @@ class MockRLTrainer(RLTrainer):
                     f"[MockRLTrainer] mock_train_step(): skipping non-float param {param}"
                 )
                 continue
-            param.mul_(0.1)
+            param *= 1.5
 
 
 # exceptions sometimes are not propogated in monarch, do it manually
@@ -84,20 +96,32 @@ def validate_fn(prev_params, curr_model, logger) -> Exception | None:
     logger.info(
         f"Validating model params, all named_parameters() =  {curr_model.named_parameters()}"
     )
-    try:
-        for name, param in curr_model.named_parameters():
-            if not torch.is_floating_point(param):
-                logger.info(f"Skipping non-float param {name}")
-                skipped.add(name)
-                continue
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
             assert name in prev_params, f"Param {name} not found in prev_params"
             assert torch.allclose(
-                prev_params[name] * 0.1, param.cpu()
-            ), f"current param {name} does not match expected value"
+                prev_params[name] * TEST_MULTIPLIER, param.cpu(), atol=1e-3, rtol=1e-2
+            ), (
+                f"current param {name} does not match expected value; "
+                f"previous param ({prev_params[name].size()})= {prev_params[name]}; "
+                f"expected = {prev_params[name] * TEST_MULTIPLIER} vs got = {param.cpu().size()} {param.cpu()}"
+            )
             verified.add(name)
-    except Exception as e:
-        logger.error(f"Validation failed with exception: {e}")
-        return e
+        except Exception as e:
+            # logger.error(f"Validation failed with exception: {e}")
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
 
 
 class TestWeightSync:
@@ -147,10 +171,10 @@ class TestWeightSync:
 
         This test performs the following steps:
         1. Loads weights from a HuggingFace (HF) model into an in-memory state dictionary, serving as the source of truth.
-        2. Initializes RLTrainer and applies a mock training step that multiplies all model weights by 0.1.
+        2. Initializes RLTrainer and applies a mock training step that multiplies all model weights by TEST_MULTIPLIER.
         3. Pushes the updated weights to torchstore.
         4. Initializes a Policy instance and calls update_weights() to load weights from torchstore.
-        5. Validates that the policy's weights match the expected values (original weights multiplied by 0.1).
+        5. Validates that the policy's weights match the expected values (original weights multiplied by TEST_MULTIPLIER).
         """
         trainer_worker_size = 2
         policy_worker_size = 1
@@ -174,7 +198,7 @@ class TestWeightSync:
 
         policy_version = uuid.uuid4().int
 
-        # Mock train step multiplies everything by 0.1
+        # Mock train step multiplies everything by TEST_MULTIPLIER
         await rl_trainer.mock_train_step.call()
 
         await rl_trainer.push_weights.call(policy_version=policy_version)
@@ -195,10 +219,10 @@ class TestWeightSync:
         Test the weight synchronization process between RLTrainer and Policy.
 
         This test performs the following steps:
-        - Initializes RLTrainer and applies a mock training step that multiplies all model weights by 0.1.
+        - Initializes RLTrainer and applies a mock training step that multiplies all model weights by TEST_MULTIPLIER.
         - Pushes the updated weights to torchstore.
         - Initializes a Policy instance and calls update_weights() to load weights from torchstore.
-        - Validates that the policy's weights match the expected values (original weights multiplied by 0.1).
+        - Validates that the policy's weights match the expected values (original weights multiplied by TEST_MULTIPLIER).
         """
         # test configs/paralleism
         trainer_worker_size = 2
@@ -228,7 +252,7 @@ class TestWeightSync:
 
         policy_version = uuid.uuid4().int
 
-        # Mock train step multiplies everything by 0.1
+        # Mock train step multiplies everything by TEST_MULTIPLIER
         await rl_trainer.mock_train_step.call()
 
         await rl_trainer.push_weights.call(policy_version=policy_version)
