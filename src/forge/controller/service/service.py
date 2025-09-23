@@ -82,11 +82,13 @@ class Service:
         self,
         cfg: ServiceConfig,
         actor_def,
+        actor_args: tuple,
         actor_kwargs: dict,
     ):
         self._cfg = cfg
         self._replicas = []
         self._actor_def = actor_def
+        self._actor_args = actor_args
         self._actor_kwargs = actor_kwargs
 
         self._active_sessions = []
@@ -119,6 +121,7 @@ class Service:
                 max_concurrent_requests=self._cfg.replica_max_concurrent_requests,
                 return_first_rank_result=self._cfg.return_first_rank_result,
                 actor_def=self._actor_def,
+                actor_args=self._actor_args,
                 actor_kwargs=self._actor_kwargs,
             )
             replicas.append(replica)

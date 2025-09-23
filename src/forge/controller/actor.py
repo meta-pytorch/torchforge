@@ -10,11 +10,11 @@ import math
 import sys
 from typing import Any, Type, TypeVar
 
+from monarch.actor import Actor, current_rank, current_size, endpoint
+
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
-
-from monarch.actor import Actor, current_rank, current_size, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -97,7 +97,9 @@ class ForgeActor(Actor):
         return type(cls.__name__, (cls,), attrs)
 
     @classmethod
-    async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
+    async def as_service(
+        cls: Type[T], *actor_args, **actor_kwargs
+    ) -> "ServiceInterface":
         """
         Spawns this actor as a Service using the configuration stored in `.options()`,
         or defaults if `.options()` was not called.
@@ -119,7 +121,7 @@ class ForgeActor(Actor):
         cfg = ServiceConfig(**cfg_kwargs)
 
         logger.info("Spawning Service Actor for %s", cls.__name__)
-        service = Service(cfg, cls, actor_kwargs)
+        service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         return ServiceInterface(service, cls)
 
