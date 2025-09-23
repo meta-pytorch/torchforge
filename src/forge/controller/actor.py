@@ -8,7 +8,6 @@ import logging
 
 import math
 import sys
-import types
 from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
@@ -206,12 +205,6 @@ class ForgeActor(Actor):
         """
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(**actor_kwargs)
-
-        # Patch shutdown to bypass endpoint system
-        actor.shutdown = types.MethodType(
-            lambda self: self._class.shutdown(self), actor
-        )
-
         return actor
 
     @classmethod
