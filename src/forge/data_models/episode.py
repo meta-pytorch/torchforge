@@ -9,7 +9,6 @@ from typing import Optional
 
 import torch
 from forge.data_models.completion import Completion
-from forge.util.ops import pad_sequence
 
 
 @dataclass
@@ -46,6 +45,9 @@ class Episode:
     # max sequence length of the episode
     max_seq_len: int = 512
 
+    # Version of the policy this episode was generated from.
+    policy_version: int = 0
+
     @property
     def episode_ids(self) -> torch.Tensor:
         """
@@ -79,39 +81,6 @@ class Episode:
         return target_ids
 
     @property
-    def input_ids_paded(self) -> torch.Tensor:
-        """
-        Get model input tokens for next-token prediction, but with padding added
-
-        Returns:
-            torch.Tensor: Episode trajectory with EOS truncated for model input.
-                         Shape: [max_seq_len - 1]
-        """
-        return pad_sequence(self.input_ids, self.max_seq_len - 1, self.pad_id)
-
-    @property
-    def target_ids_paded(self) -> torch.Tensor:
-        """
-        Get target tokens for next-token prediction training.
-
-        Returns:
-            torch.Tensor: Episode trajectory shifted by 1 position (BOS truncated).
-                         Aligned with input_ids for teacher forcing.
-                         Shape: [max_seq_len - 1]
-        """
-        return pad_sequence(self.target_ids, self.max_seq_len - 1, self.pad_id)
-
-    @property
-    def input_ids_attn_mask_padded(self) -> torch.Tensor:
-        """
-        Get's the attention mask for the input_ids with padding
-
-        Returns:
-            torch.Tensor: Attention mask for the input_ids, 1 for tokens all the tokens except pad_id
-        """
-        return self.input_ids_paded != self.pad_id
-
-    @property
     def loss_mask(self) -> torch.Tensor:
         """
         Get mask for computing loss only on response tokens.
@@ -120,21 +89,10 @@ class Episode:
             torch.Tensor: Binary mask (0 for prompt, 1 for response) shifted to align
                          with target_ids. Shape: [max_seq_len - 1]
         """
-        return self.loss_mask[1:]  # Shift to align with target_ids (truncates BOS)
+        return self.mask[1:]  # Shift to align with target_ids (truncates BOS)
 
     @property
-    def loss_mask_paded(self) -> torch.Tensor:
-        """
-        Get mask for computing loss only on response tokens with padding.
-
-        Returns:
-            torch.Tensor: Binary mask (0 for prompt, 1 for response) shifted to align
-                         with target_ids. Shape: [max_seq_len - 1]
-        """
-        return pad_sequence(self.loss_mask, self.max_seq_len - 1, self.pad_id)
-
-    @property
-    def weighted_advantages_padded(self) -> torch.Tensor:
+    def weighted_advantages(self) -> torch.Tensor:
         """
         Get advantages weighted by loss mask.
 
@@ -145,11 +103,14 @@ class Episode:
         """
         if self.advantage_weights is None:
             return torch.zeros_like(self.loss_mask)
-        return self.loss_mask * self.advantage_weights
+        return self.advantage_weights[
+            1:
+        ]  # Shift to align with target_ids (truncates BOS)
 
 
 def from_completion(
     completion: Completion,
+    policy_verson,
     reward: float = 0.0,
     pad_id: int = 0,
     max_seq_len: int = 512,
@@ -183,4 +144,5 @@ def from_completion(
         pad_id=pad_id,
         max_seq_len=max_seq_len,
         ref_logprobs=ref_logprobs,
+        policy_version=policy_verson,
     )

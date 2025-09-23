@@ -32,6 +32,44 @@ from transformers import AutoModelForCausalLM
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
+def to_batch(episodes: list[Episode], device: torch.device):
+    batch = {}
+    pad_id = episodes[0].pad_id
+    max_seq_len = max(ep.max_seq_len - 1 for ep in episodes)
+
+    batch_input_ids = []
+    batch_target_ids = []
+    batch_loss_masks = []
+    batch_weights = []
+    batch_ref_logprobs = []
+    for episode in episodes:
+        input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
+        target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
+        loss_mask = pad_sequence(episode.loss_mask, max_seq_len, 0.0)
+        weights = pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
+        ref_logprobs = episode.ref_logprobs
+
+        # Exclude padded response tokens from loss
+        valid_mask = target_ids != pad_id
+        loss_mask = loss_mask * valid_mask.float()
+        weights = weights * valid_mask.float()
+
+        batch_input_ids.append(input_ids)
+        batch_target_ids.append(target_ids)
+        batch_loss_masks.append(loss_mask)
+        batch_weights.append(weights)
+        batch_ref_logprobs.append(ref_logprobs)
+
+    # Stack into batched tensors
+    batch["input_ids"] = torch.stack(batch_input_ids).to(device)
+    batch["target_ids"] = torch.stack(batch_target_ids).to(device)
+    batch["loss_masks"] = torch.stack(batch_loss_masks).to(device)
+    batch["weights"] = torch.stack(batch_weights).to(device)
+    batch["ref_logprobs"] = torch.stack(batch_ref_logprobs).to(device)
+
+    return batch
+
+
 class RefModel(ForgeActor):
     def __init__(self, model_name, device: torch.device | None = None):
         super().__init__()
@@ -52,15 +90,18 @@ class RefModel(ForgeActor):
         self.logger.info(f"Model initialized on {self.device}")
 
     @endpoint
-    async def forward(
-        self,
-        input_ids: torch.Tensor,
-        target_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        input_ids = input_ids.to(self.device)
-        target_ids = target_ids.to(self.device)
-        mask = attention_mask.to(self.device)
+    async def forward(self, episode: Episode) -> torch.Tensor:
+        input_ids = (
+            pad_sequence(episode.input_ids, episode.max_seq_len - 1, episode.pad_id)
+            .to(self.device)
+            .unsqueeze(0)
+        )
+        target_ids = (
+            pad_sequence(episode.target_ids, episode.max_seq_len - 1, episode.pad_id)
+            .to(self.device)
+            .unsqueeze(0)
+        )
+        mask = input_ids != episode.pad_id
 
         with torch.inference_mode():
             logits = self.model(input_ids=input_ids, attention_mask=mask).logits
@@ -79,6 +120,12 @@ class Trainer(ForgeActor):
 
     @endpoint
     async def setup(self):
+        import debugpy
+
+        debugpy.listen(5681)
+        print("[LEARNER] Waiting for VS Code debugger to attach...")
+        debugpy.wait_for_client()
+        print("Attached!")
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -100,33 +147,26 @@ class Trainer(ForgeActor):
 
     @endpoint
     def train_step(self, episodes: list[Episode]) -> float:
-        # Stack into batched tensors
-        input_ids = torch.stack([episode.input_ids_paded for episode in episodes]).to(
-            self.device
-        )
-        target_ids = torch.stack([episode.target_ids_paded for episode in episodes]).to(
-            self.device
-        )
-        loss_masks = torch.stack([episode.loss_mask_paded for episode in episodes]).to(
-            self.device
-        )
-        weights = torch.stack(
-            [episode.weighted_advantages_padded for episode in episodes]
-        ).to(self.device)
-        ref_logprobs = torch.stack([episode.ref_logprobs for episode in episodes]).to(
-            self.device
-        )
+        pad_id = episodes[0].pad_id
+        batch = to_batch(episodes, self.device)
 
         # Create attention mask
-        attention_mask = input_ids != episodes[0].pad_id
+        attention_mask = batch["input_ids"] != pad_id
 
         # Forward pass
-        logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+        logits = self.model(
+            input_ids=batch["input_ids"], attention_mask=attention_mask
+        ).logits
 
-        trainer_log_probs = selective_log_softmax(logits, target_ids)
+        trainer_log_probs = selective_log_softmax(logits, batch["target_ids"])
 
         # Compute loss only on response tokens
-        loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
+        loss = self.loss(
+            trainer_log_probs,
+            batch["ref_logprobs"],
+            batch["weights"],
+            batch["loss_masks"],
+        )
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -227,6 +267,9 @@ class DatasetActor(ForgeActor):
 
 async def main(cfg: DictConfig):
     """Main Sumgits app training loop with rollout and training processes."""
+    import os
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "3,4,5,6,7"
     max_seq_len = cfg.max_seq_len
     mlogger = get_metric_logger(
         "wandb",
@@ -256,6 +299,13 @@ async def main(cfg: DictConfig):
 
     print("All services initialized successfully!")
 
+    import debugpy
+
+    debugpy.listen(5678)
+    print("[MAIN] Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
+
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
@@ -270,27 +320,24 @@ async def main(cfg: DictConfig):
             completions = await policy.generate.choose(prompt)
 
             episodes = []
+            version = await policy.get_version.choose()
             for completion in completions:
-                episode = from_completion(
-                    completion,
-                    pad_id=pad_id,
-                    max_seq_len=max_seq_len,
-                )
-
                 # calculates reward
-                reward_fut = reward_actor.evaluate_response.choose(
+                reward = await reward_actor.evaluate_response.choose(
                     response=completion.text, target=target
                 )
 
-                # calculates ref log probs
-                ref_logprobs = ref_model.forward.choose(
-                    episode.input_ids_paded,
-                    episode.target_ids_paded,
-                    episode.input_ids_attn_mask_padded,
+                episode = from_completion(
+                    completion,
+                    policy_verson=version,
+                    pad_id=pad_id,
+                    max_seq_len=max_seq_len,
+                    reward=reward,
                 )
-                await asyncio.gather(reward_fut, ref_logprobs)
-                episode.reward = reward_fut.result()
-                episode.ref_logprobs = ref_logprobs.result()
+
+                # calculates ref log probs
+                # TODO: make a batched forward instead of forward per episode
+                episode.ref_logprobs = await ref_model.forward.choose(episode)
                 episodes.append(episode)
 
             for episode in episodes:
@@ -314,10 +361,11 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.call(training_step)
-                await policy.update_weights.call(training_step)
-                # NOTE: hard-coded to be on-policy for faster convergence
-                await replay_buffer.clear.call()
+                if training_step % 100 == 0:
+                    await trainer.push_weights.call(training_step)
+                    await policy.update_weights.call(training_step)
+                    # NOTE: hard-coded to be on-policy for faster convergence
+                    await replay_buffer.clear.call()
 
     print("Starting training loop.")
     # TODO: Start multiple rollouts once all serivces support it
