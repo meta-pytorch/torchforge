@@ -9,7 +9,7 @@ import logging
 import math
 import sys
 import types
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
@@ -22,17 +22,13 @@ logger.setLevel(logging.DEBUG)
 T = TypeVar("T", bound="ForgeActor")
 
 
-def filter_config_params(cls, kwargs: dict) -> dict:
-    from inspect import signature
-
-    """
-    Filters kwargs to only include parameters that are valid for the given config class.
-    """
-    sig = signature(cls)
-    return {k: v for k, v in kwargs.items() if k in sig.parameters}
-
-
 class ForgeActor(Actor):
+    procs: int = 1
+    hosts: int | None = None
+    with_gpus: bool = False
+    num_replicas: int = 1
+    _extra_config: dict[str, Any] = {}
+
     def __init__(self, *args, **kwargs):
         if not hasattr(self, "_rank"):
             self._rank = current_rank().rank
@@ -59,7 +55,10 @@ class ForgeActor(Actor):
     def options(
         cls: Type[T],
         *,
-        procs: int,
+        procs: int = 1,
+        hosts: int | None = None,
+        with_gpus: bool = False,
+        num_replicas: int = 1,
         **kwargs,
     ) -> Type[T]:
         """
@@ -88,8 +87,15 @@ class ForgeActor(Actor):
         await actor.shutdown()
         """
 
-        cfg_dict = {"procs": procs, **kwargs}
-        return type(cls.__name__, (cls,), cfg_dict)
+        attrs = {
+            "procs": procs,
+            "hosts": hosts,
+            "with_gpus": with_gpus,
+            "num_replicas": num_replicas,
+            "_extra_config": kwargs,
+        }
+
+        return type(cls.__name__, (cls,), attrs)
 
     @classmethod
     async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
@@ -104,12 +110,14 @@ class ForgeActor(Actor):
         # Lazy import to avoid top-level dependency issues
         from forge.controller.service import Service, ServiceInterface
 
-        class_attrs = {k: v for k, v in cls.__dict__.items() if not k.startswith("__")}
-        if "procs" not in class_attrs:
-            class_attrs["procs"] = 1
-        if "num_replicas" not in class_attrs:
-            class_attrs["num_replicas"] = 1
-        cfg = ServiceConfig(**filter_config_params(ServiceConfig, class_attrs))
+        cfg_kwargs = {
+            "procs": cls.procs,
+            "hosts": cls.hosts,
+            "with_gpus": cls.with_gpus,
+            "num_replicas": cls.num_replicas,
+            **cls._extra_config,  # all extra fields
+        }
+        cfg = ServiceConfig(**cfg_kwargs)
 
         logger.info("Spawning Service Actor for %s", cls.__name__)
         service = Service(cfg, cls, actor_kwargs)
@@ -167,12 +175,13 @@ class ForgeActor(Actor):
         a homogeneous set of actors on a single proc mesh.
 
         """
-        # Build process config from class attributes with defaults
+        # Build process config
         cfg = ProcessConfig(
-            procs=getattr(cls, "procs", 1),
-            hosts=getattr(cls, "hosts", None),
-            with_gpus=getattr(cls, "with_gpus", False),
+            procs=cls.procs,
+            hosts=cls.hosts,
+            with_gpus=cls.with_gpus,
         )
+
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
         # TODO - expand support so name can stick within kwargs
