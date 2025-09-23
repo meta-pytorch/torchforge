@@ -1,5 +1,5 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.qwen3_8b --config apps/grpo/qwen3_8b.yaml
+# >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
 
 # Global configuration
 group_size: 8
