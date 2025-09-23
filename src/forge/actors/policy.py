@@ -7,6 +7,10 @@
 from __future__ import annotations
 
 import asyncio
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
 import logging
 import os
 import sys
@@ -51,7 +55,12 @@ from forge.data_models.prompt import to_prompt
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 
+<<<<<<< HEAD
 logger: logging.Logger = logging.getLogger(__name__)
+=======
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+>>>>>>> main
 
 
 @dataclass
@@ -77,6 +86,7 @@ class SamplingConfig:
     logprobs: int = 1
 
     def __post_init__(self):
+        super().__init__()
         gd_params = None
         if self.guided_decoding:
             gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
@@ -133,6 +143,7 @@ class Policy(PolicyInterface):
     policy_version: int | None = None
 
     def __post_init__(self):
+        super().__init__()
         self._run_task: asyncio.Task | None = None
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
@@ -244,7 +255,7 @@ class Policy(PolicyInterface):
         # Setup scheduler
         # TODO: Add support for `log_stats`
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
-        kv_cache_config = kv_cache_configs._values[0]
+        _, kv_cache_config = next(kv_cache_configs.items())
         self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_config.cache_config.num_cpu_blocks = 0
 
@@ -347,15 +358,14 @@ class Policy(PolicyInterface):
     async def run(self):
         # TODO: add support for `iteration_stats`
         # TODO: move postprocessing out of loop to not block
-        parallel_config = self.vllm_config.parallel_config
-        output_rank = parallel_config.world_size - parallel_config.tensor_parallel_size
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
-            worker_output = worker_outputs._values[output_rank]
+            # the results of `execute_model` is gathered on the driver rank (rank 0)
+            _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
             await asyncio.sleep(0)  # Release control before processing outputs
@@ -377,13 +387,13 @@ class Policy(PolicyInterface):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
-            self.logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
-        self.logger.debug(f"Starting weight update on {self.__class__.__name__}")
+        logger.debug(f"Starting weight update on {self.__class__.__name__}")
         await self.policy_worker.update.call(version=policy_version)
         self.policy_version = policy_version
-        self.logger.info(f"Weight update completed (now v{self.policy_version})")
+        logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
     async def get_version(self) -> int:
@@ -506,9 +516,7 @@ class PolicyWorker(ForgeActor):
         current_state_dict = model.state_dict()
         start = time.time()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        self.logger.debug(
-            f"Loaded state dict from {key} in {time.time() - start} seconds"
-        )
+        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
 
     @endpoint
     async def setup_kv_cache(self):

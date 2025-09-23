@@ -4,8 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 import os
+import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -37,6 +39,48 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+def cleanup_old_weight_versions(
+    state_dict_key: str,
+    delim: str,
+    current_policy_version: int,
+) -> None:
+    """Delete old weight versions, keeping only current and N-1 versions.
+
+    TODO - issues/194: provide a more robust way to handle eviction.
+
+    Args:
+        state_dict_key: The base key for state dict storage
+        delim: The delimiter used between key and version
+        current_policy_version: The current policy version to keep
+    """
+    if current_policy_version <= 1:
+        return  # No cleanup needed for versions 0 or 1
+
+    prefix = f"{state_dict_key}{delim}"
+    current_weights = f"{prefix}{current_policy_version}"
+    previous_weights = f"{prefix}{current_policy_version - 1}"
+
+    # Find all weight directories that match our pattern
+    parent_dir = os.path.dirname(prefix) or "."
+    if os.path.exists(parent_dir):
+        for item in os.listdir(parent_dir):
+            item_path = os.path.join(parent_dir, item)
+            if (
+                item.startswith(os.path.basename(prefix))
+                and item != os.path.basename(current_weights)
+                and item != os.path.basename(previous_weights)
+                and os.path.isdir(item_path)
+            ):
+                try:
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    logger.debug(f"Removed old weights at {item_path}")
+                except OSError as e:
+                    logger.debug(f"Error deleting {item_path}: {e}")
+
 
 @dataclass
 class RLTrainer(ForgeActor):
@@ -63,6 +107,7 @@ class RLTrainer(ForgeActor):
         in monarch for now.
 
         """
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -73,7 +118,7 @@ class RLTrainer(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        self.current_step = 1  # fragile contract.
+        self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         self.rank = current_rank().rank
@@ -100,7 +145,7 @@ class RLTrainer(ForgeActor):
         for key in {"loss", "state_dict_key", "use_dcp"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
-        self.engine.checkpointer.load(step=self.current_step)
+        self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
     def forward_backward(
@@ -173,6 +218,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+        self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -192,10 +238,10 @@ class RLTrainer(ForgeActor):
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
 
-        self.current_step += 1
+        self.step += 1
         self.engine.checkpointer.save(
-            curr_step=self.current_step,
-            last_step=self.current_step == self.num_training_steps,
+            curr_step=self.step,
+            last_step=self.step == self.num_training_steps,
         )
 
         return loss.item()
@@ -218,20 +264,31 @@ class RLTrainer(ForgeActor):
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+        vllm_ready_hf_sd = _qwen3_hf_to_vllm(
+            sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
+        )
 
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         if self.use_dcp:
+
+            # TODO - DCP should probably be being saved to NFS explicitly?
+            # Right now it will only save everything locally
             metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
             await ts.put(key, metadata)
+
+            # Delete old weight versions if they exist
+            if self.rank == 0:
+                cleanup_old_weight_versions(
+                    state_dict_key=self.state_dict_key,
+                    delim=DELIM,
+                    current_policy_version=policy_version,
+                )
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
 
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
+        logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
 
     @endpoint
     async def cleanup(self) -> None:
@@ -251,6 +308,13 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         dict: State dict in vLLM format.
     """
     load_sd = {}
+
+    def unwrap(t):
+        """Unwrap a DTensor to a Tensor."""
+        return t.full_tensor() if isinstance(t, torch.distributed.tensor.DTensor) else t
+
+    for key in sd.keys():
+        sd[key] = unwrap(sd[key]).cpu()
 
     # Copy over directly mapped keys
     for k in sd:

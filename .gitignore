@@ -196,3 +196,6 @@ cover/
 wandb/
 
 assets/wheels/vllm*.whl
+
+# DCP artifacts
+model_state_dict/
