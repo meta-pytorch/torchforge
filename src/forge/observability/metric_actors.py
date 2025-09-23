@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class LocalFetcherActor(Actor):
-    """
-    Thin per-process actor to trigger MetricCollector ops without direct access,
-    used by GlobalLoggingActor to broadcast inits/flushes across ranks.
+    """Thin per-process actor used to trigger MetricCollector singleton
+    operations without direct access. It is what GlobalLoggingActor
+    uses to broadcast inits/flushes across ranks.
+
+    GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
     @endpoint
@@ -58,6 +60,11 @@ class LocalFetcherActor(Actor):
 
 
 class GlobalLoggingActor(Actor):
+    """Coordinates metric logging across all ranks for every training step.
+
+    Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
+    and per-rank and global reduction logging modes."""
+
     def __init__(self):
         self.fetchers: Dict[str, LocalFetcherActor] = {}
         self.config: Dict[str, Any] | None = None
@@ -65,7 +72,7 @@ class GlobalLoggingActor(Actor):
         self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
 
     @endpoint
-    async def init_config(self, config: Dict[str, Any]):
+    async def initialize_backends(self, config: Dict[str, Any]):
         """
         Sets config on global actor and inits backends; broadcasts to registered per-rank fetchers.
 
@@ -116,7 +123,7 @@ class GlobalLoggingActor(Actor):
     def get_config(self) -> Dict[str, Any] | None:
         """
         Returns the stored logging config for MetricCollector to query during init,
-        so they can be initialized in their own process.
+        so local backends can be initialized in their own process.
         """
         return self.config
 

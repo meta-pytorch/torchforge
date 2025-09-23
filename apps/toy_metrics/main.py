@@ -84,7 +84,7 @@ async def main(mode: str = "wandb_all_log_all"):
 
     # Now init config on global (inits backends eagerly across fetchers)
     global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
-    await global_logger.init_config.call_one(logging_config)
+    await global_logger.initialize_backends.call_one(logging_config)
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
