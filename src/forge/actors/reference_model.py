@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import logging
 import math
 import os
 
@@ -15,11 +16,20 @@ import torch
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 
-from torchtitan.config.job_config import Checkpoint, Compile, Model, Parallelism
+from torchtitan.config.job_config import (
+    Checkpoint,
+    Compile,
+    Model,
+    Parallelism,
+    Training,
+)
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -29,6 +39,9 @@ class ReferenceModel(ForgeActor):
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     compile: Compile = field(default_factory=Compile)
+    training: Training = field(
+        default_factory=Training
+    )  # Needed in order to set attrs like dtype, garbage collection freq, etc.
 
     # Populated in setup
     # TODO: Commented out since engine_config parsing extracts from class members
@@ -36,6 +49,7 @@ class ReferenceModel(ForgeActor):
 
     def __post_init__(self):
         """Initializes config types and env variables."""
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -52,6 +66,7 @@ class ReferenceModel(ForgeActor):
         """
         self.rank = current_rank().rank
         self.size = math.prod(current_size().values())
+        self.step = 0
 
         env = {
             "RANK": str(self.rank),
@@ -74,6 +89,7 @@ class ReferenceModel(ForgeActor):
 
     @endpoint
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        self.engine.gc_handler.run(self.step)
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
@@ -97,6 +113,7 @@ class ReferenceModel(ForgeActor):
                 with self.engine.maybe_enable_amp:
                     with torch.inference_mode():
                         logits = model_parts[0](input_ids)
+        self.step += 1
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
         return logits

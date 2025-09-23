@@ -47,32 +47,32 @@ ref_model:
 
 services:
   dataset:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   policy:
-    procs_per_replica: 1
-    hosts_per_replica: 1
+    procs: 1
+    hosts: 1
     num_replicas: 1
     with_gpus: true
   trainer:
-    procs_per_replica: 1
-    hosts_per_replica: 1
+    procs: 1
+    hosts: 1
     num_replicas: 1
     with_gpus: true
   replay_buffer:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   compute_advantages:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   ref_model:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: true
   reward_actor:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false

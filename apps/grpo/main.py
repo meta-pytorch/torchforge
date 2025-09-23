@@ -249,7 +249,7 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
-    await ts.initialize()
+    await ts.initialize(strategy=ts.ControllerStorageVolumes())
     (
         dataloader,
         policy,
@@ -286,6 +286,7 @@ async def main(cfg: DictConfig):
                 return
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.choose(prompt)
+            # TODO: this shall be part of the responses metadata instead of a separate call
             version = await policy.get_version.choose()
             group = Group.new_group(
                 group_id=rollout_count,
@@ -304,10 +305,8 @@ async def main(cfg: DictConfig):
                 device="cuda",
             )
             # Populate episode info and calculate rewards
-            for i, (episode, response) in enumerate(
-                zip(group.episodes, responses.outputs)
-            ):
-                episode.request_tokens = responses.prompt_token_ids
+            for i, (episode, response) in enumerate(zip(group.episodes, responses)):
+                episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
                 input_ids[i, :max_req_tokens] = episode.request_tensor
@@ -343,11 +342,8 @@ async def main(cfg: DictConfig):
 
     async def continuous_training():
         training_step = 0
-        policy_version = 0
         while True:
-            batch = await replay_buffer.sample.choose(
-                curr_policy_version=policy_version
-            )
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
@@ -355,9 +351,8 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(policy_version)
-                policy_version += 1
-                await policy.update_weights.call()
+                await trainer.push_weights.call(training_step)
+                await policy.update_weights.call(training_step)
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

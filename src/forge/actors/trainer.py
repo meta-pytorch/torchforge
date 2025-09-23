@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 import os
 import time
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field, fields
 from typing import Callable
 
 import torch
+import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
 from monarch.actor import current_rank, current_size, endpoint
@@ -36,6 +38,9 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 @dataclass
 class RLTrainer(ForgeActor):
@@ -53,6 +58,7 @@ class RLTrainer(ForgeActor):
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
+    use_dcp: bool = True
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -71,7 +77,7 @@ class RLTrainer(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        self.current_step = 1  # fragile contract.
+        self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         self.rank = current_rank().rank
@@ -95,10 +101,10 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {"loss", "state_dict_key"}:
+        for key in {"loss", "state_dict_key", "use_dcp"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
-        self.engine.checkpointer.load(step=self.current_step)
+        self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
     def forward_backward(
@@ -171,6 +177,7 @@ class RLTrainer(ForgeActor):
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+        self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
@@ -190,10 +197,10 @@ class RLTrainer(ForgeActor):
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
 
-        self.current_step += 1
+        self.step += 1
         self.engine.checkpointer.save(
-            curr_step=self.current_step,
-            last_step=self.current_step == self.num_training_steps,
+            curr_step=self.step,
+            last_step=self.step == self.num_training_steps,
         )
 
         return loss.item()
@@ -207,6 +214,7 @@ class RLTrainer(ForgeActor):
         # 2. Unify CheckpointManager and TorchStore weights save control path.
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
+
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
         if self.engine.checkpointer.sd_adapter is None:
@@ -216,13 +224,17 @@ class RLTrainer(ForgeActor):
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
-        await ts.put_state_dict(state_dict=vllm_ready_hf_sd, key=key)
+        if self.use_dcp:
+            metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
+            await ts.put(key, metadata)
+        else:
+            await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
-        self.logger.debug(
-            f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
-        )
+
+        logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
 
     @endpoint
     async def cleanup(self) -> None:
@@ -242,6 +254,13 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         dict: State dict in vLLM format.
     """
     load_sd = {}
+
+    def unwrap(t):
+        """Unwrap a DTensor to a Tensor."""
+        return t.full_tensor() if isinstance(t, torch.distributed.tensor.DTensor) else t
+
+    for key in sd.keys():
+        sd[key] = unwrap(sd[key]).cpu()
 
     # Copy over directly mapped keys
     for k in sd:

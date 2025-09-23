@@ -50,7 +50,7 @@ class ForgeActor(Actor):
         *,
         service_config: ServiceConfig | None = None,
         num_replicas: int | None = None,
-        procs_per_replica: int | None = None,
+        procs: int | None = None,
         **service_kwargs,
     ) -> Type[T]:
         """
@@ -61,16 +61,16 @@ class ForgeActor(Actor):
             # Option A: construct ServiceConfig implicitly
             service = await MyForgeActor.options(
                 num_replicas=1,
-                procs_per_replica=2,
+                procs=2,
             ).as_service(...)
             await service.shutdown()
 
             # Option B: provide an explicit ServiceConfig
-            cfg = ServiceConfig(num_replicas=1, procs_per_replica=2, ..)
+            cfg = ServiceConfig(num_replicas=1, procs=2, ..)
             service = await MyForgeActor.options(service_config=cfg).as_service(...)
             await service.shutdown()
 
-            # Option C: skip options, use the default service config with num_replicas=1, procs_per_replica=1
+            # Option C: skip options, use the default service config with num_replicas=1, procs=1
             service = await MyForgeActor.as_service(...)
             await service.shutdown()
         """
@@ -78,18 +78,18 @@ class ForgeActor(Actor):
         if service_config is not None:
             cfg = service_config
         else:
-            if num_replicas is None or procs_per_replica is None:
+            if num_replicas is None or procs is None:
                 raise ValueError(
-                    "Must provide either `service_config` or (num_replicas + procs_per_replica)."
+                    "Must provide either `service_config` or (num_replicas + procs)."
                 )
             cfg = ServiceConfig(
                 num_replicas=num_replicas,
-                procs_per_replica=procs_per_replica,
+                procs=procs,
                 **service_kwargs,
             )
 
         return type(
-            f"{cls.__name__}Configured",
+            f"{cls.__name__}Service",
             (cls,),
             {"_service_config": cfg},
         )
@@ -107,9 +107,9 @@ class ForgeActor(Actor):
         # Use _service_config if already set by options(), else default
         cfg = getattr(cls, "_service_config", None)
         if cfg is None:
-            cfg = ServiceConfig(num_replicas=1, procs_per_replica=1)
+            cfg = ServiceConfig(num_replicas=1, procs=1)
             # dynamically create a configured subclass for consistency
-            cls = type(f"{cls.__name__}Configured", (cls,), {"_service_config": cfg})
+            cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
 
         logger.info("Spawning Service Actor for %s", cls.__name__)
         service = Service(cfg, cls, actor_kwargs)
