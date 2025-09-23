@@ -218,10 +218,10 @@ class TestWeightSync:
         v0 = uuid.uuid4().int
         v1 = v0 + 1
 
-        await rl_trainer.push_weights.call(policy_version=v0)
+        await rl_trainer.push_weights_hf_nonsharded.call(policy_version=v0)
         # Setting everything to zero
         await rl_trainer.mock_train_step.call()
-        await rl_trainer.push_weights.call(policy_version=v1)
+        await rl_trainer.push_weights_hf_nonsharded.call(policy_version=v1)
         await policy._test_save_model_params.call()
 
         # Sanity check that before update all the tests pass
@@ -286,10 +286,10 @@ class TestWeightSync:
         v0 = uuid.uuid4().int
         v1 = v0 + 1
 
-        await rl_trainer.push_weights.call(policy_version=v0)
+        await rl_trainer.push_weights_hf_nonsharded.call(policy_version=v0)
         # Setting everything to zero
         await rl_trainer.mock_train_step.call()
-        await rl_trainer.push_weights.call(policy_version=v1)
+        await rl_trainer.push_weights_hf_nonsharded.call(policy_version=v1)
         await policy._test_save_model_params.call()
 
         # Sanity check that before update all the tests pass

@@ -7,10 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-<<<<<<< HEAD
-=======
-
->>>>>>> main
 import logging
 import os
 import sys
@@ -22,6 +18,20 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from vllm.config import VllmConfig
 
@@ -45,26 +55,9 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.actors.torchstore_utils import (
-    extract_param_name,
-    get_param_key,
-    get_param_prefix,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
-
-<<<<<<< HEAD
 logger: logging.Logger = logging.getLogger(__name__)
-=======
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
->>>>>>> main
 
 
 @dataclass
