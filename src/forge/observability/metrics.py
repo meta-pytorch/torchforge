@@ -158,195 +158,6 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
     return reduced_metrics
 
 
-class LoggerBackend(ABC):
-    """Abstract logger_backend for metric logging, e.g. wandb, jsonl, etc.
-
-    #TODO: improve docstrings. Say how they are used/when/why/what they should do. Keep it short
-    but informative. For example, it should behave differently if logging per rank or reducing.
-    how global actor can call get_metadata_for_secondary_ranks from the primary run so it can share with the others
-    during initialize.
-    """
-
-    def __init__(self, logger_backend_config: Dict[str, Any]):
-        self.logger_backend_config = logger_backend_config
-
-    @abstractmethod
-    async def init(
-        self,
-        role: str,
-        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """
-        Initializes backend for role in distributed logging flow.
-
-        Called by GlobalLoggingActor: globals first, then broadcasts metadata to locals via fetchers.
-
-        Args:
-            role (str): "global" (controller/primary) or "local" (per-rank/secondary).
-            primary_metadata (Optional[Dict[str, Any]]): From global backend for
-                backend that required shared info, e.g. {"shared_run_id": "abc123"}.
-
-        Raises: ValueError if missing metadata for shared local init.
-        """
-        if primary_logger_backend_metadata is None:
-            primary_logger_backend_metadata = {}
-        pass
-
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
-        pass
-
-    async def finish(self) -> None:
-        pass
-
-    def get_metadata_for_secondary_ranks(self) -> Optional[Dict[str, Any]]:
-        """Return sharable state after primary init (e.g., for shared modes). Called only on globals."""
-        return None
-
-
-class ConsoleBackend(LoggerBackend):
-    def __init__(self, logger_backend_config: Dict[str, Any]):
-        super().__init__(logger_backend_config)
-
-    async def init(
-        self,
-        role: str,
-        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        pass
-
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
-        prefix = (
-            get_actor_name_with_rank()
-            if self.logger_backend_config.get("log_per_rank", True)
-            else "GLOBAL"
-        )
-        logger.info(f"=== {prefix} METRICS STEP {step} ===")
-
-        # TODO: Improve display. Maybe pprint? Currently requires loglevel == info
-        for key, value in metrics.items():
-            logger.info(f"  {key}: {value}")
-        logger.info("==============================\n")
-
-    async def finish(self) -> None:
-        pass
-
-
-class WandbBackend(LoggerBackend):
-    """Reference: docs.wandb.ai/guides/track/log/distributed-training
-
-    #TODO: give this better names
-    #TODO: most likely delete wandb_rank_0_log_all
-    valid_modes = [
-            "wandb_all_log_all", # Track multiple processes
-            "wandb_rank_0_log_all", #Track all processes to a single run
-            "wandb_rank_0_reduce_all", # Track a single process
-        ]
-    """
-
-    def __init__(self, logger_backend_config: Dict[str, Any]):
-        super().__init__(logger_backend_config)
-        self.project = logger_backend_config["project"]
-        self.group = logger_backend_config.get("group", "experiment_group")
-        self.name = None
-        self.run = None
-        self.mode = logger_backend_config.get("mode", "wandb_all_log_all")
-        valid_modes = [
-            "wandb_all_log_all",
-            "wandb_rank_0_log_all",
-            "wandb_rank_0_reduce_all",
-        ]
-        if self.mode not in valid_modes:
-            raise ValueError(
-                f"Invalid WandbBackend mode '{self.mode}'. Must be one of {valid_modes}."
-            )
-
-    async def init(
-        self,
-        role: str,
-        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        import wandb
-
-        if primary_logger_backend_metadata is None:
-            primary_logger_backend_metadata = {}
-        self.name = (
-            get_actor_name_with_rank() if role == "local" else "global_controller"
-        )
-
-        if self.mode == "wandb_all_log_all" and role == "local":
-            self.run = wandb.init(
-                project=self.project, group=self.group, name=self.name
-            )
-        elif self.mode == "wandb_rank_0_log_all":
-            if role == "global":
-                # Primary
-                settings = wandb.Settings(
-                    mode="shared", x_primary=True, x_label="controller_primary"
-                )
-                self.run = wandb.init(
-                    project=self.project, group=self.group, settings=settings
-                )
-                # TODO: Make metric definitions automatic or configurable via logger_backend config
-                self.run.define_metric("global_step")
-                self.run.define_metric("train/loss", step_metric="global_step")
-                self.run.define_metric("generate/tokens", step_metric="global_step")
-            elif role == "local":
-                # Secondary: Use shared_run_id from primary_logger_backend_metadata
-                shared_id = primary_logger_backend_metadata.get("shared_run_id")
-                if shared_id is None:
-                    local_rank = current_rank().rank
-                    raise ValueError(
-                        f"Rank {local_rank}: Shared ID required but not provided"
-                    )
-                settings = wandb.Settings(
-                    mode="shared", x_primary=False, x_label=self.name
-                )
-                self.run = wandb.init(
-                    id=shared_id,
-                    project=self.project,
-                    group=self.group,
-                    settings=settings,
-                )
-        elif self.mode == "wandb_rank_0_reduce_all" and role == "global":
-            self.run = wandb.init(project=self.project, group=self.group)
-            # self.run.define_metric("global_step")
-            # self.run.define_metric("train/loss", step_metric="global_step")
-            # self.run.define_metric("generate/tokens", step_metric="global_step")
-        else:
-            logger.debug(f"Skipped init for {self.mode} mode and {role} role")
-
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
-        if self.run:
-            log_data = {**metrics, "global_step": step}
-            self.run.log(log_data)
-            logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
-        else:
-            logger.debug(f"WandbBackend: No run, skipping log for {self.name}")
-
-    def get_metadata_for_secondary_ranks(self) -> Optional[Dict[str, Any]]:
-        if self.run and self.mode == "wandb_rank_0_log_all":
-            return {"shared_run_id": self.run.id}
-        return None  # {} for others
-
-    async def finish(self) -> None:
-        if self.run:
-            self.run.finish()
-            logger.info(f"WandbBackend {self.name}: Finished run")
-
-
-def get_logger_backend_class(cls_name: str) -> type[LoggerBackend]:
-    """Simple mapping between logger_backend type and its class
-
-    Factory for backend classes from config; returns uninitialized class for role-based init.
-    """
-    if cls_name == "console":
-        return ConsoleBackend
-    elif cls_name == "wandb":
-        return WandbBackend
-    else:
-        raise ValueError(f"Unknown logger backend type: {cls_name}")
-
-
 class MetricAccumulator(ABC):
     # TODO: add docstring for every method, explaining when/why this is used
     def __init__(self, reduction: ReductionType):
@@ -640,3 +451,197 @@ class MetricCollector:
 
         for logger_backend in self.logger_backends:
             await logger_backend.finish()
+
+
+###########
+# Backends #
+###########
+
+
+class LoggerBackend(ABC):
+    """Abstract logger_backend for metric logging, e.g. wandb, jsonl, etc.
+
+    #TODO: improve docstrings. Say how they are used/when/why/what they should do. Keep it short
+    but informative. For example, it should behave differently if logging per rank or reducing.
+    how global actor can call get_metadata_for_secondary_ranks from the primary run so it can share with the others
+    during initialize.
+    """
+
+    def __init__(self, logger_backend_config: Dict[str, Any]):
+        self.logger_backend_config = logger_backend_config
+
+    @abstractmethod
+    async def init(
+        self,
+        role: str,
+        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Initializes backend for role in distributed logging flow.
+
+        Called by GlobalLoggingActor: globals first, then broadcasts metadata to locals via fetchers.
+
+        Args:
+            role (str): "global" (controller/primary) or "local" (per-rank/secondary).
+            primary_metadata (Optional[Dict[str, Any]]): From global backend for
+                backend that required shared info, e.g. {"shared_run_id": "abc123"}.
+
+        Raises: ValueError if missing metadata for shared local init.
+        """
+        if primary_logger_backend_metadata is None:
+            primary_logger_backend_metadata = {}
+        pass
+
+    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+        pass
+
+    async def finish(self) -> None:
+        pass
+
+    def get_metadata_for_secondary_ranks(self) -> Optional[Dict[str, Any]]:
+        """Return sharable state after primary init (e.g., for shared modes). Called only on globals."""
+        return None
+
+
+class ConsoleBackend(LoggerBackend):
+    def __init__(self, logger_backend_config: Dict[str, Any]):
+        super().__init__(logger_backend_config)
+
+    async def init(
+        self,
+        role: str,
+        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        pass
+
+    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+        prefix = (
+            get_actor_name_with_rank()
+            if self.logger_backend_config.get("log_per_rank", True)
+            else "GLOBAL"
+        )
+        logger.info(f"=== {prefix} METRICS STEP {step} ===")
+
+        # TODO: Improve display. Maybe pprint? Currently requires loglevel == info
+        for key, value in metrics.items():
+            logger.info(f"  {key}: {value}")
+        logger.info("==============================\n")
+
+    async def finish(self) -> None:
+        pass
+
+
+class WandbBackend(LoggerBackend):
+    """Reference: docs.wandb.ai/guides/track/log/distributed-training
+
+    #TODO: give this better names
+    #TODO: most likely delete wandb_rank_0_log_all
+    valid_modes = [
+            "wandb_all_log_all", # Track multiple processes
+            "wandb_rank_0_log_all", #Track all processes to a single run
+            "wandb_rank_0_reduce_all", # Track a single process
+        ]
+    """
+
+    def __init__(self, logger_backend_config: Dict[str, Any]):
+        super().__init__(logger_backend_config)
+        self.project = logger_backend_config["project"]
+        self.group = logger_backend_config.get("group", "experiment_group")
+        self.name = None
+        self.run = None
+        self.mode = logger_backend_config.get("mode", "wandb_all_log_all")
+        valid_modes = [
+            "wandb_all_log_all",
+            "wandb_rank_0_log_all",
+            "wandb_rank_0_reduce_all",
+        ]
+        if self.mode not in valid_modes:
+            raise ValueError(
+                f"Invalid WandbBackend mode '{self.mode}'. Must be one of {valid_modes}."
+            )
+
+    async def init(
+        self,
+        role: str,
+        primary_logger_backend_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        import wandb
+
+        if primary_logger_backend_metadata is None:
+            primary_logger_backend_metadata = {}
+        self.name = (
+            get_actor_name_with_rank() if role == "local" else "global_controller"
+        )
+
+        if self.mode == "wandb_all_log_all" and role == "local":
+            self.run = wandb.init(
+                project=self.project, group=self.group, name=self.name
+            )
+        elif self.mode == "wandb_rank_0_log_all":
+            if role == "global":
+                # Primary
+                settings = wandb.Settings(
+                    mode="shared", x_primary=True, x_label="controller_primary"
+                )
+                self.run = wandb.init(
+                    project=self.project, group=self.group, settings=settings
+                )
+                # TODO: Make metric definitions automatic or configurable via logger_backend config
+                self.run.define_metric("global_step")
+                self.run.define_metric("train/loss", step_metric="global_step")
+                self.run.define_metric("generate/tokens", step_metric="global_step")
+            elif role == "local":
+                # Secondary: Use shared_run_id from primary_logger_backend_metadata
+                shared_id = primary_logger_backend_metadata.get("shared_run_id")
+                if shared_id is None:
+                    local_rank = current_rank().rank
+                    raise ValueError(
+                        f"Rank {local_rank}: Shared ID required but not provided"
+                    )
+                settings = wandb.Settings(
+                    mode="shared", x_primary=False, x_label=self.name
+                )
+                self.run = wandb.init(
+                    id=shared_id,
+                    project=self.project,
+                    group=self.group,
+                    settings=settings,
+                )
+        elif self.mode == "wandb_rank_0_reduce_all" and role == "global":
+            self.run = wandb.init(project=self.project, group=self.group)
+            # self.run.define_metric("global_step")
+            # self.run.define_metric("train/loss", step_metric="global_step")
+            # self.run.define_metric("generate/tokens", step_metric="global_step")
+        else:
+            logger.debug(f"Skipped init for {self.mode} mode and {role} role")
+
+    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+        if self.run:
+            log_data = {**metrics, "global_step": step}
+            self.run.log(log_data)
+            logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
+        else:
+            logger.debug(f"WandbBackend: No run, skipping log for {self.name}")
+
+    def get_metadata_for_secondary_ranks(self) -> Optional[Dict[str, Any]]:
+        if self.run and self.mode == "wandb_rank_0_log_all":
+            return {"shared_run_id": self.run.id}
+        return None  # {} for others
+
+    async def finish(self) -> None:
+        if self.run:
+            self.run.finish()
+            logger.info(f"WandbBackend {self.name}: Finished run")
+
+
+def get_logger_backend_class(cls_name: str) -> type[LoggerBackend]:
+    """Simple mapping between logger_backend type and its class
+
+    Factory for backend classes from config; returns uninitialized class for role-based init.
+    """
+    if cls_name == "console":
+        return ConsoleBackend
+    elif cls_name == "wandb":
+        return WandbBackend
+    else:
+        raise ValueError(f"Unknown logger backend type: {cls_name}")

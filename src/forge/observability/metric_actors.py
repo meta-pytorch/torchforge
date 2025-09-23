@@ -30,7 +30,7 @@ class LocalFetcherActor(Actor):
 
         Args:
             step (int): train step used by backends to align all metrics on the same x-axis
-                return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
+            return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
             Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
