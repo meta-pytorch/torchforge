@@ -17,6 +17,8 @@ from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 
 from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig
+
+from forge.controller.service.service import uuid
 from forge.data.sharding import VLLMSharding
 
 from monarch.actor import endpoint
@@ -64,10 +66,36 @@ class MockRLTrainer(RLTrainer):
         """Mock train step. This simply multiplies the model weights by 0.1."""
         sd = self.engine.checkpointer.states["model"].state_dict()
         sd, _ = flatten_state_dict(sd)
-        for name, param in sd.items():
+        for _, param in sd.items():
             if not torch.is_floating_point(param):
                 continue
-            param.copy_(sd[name] * 0.1)
+            param.mul_(0.1)
+
+
+# exceptions sometimes are not propogated in monarch, do it manually
+def validate_fn(prev_params, curr_model, logger) -> Exception | None:
+    verified = set()
+    skipped = set()
+    try:
+        params = curr_model.named_parameters()
+        logger.info(
+            f"Validating model params, # of params {len(params)}, all params {params}"
+        )
+        for name, param in curr_model.named_parameters():
+            if not torch.is_floating_point(param):
+                logger.info(f"Skipping non-float param {name}")
+                skipped.add(name)
+                continue
+            assert name in prev_params
+            assert torch.allclose(prev_params[name] * 0.1, param.cpu())
+            verified.add(name)
+    except Exception as e:
+        return e
+    finally:
+        logger.info(
+            f"Skipped non-float parameters: {skipped}. Successfully verified {len(verified)} parameters: {verified}"
+        )
+        return None
 
 
 class TestWeightSync:
@@ -144,24 +172,13 @@ class TestWeightSync:
         await policy._test_save_model_params.call()
         await policy.update_weights.call(policy_version=0)
 
-        # exceptions sometimes are not propogated in monarch, do it manually
-        def validate_fn(prev_params, curr_model) -> Exception | None:
-            try:
-                for name, param in curr_model.named_parameters():
-                    if not torch.is_floating_point(param):
-                        continue
-                    assert name in prev_params
-                    assert torch.allclose(prev_params[name] * 0.1, param.cpu())
-            except Exception as e:
-                return e
-            finally:
-                return None
-
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
                 if e:
                     raise e
+
+        await ts.shutdown()
 
     @pytest.mark.asyncio
     @requires_cuda
@@ -208,26 +225,10 @@ class TestWeightSync:
         await policy._test_save_model_params.call()
         await policy.update_weights.call(policy_version=0)
 
-        # exceptions sometimes are not propogated in monarch, do it manually
-        def validate_fn(prev_params, curr_model, logger) -> Exception | None:
-            verified = set()
-            try:
-                for name, param in curr_model.named_parameters():
-                    if not torch.is_floating_point(param):
-                        continue
-                    assert name in prev_params
-                    assert torch.allclose(prev_params[name] * 0.1, param.cpu())
-                    verified.add(name)
-            except Exception as e:
-                return e
-            finally:
-                logger.info(
-                    f"Successfully verified {len(verified)} parameters: {verified}"
-                )
-                return None
-
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
                 if e:
                     raise e
+
+        await ts.shutdown()
