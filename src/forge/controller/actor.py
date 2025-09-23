@@ -161,7 +161,7 @@ class ForgeActor(Actor):
         os.environ["MASTER_PORT"] = port
 
     @classmethod
-    async def launch(cls, **kwargs) -> "ForgeActor":
+    async def launch(cls, *args, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -183,9 +183,8 @@ class ForgeActor(Actor):
 
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
-        # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-        actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
+        actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
 
         if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
@@ -195,7 +194,7 @@ class ForgeActor(Actor):
         return actor
 
     @classmethod
-    async def as_actor(cls: Type[T], **actor_kwargs) -> T:
+    async def as_actor(cls: Type[T], *args, **actor_kwargs) -> T:
         """
         Spawns a single actor using the configuration stored in `.options()`, or defaults.
 
@@ -204,7 +203,7 @@ class ForgeActor(Actor):
         If no configuration was stored, defaults to a single process with no GPU.
         """
         logger.info("Spawning single actor %s", cls.__name__)
-        actor = await cls.launch(**actor_kwargs)
+        actor = await cls.launch(*args, **actor_kwargs)
         return actor
 
     @classmethod

@@ -31,8 +31,18 @@ logger.setLevel(logging.INFO)
 class Counter(ForgeActor):
     """Test actor that maintains a counter with various endpoints."""
 
-    def __init__(self, v: int):
+    def __init__(self, v: int, *args, **kwargs):
         self.v = v
+        self.args = args
+        self.kwargs = kwargs
+
+    @endpoint
+    async def get_args(self):
+        return self.args
+
+    @endpoint
+    async def get_kwargs(self):
+        return self.kwargs
 
     @endpoint
     async def incr(self):
@@ -83,13 +93,19 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
 @pytest.mark.timeout(10)
 async def test_as_actor_with_kwargs_config():
     """Test spawning a single actor with passing configs through kwargs."""
-    actor = await Counter.options(procs=1).as_actor(v=5)
+    actor = await Counter.options(procs=1).as_actor(
+        5, "hello", k=0
+    )  # "hello" goes to args, k=0 goes to kwargs
+
     try:
         assert await actor.value.choose() == 5
 
         # Test increment
         await actor.incr.choose()
         assert await actor.value.choose() == 6
+        # Check that the positional/keyword arguments were passed correctly to the actor
+        assert await actor.get_args.choose() == ("hello",)
+        assert await actor.get_kwargs.choose() == {"k": 0}
 
     finally:
         await Counter.shutdown(actor)
