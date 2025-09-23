@@ -11,8 +11,8 @@ policy:
 
 services:
   policy:
-    procs_per_replica: 2
-    num_replicas: 1
+    procs: ${policy.engine_config.tensor_parallel_size}
+    num_replicas: 4
     with_gpus: true
 
 

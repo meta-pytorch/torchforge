@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import random
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -11,6 +12,9 @@ from typing import Any, Callable
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -22,6 +26,9 @@ class ReplayBuffer(ForgeActor):
     dp_size: int = 1
     seed: int | None = None
     collate: Callable = lambda batch: batch
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self) -> None:
@@ -36,7 +43,9 @@ class ReplayBuffer(ForgeActor):
         self.buffer.append(episode)
 
     @endpoint
-    async def sample(self, curr_policy_version: int, batch_size: int | None = None):
+    async def sample(
+        self, curr_policy_version: int, batch_size: int | None = None
+    ) -> tuple[tuple[Any, ...], ...] | None:
         """Sample from the replay buffer.
 
         Args:
@@ -85,11 +94,18 @@ class ReplayBuffer(ForgeActor):
         self._evict(curr_policy_version)
 
     def _evict(self, curr_policy_version: int) -> None:
+        buffer_len_before_evict = len(self.buffer)
         self.buffer = [
             trajectory
             for trajectory in self.buffer
             if (curr_policy_version - trajectory.policy_version) <= self.max_policy_age
         ]
+        buffer_len_after_evict = len(self.buffer)
+
+        logger.debug(
+            f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
+            f"{buffer_len_before_evict - buffer_len_after_evict} episodes expired, {buffer_len_after_evict} episodes left"
+        )
 
     @endpoint
     async def _getitem(self, idx: int):
@@ -104,6 +120,7 @@ class ReplayBuffer(ForgeActor):
     async def clear(self) -> None:
         """Clear the replay buffer immediately - dropping all episodes."""
         self.buffer.clear()
+        logger.debug("replay buffer cleared")
 
     @endpoint
     async def state_dict(self) -> dict[str, Any]:

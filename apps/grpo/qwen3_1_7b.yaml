@@ -1,4 +1,5 @@
-# GRPO Training Configuration
+# Grouped Relative Policy Optimization (GRPO)
+# >>> python -m apps.grpo.qwen3_1_7b --config apps/grpo/qwen3_1_7b.yaml
 
 # Global configuration
 group_size: 8
@@ -6,6 +7,7 @@ batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
+off_by_n: 1 # Off by one by default
 
 # Dataset configuration
 dataset:
@@ -30,45 +32,99 @@ policy:
 
 # Trainer configuration
 trainer:
-  model_name: ${model}
-  learning_rate: 1e-5
-
-# Reference model configuration
-ref_model:
-  model_name: ${model}
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: ${batch_size}
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 1000000
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 500
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${batch_size}
-  max_policy_age: 1 # Async by 1
-  dp_size: 1
+  max_policy_age: ${off_by_n}
+  dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
 
+# Reference model configuration
+ref_model:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  training:
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+
+# All resource allocations
 services:
   dataset:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   policy:
-    procs_per_replica: 1
+    procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   trainer:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: true
   replay_buffer:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   ref_model:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: true
   compute_advantages:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false
   reward_actor:
-    procs_per_replica: 1
+    procs: 1
     num_replicas: 1
     with_gpus: false

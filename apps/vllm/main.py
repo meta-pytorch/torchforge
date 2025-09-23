@@ -17,8 +17,8 @@ from forge.actors.policy import Policy
 from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
+from forge.data_models.completion import Completion
 from omegaconf import DictConfig
-from vllm.outputs import RequestOutput
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
 os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
@@ -33,23 +33,32 @@ async def run(cfg: DictConfig):
     print("Spawning service...")
     policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
-    try:
-        async with policy.session():
-            print("Requesting generation...")
-            response_output: RequestOutput = await policy.generate.choose(prompt=prompt)
+    import time
 
-            print("\nGeneration Results:")
-            print("=" * 80)
-            for batch, response in enumerate(response_output.outputs):
-                print(f"Sample {batch + 1}:")
-                print(f"User: {prompt}")
-                print(f"Assistant: {response.text}")
-                print("-" * 80)
+    print("Requesting generation...")
+    n = 100
+    start = time.time()
+    response_outputs: list[Completion] = await asyncio.gather(
+        *[policy.generate.choose(prompt=prompt) for _ in range(n)]
+    )
+    end = time.time()
 
-    finally:
-        print("\nShutting down...")
-        await policy.shutdown()
-        await shutdown()
+    print(f"Generation of {n} requests completed in {end - start:.2f} seconds.")
+    print(
+        f"Generation with procs {cfg.services.policy.procs}, replicas {cfg.services.policy.num_replicas}"
+    )
+
+    print(f"\nGeneration Results (last one of {n} requests):")
+    print("=" * 80)
+    for batch, response in enumerate(response_outputs[-1]):
+        print(f"Sample {batch + 1}:")
+        print(f"User: {prompt}")
+        print(f"Assistant: {response.text}")
+        print("-" * 80)
+
+    print("\nShutting down...")
+    await policy.shutdown()
+    await shutdown()
 
 
 @parse
