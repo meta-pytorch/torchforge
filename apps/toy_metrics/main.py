@@ -91,7 +91,7 @@ async def main(mode: str = "wandb_all_log_all"):
         await trainer.train_step.call(i)
         for sub in range(3):
             await generator.generate_step.call(i, sub)
-        await global_logger.flush_global.call_one(i)
+        await global_logger.flush.call_one(i)
 
     await global_logger.shutdown.call_one()
 

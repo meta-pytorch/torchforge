@@ -132,7 +132,7 @@ class GlobalLoggingActor(Actor):
         self.fetchers[name] = fetcher
 
     @endpoint
-    async def flush_global(self, step: int):
+    async def flush(self, step: int):
         """
         Triggers parallel flush/reset on all registered fetchers. Per-rank MetricCollectors
         log to local backends and return states if needed for cross-rank reduction.
