@@ -357,6 +357,7 @@ class Policy(PolicyInterface):
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
+            # the results of `execute_model` is gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
