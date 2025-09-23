@@ -61,7 +61,7 @@ html_theme_options = {
     "navigation_with_keys": False,
     "show_lf_header": False,
     "show_lf_footer": False,
-    "analytics_id": "GTM-T8XT4PS",
+    "analytics_id": "GTM-NPLPKN5G",
     "logo": {
         "text": "Home",
     },

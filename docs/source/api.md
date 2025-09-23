@@ -35,13 +35,3 @@ api_controller
 api_cli
 api_util
 ```
-
-## Quick Reference
-
-For developers looking for specific functionality:
-
-- **Getting started with training**: See [Actors](api_actors.md) for policy actors, trainers, and replay buffers
-- **Working with data**: See [Data](api_data.md) for datasets, data models, and utilities
-- **Custom loss functions**: See [Losses](api_losses.md) for GRPO and REINFORCE implementations
-- **Distributed training**: See [Controller](api_controller.md) for orchestration and resource management
-- **Command line tools**: See [CLI](api_cli.md) for available commands and configuration options
