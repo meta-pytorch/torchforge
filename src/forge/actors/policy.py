@@ -19,6 +19,15 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -42,15 +51,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -419,8 +419,8 @@ class Policy(PolicyInterface):
                     prompt=to_prompt(original_prompt),
                     stop_reason=output.finish_reason,
                     text=output.text,
-                    prompt_ids=torch.tensor(prompt_token_ids),
-                    token_ids=torch.tensor(output.token_ids),
+                    prompt_ids=torch.LongTensor(prompt_token_ids),
+                    token_ids=torch.LongTensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                 )
             )
@@ -447,7 +447,7 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = False
 
     @endpoint
     async def setup(self):

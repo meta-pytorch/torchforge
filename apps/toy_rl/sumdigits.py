@@ -174,39 +174,6 @@ class Episode:
         return self.loss_mask * self.advantage
 
 
-@dataclass
-class Group:
-    group_id: str
-    episodes: list[Episode]
-
-    @classmethod
-    def new_group(
-        cls,
-        group_id: int,
-        group_size: int,
-        request: str,
-        policy_version: int,
-        pad_id: int,
-        request_len: int,
-        response_len: int,
-        target: Any = None,
-    ):
-        episodes = []
-        for _ in range(group_size):
-            episodes.append(
-                Episode(
-                    episode_id=str(uuid.uuid4()),
-                    request=request,
-                    policy_version=policy_version,
-                    pad_id=pad_id,
-                    request_len=request_len,
-                    response_len=response_len,
-                    target=target,
-                )
-            )
-        return cls(str(group_id), episodes)
-
-
 class RefModel(ForgeActor):
     def __init__(self, model_name, device: torch.device | None = None):
         super().__init__()
@@ -246,6 +213,45 @@ class RefModel(ForgeActor):
         return selective_log_softmax(logits, target_ids).squeeze(0)
 
 
+def to_batch(episodes: list[Episode], device: torch.device):
+    pad_id = episodes[0].pad_id
+    batch = {}
+
+    # Calculate batch maximum length
+    max_seq_len = max(ep.max_seq_len - 1 for ep in episodes)
+    batch_input_ids = []
+    batch_target_ids = []
+    batch_loss_masks = []
+    batch_weights = []
+    batch_ref_logprobs = []
+    for episode in episodes:
+        input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
+        target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
+        loss_mask = pad_sequence(episode.loss_mask, max_seq_len, 0.0)
+        weights = pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
+        ref_logprobs = episode.ref_logprobs
+
+        # Exclude padded response tokens from loss
+        valid_mask = target_ids != pad_id
+        loss_mask = loss_mask * valid_mask.float()
+        weights = weights * valid_mask.float()
+
+        batch_input_ids.append(input_ids)
+        batch_target_ids.append(target_ids)
+        batch_loss_masks.append(loss_mask)
+        batch_weights.append(weights)
+        batch_ref_logprobs.append(ref_logprobs)
+
+    # Stack into batched tensors
+    batch["input_ids"] = torch.stack(batch_input_ids).to(device)
+    batch["target_ids"] = torch.stack(batch_target_ids).to(device)
+    batch["loss_masks"] = torch.stack(batch_loss_masks).to(device)
+    batch["weights"] = torch.stack(batch_weights).to(device)
+    batch["ref_logprobs"] = torch.stack(batch_ref_logprobs).to(device)
+
+    return batch
+
+
 @dataclass
 class Trainer(ForgeActor):
     """Reinforce Loss Trainer implementation for policy optimization."""
@@ -280,55 +286,25 @@ class Trainer(ForgeActor):
     def train_step(self, episodes: list[Episode]) -> float:
         pad_id = episodes[0].pad_id
 
-        # Calculate batch maximum length
-        max_seq_len = max(ep.max_seq_len - 1 for ep in episodes)
-        batch_input_ids = []
-        batch_target_ids = []
-        batch_loss_masks = []
-        batch_weights = []
-        batch_sampling_log_probs = []
-        batch_ref_logprobs = []
-        for episode in episodes:
-            input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
-            target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
-            loss_mask = pad_sequence(episode.loss_mask, max_seq_len, 0.0)
-            sampling_log_probs = pad_sequence(
-                episode.sampling_log_probs, max_seq_len, 0.0
-            )
-            weights = pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
-            ref_logprobs = episode.ref_logprobs
-
-            # Exclude padded response tokens from loss
-            valid_mask = target_ids != pad_id
-            loss_mask = loss_mask * valid_mask.float()
-            weights = weights * valid_mask.float()
-            sampling_log_probs = sampling_log_probs * valid_mask.float()
-
-            batch_input_ids.append(input_ids)
-            batch_target_ids.append(target_ids)
-            batch_loss_masks.append(loss_mask)
-            batch_weights.append(weights)
-            batch_sampling_log_probs.append(sampling_log_probs)
-            batch_ref_logprobs.append(ref_logprobs)
-
-        # Stack into batched tensors
-        input_ids = torch.stack(batch_input_ids).to(self.device)
-        target_ids = torch.stack(batch_target_ids).to(self.device)
-        loss_masks = torch.stack(batch_loss_masks).to(self.device)
-        weights = torch.stack(batch_weights).to(self.device)
-        sampling_log_probs = torch.stack(batch_sampling_log_probs).to(self.device)
-        ref_logprobs = torch.stack(batch_ref_logprobs).to(self.device)
+        batch = to_batch(episodes, self.device)
 
         # Create attention mask
-        attention_mask = input_ids != pad_id
+        attention_mask = batch["input_ids"] != pad_id
 
         # Forward pass
-        logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+        logits = self.model(
+            input_ids=batch["input_ids"], attention_mask=attention_mask
+        ).logits
 
-        trainer_log_probs = selective_log_softmax(logits, target_ids)
+        trainer_log_probs = selective_log_softmax(logits, batch["target_ids"])
         # Compute loss only on response tokens
         # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
-        loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
+        loss = self.loss(
+            trainer_log_probs,
+            batch["ref_logprobs"],
+            batch["weights"],
+            batch["loss_masks"],
+        )
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -474,35 +450,37 @@ async def main(cfg: DictConfig):
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.choose(prompt)
             version = await policy.get_version.choose()
-            group = Group.new_group(
-                group_id=rollout_count,
-                group_size=group_size,
-                request=prompt,
-                policy_version=version,
-                pad_id=pad_id,
-                request_len=max_req_tokens,
-                response_len=max_res_tokens,
-                target=target,
-            )
 
-            # TODO: Parallelize the following calculation
-            for episode, response in zip(group.episodes, responses):
-                episode.request_tokens = response.prompt_ids
-                episode.response_tokens = response.token_ids
-                episode.response = response.text
-                episode.response_logprobs = response.logprobs
-                episode.ref_logprobs = await ref_model.forward.choose(episode)
-                episode.reward = await reward_actor.evaluate_response.choose(
+            _episodes = []
+            for response in responses:
+                reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
-                episode.advantage = episode.reward  # simple case for now
-            for episode in group.episodes:
+                _episode = Episode(
+                    episode_id=str(uuid.uuid4()),
+                    request=prompt,
+                    policy_version=version,
+                    pad_id=pad_id,
+                    request_len=max_req_tokens,
+                    response_len=max_res_tokens,
+                    target=target,
+                    request_tokens=response.prompt_ids,
+                    response_tokens=response.token_ids,
+                    response=response.text,
+                    response_logprobs=response.logprobs,
+                    advantage=reward,
+                    reward=reward,
+                )
+                _episode.ref_logprobs = await ref_model.forward.choose(_episode)
+                _episodes.append(_episode)
+
+            for episode in _episodes:
                 await replay_buffer.add.choose(episode)
             avg_response_len = (
-                sum(len(e.response_tokens) for e in group.episodes) / group_size
+                sum(len(e.response_tokens) for e in _episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            avg_reward = sum(e.reward for e in group.episodes) / group_size
+            avg_reward = sum(e.reward for e in _episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
-from forge.data_models.scored_completion import ScoredCompletion
+from forge.data_models.completion import Completion
 
 
 @dataclass
@@ -31,26 +31,108 @@ class Episode:
 
     # The log probabilities of the target tokens, for prompt part it's set to 0,
     # for generation part it's computed from the Generator/Sampler.
-    log_probs: Optional[torch.Tensor] = None
+    logprobs: Optional[torch.Tensor] = None
 
-    # TODO: add more fields as required
-    state: str = ""
+    # The reward score for this episode
+    reward: float = 0.0
+
+    # the pad_id token for the tokenizer
+    pad_id: int = 0
+
+    # The log probabilities of the target tokens, generated from the reference model
+    ref_logprobs: Optional[torch.Tensor] = None
+
+    # max sequence length of the episode
+    max_seq_len: int = 512
+
+    # Version of the policy this episode was generated from.
+    policy_version: int = 0
+
+    @property
+    def episode_ids(self) -> torch.Tensor:
+        """
+        Get complete episode trajectory as concatenated token sequence.
+
+        Returns:
+            torch.Tensor: Full sequence [request_tokens + response_tokens].
+                         Shape: [request_len + response_len]
+        """
+        return self.ids
+
+    @property
+    def input_ids(self) -> torch.Tensor:
+        """
+        Get model input tokens for next-token prediction.
+
+        Returns:
+            torch.Tensor: Episode trajectory with EOS truncated for model input.
+                         Shape: [max_seq_len - 1]
+        """
+        input_ids = self.episode_ids[:-1]  # truncate EOS
+        return input_ids
+
+    @property
+    def target_ids(self) -> torch.Tensor:
+        """
+        Get target tokens for next-token prediction training.
+
+        Returns:
+            torch.Tensor: Episode trajectory shifted by 1 position (BOS truncated).
+                         Aligned with input_ids for teacher forcing.
+                         Shape: [max_seq_len - 1]
+        """
+        target_ids = self.episode_ids[1:]  # truncate BOS
+        return target_ids
+
+    @property
+    def loss_mask(self) -> torch.Tensor:
+        """
+        Get mask for computing loss only on response tokens.
+
+        Returns:
+            torch.Tensor: Binary mask (0 for prompt, 1 for response) shifted to align
+                         with target_ids. Shape: [max_seq_len - 1]
+        """
+        loss_mask = self.mask[1:]  # Shift to align with target_ids (truncates BOS)
+        return loss_mask
+
+    @property
+    def weighted_advantages(self) -> torch.Tensor:
+        """
+        Get advantages weighted by loss mask for REINFORCE training.
+
+        Returns:
+            torch.Tensor: Advantage values masked to response tokens only.
+                         Zero for prompt positions, advantage value for response positions.
+                         Shape: [max_seq_len - 1]
+        """
+        weights = self.weights[1:]  # Shift to align with target_ids (truncates BOS)
+        return weights
 
 
-def from_scored_completion(scored_completion: ScoredCompletion) -> Episode:
+def from_completion(
+    completion: Completion,
+    policy_verson,
+    reward: float = 0.0,
+    pad_id: int = 0,
+    max_seq_len: int = 512,
+    ref_logprobs: Optional[torch.Tensor] = None,
+) -> Episode:
     """Converts a ScoredCompletion to an Episode."""
-    prompt_ids = scored_completion.completion.prompt_ids
-    token_ids = scored_completion.completion.token_ids
-    log_probs = scored_completion.completion.log_probs
+    prompt_ids = completion.prompt_ids
+    token_ids = completion.token_ids
+    log_probs = completion.logprobs
     ids = torch.cat([prompt_ids, token_ids])
-    mask = torch.cat(
+    loss_mask = torch.cat(
         [
-            torch.zeros(prompt_ids.shape, dtype=torch.float32),
-            torch.ones_like(token_ids, dtype=torch.float32),
+            torch.zeros(
+                len(prompt_ids), dtype=torch.float32
+            ),  # Don't compute loss on prompt
+            torch.ones(len(token_ids), dtype=torch.float32),  # Compute loss on response
         ]
     )
-    advantage = scored_completion.score
-    weights = mask * advantage
+    advantage = reward
+    weights = loss_mask * advantage
     log_probs = torch.cat(
         [
             torch.zeros(prompt_ids.shape, dtype=torch.float32),
@@ -58,11 +140,13 @@ def from_scored_completion(scored_completion: ScoredCompletion) -> Episode:
             log_probs,
         ]
     )
-    return Episode(ids=ids, mask=mask, weights=weights, log_probs=log_probs)
-
-
-def from_scored_completions(
-    scored_completions: Sequence[ScoredCompletion],
-) -> Sequence[Episode]:
-    """Converts a sequence of ScoredCompletion to a sequence of Episodes."""
-    return [from_scored_completion(sc) for sc in scored_completions]
+    return Episode(
+        ids=ids,
+        mask=loss_mask,
+        weights=weights,
+        logprobs=log_probs,
+        pad_id=pad_id,
+        max_seq_len=max_seq_len,
+        ref_logprobs=ref_logprobs,
+        policy_version=policy_verson,
+    )
