@@ -177,7 +177,7 @@ class Provisioner:
                 # We can't currently do this because HostMesh only supports single
                 # proc_mesh creation at the moment. This will be possible once
                 # we have "proper HostMesh support".
-                def bootstrap(gpu_ids: list[int]):
+                def bootstrap(gpu_ids: list[str]):
                     # This works for single host, needed for vLLM currently.
                     import os
 
