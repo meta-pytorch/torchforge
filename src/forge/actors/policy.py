@@ -20,6 +20,7 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
+from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
@@ -138,6 +139,7 @@ class Policy(PolicyInterface):
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: "PolicyWorker" = None
     policy_version: int | None = None
+    use_vllm_builtin_loading: bool = False
 
     def __post_init__(self):
         super().__init__()
@@ -388,7 +390,10 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.call(version=policy_version)
+        if self.use_vllm_builtin_loading:
+            await self.policy_worker._update_hf_nonsharded.call(version=policy_version)
+        else:
+            await self.policy_worker._update_sharded.call(version=policy_version)
         self.policy_version = policy_version
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
@@ -500,7 +505,17 @@ class PolicyWorker(ForgeActor):
             )
 
     @endpoint
-    async def update(self, version: int):
+    async def _update_sharded(self, version: int):
+        """Update model weights by reading state dict from torchstore"""
+        key = f"{self.state_dict_key}{DELIM}{version}"
+        model = self.worker.model_runner.model
+        current_state_dict = model.state_dict()
+        start = time.time()
+        await self._load_tensor_parallel_state_dict(current_state_dict, version)
+        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
+
+    @endpoint
+    async def _update_hf_nonsharded(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         model = self.worker.model_runner.model
         prefix = get_param_prefix(version)
