@@ -390,6 +390,11 @@ if __name__ == "__main__":
 
     @parse
     def _main(cfg):
+        # import pickle
+        # with open("../qwen3_multinode.pkl", "wb") as fp:
+        #     pickle.dump(cfg, fp)
+
+        # return
         asyncio.run(main(cfg))
 
     _main()  # @parse grabs the cfg from CLI

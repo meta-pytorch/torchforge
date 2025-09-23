@@ -12,6 +12,7 @@ import sys
 import time
 from collections.abc import Mapping
 from copy import copy
+from typing import Optional
 from dataclasses import asdict, dataclass, field, fields
 
 import torch
@@ -166,10 +167,10 @@ class Policy(PolicyInterface):
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
-        vllm_config = engine_config.create_vllm_config()
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+            "vllm_worker", PolicyWorker,
         )
+        await workers.create_config.call(engine_config=engine_config)
 
         if isinstance(sampling_config, Mapping):
             sampling_config = SamplingConfig(**sampling_config)
@@ -399,9 +400,14 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
-    vllm_config: VllmConfig
+    vllm_config: VllmConfig = None
     state_dict_key: str = "model_state_dict"
+    checkpoint_path: str = ""
     use_dcp: bool = True
+
+    @endpoint
+    def create_config(self, engine_config) -> None:
+        self.vllm_config = engine_config.create_vllm_config()
 
     @endpoint
     async def setup(self):
@@ -423,7 +429,7 @@ class PolicyWorker(ForgeActor):
             self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
 
-        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        checkpoint_id = f"{self.checkpoint_path}/{self.state_dict_key}{DELIM}{version}"
         dcp_metadata = None
         if self.use_dcp:
             dcp_metadata = await ts.get(checkpoint_id)

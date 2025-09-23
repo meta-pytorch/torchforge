@@ -19,8 +19,10 @@ dataset:
 
 # Policy configuration
 policy:
+  checkpoint_path: checkpoints
   engine_config:
-    model: ${model}
+    tokenizer: /home/lpasqualin/titan_manifold/tree/forge/qwen3-1-7b-tokenizer
+    model: /home/lpasqualin/titan_manifold/tree/qwen3/Qwen3-1-7B
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -35,7 +37,7 @@ trainer:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
+    hf_assets_path: /home/lpasqualin/titan_manifold/tree/qwen3/Qwen3-1-7B/
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -47,7 +49,7 @@ trainer:
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
-    dtype: bfloat16
+    # dtype: bfloat16
   compile:
     enable: false
   parallelism:
@@ -60,11 +62,12 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: hf://${model}
+    initial_load_path: /home/lpasqualin/titan_manifold/tree/qwen3/Qwen3-1-7B/
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
+    folder: checkpoints
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
@@ -80,9 +83,9 @@ ref_model:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
-  training:
-    dtype: bfloat16
+    hf_assets_path: /home/lpasqualin/titan_manifold/tree/qwen3/Qwen3-1-7B/
+  # training:
+  #   dtype: bfloat16
   compile:
     enable: false
   parallelism:
@@ -93,7 +96,7 @@ ref_model:
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    initial_load_path: hf://${model}
+    initial_load_path: /home/lpasqualin/titan_manifold/tree/qwen3/Qwen3-1-7B/
     initial_load_in_hf: true
 
 # All resource allocations

@@ -95,6 +95,22 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     async def setup(self):
+
+        import socket
+        print(f"HOST= {socket.gethostname()=}")
+
+        # Print all files in the specified directory
+        import glob
+        snapshot_dir = "/mnt/mffuse/qwen3/Qwen3-1-7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+        files = glob.glob(f"{snapshot_dir}/**", recursive=True)
+        print("Files in snapshot directory:")
+        for f in files:
+            print(f"FILE= {f=}")
+        
+        if not files:
+            raise RuntimeError("No files found in snapshot directory")
+
+
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         for key in {"loss", "state_dict_key", "use_dcp"}:
@@ -220,7 +236,7 @@ class RLTrainer(ForgeActor):
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
 
-        key = f"{self.state_dict_key}{DELIM}{policy_version}"
+        key = f"{self.checkpoint.folder}/{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         if self.use_dcp:
             metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
