@@ -16,6 +16,14 @@ from typing import Callable
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
 
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
@@ -35,9 +43,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -289,6 +294,15 @@ class RLTrainer(ForgeActor):
         end_time = time.time()
 
         logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
+
+    @endpoint
+    async def push_weights_hf_nonsharded(
+        self, hf_state_dict, policy_version: int
+    ) -> None:
+        """Push weights to torchstore in HF format, non-sharded."""
+        for name, param in hf_state_dict.items():
+            key = get_param_key(policy_version, name)
+            await ts.put(key, param)
 
     @endpoint
     async def cleanup(self) -> None:
