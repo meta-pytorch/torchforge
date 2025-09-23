@@ -108,6 +108,11 @@ class RLTrainer(ForgeActor):
 
         """
         super().__init__()
+
+        if self.use_dcp:
+            # DCP specific optimization
+            torch.serialization.set_crc32_options(False)
+
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
