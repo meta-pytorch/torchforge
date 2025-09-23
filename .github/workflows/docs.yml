@@ -12,42 +12,51 @@ jobs:
     name: Build Documentation
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      matrix:
-        python-version: ['3.10', '3.11', '3.12']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
           auto-update-conda: true
           miniconda-version: "latest"
           activate-environment: test
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.10'
+          auto-activate-base: false
+      - name: Verify conda environment
+        shell: bash -l {0}
+        run: |
+          conda info
+          which python
+          which conda
       - name: Update pip
+        shell: bash -l {0}
         run: python -m pip install --upgrade pip
       - name: Install pytorch
+        shell: bash -l {0}
         run: python -m pip install torch==2.9.0.dev20250826 --extra-index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Install monarch
+        shell: bash -l {0}
         run: python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
       - name: Install torchforge
+        shell: bash -l {0}
         run: ./scripts/install.sh
       - name: Install docs dependencies
+        shell: bash -l {0}
         run: python -m pip install -r docs/requirements.txt
       - name: Build docs
+        shell: bash -l {0}
         working-directory: docs
-        run: make -C docs html SPHINXOPTS='-W'
+        run: make html SPHINXOPTS='-W'
       - name: Upload docs artifact
         uses: actions/upload-artifact@v4
         with:
           name: docs
           path: docs/_build/html/
 
-doc-preview:
+  doc-preview:
     runs-on: [ubuntu-latest]
     needs: build-docs
     if: ${{ github.event_name == 'pull_request' }}
@@ -73,7 +82,7 @@ doc-preview:
           path: docs
           s3-prefix: meta-pytorch/forge/${{ github.event.pull_request.number }}
 
-    deploy-docs:
+  deploy-docs:
         needs: build-docs
         if: github.ref == 'refs/heads/main'
         permissions:
