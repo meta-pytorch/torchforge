@@ -76,7 +76,7 @@ async def main(mode: str = "wandb_all_log_all"):
     logging_config = {
         "backends": backends,
     }
-    service_config = {"procs_per_replica": 2, "num_replicas": 2, "with_gpus": False}
+    service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
 
     # Spawn services first (triggers registrations via provisioner hook)
     trainer = await TrainActor.options(**service_config).as_service()
