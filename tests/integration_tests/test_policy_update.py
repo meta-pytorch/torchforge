@@ -13,17 +13,16 @@ import pytest_asyncio
 
 import torch
 import torchstore as ts
-
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
 
 from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig
 
 from forge.controller.service.service import uuid
-from forge.data.sharding import VLLMSharding
 
-from monarch.actor import endpoint
+from monarch.actor import current_rank, endpoint
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
+from torch.distributed.tensor import DTensor, Replicate
 
 
 requires_cuda = pytest.mark.skipif(
@@ -38,8 +37,6 @@ logger.setLevel(logging.INFO)
 
 
 # Run tests: pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::<test_name>
-
-TEST_MULTIPLIER = 1.5
 
 
 def get_configs(
@@ -66,31 +63,21 @@ def get_configs(
 class MockRLTrainer(RLTrainer):
     @endpoint
     async def mock_train_step(self):
-        """Mock train step. This simply multiplies the model weights by TEST_MULTIPLIER"""
-        self.engine.optimizers.step()
-        self.engine.optimizers.zero_grad()
-        self.engine.lr_schedulers.step()
-
-        self.current_step += 1
-        self.engine.checkpointer.save(
-            curr_step=self.current_step,
-            last_step=self.current_step == self.num_training_steps,
-        )
-
-        sd = self.engine.checkpointer.states["model"].state_dict()
-        sd, _ = flatten_state_dict(sd)
-        logger.info(f"[MockRLTrainer] mock_train_step(): sd = {sd}")
-        for _, param in sd.items():
-            if not torch.is_floating_point(param):
-                logger.info(
-                    f"[MockRLTrainer] mock_train_step(): skipping non-float param {param}"
-                )
-                continue
-            param *= 1.5
+        """Mock train step. This simply sets all model weights to zero."""
+        for model_part in self.engine.model_parts:
+            sd = model_part.state_dict()
+            for k in sd.keys():
+                if not torch.is_floating_point(sd[k]):
+                    logger.info(
+                        f"[MockRLTrainer] mock_train_step(): skipping non-float param {k}"
+                    )
+                    continue
+                sd[k] *= 0.0
 
 
 # exceptions sometimes are not propogated in monarch, do it manually
 def validate_fn(prev_params, curr_model, logger) -> Exception | None:
+    """Validate that current parameters are the same as prev_params."""
     verified = set()
     skipped = set()
     logger.info(
@@ -105,12 +92,45 @@ def validate_fn(prev_params, curr_model, logger) -> Exception | None:
         try:
             assert name in prev_params, f"Param {name} not found in prev_params"
             assert torch.allclose(
-                prev_params[name] * TEST_MULTIPLIER, param.cpu(), atol=1e-3, rtol=1e-2
+                prev_params[name], param.cpu(), atol=1e-3, rtol=1e-2
             ), (
                 f"current param {name} does not match expected value; "
                 f"previous param ({prev_params[name].size()})= {prev_params[name]}; "
-                f"expected = {prev_params[name] * TEST_MULTIPLIER} vs got = {param.cpu().size()} {param.cpu()}"
+                f"expected = {prev_params[name]} vs got = {param.cpu().size()} {param.cpu()}"
             )
+            verified.add(name)
+        except Exception as e:
+            # logger.error(f"Validation failed with exception: {e}")
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
+
+
+# exceptions sometimes are not propogated in monarch, do it manually
+def validate_fn_all_zeros(prev_params, curr_model, logger) -> Exception | None:
+    """Validate all parameters are set to zero. prev_params is actually not used."""
+    _ = prev_params
+    verified = set()
+    skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() =  {curr_model.named_parameters()}"
+    )
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
+            param = param.cpu()
+            assert torch.allclose(
+                torch.zeros_like(param), param, atol=1e-4, rtol=1e-3
+            ), "param {name} is not zero."
             verified.add(name)
         except Exception as e:
             # logger.error(f"Validation failed with exception: {e}")
@@ -170,13 +190,12 @@ class TestWeightSync:
         Test the weight synchronization process between RLTrainer and Policy.
 
         This test performs the following steps:
-        1. Loads weights from a HuggingFace (HF) model into an in-memory state dictionary, serving as the source of truth.
-        2. Initializes RLTrainer and applies a mock training step that multiplies all model weights by TEST_MULTIPLIER.
-        3. Pushes the updated weights to torchstore.
-        4. Initializes a Policy instance and calls update_weights() to load weights from torchstore.
-        5. Validates that the policy's weights match the expected values (original weights multiplied by TEST_MULTIPLIER).
+        - Initialize trainer and push weights v0 (original huggingface ckpt)
+        - Step the trainer, setting all weights to zero and push weights v1
+        - Load weights v0 and check the policy has all zero weights
+        - Load weights v1 and check the policy has all the weights back
         """
-        trainer_worker_size = 2
+        trainer_worker_size = 1
         policy_worker_size = 1
         tp_size = 1
 
@@ -196,15 +215,21 @@ class TestWeightSync:
             ]
         )
 
-        policy_version = uuid.uuid4().int
+        v0 = uuid.uuid4().int
+        v1 = v0 + 1
 
-        # Mock train step multiplies everything by TEST_MULTIPLIER
+        await rl_trainer.push_weights.call(policy_version=v0)
+        # Setting everything to zero
         await rl_trainer.mock_train_step.call()
-
-        await rl_trainer.push_weights.call(policy_version=policy_version)
+        await rl_trainer.push_weights.call(policy_version=v1)
         await policy._test_save_model_params.call()
-        await policy.update_weights.call(policy_version=policy_version)
-
+        await policy.update_weights.call(policy_version=v1)
+        all_errs = await policy._test_validate_model_params.call(validate_fn_all_zeros)
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+        # Reloading v0, getting back original weights
+        await policy.update_weights.call(policy_version=v0)
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
@@ -219,10 +244,10 @@ class TestWeightSync:
         Test the weight synchronization process between RLTrainer and Policy.
 
         This test performs the following steps:
-        - Initializes RLTrainer and applies a mock training step that multiplies all model weights by TEST_MULTIPLIER.
-        - Pushes the updated weights to torchstore.
-        - Initializes a Policy instance and calls update_weights() to load weights from torchstore.
-        - Validates that the policy's weights match the expected values (original weights multiplied by TEST_MULTIPLIER).
+        - Initialize trainer and push weights v0 (original huggingface ckpt)
+        - Step the trainer, setting all weights to zero and push weights v1
+        - Load weights v0 and check the policy has all zero weights
+        - Load weights v1 and check the policy has all the weights back
         """
         # test configs/paralleism
         trainer_worker_size = 2
@@ -250,15 +275,21 @@ class TestWeightSync:
             ]
         )
 
-        policy_version = uuid.uuid4().int
+        v0 = uuid.uuid4().int
+        v1 = v0 + 1
 
-        # Mock train step multiplies everything by TEST_MULTIPLIER
+        await rl_trainer.push_weights.call(policy_version=v0)
+        # Setting everything to zero
         await rl_trainer.mock_train_step.call()
-
-        await rl_trainer.push_weights.call(policy_version=policy_version)
+        await rl_trainer.push_weights.call(policy_version=v1)
         await policy._test_save_model_params.call()
-        await policy.update_weights.call(policy_version=policy_version)
-
+        await policy.update_weights.call(policy_version=v1)
+        all_errs = await policy._test_validate_model_params.call(validate_fn_all_zeros)
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+        # Reloading v0, getting back original weights
+        await policy.update_weights.call(policy_version=v0)
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
