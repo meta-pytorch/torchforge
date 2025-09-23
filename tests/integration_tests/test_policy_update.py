@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import logging
 from typing import Callable
 
@@ -66,8 +67,12 @@ class MockRLTrainer(RLTrainer):
         """Mock train step. This simply multiplies the model weights by 0.1."""
         sd = self.engine.checkpointer.states["model"].state_dict()
         sd, _ = flatten_state_dict(sd)
+        logger.info(f"[MockRLTrainer] mock_train_step(): sd = {sd}")
         for _, param in sd.items():
             if not torch.is_floating_point(param):
+                logger.info(
+                    f"[MockRLTrainer] mock_train_step(): skipping non-float param {param}"
+                )
                 continue
             param.mul_(0.1)
 
@@ -76,26 +81,23 @@ class MockRLTrainer(RLTrainer):
 def validate_fn(prev_params, curr_model, logger) -> Exception | None:
     verified = set()
     skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() =  {curr_model.named_parameters()}"
+    )
     try:
-        params = curr_model.named_parameters()
-        logger.info(
-            f"Validating model params, # of params {len(params)}, all params {params}"
-        )
         for name, param in curr_model.named_parameters():
             if not torch.is_floating_point(param):
                 logger.info(f"Skipping non-float param {name}")
                 skipped.add(name)
                 continue
-            assert name in prev_params
-            assert torch.allclose(prev_params[name] * 0.1, param.cpu())
+            assert name in prev_params, f"Param {name} not found in prev_params"
+            assert torch.allclose(
+                prev_params[name] * 0.1, param.cpu()
+            ), f"current param {name} does not match expected value"
             verified.add(name)
     except Exception as e:
+        logger.error(f"Validation failed with exception: {e}")
         return e
-    finally:
-        logger.info(
-            f"Skipped non-float parameters: {skipped}. Successfully verified {len(verified)} parameters: {verified}"
-        )
-        return None
 
 
 class TestWeightSync:
@@ -150,33 +152,39 @@ class TestWeightSync:
         4. Initializes a Policy instance and calls update_weights() to load weights from torchstore.
         5. Validates that the policy's weights match the expected values (original weights multiplied by 0.1).
         """
-        worker_size = 1
-        # 1. Initialize TS
+        trainer_worker_size = 2
+        policy_worker_size = 1
+        tp_size = 1
+
         await ts.initialize()
-        # 2. Trainer push
-        rl_trainer = await MockRLTrainer.options(
-            procs=worker_size, with_gpus=True, num_replicas=1
-        ).as_service(**trainer_cfg)
+
+        policy_config, service_config = get_configs(
+            worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
+        )
+        policy, rl_trainer = await asyncio.gather(
+            *[
+                Policy.options(service_config=service_config).as_service(
+                    **policy_config
+                ),
+                MockRLTrainer.options(
+                    procs=trainer_worker_size, with_gpus=True, num_replicas=1
+                ).as_service(**trainer_cfg),
+            ]
+        )
+
+        policy_version = uuid.uuid4().int
 
         # Mock train step multiplies everything by 0.1
         await rl_trainer.mock_train_step.call()
 
-        await rl_trainer.push_weights.choose(policy_version=0)
-        # 3. Policy pull weights
-        policy_config, service_config = get_configs(
-            worker_size=worker_size, tp_size=worker_size, model_name=self.model
-        )
-        policy = await Policy.options(service_config=service_config).as_service(
-            **policy_config
-        )
+        await rl_trainer.push_weights.call(policy_version=policy_version)
         await policy._test_save_model_params.call()
-        await policy.update_weights.call(policy_version=0)
+        await policy.update_weights.call(policy_version=policy_version)
 
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
-                if e:
-                    raise e
+                assert not e, f"Validation failed with exception: {e}"
 
         await ts.shutdown()
 
@@ -204,31 +212,32 @@ class TestWeightSync:
 
         await ts.initialize()
 
-        rl_trainer = await MockRLTrainer.options(
-            procs=trainer_worker_size, with_gpus=True, num_replicas=1
-        ).as_service(**trainer_cfg_tp)
-
-        await rl_trainer.push_weights.call(policy_version=0)
-
         policy_config, service_config = get_configs(
             worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
         )
-        policy = await Policy.options(service_config=service_config).as_service(
-            **policy_config
+        policy, rl_trainer = await asyncio.gather(
+            *[
+                Policy.options(service_config=service_config).as_service(
+                    **policy_config
+                ),
+                MockRLTrainer.options(
+                    procs=trainer_worker_size, with_gpus=True, num_replicas=1
+                ).as_service(**trainer_cfg_tp),
+            ]
         )
+
+        policy_version = uuid.uuid4().int
 
         # Mock train step multiplies everything by 0.1
         await rl_trainer.mock_train_step.call()
 
-        await rl_trainer.push_weights.choose(policy_version=0)
-
+        await rl_trainer.push_weights.call(policy_version=policy_version)
         await policy._test_save_model_params.call()
-        await policy.update_weights.call(policy_version=0)
+        await policy.update_weights.call(policy_version=policy_version)
 
         all_errs = await policy._test_validate_model_params.call(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
-                if e:
-                    raise e
+                assert not e, f"Validation failed with exception: {e}"
 
         await ts.shutdown()
