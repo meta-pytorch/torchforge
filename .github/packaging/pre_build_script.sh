@@ -11,7 +11,8 @@ TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
 WHEEL_DIR="${REPOSITORY}/dist"
 
-
+mkdir -p $BUILD_DIR
+mkdir -p $WHEEL_DIR
 echo "build dir is $BUILD_DIR"
 echo "wheel dir is $WHEEL_DIR"
 

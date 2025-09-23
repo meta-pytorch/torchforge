@@ -22,6 +22,7 @@ jobs:
       test-infra-ref: main
       with-cuda: enable
       with-rocm: disable
+      with-cpu: disable
       python-versions: '["3.10", "3.11", "3.12"]'
   build:
     needs: generate-matrix
