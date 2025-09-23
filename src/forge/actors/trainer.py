@@ -249,6 +249,7 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
+        start_time = time.perf_counter()
         # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
@@ -267,14 +268,17 @@ class RLTrainer(ForgeActor):
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
         )
-
+        conversion_time = time.perf_counter()
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
-        start_time = time.time()
         if self.use_dcp:
-
             # TODO - DCP should probably be being saved to NFS explicitly?
             # Right now it will only save everything locally
-            metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
+            storage_writer = torch.distributed.checkpoint.FileSystemWriter(
+                key, single_file_per_rank=False, thread_count=8
+            )
+            metadata = dcp.save(
+                storage_writer=storage_writer, state_dict=vllm_ready_hf_sd
+            )
             await ts.put(key, metadata)
 
             # Delete old weight versions if they exist
@@ -286,9 +290,11 @@ class RLTrainer(ForgeActor):
                 )
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
-        end_time = time.time()
-
-        logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
+        end_time = time.perf_counter()
+        logger.info(
+            f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
+            f"(to_vllm: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
+        )
 
     @endpoint
     async def cleanup(self) -> None:
