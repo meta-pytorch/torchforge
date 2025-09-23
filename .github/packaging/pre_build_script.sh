@@ -31,13 +31,31 @@ build_vllm() {
 }
 
 build_monarch() {
+    # Get Rust build related pieces
+    if ! command -v rustup &> /dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    fi
+
+    rustup toolchain install nightly
+    rustup default nightly
+
+    if command -v dnf &>/dev/null; then
+        sudo dnf install -y clang-devel libnccl-devel \
+            libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y clang libunwind-dev \
+            libibverbs-dev librdmacm-dev
+    fi
+
     cd "$BUILD_DIR"
     git clone https://github.com/meta-pytorch/monarch.git
     cd "$BUILD_DIR/monarch"
     git checkout $MONARCH_COMMIT
 
     pip install -r build-requirements.txt
-    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
+    USE_TENSOR_ENGINE=1 pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
 build_torchtitan() {
