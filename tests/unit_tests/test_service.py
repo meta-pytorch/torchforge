@@ -69,6 +69,7 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
         idx=idx,
         proc_config=ProcessConfig(),
         actor_def=Counter,
+        actor_args=(),
         actor_kwargs={},
     )
     replica.state = ReplicaState.HEALTHY if healthy else ReplicaState.UNHEALTHY
