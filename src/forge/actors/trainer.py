@@ -7,6 +7,7 @@
 import logging
 import math
 import os
+import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -39,7 +40,46 @@ from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+
+
+def cleanup_old_weight_versions(
+    state_dict_key: str,
+    delim: str,
+    current_policy_version: int,
+) -> None:
+    """Delete old weight versions, keeping only current and N-1 versions.
+
+    TODO - issues/194: provide a more robust way to handle eviction.
+
+    Args:
+        state_dict_key: The base key for state dict storage
+        delim: The delimiter used between key and version
+        current_policy_version: The current policy version to keep
+    """
+    if current_policy_version <= 1:
+        return  # No cleanup needed for versions 0 or 1
+
+    prefix = f"{state_dict_key}{delim}"
+    current_weights = f"{prefix}{current_policy_version}"
+    previous_weights = f"{prefix}{current_policy_version - 1}"
+
+    # Find all weight directories that match our pattern
+    parent_dir = os.path.dirname(prefix) or "."
+    if os.path.exists(parent_dir):
+        for item in os.listdir(parent_dir):
+            item_path = os.path.join(parent_dir, item)
+            if (
+                item.startswith(os.path.basename(prefix))
+                and item != os.path.basename(current_weights)
+                and item != os.path.basename(previous_weights)
+                and os.path.isdir(item_path)
+            ):
+                try:
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    logger.debug(f"Removed old weights at {item_path}")
+                except OSError as e:
+                    logger.debug(f"Error deleting {item_path}: {e}")
 
 
 @dataclass
@@ -67,6 +107,7 @@ class RLTrainer(ForgeActor):
         in monarch for now.
 
         """
+        super().__init__()
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -223,13 +264,26 @@ class RLTrainer(ForgeActor):
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(sd=hf_state_dict, num_layers=28)
+        vllm_ready_hf_sd = _qwen3_hf_to_vllm(
+            sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
+        )
 
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         start_time = time.time()
         if self.use_dcp:
+
+            # TODO - DCP should probably be being saved to NFS explicitly?
+            # Right now it will only save everything locally
             metadata = dcp.save(checkpoint_id=key, state_dict=vllm_ready_hf_sd)
             await ts.put(key, metadata)
+
+            # Delete old weight versions if they exist
+            if self.rank == 0:
+                cleanup_old_weight_versions(
+                    state_dict_key=self.state_dict_key,
+                    delim=DELIM,
+                    current_policy_version=policy_version,
+                )
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
         end_time = time.time()
