@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euxo pipefail
 
 # Builds vLLM, Monarch and torchstore
 # This script builds vLLM, Monarch and torchstore and places
@@ -33,9 +34,15 @@ build_vllm() {
 build_monarch() {
     # Get Rust build related pieces
     if ! command -v rustup &> /dev/null; then
+        echo "getting rustup"
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "got rustup"
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        echo "added to $GITHUB_PATH"
     fi
+
+    echo "we have rust!"
+    which rustup
 
     rustup toolchain install nightly
     rustup default nightly
@@ -100,5 +107,5 @@ append_date() {
 
 # build_vllm
 build_monarch
-build_torchstore
+# build_torchstore
 append_date
