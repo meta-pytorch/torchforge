@@ -11,6 +11,7 @@ import sys
 import time
 
 from forge.controller.actor import ForgeActor
+from forge.controller.provisioner import shutdown
 from forge.observability.metric_actors import GlobalLoggingActor
 from forge.observability.metrics import record_metric, ReductionType
 
@@ -93,7 +94,7 @@ async def main(mode: str = "wandb_all_log_all"):
             await generator.generate_step.call(i, sub)
         await global_logger.flush.call_one(i)
 
-    await global_logger.shutdown.call_one()
+    await shutdown()
 
 
 if __name__ == "__main__":

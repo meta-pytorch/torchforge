@@ -129,7 +129,14 @@ class GlobalLoggingActor(Actor):
 
     @endpoint
     async def register_fetcher(self, fetcher: LocalFetcherActor, name: str):
+        """Registers a fetcher with the global actor. Each key represents a process mesh.
+        If there are 2 processes, each with 2 replicas with N gpus, we would
+        have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
         self.fetchers[name] = fetcher
+
+    @endpoint
+    async def deregister_fetcher(self, name: str):
+        del self.fetchers[name]
 
     @endpoint
     async def flush(self, step: int):
