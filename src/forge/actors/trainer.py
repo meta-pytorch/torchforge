@@ -297,10 +297,18 @@ class RLTrainer(ForgeActor):
         logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
 
     @endpoint
-    async def push_weights_hf_nonsharded(
-        self, hf_state_dict, policy_version: int
-    ) -> None:
+    async def push_weights_hf_nonsharded(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format, non-sharded."""
+        if "model" not in self.engine.checkpointer.states:
+            raise RuntimeError("Model state not found in checkpointer state")
+
+        sd = self.engine.checkpointer.states["model"].state_dict()
+        flattened_state_dict, _ = flatten_state_dict(sd)
+        if self.engine.checkpointer.sd_adapter is None:
+            raise RuntimeError(
+                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+            )
+        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         for name, param in hf_state_dict.items():
             key = get_param_key(policy_version, name)
             await ts.put(key, param)
