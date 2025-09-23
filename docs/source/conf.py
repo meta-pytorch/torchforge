@@ -61,7 +61,6 @@ html_theme_path = [pytorch_sphinx_theme2.get_html_theme_path()]
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_static_path = ["_static"]
 
 html_theme_options = {
     "navigation_with_keys": False,
