@@ -40,18 +40,15 @@ build_monarch() {
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
     fi
 
-    echo "we have rust!"
-    which rustup
-
     rustup toolchain install nightly
     rustup default nightly
 
     if command -v dnf &>/dev/null; then
-        sudo dnf install -y clang-devel libnccl-devel \
+        dnf install -y clang-devel libnccl-devel \
             libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
     elif command -v apt-get &>/dev/null; then
-        sudo apt-get update
-        sudo apt-get install -y clang libunwind-dev \
+        apt-get update
+        apt-get install -y clang libunwind-dev \
             libibverbs-dev librdmacm-dev
     fi
 
