@@ -28,6 +28,7 @@ jobs:
     needs: generate-matrix
     name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    timeout-minutes: 120
     strategy:
       fail-fast: false
     with:

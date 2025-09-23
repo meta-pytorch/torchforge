@@ -9,12 +9,15 @@ MONARCH_COMMIT="main"
 TORCHTITAN_COMMIT="main"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
-WHEEL_DIR="${REPOSITORY}/dist"
+
+# Push everything to the dist folder, so
+# the final action pushes everything together
+WHL_DIR="${REPOSITORY}/dist"
 
 mkdir -p $BUILD_DIR
-mkdir -p $WHEEL_DIR
+mkdir -p $WHL_DIR
 echo "build dir is $BUILD_DIR"
-echo "wheel dir is $WHEEL_DIR"
+echo "wheel dir is $WHL_DIR"
 
 build_vllm() {
     cd "$BUILD_DIR"
@@ -24,7 +27,7 @@ build_vllm() {
 
     python use_existing_torch.py
     pip install -r requirements/build.txt
-    pip wheel --no-build-isolation --no-deps . -w "$WHEEL_DIR"
+    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
 build_monarch() {
@@ -34,7 +37,7 @@ build_monarch() {
     git checkout $MONARCH_COMMIT
 
     pip install -r build-requirements.txt
-    pip wheel --no-build-isolation --no-deps . -w "$WHEEL_DIR"
+    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
 build_torchtitan() {
@@ -43,7 +46,7 @@ build_torchtitan() {
     cd "$BUILD_DIR/torchtitan"
     git checkout $TORCHTITAN_COMMIT
 
-    pip wheel --no-deps . -w "$WHEEL_DIR"
+    pip wheel --no-deps . -w "$WHL_DIR"
 }
 
 build_torchstore() {
@@ -57,7 +60,7 @@ build_torchstore() {
     cd "$BUILD_DIR/torchstore"
     git checkout $TORCHSTORE_COMMIT
 
-    pip wheel --no-deps . -w "$WHEEL_DIR"
+    pip wheel --no-deps . -w "$WHL_DIR"
 }
 
 
@@ -77,7 +80,7 @@ append_date() {
 }
 
 
-build_vllm
+# build_vllm
 build_monarch
 build_torchstore
 append_date
