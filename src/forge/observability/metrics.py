@@ -85,7 +85,6 @@ def get_actor_name_with_rank() -> str:
     return rank_name
 
 
-# Simple push
 async def record_metric(
     key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
 ) -> None:
@@ -222,7 +221,8 @@ class ConsoleBackend(LoggerBackend):
             else "GLOBAL"
         )
         logger.info(f"=== {prefix} METRICS STEP {step} ===")
-        # TODO: make it a proper display. Maybe pprint?
+
+        # TODO: Improve display. Maybe pprint? Currently requires loglevel == info
         for key, value in metrics.items():
             logger.info(f"  {key}: {value}")
         logger.info("==============================\n")
@@ -232,8 +232,17 @@ class ConsoleBackend(LoggerBackend):
 
 
 class WandbBackend(LoggerBackend):
-    # TODO: add some doc about the different modes and this reference: docs.wandb.ai/guides/track/log/distributed-training
-    # we should probably have an assertion that mode is in the lsit of 3 possible options
+    """Reference: docs.wandb.ai/guides/track/log/distributed-training
+
+    #TODO: give this better names
+    #TODO: most likely delete wandb_rank_0_log_all
+    valid_modes = [
+            "wandb_all_log_all", # Track multiple processes
+            "wandb_rank_0_log_all", #Track all processes to a single run
+            "wandb_rank_0_reduce_all", # Track a single process
+        ]
+    """
+
     def __init__(self, logger_backend_config: Dict[str, Any]):
         super().__init__(logger_backend_config)
         self.project = logger_backend_config["project"]
