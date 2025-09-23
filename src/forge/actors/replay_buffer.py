@@ -9,9 +9,9 @@ import random
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
+
+from monarch.actor import endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,6 +37,10 @@ class ReplayBuffer(ForgeActor):
             self.seed = random.randint(0, 2**32)
         random.seed(self.seed)
         self.sampler = random.sample
+
+    @endpoint
+    def get_dp_size(self) -> int:
+        return self.dp_size
 
     @endpoint
     async def add(self, episode: "Episode") -> None:
