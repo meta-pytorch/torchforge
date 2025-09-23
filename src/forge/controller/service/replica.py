@@ -15,7 +15,7 @@ from typing import Optional
 
 from monarch.actor import ActorError
 
-from forge.controller.actor import ForgeActor
+from forge.controller import ForgeActor
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
