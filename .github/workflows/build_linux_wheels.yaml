@@ -1,0 +1,39 @@
+name: Build nightly wheels and publish to PyTorch Index
+
+on:
+  push:
+    branches:
+      - nightly
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  generate-matrix:
+    if: github.repository_owner == 'pytorch'
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    with:
+      package-type: wheel
+      os: linux
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+      with-cuda: enable
+      python-versions: '["3.10", "3.11", "3.12"]'
+  build:
+    needs: generate-matrix
+    name: ${{ matrix.repository }}
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    strategy:
+      fail-fast: false
+    with:
+      repository: meta-pytorch/forge
+      ref: ""
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+      package-name: forge
+      build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
+      pre-script: .github/packaging/pre_build_script.sh
+      trigger-event: ${{ github.event_name }}
+      build-platform: 'python-build-package'
