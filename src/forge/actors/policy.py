@@ -23,7 +23,6 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
@@ -46,8 +45,13 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
@@ -511,12 +515,23 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
-        current_state_dict = model.state_dict()
-        start = time.time()
-        await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
+        prefix = get_param_prefix(version)
+        self.logger.debug(f"{prefix=}")
+        matching_keys = await ts.keys(prefix)
+        self.logger.debug(f"{matching_keys=}")
+        # TODO: find a way to save the original huggingface parameter names.
+        hf_names = [extract_param_name(key) for key in matching_keys]
+        self.logger.debug(f"{hf_names=}")
+        loaded_weights = set()
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        for name in hf_names:
+            param = await ts.get(get_param_key(version, name))
+            loaded = model.load_weights([(name, param)])
+            del param
+            loaded_weights.update(loaded)
+        self.logger.info(f"Updated {len(loaded_weights)} parameters")
 
     @endpoint
     async def setup_kv_cache(self):

@@ -17,6 +17,12 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
+
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 
@@ -289,6 +295,15 @@ class RLTrainer(ForgeActor):
         end_time = time.time()
 
         logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
+
+    @endpoint
+    async def push_weights_hf_nonsharded(
+        self, hf_state_dict, policy_version: int
+    ) -> None:
+        """Push weights to torchstore in HF format, non-sharded."""
+        for name, param in hf_state_dict.items():
+            key = get_param_key(policy_version, name)
+            await ts.put(key, param)
 
     @endpoint
     async def cleanup(self) -> None:
