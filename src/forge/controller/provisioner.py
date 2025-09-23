@@ -232,13 +232,13 @@ class Provisioner:
 
             procs._host = host_mesh
 
-            # Spawn local logging actor on each process and register with global logger
-            await self._setup_logging(procs)
-
             # If we created a server, track so we can tear it down later.
             if server_name:
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
+
+        # Spawn local logging actor on each process and register with global logger
+        await self._setup_logging(procs)
 
         return procs
 
