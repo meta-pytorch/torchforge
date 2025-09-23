@@ -21,6 +21,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       with-cuda: enable
+      with-rocm: disable
       python-versions: '["3.10", "3.11", "3.12"]'
   build:
     needs: generate-matrix
