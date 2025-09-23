@@ -36,9 +36,8 @@ build_monarch() {
     if ! command -v rustup &> /dev/null; then
         echo "getting rustup"
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo "got rustup"
+        export PATH="$HOME/.cargo/bin:$PATH"
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        echo "added to $GITHUB_PATH"
     fi
 
     echo "we have rust!"
