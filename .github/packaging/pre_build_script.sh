@@ -44,7 +44,7 @@ build_monarch() {
     rustup default nightly
 
     if command -v dnf &>/dev/null; then
-        dnf install -y clang-devel libnccl-devel \
+        dnf install -y clang-devel \
             libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
     elif command -v apt-get &>/dev/null; then
         apt-get update
