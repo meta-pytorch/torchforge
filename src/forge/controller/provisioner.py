@@ -126,6 +126,24 @@ class Provisioner:
             server_name,
         )
 
+    async def _setup_logging(self, procs: ProcMesh) -> None:
+        """Spawn and register local fetcher for metrics on each process."""
+        from forge.observability.metric_actors import (
+            GlobalLoggingActor,
+            LocalFetcherActor,
+        )
+
+        local_fetcher_actor = await procs.spawn(
+            "local_fetcher_actor", LocalFetcherActor
+        )
+        procs._local_fetcher = local_fetcher_actor
+
+        global_logger = await get_or_spawn_controller(
+            "global_logger", GlobalLoggingActor
+        )
+        process_name = f"proc_mesh_{id(procs)}"
+        await global_logger.register_fetcher.call_one(local_fetcher_actor, process_name)
+
     async def get_proc_mesh(
         self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
     ):
@@ -192,34 +210,7 @@ class Provisioner:
             procs._host = host_mesh
 
             # Spawn local logging actor on each process and register with global logger
-            try:
-                from forge.controller.v3.metric_actors import (
-                    GlobalLoggingActor,
-                    LocalFetcherActor,
-                )
-
-                local_fetcher_actor = await procs.spawn(
-                    "local_fetcher_actor", LocalFetcherActor
-                )
-                procs._local_fetcher = local_fetcher_actor
-
-                # Register with global logger
-                global_logger = await get_or_spawn_controller(
-                    "global_logger", GlobalLoggingActor
-                )
-                process_name = f"proc_mesh_{id(procs)}"
-                await global_logger.register_fetcher.call_one(
-                    local_fetcher_actor, process_name
-                )
-
-                logger.debug(
-                    f"Spawned and registered LocalFetcherActor for {process_name}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to spawn LocalFetcherActor: {e}")
-                import traceback
-
-                traceback.print_stack()
+            await self._setup_logging(procs)
 
             # If we created a server, track so we can tear it down later.
             if server_name:
@@ -233,17 +224,13 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
-                try:
-                    from forge.controller.v3.metric_actors import GlobalLoggingActor
+                from forge.observability.metric_actors import GlobalLoggingActor
 
-                    global_logger = await get_or_spawn_controller(
-                        "global_logger", GlobalLoggingActor
-                    )
-                    process_name = f"proc_mesh_{id(proc_mesh)}"
-                    await global_logger.deregister.call_one(process_name)
-                    logger.debug(f"Deregistered LocalLoggingActor for {process_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to deregister LocalLoggingActor: {e}")
+                global_logger = await get_or_spawn_controller(
+                    "global_logger", GlobalLoggingActor
+                )
+                process_name = f"proc_mesh_{id(proc_mesh)}"
+                await global_logger.deregister.call_one(process_name)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]

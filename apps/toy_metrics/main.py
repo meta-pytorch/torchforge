@@ -5,14 +5,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+
+import logging
 import sys
 import time
 
+from forge.controller.actor import ForgeActor
+from forge.observability.metric_actors import GlobalLoggingActor
+from forge.observability.metrics import record_metric, ReductionType
+
 from monarch.actor import current_rank, endpoint, get_or_spawn_controller
 
-from forge.controller.actor import ForgeActor
-from forge.controller.v3.metric_actors import GlobalLoggingActor
-from forge.controller.v3.metrics import push_metrics, ReductionType
+logging.basicConfig(level=logging.INFO)
 
 
 class TrainActor(ForgeActor):
@@ -21,7 +25,7 @@ class TrainActor(ForgeActor):
         rank = current_rank().rank
         value = rank * 1000 + 100 * step
         print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
-        await push_metrics("train/loss", value)
+        await record_metric("train/loss", value)
 
 
 class GeneratorActor(ForgeActor):
@@ -30,7 +34,7 @@ class GeneratorActor(ForgeActor):
         rank = current_rank().rank
         value = rank * 1000 + step * 100 + substep * 10
         print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
-        await push_metrics("generate/tokens", value, ReductionType.SUM)
+        await record_metric("generate/tokens", value, ReductionType.SUM)
 
 
 # Main
@@ -49,6 +53,7 @@ async def main(mode: str = "wandb_all_log_all"):
         ]
     elif mode == "wandb_rank_0_reduce_all":
         backends = [
+            {"class": "console", "log_per_rank": False},
             {
                 "class": "wandb",
                 "project": "my_project",
@@ -71,7 +76,7 @@ async def main(mode: str = "wandb_all_log_all"):
     logging_config = {
         "backends": backends,
     }
-    service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
+    service_config = {"procs_per_replica": 2, "num_replicas": 2, "with_gpus": False}
 
     # Spawn services first (triggers registrations via provisioner hook)
     trainer = await TrainActor.options(**service_config).as_service()
