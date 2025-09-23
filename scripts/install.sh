@@ -18,10 +18,10 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
-PYTORCH_VERSION="2.9.0.dev20250828"
+PYTORCH_VERSION="2.9.0.dev20250905"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0"
+RELEASE_TAG="v0.0.0-92025"
 GITHUB_REPO="meta-pytorch/forge"
 
 # Check conda environment
@@ -165,9 +165,16 @@ download_vllm_wheel() {
 
     if [ -z "$vllm_wheel_name" ]; then
         log_error "Could not find vLLM wheel in release $RELEASE_TAG"
-        log_info "Make sure you've uploaded the vLLM wheel to the GitHub release"
+        log_info "Make sure the vLLM wheel has been uploaded to the GitHub release"
         exit 1
     fi
+    for f in assets/wheels/vllm-*; do
+        [ -e "$f" ] || continue  # skip if glob didn't match
+        if [ "$(basename "$f")" != "$vllm_wheel_name" ]; then
+            log_info "Removing stale vLLM wheel: $(basename "$f")"
+            rm -f "$f"
+        fi
+    done
 
     local local_path="$WHEEL_DIR/$vllm_wheel_name"
 

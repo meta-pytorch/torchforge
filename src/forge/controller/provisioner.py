@@ -8,6 +8,8 @@
 import asyncio
 import functools
 import logging
+
+import os
 import socket
 import uuid
 
@@ -47,8 +49,12 @@ class GpuManager:
 
     """
 
-    def __init__(self):
-        self.available_gpus = set(range(0, 8))
+    def __init__(self, available_devices: set[int] | None = None):
+        if available_devices is None:
+            available_devices = set(range(0, 8))
+        assert all(isinstance(x, int) for x in available_devices)
+        assert all(x >= 0 and x < 8 for x in available_devices)
+        self.available_gpus = available_devices
 
     def get_available_gpus(self) -> list[str]:
         """Returns a list of available GPU devices."""
@@ -80,8 +86,25 @@ class Provisioner:
         # we generate a hash per HostMesh. We'll
         # remove this once this is supported in Monarch.
         self._this_host_id = uuid.uuid1()
+
+        # For the local host, we may want to set CUDA_VISIBLE_DEVICES
+        # for small scale testing. We inherit the environment's
+        # CUDA_VISIBLE_DEVICES **only for the local host** and not
+        # for remote hosts.
+        available_local_devices = None
+        cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", None)
+        if cuda_visible_devices is not None and cuda_visible_devices.strip():
+            try:
+                available_local_devices = set(
+                    int(x.strip()) for x in cuda_visible_devices.split(",") if x.strip()
+                )
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid CUDA_VISIBLE_DEVICES format: '{cuda_visible_devices}'. "
+                    f"Expected comma-separated integers (e.g., '0,1,2'). Error: {e}"
+                ) from e
         self._host_gpu_map = {
-            self._this_host_id: GpuManager(),
+            self._this_host_id: GpuManager(available_local_devices),
         }
 
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
@@ -154,7 +177,7 @@ class Provisioner:
                 # We can't currently do this because HostMesh only supports single
                 # proc_mesh creation at the moment. This will be possible once
                 # we have "proper HostMesh support".
-                def bootstrap(gpu_ids: int):
+                def bootstrap(gpu_ids: list[str]):
                     # This works for single host, needed for vLLM currently.
                     import os
 
@@ -162,7 +185,10 @@ class Provisioner:
                     os.environ["MASTER_ADDR"] = socket.gethostname()
                     # Multiple actors trying to call _get_port doesn't work
                     # os.environ["MASTER_PORT"] = _get_port()
-                    os.environ["MASTER_PORT"] = "12345"
+
+                    # Setting the last digit to the first GPU id allows us to i.e.
+                    # create multiple vLLM instances on the same local host.
+                    os.environ["MASTER_PORT"] = f"1234{gpu_ids[0]}"
                     os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
