@@ -33,25 +33,32 @@ async def run(cfg: DictConfig):
     print("Spawning service...")
     policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
-    try:
-        async with policy.session():
-            print("Requesting generation...")
-            response_output: list[Completion] = await policy.generate.choose(
-                prompt=prompt
-            )
+    import time
 
-            print("\nGeneration Results:")
-            print("=" * 80)
-            for batch, response in enumerate(response_output):
-                print(f"Sample {batch + 1}:")
-                print(f"User: {prompt}")
-                print(f"Assistant: {response.text}")
-                print("-" * 80)
+    print("Requesting generation...")
+    n = 100
+    start = time.time()
+    response_outputs: list[Completion] = await asyncio.gather(
+        *[policy.generate.choose(prompt=prompt) for _ in range(n)]
+    )
+    end = time.time()
 
-    finally:
-        print("\nShutting down...")
-        await policy.shutdown()
-        await shutdown()
+    print(f"Generation of {n} requests completed in {end - start:.2f} seconds.")
+    print(
+        f"Generation with procs {cfg.services.policy.procs}, replicas {cfg.services.policy.num_replicas}"
+    )
+
+    print(f"\nGeneration Results (last one of {n} requests):")
+    print("=" * 80)
+    for batch, response in enumerate(response_outputs[-1]):
+        print(f"Sample {batch + 1}:")
+        print(f"User: {prompt}")
+        print(f"Assistant: {response.text}")
+        print("-" * 80)
+
+    print("\nShutting down...")
+    await policy.shutdown()
+    await shutdown()
 
 
 @parse
