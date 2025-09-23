@@ -92,7 +92,7 @@ async def test_as_actor_with_kwargs_config():
         assert await actor.value.choose() == 6
 
     finally:
-        await actor.shutdown()
+        await Counter.shutdown(actor)
 
 
 @pytest.mark.asyncio
@@ -109,7 +109,7 @@ async def test_as_actor_default_usage():
         assert await actor.value.choose() == 8
 
     finally:
-        await actor.shutdown()
+        await Counter.shutdown(actor)
 
 
 @pytest.mark.asyncio
@@ -125,7 +125,7 @@ async def test_options_applies_config():
     try:
         assert await actor.value.choose() == 3
     finally:
-        await actor.shutdown()
+        await Counter.shutdown(actor)
 
 
 # Service Config Tests

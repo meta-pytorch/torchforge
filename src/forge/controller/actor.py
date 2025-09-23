@@ -214,8 +214,11 @@ class ForgeActor(Actor):
 
         return actor
 
-    async def shutdown(self):
-        """Stop this actor safely without going through endpoint system."""
-        if getattr(self, "_proc_mesh", None) is None:
+    @classmethod
+    async def shutdown(cls, actor: "ForgeActor"):
+        """Shuts down an actor.
+        This method is used by `Service` to teardown a replica.
+        """
+        if actor._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
-        await stop_proc_mesh(self._proc_mesh)
+        await stop_proc_mesh(actor._proc_mesh)
