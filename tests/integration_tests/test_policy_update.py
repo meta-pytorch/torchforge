@@ -223,11 +223,19 @@ class TestWeightSync:
         await rl_trainer.mock_train_step.call()
         await rl_trainer.push_weights.call(policy_version=v1)
         await policy._test_save_model_params.call()
+
+        # Sanity check that before update all the tests pass
+        all_errs = await policy._test_validate_model_params.call(validate_fn)
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+
         await policy.update_weights.call(policy_version=v1)
         all_errs = await policy._test_validate_model_params.call(validate_fn_all_zeros)
         for errs in all_errs:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
+
         # Reloading v0, getting back original weights
         await policy.update_weights.call(policy_version=v0)
         all_errs = await policy._test_validate_model_params.call(validate_fn)
@@ -283,6 +291,13 @@ class TestWeightSync:
         await rl_trainer.mock_train_step.call()
         await rl_trainer.push_weights.call(policy_version=v1)
         await policy._test_save_model_params.call()
+
+        # Sanity check that before update all the tests pass
+        all_errs = await policy._test_validate_model_params.call(validate_fn)
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+
         await policy.update_weights.call(policy_version=v1)
         all_errs = await policy._test_validate_model_params.call(validate_fn_all_zeros)
         for errs in all_errs:
