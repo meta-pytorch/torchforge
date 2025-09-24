@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+# Usage: python -m apps.toy_rl.sumdigits --config apps/toy_rl/sumdigits.yaml
 
 import asyncio
 import random
@@ -28,6 +28,7 @@ from forge.util.metric_logging import get_metric_logger
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
+from torch.functional import _return_counts
 
 from torchstore.state_dict_utils import DELIM
 from transformers import AutoModelForCausalLM
@@ -342,7 +343,8 @@ class Trainer(ForgeActor):
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
         if self.use_vllm_builtin_loading:
-            return await self._push_weights_hf_nonsharded(version)
+            await self._push_weights_hf_nonsharded(version)
+            return None
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
             self.model.state_dict(), num_layers=self.model.config.num_hidden_layers

@@ -17,6 +17,11 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.actors.torchstore_utils import get_param_key
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -35,11 +40,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.actors.torchstore_utils import get_param_key
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -252,9 +252,9 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         if self.use_vllm_builtin_loading:
-            return await self._push_weights_hf_nonsharded(policy_version)
+            await self._push_weights_hf_nonsharded(policy_version)
         else:
-            return await self._push_weights_sharded(policy_version)
+            await self._push_weights_sharded(policy_version)
 
     async def _push_weights_sharded(self, policy_version: int) -> None:
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
