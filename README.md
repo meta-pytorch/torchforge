@@ -11,7 +11,7 @@ Key features:
 - Hackability for power users (all parts of the RL loop can be easily modified without interacting with infrastructure)
 - Scalability (ability so shift between async and syncronous training and across thousands of GPUs)
 
-> ⚠️ **Early Development Warning** Monarch is currently in an experimental
+> ⚠️ **Early Development Warning** Forge is currently in an experimental
 > stage. You should expect bugs, incomplete features, and APIs that may change
 > in future versions. The project welcomes bugfixes, but to make sure things are
 > well coordinated you should discuss any significant change before starting the
