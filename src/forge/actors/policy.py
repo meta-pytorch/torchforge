@@ -19,20 +19,6 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
-
-from forge.actors.torchstore_utils import (
-    extract_param_name,
-    get_param_key,
-    get_param_prefix,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
-# Removed WeightSyncConfig - using boolean flag instead
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -56,6 +42,19 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
+
+from forge.actors.torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -129,7 +128,7 @@ class EngineConfig(EngineArgs):
 
 
 @dataclass
-class Policy(ForgeActor):
+class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     use_vllm_builtin_load: bool = False
@@ -394,7 +393,6 @@ class Policy(ForgeActor):
             await asyncio.gather(*curr_requests)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        logger.info(f"Policy {self=}")
         if self.use_vllm_builtin_load:
             await self.policy_worker._update_hf_nonsharded.call(version=policy_version)
         else:
