@@ -449,6 +449,9 @@ class PolicyWorker(ForgeActor):
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
 
+    def __post_init__(self):
+        super().__init__()
+
     @endpoint
     async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
@@ -501,9 +504,11 @@ class PolicyWorker(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
-        start = time.time()
+        start = time.perf_counter()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
+        logger.info(
+            f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
+        )
 
     @endpoint
     async def setup_kv_cache(self):
