@@ -101,6 +101,7 @@ append_date() {
 }
 
 
+echo $TORCHSTORE_SSH_KEY
 # build_vllm
 build_monarch
 build_torchstore
