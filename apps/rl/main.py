@@ -167,6 +167,7 @@ async def run(cfg: DictConfig):
     inputs, targets = await replay_buffer.sample.choose(curr_policy_version=0)
     outputs = await trainer.train_step.choose(inputs, targets)
     print("Loss: ", outputs["loss"])
+    print("Gradient Norm: ", outputs["grad_norm"])
 
     print("Shutting down...")
     await trainer.shutdown()

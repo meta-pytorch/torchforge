@@ -15,7 +15,8 @@ from typing import Callable
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
-
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -32,11 +33,10 @@ from torchtitan.config.job_config import (
     Parallelism,
     Training,
 )
+from torchtitan.distributed import utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
+from transformers import AutoModelForCausalLM
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -166,6 +166,10 @@ class RLTrainer(ForgeActor):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
                     logits = model_parts[0](**inputs)
+                    # hf_logits = self.hf_model(input_ids=inputs["tokens"]).logits.to(
+                    #     "cpu"
+                    # )
+                    # assert torch.allclose(logits, hf_logits)
                     loss = self.loss(logits, **targets)
                 # need to free to before bwd to avoid peaking memory
                 del logits
@@ -176,7 +180,7 @@ class RLTrainer(ForgeActor):
     @endpoint
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
-    ) -> float:
+    ) -> dict[str, float]:
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
@@ -193,6 +197,17 @@ class RLTrainer(ForgeActor):
         loss = self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
 
+        grad_norm = dist_utils.clip_grad_norm_(
+            [p for m in self.engine.model_parts for p in m.parameters()],
+            self.training.max_norm,
+            foreach=True,
+            pp_mesh=None,
+            # (
+            #     self.engine.parallel_dims.world_mesh["pp"] if self.engine.parallel_dims.pp_enabled else None
+            # ),
+            ep_enabled=False,  # parallel_dims.ep_enabled,
+        )
+
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
@@ -203,7 +218,7 @@ class RLTrainer(ForgeActor):
             last_step=self.step == self.num_training_steps,
         )
 
-        return loss.item()
+        return {"loss": loss.item(), "grad_norm": grad_norm}
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:

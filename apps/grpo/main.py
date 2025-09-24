@@ -24,6 +24,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
+from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -43,7 +44,7 @@ class Episode:
     response: str | None = None
     request_tokens: list[int] | None = None
     response_tokens: list[int] | None = None
-    ref_logprobs: torch.Tensor | None = None
+    ref_logits: torch.Tensor | None = None
     reward: float | None = None
     advantage: float | None = None
 
@@ -107,8 +108,8 @@ def collate(batches: list[list[Episode]]):
         response = [e.response_tensor for e in batch]
         response = torch.stack(response)  # [b x s]
 
-        ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
+        ref_logits = [e.ref_logits for e in batch]
+        ref_logits = torch.stack(ref_logits).squeeze()  # [b x s]
 
         advantages = [e.advantage for e in batch]
         advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
@@ -119,7 +120,7 @@ def collate(batches: list[list[Episode]]):
         input = {"tokens": torch.cat([request, response], dim=1)}
         target = {
             "response": response,
-            "ref_logprobs": ref_logprobs,
+            "ref_logits": ref_logits,
             "advantages": advantages,
             "padding_mask": mask,
         }
@@ -129,30 +130,35 @@ def collate(batches: list[list[Episode]]):
 
 
 def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+    logits: torch.Tensor, target_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1]
-    logprobs = torch.log_softmax(logits / temperature, dim=-1).to(input_ids.device)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
-    return logprobs
+    logits = logits[:, -target_ids.size(1) : -1, :].float()
+    scaled_logits = logits / temperature
+    logprobs = selective_log_softmax(scaled_logits, target_ids)
+    return logprobs.to(target_ids.device)
 
 
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
+    ref_logits: torch.Tensor,
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
     beta: float = 0.1,
 ) -> torch.Tensor:
+    print(f"num of padding: {padding_mask.sum(dim=1)}")
+    # assert ref_logits.dtype == torch.long
+    # assert logits.dtype == torch.long
     logprobs = compute_logprobs(logits, response)
+    ref_logprobs = compute_logprobs(ref_logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    print(f"kl (no padding): {(kl * padding_mask).mean(dim=1)}")
+    # Pad out via padding mask
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
     per_token_loss = -(per_token_policy_loss - beta * kl)
     loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
+        (per_token_loss * padding_mask).sum(dim=1)
+        / padding_mask.sum(dim=1).clamp(min=1.0)
     ).mean()
     return loss
 
@@ -299,28 +305,31 @@ async def main(cfg: DictConfig):
                 target=target,
             )
 
-            input_ids = torch.ones(
-                (group_size, max_req_tokens + max_req_tokens),
-                dtype=torch.long,
-                device="cuda",
-            )
-            # Populate episode info and calculate rewards
-            for i, (episode, response) in enumerate(zip(group.episodes, responses)):
+            # Populate episode info, compute ref logprobs, and calculate rewards
+            for episode, response in zip(group.episodes, responses):
                 episode.request_tokens = response.prompt_ids
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
-                input_ids[i, :max_req_tokens] = episode.request_tensor
-                input_ids[i, max_req_tokens:] = episode.response_tensor
+                episode.ref_logits = await ref_model.forward.choose(
+                    torch.cat(
+                        [episode.request_tensor, episode.response_tensor]
+                    ).unsqueeze(0)
+                )
                 episode.reward = await reward_actor.evaluate_response.choose(
                     prompt=prompt, response=response.text, target=target
                 )
 
-            # Calculate reference logprobs
-            ref_logits = await ref_model.forward.choose(input_ids)
-            ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
-            for i, episode in enumerate(group.episodes):
-                episode.ref_logprobs = ref_logprobs[i]
-            del ref_logits, ref_logprobs, input_ids
+            # # Calculate reference logprobs
+            # print(f" input ids dtype: {input_ids.dtype}")
+            # ref_logits = await ref_model.forward.choose(input_ids)
+            # # ref_logits = ref_logits[:, :-1, :]  # Exclude the last token
+            # # ref_logits = ref_logits[:, -max_res_tokens:, :]
+            # print(f" ref logits dtype: {ref_logits.dtype}")
+            # print("Computed ref logits")
+            # # ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
+            # for i, episode in enumerate(group.episodes):
+            #     episode.ref_logits = ref_logits[i]
+            # del ref_logits, input_ids
 
             # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.choose(group)
@@ -342,15 +351,22 @@ async def main(cfg: DictConfig):
 
     async def continuous_training():
         training_step = 0
+        _tokenizer = get_tokenizer("Qwen/Qwen3-1.7B")
         while True:
             batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.choose(inputs, targets)
+                tokens = inputs[0]["tokens"]
+                print(f"Training input: {_tokenizer.batch_decode(tokens)}")
+                print(f"Num of padding tokens: {targets[0]['padding_mask'].sum(dim=1)}")
+                metrics = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
-                mlogger.log("loss/training_step", loss, training_step)
+                mlogger.log("loss/training_step", metrics["loss"], training_step)
+                mlogger.log(
+                    "grad_norm/training_step", metrics["grad_norm"], training_step
+                )
                 await trainer.push_weights.call(training_step)
                 await policy.update_weights.call(training_step)
 
