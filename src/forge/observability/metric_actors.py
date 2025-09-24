@@ -167,18 +167,19 @@ class GlobalLoggingActor(Actor):
         if has_reduce:
             # Handle exceptions and extract values from ValueMesh results
             all_local_states = []
-            for res in results:
-                if isinstance(res, Exception):
-                    logger.warning(f"Flush failed on a fetcher: {res}")
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.warning(f"Flush failed on a fetcher: {result}")
                     continue
-                # res is a ValueMesh. TODO: use public API (.items()), but need to parse metadata
-                res = res._values
-                if isinstance(res, list):
-                    all_local_states.extend(
-                        [r for r in res if isinstance(r, dict) and r]
-                    )
-                elif isinstance(res, dict) and res:
-                    all_local_states.append(res)
+
+                # result is a generator that outputs {{'gpus': i/N}, {metric_key1: metric_state1, ...}}]
+                for gpu_info, local_metric_state in result.items():
+                    if isinstance(local_metric_state, dict):
+                        all_local_states.append(local_metric_state)
+                    else:
+                        logger.warning(
+                            f"Unexpected result from fetcher. {gpu_info=}, {local_metric_state=}"
+                        )
 
             if not all_local_states:
                 logger.warning(f"No states to reduce for step {step}")

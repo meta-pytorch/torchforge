@@ -94,6 +94,14 @@ async def main(mode: str = "wandb_all_log_all"):
             await generator.generate_step.call(i, sub)
         await global_logger.flush.call_one(i)
 
+    # shutdown
+    await asyncio.gather(
+        trainer.shutdown(),
+        generator.shutdown(),
+    )
+
+    await global_logger.shutdown.call_one()
+
     await shutdown()
 
 
