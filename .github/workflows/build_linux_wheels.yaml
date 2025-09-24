@@ -37,7 +37,6 @@ jobs:
       test-infra-ref: main
       package-name: forge
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
-      env-var-script: export TORCHSTORE_SSH_KEY=${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}
       pre-script: .github/packaging/pre_build_script.sh
       trigger-event: ${{ github.event_name }}
       build-platform: 'python-build-package'
