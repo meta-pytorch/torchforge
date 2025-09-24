@@ -17,6 +17,9 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -35,9 +38,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -343,13 +343,29 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         ):
             load_sd[k] = sd[k]
 
+    # Suppose tp = 4 for policy for illustration.
+    policy_tp = 4
+
     for i in range(num_layers):
         prefix = f"model.layers.{i}."
         # QKV fusion
         q = sd[prefix + "self_attn.q_proj.weight"]
         k = sd[prefix + "self_attn.k_proj.weight"]
         v = sd[prefix + "self_attn.v_proj.weight"]
-        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
+
+        q_shards = torch.chunk(q, policy_tp, dim=0)
+        k_shards = torch.chunk(k, policy_tp, dim=0)
+        v_shards = torch.chunk(v, policy_tp, dim=0)
+
+        # Concatenate each corresponding shard (q_shard_i, k_shard_i, v_shard_i)
+        combined_shards = []
+        for i in range(policy_tp):
+            combined_shard = torch.cat([q_shards[i], k_shards[i], v_shards[i]], dim=0)
+            combined_shards.append(combined_shard)
+
+        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat(
+            combined_shards, dim=0
+        )
 
         # QKV fusion - handle bias if present
         q_bias_key = prefix + "self_attn.q_proj.bias"
@@ -360,6 +376,7 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
             q_bias = sd[q_bias_key]
             k_bias = sd[k_bias_key]
             v_bias = sd[v_bias_key]
+            # Same sharding has to happen here
             load_sd[prefix + "self_attn.qkv_proj.bias"] = torch.cat(
                 [q_bias, k_bias, v_bias], dim=0
             )
@@ -367,7 +384,14 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         # MLP gate_up_proj fusion
         gate = sd[prefix + "mlp.gate_proj.weight"]
         up = sd[prefix + "mlp.up_proj.weight"]
-        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+        gate_shards = torch.chunk(gate, policy_tp, dim=0)
+        up_shards = torch.chunk(up, policy_tp, dim=0)
+
+        combined_shards = []
+        for i in range(policy_tp):
+            combined_shard = torch.cat([gate_shards[i], up_shards[i]], dim=0)
+            combined_shards.append(combined_shard)
+        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat(combined_shards, dim=0)
 
         # MLP gate_up_proj fusion - handle bias if present
         gate_bias_key = prefix + "mlp.gate_proj.bias"
@@ -376,6 +400,7 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         if all(key in sd for key in [gate_bias_key, up_bias_key]):
             gate_bias = sd[gate_bias_key]
             up_bias = sd[up_bias_key]
+            # Same sharding has to happen here
             load_sd[prefix + "mlp.gate_up_proj.bias"] = torch.cat(
                 [gate_bias, up_bias], dim=0
             )
