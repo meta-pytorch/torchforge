@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import torchstore as ts
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import _qwen3_hf_to_vllm
+from forge.actors.torchstore_utils import get_param_key
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
@@ -250,10 +250,11 @@ class RefModel(ForgeActor):
 class Trainer(ForgeActor):
     """Reinforce Loss Trainer implementation for policy optimization."""
 
-    model_name: str
+    model_name: str = ""
     learning_rate: float = 1e-5
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
+    use_vllm_builtin_loading: bool = False
 
     @endpoint
     async def setup(self):
@@ -340,6 +341,8 @@ class Trainer(ForgeActor):
     @endpoint
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
+        if self.use_vllm_builtin_loading:
+            return await self._push_weights_hf_nonsharded(version)
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
             self.model.state_dict(), num_layers=self.model.config.num_hidden_layers
@@ -350,6 +353,13 @@ class Trainer(ForgeActor):
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
+
+    async def _push_weights_hf_nonsharded(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format, non-sharded."""
+        hf_state_dict = self.model.state_dict()
+        for name, param in hf_state_dict.items():
+            key = get_param_key(policy_version, name)
+            await ts.put(key, param)
 
 
 @dataclass
@@ -440,6 +450,8 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
+    print(f"{cfg.policy=}")
+    print(f"{cfg.services.policy=}")
     await ts.initialize()
     (
         dataloader,
