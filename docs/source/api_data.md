@@ -14,4 +14,3 @@ Data model for input prompts and contexts.
    :undoc-members:
    :show-inheritance:
 ```
-
