@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
 
 from monarch.actor import endpoint, ProcMesh
 
@@ -39,23 +38,16 @@ class LLMJudge(ForgeActor):
         *,
         process_config: ProcessConfig,
         policy_cfg: Mapping,
-        prompt_wrapper: Optional[Callable[[str, list[str]], str]] = None,
-        output_postprocessor: Optional[Callable[[Any], Any]] = None,
         **kwargs,
     ):
         judge_procs = await get_proc_mesh(process_config=process_config)
         policy = await Policy.options(**policy_cfg.services.policy).as_service(
             **policy_cfg.policy
         )
+        print("Launch policy type: ", type(policy))
 
         actor_name = kwargs.pop("name", cls.__name__)
-        llm_judge = await judge_procs.spawn(
-            actor_name,
-            cls,
-            prompt_wrapper=prompt_wrapper,
-            output_postprocessor=output_postprocessor,
-            generator=policy,
-        )
+        llm_judge = await judge_procs.spawn(actor_name, cls, generator=policy)
         llm_judge._judge_proc = judge_procs
 
         await llm_judge.setup.call()
@@ -139,8 +131,6 @@ class RewardModelJudge(ForgeActor):
         *,
         process_config: ProcessConfig,
         policy_cfg: Mapping,
-        prompt_wrapper: Optional[Callable[[str, list[str]], str]] = None,
-        output_postprocessor: Optional[Callable[[Any], Any]] = None,
         **kwargs,
     ):
         judge_procs = await get_proc_mesh(process_config=process_config)
@@ -149,13 +139,7 @@ class RewardModelJudge(ForgeActor):
         )
 
         actor_name = kwargs.pop("name", cls.__name__)
-        llm_judge = await judge_procs.spawn(
-            actor_name,
-            cls,
-            prompt_wrapper=prompt_wrapper,
-            output_postprocessor=output_postprocessor,
-            generator=policy,
-        )
+        llm_judge = await judge_procs.spawn(actor_name, cls, generator=policy)
         llm_judge._judge_proc = judge_procs
 
         return llm_judge
