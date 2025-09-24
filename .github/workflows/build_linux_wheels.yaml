@@ -30,6 +30,8 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
+    env:
+      TORCHSTORE_SSH_KEY: ${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}
     with:
       repository: meta-pytorch/forge
       ref: ""

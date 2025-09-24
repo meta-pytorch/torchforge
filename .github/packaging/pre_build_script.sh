@@ -6,7 +6,7 @@ set -euxo pipefail
 # their wheels into dist/.
 
 VLLM_BRANCH="v0.10.0"
-MONARCH_COMMIT="main"
+MONARCH_COMMIT="2a1e99a5a41b043e6a310d19537d0a37fce315e5"
 TORCHTITAN_COMMIT="main"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
@@ -71,6 +71,10 @@ build_torchtitan() {
 }
 
 build_torchstore() {
+    # This won't be needed once torchstore is open sourced.
+   eval "$(ssh-agent -s)"
+   ssh-add - <<< "$TORCHSTORE_SSH_KEY"
+
    cd "$BUILD_DIR"
     if [ -d "torchstore" ]; then
         log_warn "torchstore directory exists, removing..."
@@ -103,5 +107,5 @@ append_date() {
 
 # build_vllm
 build_monarch
-# build_torchstore
+build_torchstore
 append_date
