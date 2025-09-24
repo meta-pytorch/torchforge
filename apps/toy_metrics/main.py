@@ -14,6 +14,11 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.observability.metric_actors import GlobalLoggingActor
 from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.perf_tracker import (
+    record_perf_metrics,
+    record_perf_metrics_ctx,
+    StepTimer,
+)
 
 from monarch.actor import current_rank, endpoint, get_or_spawn_controller
 
@@ -22,20 +27,67 @@ logging.basicConfig(level=logging.INFO)
 
 class TrainActor(ForgeActor):
     @endpoint
+    @record_perf_metrics(
+        "trainer_perf", track_time=False, track_memory=True, sync_cuda_event=False
+    )
     async def train_step(self, step: int):
         rank = current_rank().rank
+
+        # Phase 2: Use StepTimer for detailed step timing
+        timer = StepTimer("trainer_perf/step", sync_cuda_event=False)
+        await timer.start()
+
+        # Simulate forward pass
+        await timer.step("forward")
+        await asyncio.sleep(0.01)  # Simulate computation
+
+        # Simulate backward pass
+        await timer.step("backward")
+        await asyncio.sleep(0.005)  # Simulate computation
         value = rank * 1000 + 100 * step
+
+        # Record training metrics
+        await record_metric("trainer/avg_grpo_loss", value, ReductionType.MEAN)
+        await record_metric("trainer/std_grpo_loss", value, ReductionType.STD)
+        await record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
+        await record_metric("trainer/learning_rate", 0.001, ReductionType.MEAN)
+
         print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
-        await record_metric("train/loss", value)
+
+        await timer.end()
+        return value
 
 
 class GeneratorActor(ForgeActor):
     @endpoint
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
-        value = rank * 1000 + step * 100 + substep * 10
-        print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
-        await record_metric("generate/tokens", value, ReductionType.SUM)
+
+        # Phase 1: Use context manager for perf metrics
+        async with record_perf_metrics_ctx(
+            "policy_perf", track_time=True, track_memory=False, sync_cuda_event=False
+        ):
+            # Simulate generation processing
+            await asyncio.sleep(0.02)  # Simulate generation time
+
+            value = rank * 1000 + step * 100 + substep * 10
+
+            # Record generation metrics following the plan
+            await record_metric("policy/count_requests", 1, ReductionType.SUM)
+            await record_metric(
+                "policy/sum_tokens_requested", 50, ReductionType.SUM
+            )  # Simulated max_tokens
+            await record_metric("policy/sum_tokens_generated", value, ReductionType.SUM)
+            await record_metric(
+                "policy/count_sequences_completed", 1, ReductionType.SUM
+            )
+            await record_metric(
+                "policy/avg_tokens_per_sample", value, ReductionType.MEAN
+            )
+
+            print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
+
+        return value
 
 
 # Main
