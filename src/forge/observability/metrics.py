@@ -22,6 +22,7 @@ class ReductionType(Enum):
     MAX = "max"
     MIN = "min"
     COUNT = "count"
+    STD = "std"
 
     @property
     def accumulator_class(self):
@@ -31,6 +32,7 @@ class ReductionType(Enum):
             ReductionType.MAX: MaxAccumulator,
             ReductionType.MIN: MinAccumulator,
             ReductionType.COUNT: CountAccumulator,
+            ReductionType.STD: StdAccumulator,
         }
         return mapping[self]
 
@@ -632,6 +634,55 @@ class WandbBackend(LoggerBackend):
         if self.run:
             self.run.finish()
             logger.info(f"WandbBackend {self.name}: Finished run")
+
+
+class StdAccumulator(MetricAccumulator):
+    def __init__(self, reduction: ReductionType):
+        super().__init__(reduction)
+        self.sum = 0.0
+        self.sum_sq = 0.0
+        self.count = 0
+
+    def append(self, value: Any) -> None:
+        v = float(value.item() if hasattr(value, "item") else value)
+        self.sum += v
+        self.sum_sq += v * v
+        self.count += 1
+
+    def get_value(self) -> float:
+        if self.count == 0:
+            return 0.0
+        if self.count == 1:
+            return 0.0
+        mean = self.sum / self.count
+        variance = (self.sum_sq / self.count) - (mean * mean)
+        return max(0.0, variance) ** 0.5  # sqrt, avoid negative due to floating point
+
+    def get_state(self) -> Dict[str, Any]:
+        return {
+            "reduction_type": self.reduction_type.value,
+            "sum": self.sum,
+            "sum_sq": self.sum_sq,
+            "count": self.count,
+        }
+
+    @classmethod
+    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> float:
+        total_sum = sum(s["sum"] for s in states)
+        total_sum_sq = sum(s["sum_sq"] for s in states)
+        total_count = sum(s["count"] for s in states)
+        if total_count == 0:
+            return 0.0
+        if total_count == 1:
+            return 0.0
+        mean = total_sum / total_count
+        variance = (total_sum_sq / total_count) - (mean * mean)
+        return max(0.0, variance) ** 0.5
+
+    def reset(self) -> None:
+        self.sum = 0.0
+        self.sum_sq = 0.0
+        self.count = 0
 
 
 def get_logger_backend_class(cls_name: str) -> type[LoggerBackend]:
