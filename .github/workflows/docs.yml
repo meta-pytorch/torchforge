@@ -51,38 +51,38 @@ jobs:
       - name: Build docs
         shell: bash -l {0}
         working-directory: docs
-        run: make html SPHINXOPTS='-W'
+        run: make html --keep-going SPHINXOPTS='-W'
       - name: Upload docs artifact
         uses: actions/upload-artifact@v4
         with:
           name: docs
           path: docs/_build/html/
 
-  doc-preview:
-    runs-on: [ubuntu-latest]
-    needs: build-docs
-    if: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docs
-          path: docs
-      - name: Add noindex to preview docs
-        run: |
-          echo "Adding noindex meta tag to prevent search engine indexing of preview docs"
-          find docs -name "*.html" -print0 | xargs -0 sed -i 's/<head>/<head>\n  <meta name="robots" content="noindex">/'
-      - name: Upload docs preview
-        uses: seemethere/upload-artifact-s3@v5
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          retention-days: 14
-          s3-bucket: doc-previews
-          if-no-files-found: error
-          path: docs
-          s3-prefix: meta-pytorch/forge/${{ github.event.pull_request.number }}
+  # doc-preview:
+  #   runs-on: [ubuntu-latest]
+  #   needs: build-docs
+  #   if: ${{ github.event_name == 'pull_request' }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: docs
+  #         path: docs
+  #     - name: Add noindex to preview docs
+  #       run: |
+  #         echo "Adding noindex meta tag to prevent search engine indexing of preview docs"
+  #         find docs -name "*.html" -print0 | xargs -0 sed -i 's/<head>/<head>\n  <meta name="robots" content="noindex">/'
+  #     - name: Upload docs preview
+  #       uses: seemethere/upload-artifact-s3@v5
+  #       if: ${{ github.event_name == 'pull_request' }}
+  #       with:
+  #         retention-days: 14
+  #         s3-bucket: doc-previews
+  #         if-no-files-found: error
+  #         path: docs
+  #         s3-prefix: meta-pytorch/forge/${{ github.event.pull_request.number }}
 
   deploy-docs:
         needs: build-docs
