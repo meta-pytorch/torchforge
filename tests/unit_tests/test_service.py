@@ -685,8 +685,8 @@ async def test_broadcast_call_with_failed_replica():
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_broadcast_call_vs_route():
-    """Test that broadcast call hits all replicas while route hits only one."""
+async def test_broadcast_fanout_vs_route():
+    """Test that broadcast fanout hits all replicas while route hits only one."""
     service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
 
     try:
