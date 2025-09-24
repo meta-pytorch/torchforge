@@ -102,7 +102,6 @@ ref_model:
 services:
   dataset:
     procs: 1
-    num_replicas: 1
     with_gpus: false
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
@@ -110,21 +109,16 @@ services:
     with_gpus: true
   trainer:
     procs: 1
-    num_replicas: 1
     with_gpus: true
   replay_buffer:
     procs: 1
-    num_replicas: 1
     with_gpus: false
   ref_model:
     procs: 1
-    num_replicas: 1
     with_gpus: true
   compute_advantages:
     procs: 1
-    num_replicas: 1
     with_gpus: false
   reward_actor:
     procs: 1
-    num_replicas: 1
     with_gpus: false
