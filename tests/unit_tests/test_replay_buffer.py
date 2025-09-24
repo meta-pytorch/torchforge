@@ -21,7 +21,7 @@ class TestReplayBuffer:
         replay_buffer = await mesh.spawn(
             "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
         )
-        await replay_buffer.setup.call()
+        await replay_buffer.setup.fanout()
         return replay_buffer
 
     @pytest.mark.asyncio
@@ -117,7 +117,7 @@ class TestReplayBuffer:
         replay_buffer = await mesh.spawn(
             "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1, dp_size=3
         )
-        await replay_buffer.setup.call()
+        await replay_buffer.setup.fanout()
 
         # Add enough trajectories to sample
         for i in range(10):

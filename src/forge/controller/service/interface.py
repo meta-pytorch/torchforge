@@ -94,13 +94,13 @@ class ServiceEndpoint(Generic[P, R]):
         self.service = service
         self.endpoint_name = endpoint_name
 
-    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    async def route(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Chooses a replica to call based on context and load balancing strategy."""
         # Extract sess_id from kwargs if present
         sess_id = kwargs.pop("sess_id", None)
         return await self.service._call(sess_id, self.endpoint_name, *args, **kwargs)
 
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def fanout(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
         """Broadcasts a request to all healthy replicas and returns the results as a list."""
         result = await self.service.call_all(self.endpoint_name, *args, **kwargs)
         return result
