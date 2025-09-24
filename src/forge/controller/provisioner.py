@@ -11,20 +11,38 @@ import logging
 
 import os
 import socket
+import subprocess
 import uuid
 
 import monarch
+
+from forge.types import ProcessConfig
+from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints, AllocSpec
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
+from monarch._src.actor.meta.allocator import MastAllocator, MastAllocatorConfig
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch._src.actor.actor_mesh import Actor, current_rank
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
-from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+import getpass
+
+USER = getpass.getuser()
+WORK_DIR = f"/data/users/{USER}"  # on DEVGPU
+WOKR_DIR_MAST = f"/home/{USER}"  # on MAST
+EDITABLE_WORKSPACES = ["forge"]
+
+EDITABLE_WORKSPACE_PATHS = [
+    f"{WORK_DIR}/{workspace}" for workspace in EDITABLE_WORKSPACES
+]
+
+JOB_NAME = "rithesh-forge-grpo-df89bf"
 
 
 def _get_port() -> str:
@@ -39,6 +57,65 @@ class _SetupActor(Actor):
     @endpoint
     def get_info(self) -> [str, str]:
         return socket.gethostname(), _get_port()
+
+    @endpoint
+    def mount(self, mount_dst: str, procs_per_host: int):
+        assert procs_per_host > 0
+        if current_rank().rank % procs_per_host != 0:
+            # Only use one rank per host to mount the directory
+            return
+        self.mount_mnt_directory(mount_dst)
+
+    def mount_mnt_directory(self, mount_dst: str) -> None:
+        # Sanity check of the mounted directory
+        sanity_path = os.path.join(mount_dst, "huggingface_models/")
+        if os.path.exists(sanity_path):
+            print(f"Found directory {sanity_path}; skip mounting.")
+            return
+
+        # Otherwise, mount the directory
+        if not os.path.exists(mount_dst):
+            os.makedirs(mount_dst, exist_ok=True)
+
+        # Store original LD_LIBRARY_PATH to restore after mounting
+        original_ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
+
+        try:
+            # Create an environment without LD_LIBRARY_PATH
+            # libc.so.6 version within LD_LIBRARY_PATH is too old causing error like
+            # fbcode/platform010/lib/libc.so.6: version `GLIBC_ABI_DT_RELR' not found (required by /usr/bin/env)
+            # /usr/bin/env: /usr/local/fbcode/platform010/lib/libc.so.6: version `GLIBC_2.38' not found (required by /usr/bin/env)
+
+            clean_env = os.environ.copy()
+            if "LD_LIBRARY_PATH" in clean_env:
+                del clean_env["LD_LIBRARY_PATH"]
+
+            subprocess.run(
+                [
+                    "/packages/oil.oilfs/oilfs-wrapper",
+                    "ws://ws.ai.pci0ai/genai_fair_llm",
+                    mount_dst,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                env=clean_env,
+            )
+            print("Done mounting")
+        except subprocess.CalledProcessError as e:
+            print(
+                f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}"
+            )
+        finally:
+            # Restore original LD_LIBRARY_PATH
+            if original_ld_library_path:
+                os.environ["LD_LIBRARY_PATH"] = original_ld_library_path
+            elif "LD_LIBRARY_PATH" in os.environ:
+                del os.environ["LD_LIBRARY_PATH"]
+
+        assert os.path.exists(
+            sanity_path
+        ), f"Did not find directory {sanity_path}; something wrong with mounting."
 
 
 class GpuManager:
@@ -107,38 +184,79 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
 
-    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
+    async def get_mast_allocator(
+        self,
+        task_group: str = "mesh0",
+        monarch_port: int = 26600,
+        num_hosts: int = 1,
+        num_gpus: int = 8,
+    ):
+        job_name = JOB_NAME
+        allocator = MastAllocator(
+            MastAllocatorConfig(
+                job_name=job_name,
+                remote_allocator_port=26600,  # This is the default monarch port
+            ),
+        )
+        spec = AllocSpec(
+            AllocConstraints({MastAllocator.ALLOC_LABEL_TASK_GROUP: task_group}),
+            hosts=num_hosts,
+            gpus=num_gpus,
+        )
+        # allocation = await allocator.allocate(spec)
+        # return allocation
+        alloc_constraints = AllocConstraints(
+            {MastAllocator.ALLOC_LABEL_TASK_GROUP: task_group}
+        )
+
+        return allocator, alloc_constraints
+
+    async def create_host_mesh(self, name: str, num_hosts: int):
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
         logger.debug(f"Creating remote server for alloc {name}")
-        appdef = hyperactor.host_mesh(
-            image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
-        )
-        for role in appdef.roles:
-            # Note - this is hardcoded to SLURM
-            # We got this with sinfo
-            role.resource.memMB = 2062607
-            role.resource.cpu = 128
-            role.resource.gpu = 8
+        # appdef = hyperactor.host_mesh(
+        #     image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
+        # )
+        # for role in appdef.roles:
+        #     # Note - this is hardcoded to SLURM
+        #     # We got this with sinfo
+        #     role.resource.memMB = 2062607
+        #     role.resource.cpu = 128
+        #     role.resource.gpu = 8
 
-        # TODO - multi scheduler support
-        server_config = Config(
-            scheduler="slurm",
-            appdef=appdef,
-            workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
-        )
-        server_info = await commands.get_or_create(
-            "forge_job",
-            server_config,
-            force_restart=False,
-        )
-        alloc = RemoteAllocator(
-            world_id=name,
-            initializer=TorchXRemoteAllocInitializer(server_info.server_handle),
-        )
-        server_name = f"slurm:///{server_info.name}"
+        # # TODO - multi scheduler support
+        # server_config = Config(
+        #     scheduler="slurm",
+        #     appdef=appdef,
+        #     workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
+        # )
+        # server_info = await commands.get_or_create(
+        #     "forge_job",
+        #     server_config,
+        #     force_restart=False,
+        # )
+        # alloc = RemoteAllocator(
+        #     world_id=name,
+        #     initializer=TorchXRemoteAllocInitializer(server_info.server_handle),
+        # )
+        # server_name = f"slurm:///{server_info.name}"
+        # return (
+        #     HostMesh(Shape(["hosts"], NDSlice.new_row_major([num_hosts])), alloc),
+        #     server_name,
+        # )
+        server_name = f"mast_conda:///{JOB_NAME}"
+
+        # allocation = await self.get_mast_allocator(task_group=name)
+        # return allocation, server_name
+
+        alloc, alloc_constraints = await self.get_mast_allocator(task_group=name)
         return (
-            HostMesh(Shape(["hosts"], NDSlice.new_row_major([num_hosts])), alloc),
+            HostMesh(
+                shape=Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            ),
             server_name,
         )
 
@@ -154,14 +272,19 @@ class Provisioner:
             server_name = None
             if num_hosts is not None and num_hosts > 0:
                 created_hosts = len(self._server_names)
+                _name = f"policy"
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=f"alloc-{created_hosts}",
+                    name=_name,
                     num_hosts=num_hosts,
                 )
+                # allocation, server_name = await self.create_host_mesh(
+                #     name=_name,
+                #     num_hosts=num_hosts,
+                # )
                 host_id = uuid.uuid1()
                 gpu_manager = GpuManager()
                 self._host_gpu_map[host_id] = gpu_manager
-                host_mesh._host_id = host_id
+                # host_mesh._host_id = host_id
             else:
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
@@ -197,11 +320,23 @@ class Provisioner:
                     per_host={"gpus": num_procs},
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
+                # procs = await ProcMesh.from_alloc(
+                #     allocation, functools.partial(bootstrap, gpu_ids=gpu_ids)
+                # )
+                await procs.initialized
+                # await procs.sync_workspace(
+                #     workspace=monarch.tools.config.workspace.Workspace(
+                #         dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACES],
+                #     ),
+                #     conda=True,
+                #     auto_reload=False,
+                # )
                 setup = await procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
                 # Pick a random host/port, we'll feed this in afterwards
                 # Once we have true HostMesh support, we can do this on proc 0 of each host
                 # then spin up the proc meshes with the environment afterwards.
                 hostname, port = await setup.get_info.choose()
+                await setup.mount.choose(mount_dst="/mnt/wsfuse", procs_per_host=8)
                 procs._hostname = hostname
                 procs._port = port
                 procs._gpu_ids = gpu_ids

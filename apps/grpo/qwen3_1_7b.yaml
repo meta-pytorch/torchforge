@@ -20,7 +20,7 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: ${model}
+    model: /home/rithesh/mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -29,13 +29,17 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+  process_config:
+    procs: ${policy.engine_config.tensor_parallel_size}
+    with_gpus: true
+    hosts: 1
 
 # Trainer configuration
 trainer:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
+    hf_assets_path: /home/rithesh/mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -61,7 +65,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: hf://${model}
+    initial_load_path: /home/rithesh/mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -81,7 +85,7 @@ ref_model:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
+    hf_assets_path: /home/rithesh/mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -95,7 +99,7 @@ ref_model:
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    initial_load_path: hf://${model}
+    initial_load_path: /home/rithesh/mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
     initial_load_in_hf: true
 
 # All resource allocations
@@ -108,10 +112,12 @@ services:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
+    hosts: 1
   trainer:
     procs: 1
     num_replicas: 1
     with_gpus: true
+    hosts: 1
   replay_buffer:
     procs: 1
     num_replicas: 1
@@ -120,6 +126,7 @@ services:
     procs: 1
     num_replicas: 1
     with_gpus: true
+    hosts: 1
   compute_advantages:
     procs: 1
     num_replicas: 1

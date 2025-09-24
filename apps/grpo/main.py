@@ -248,6 +248,13 @@ async def main(cfg: DictConfig):
         project="grpo-training",
     )
 
+    import debugpy
+
+    debugpy.listen(5678)
+    print("[MAIN] Waiting for VS Code debugger to attach...")
+    debugpy.wait_for_client()
+    print("Attached!")
+
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
     (
