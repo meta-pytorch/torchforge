@@ -63,7 +63,6 @@ class GeneratorActor(ForgeActor):
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
 
-        # Phase 1: Use context manager for perf metrics
         async with record_perf_metrics_ctx(
             "policy_perf", track_time=True, track_memory=False, sync_cuda_event=False
         ):
