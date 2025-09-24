@@ -101,6 +101,36 @@ class ServiceEndpoint(Generic[P, R]):
         result = await self.service.call_all(self.endpoint_name, *args, **kwargs)
         return result
 
+    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        raise NotImplementedError(
+            "You tried to use choose() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+        raise NotImplementedError(
+            "You tried to use call() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def call_one(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        raise NotImplementedError(
+            "You tried to use a call_one() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+        raise NotImplementedError(
+            "You tried to use broadcast() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def generate(self, *args: P.args, **kwargs: P.kwargs):
+        raise NotImplementedError(
+            "You tried to use generate() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
 
 class ServiceEndpointV2(Generic[P, R]):
     """An endpoint object specific to services.

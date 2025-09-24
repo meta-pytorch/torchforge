@@ -214,6 +214,42 @@ async def test_multiple_services_isolated_configs():
         await service2.shutdown()
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_service_endpoint_monarch_method_error():
+    """Test that calling Monarch-style methods on a service endpoint raises NotImplementedError."""
+    service = await Counter.options(procs=1, num_replicas=1).as_service(0)
+    try:
+        # Try to call a Monarch-style method and check for the error
+        with pytest.raises(
+            NotImplementedError,
+            match="You tried to use a call_one",
+        ):
+            await service.value.call_one()
+        with pytest.raises(
+            NotImplementedError,
+            match="You tried to use broadcast",
+        ):
+            await service.value.broadcast()
+        with pytest.raises(
+            NotImplementedError,
+            match="You tried to use generate",
+        ):
+            await service.value.generate()
+        with pytest.raises(
+            NotImplementedError,
+            match="You tried to use choose",
+        ):
+            await service.value.choose()
+        with pytest.raises(
+            NotImplementedError,
+            match="You tried to use call",
+        ):
+            await service.value.call()
+    finally:
+        await service.shutdown()
+
+
 # Core Functionality Tests
 
 
