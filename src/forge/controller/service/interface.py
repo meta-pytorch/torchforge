@@ -78,16 +78,12 @@ class SessionContext:
 
 
 class ServiceEndpoint(Generic[P, R]):
-    """An endpoint object specific to services.
+    """
+    This extends Monarch's actor APIs for service endpoints.
+    - `route(*args, **kwargs)`: Routes the request to a single replica.
+    - `fanout(*args, **kwargs)`: Broadcasts the request to all healthy replicas.
 
-    This loosely mimics the Endpoint APIs exposed in Monarch, with
-    a few key differences:
-    - Only choose(route) and call(fanout) are retained (dropping stream and call_one)
-    - Fanout returns a list directly rather than a ValueMesh.
-
-    These changes are made with Forge use cases in mind, but can
-    certainly be expanded/adapted in the future.
-
+    Monarch's native actor APIs do not apply for services.
     """
 
     def __init__(self, service, endpoint_name: str):
