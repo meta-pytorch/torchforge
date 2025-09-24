@@ -786,6 +786,176 @@ async def test_session_router_with_round_robin_fallback():
     assert r1.idx == r2.idx == 0
 
 
+@pytest.mark.asyncio
+async def test_batching_router_batchsize_with_roundrobin():
+    """Batch should flush when max batch size is reached using RoundRobinRouter."""
+    replicas = [make_replica(0), make_replica(1)]
+    batch_size = 3
+
+    router = BatchRouter(
+        RoundRobinRouter(),
+        batch_max_size=batch_size,
+        batch_max_wait_s=0.5,  # long enough to not trigger timeout
+    )
+
+    try:
+        # Enqueue `batch_size + 1` requests to force batch flush
+        tasks = [
+            asyncio.create_task(router.get_replica(replicas))
+            for _ in range(batch_size + 1)
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Check all results are healthy replicas
+        assert all(r.state == ReplicaState.HEALTHY for r in results)
+
+        # Check results only use existing replica indices
+        indices = {r.idx for r in results}
+        assert indices.issubset({0, 1})
+
+        # Ensure batch queue is empty after flush
+        assert router._queue.qsize() == 0
+    finally:
+        router.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batching_router_skips_unhealthy_replicas():
+    """If a replica becomes unhealthy before batch dispatch, it should be skipped."""
+    replicas = [make_replica(0, load=0), make_replica(1, load=10)]
+
+    router = BatchRouter(
+        LeastLoadedRouter(),
+        batch_max_size=4,
+        batch_max_wait_s=0.5,
+    )
+    try:
+        # Start two requests that will form a batch
+        tasks = [asyncio.create_task(router.get_replica(replicas)) for _ in range(2)]
+
+        # While they are waiting, mark replica 0 (least loaded) as unhealthy
+        await asyncio.sleep(0.01)
+        replicas[0].state = ReplicaState.UNHEALTHY
+
+        results = await asyncio.gather(*tasks)
+
+        # All results must be the *healthy* replica (idx=1)
+        assert all(r.idx == 1 for r in results)
+        assert results[0].state == ReplicaState.HEALTHY
+    finally:
+        router.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batching_router_two_batches_timing():
+    """Test that two sequential batches are processed independently with proper timing."""
+    import time
+
+    replicas = [make_replica(0, load=5), make_replica(1, load=10)]
+    batch_wait_time = 0.05  # 50ms timeout
+
+    router = BatchRouter(
+        LeastLoadedRouter(),
+        batch_max_size=3,
+        batch_max_wait_s=batch_wait_time,
+    )
+    try:
+        # First batch: 2 requests that will timeout
+        start_time = time.time()
+
+        # Create first batch tasks
+        first_batch_tasks = [
+            asyncio.create_task(router.get_replica(replicas)) for _ in range(2)
+        ]
+
+        # Wait for first batch to complete (should timeout after batch_wait_time)
+        first_results = await asyncio.gather(*first_batch_tasks)
+        first_batch_duration = time.time() - start_time
+
+        # Verify first batch took approximately the timeout duration (tighter tolerance)
+        assert (
+            batch_wait_time <= first_batch_duration < batch_wait_time + 0.01
+        )  # 10ms tolerance on 50ms timeout
+
+        # Verify first batch results (should pick lowest load replica)
+        assert all(r.idx == 0 for r in first_results)  # replica 0 has lower load
+        assert all(r.state == ReplicaState.HEALTHY for r in first_results)
+
+        # Second batch: 2 more requests (new timing cycle should start)
+        second_batch_start = time.time()
+
+        # Create second batch tasks
+        second_batch_tasks = [
+            asyncio.create_task(router.get_replica(replicas)) for _ in range(2)
+        ]
+
+        # Wait for second batch to complete
+        second_results = await asyncio.gather(*second_batch_tasks)
+        second_batch_duration = time.time() - second_batch_start
+
+        # Verify second batch also took approximately the timeout duration (tighter tolerance)
+        assert batch_wait_time <= second_batch_duration < batch_wait_time + 0.01
+
+        # Verify second batch results
+        assert all(r.idx == 0 for r in second_results)  # should still pick lowest load
+        assert all(r.state == ReplicaState.HEALTHY for r in second_results)
+
+        # Ensure batch queue is empty after both batches
+        assert router._queue.qsize() == 0
+    finally:
+        router.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_batchrouter_callable_updates():
+    """Test that callables reflect updates after a batch is processed."""
+
+    # Initial replicas and session map
+    replicas = [make_replica(0, load=0), make_replica(1, load=10)]
+    session_map = {}
+
+    # Define dynamic callable for healthy replicas
+    def get_healthy_replicas():
+        # Always return only replicas whose state is HEALTHY
+        return [r for r in replicas if r.healthy]
+
+    # Wrap inner router to spy on session_map received
+    class SpyRouter(LeastLoadedRouter):
+        async def get_replica(self, healthy_replicas, sess_id, session_map_arg):
+            # Save the session_map passed in
+            self.last_session_map = session_map_arg
+            return await super().get_replica(healthy_replicas, sess_id, session_map_arg)
+
+    # Router using callables
+    spy_inner_router = SpyRouter()
+    router = BatchRouter(
+        spy_inner_router,
+        batch_max_size=2,
+        batch_max_wait_s=0.05,
+        get_healthy_replicas=get_healthy_replicas,
+        session_map=session_map,
+    )
+
+    try:
+        # Mark replica 0 unhealthy *after* we enqueue the first batch
+        tasks = [asyncio.create_task(router.get_replica(replicas)) for _ in range(1)]
+        await asyncio.sleep(0.001)
+        replicas[0].state = ReplicaState.UNHEALTHY
+        session_map["s1"] = 42  # simulate an update while batch is pending
+
+        # Wait for batch to complete
+        results = await asyncio.gather(*tasks)
+
+        # Verify router used healthy replica (idx=1) instead of least-loaded one (idx=0)
+        assert all(r.idx == 1 for r in results)
+
+        # Verify router actually received the updated session_map
+        assert spy_inner_router.last_session_map["s1"] == 42
+
+    finally:
+        await router.shutdown()
+
+
 # Router integeration tests
 
 
