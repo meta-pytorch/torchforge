@@ -259,17 +259,17 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_actor(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.services.trainer).as_actor(
+        RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
-        ReplayBuffer.options(**cfg.services.replay_buffer).as_actor(
+        ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.services.compute_advantages).as_actor(),
-        ReferenceModel.options(**cfg.services.ref_model).as_actor(**cfg.ref_model),
-        RewardActor.options(**cfg.services.reward_actor).as_actor(
+        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
+        ReferenceModel.options(**cfg.actors.ref_model).as_actor(**cfg.ref_model),
+        RewardActor.options(**cfg.actors.reward_actor).as_actor(
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )

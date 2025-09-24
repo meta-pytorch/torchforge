@@ -46,14 +46,16 @@ ref_model:
   model_name: ${model}
 
 services:
-  dataset:
-    procs: 1
-    with_gpus: false
   policy:
     procs: 1
     hosts: 1
     num_replicas: 1
     with_gpus: true
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
   trainer:
     procs: 1
     hosts: 1
