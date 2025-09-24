@@ -95,12 +95,12 @@ async def main(mode: str = "wandb_all_log_all"):
         await global_logger.flush.call_one(i)
 
     # shutdown
+    await asyncio.gather(global_logger.shutdown.call_one())
+
     await asyncio.gather(
         trainer.shutdown(),
         generator.shutdown(),
     )
-
-    await global_logger.shutdown.call_one()
 
     await shutdown()
 
