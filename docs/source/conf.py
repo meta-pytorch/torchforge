@@ -13,7 +13,6 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 import sys
-from unittest.mock import MagicMock
 
 import pytorch_sphinx_theme2
 
