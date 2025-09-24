@@ -30,8 +30,6 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
-    env:
-      TORCHSTORE_SSH_KEY: ${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}
     with:
       repository: meta-pytorch/forge
       ref: ""
@@ -39,6 +37,12 @@ jobs:
       test-infra-ref: main
       package-name: forge
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
-      pre-script: .github/packaging/pre_build_script.sh
+      pre-script: |
+          # note this will not be needed once torchstore is open sourced
+          echo "${{ secrets.FORGE_GITHUB_CI_FOR_TORCHSTORE }}" > /tmp/ssh_key
+          chmod 600 /tmp/ssh_key
+          eval "$(ssh-agent -s)"
+          ssh-add /tmp/ssh_key
+          .github/packaging/pre_build_script.sh
       trigger-event: ${{ github.event_name }}
       build-platform: 'python-build-package'

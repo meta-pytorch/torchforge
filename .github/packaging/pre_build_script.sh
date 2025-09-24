@@ -71,11 +71,7 @@ build_torchtitan() {
 }
 
 build_torchstore() {
-    # This won't be needed once torchstore is open sourced.
-   eval "$(ssh-agent -s)"
-   ssh-add - <<< "$TORCHSTORE_SSH_KEY"
-
-   cd "$BUILD_DIR"
+    cd "$BUILD_DIR"
     if [ -d "torchstore" ]; then
         log_warn "torchstore directory exists, removing..."
         rm -rf torchstore
