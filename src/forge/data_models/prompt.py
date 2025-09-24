@@ -7,7 +7,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 
 class Role(Enum):

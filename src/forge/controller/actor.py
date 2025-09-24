@@ -8,7 +8,7 @@ import logging
 
 import math
 import sys
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
@@ -22,6 +22,12 @@ T = TypeVar("T", bound="ForgeActor")
 
 
 class ForgeActor(Actor):
+    procs: int = 1
+    hosts: int | None = None
+    with_gpus: bool = False
+    num_replicas: int = 1
+    _extra_config: dict[str, Any] = {}
+
     def __init__(self, *args, **kwargs):
         if not hasattr(self, "_rank"):
             self._rank = current_rank().rank
@@ -48,71 +54,74 @@ class ForgeActor(Actor):
     def options(
         cls: Type[T],
         *,
-        service_config: ServiceConfig | None = None,
-        num_replicas: int | None = None,
-        procs: int | None = None,
-        **service_kwargs,
+        procs: int = 1,
+        hosts: int | None = None,
+        with_gpus: bool = False,
+        num_replicas: int = 1,
+        **kwargs,
     ) -> Type[T]:
         """
-        Returns a subclass of this ForgeActor with a bound ServiceConfig.
-        The returned subclass can later be launched via `.as_service()`.
+        Returns a version of ForgeActor with configured resource attributes.
 
-        Usage (choose ONE of the following forms):
-            # Option A: construct ServiceConfig implicitly
-            service = await MyForgeActor.options(
-                num_replicas=1,
-                procs=2,
-            ).as_service(...)
-            await service.shutdown()
+        This method allows you to pre-configure an actor class before spawning it with
+        `.as_actor()` or `.as_service()`. Each call creates a separate subclass, so
+        multiple different configurations can coexist without interfering with each other.
 
-            # Option B: provide an explicit ServiceConfig
-            cfg = ServiceConfig(num_replicas=1, procs=2, ..)
-            service = await MyForgeActor.options(service_config=cfg).as_service(...)
-            await service.shutdown()
+        ---- Usage Examples ----
 
-            # Option C: skip options, use the default service config with num_replicas=1, procs=1
-            service = await MyForgeActor.as_service(...)
-            await service.shutdown()
+        # Pre-configure a service with multiple replicas
+        service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
+        await service.shutdown()
+
+        # Default usage without calling options
+        service = await MyForgeActor.as_service(...)
+        await service.shutdown()
+
+        # Pre-configure a single actor
+        actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
+        await actor.shutdown()
+
+        # Default usage without calling options
+        actor = await MyForgeActor.as_actor(...)
+        await actor.shutdown()
         """
 
-        if service_config is not None:
-            cfg = service_config
-        else:
-            if num_replicas is None or procs is None:
-                raise ValueError(
-                    "Must provide either `service_config` or (num_replicas + procs)."
-                )
-            cfg = ServiceConfig(
-                num_replicas=num_replicas,
-                procs=procs,
-                **service_kwargs,
-            )
+        attrs = {
+            "procs": procs,
+            "hosts": hosts,
+            "with_gpus": with_gpus,
+            "num_replicas": num_replicas,
+            "_extra_config": kwargs,
+        }
 
-        return type(
-            f"{cls.__name__}Service",
-            (cls,),
-            {"_service_config": cfg},
-        )
+        return type(cls.__name__, (cls,), attrs)
 
     @classmethod
-    async def as_service(cls: Type[T], **actor_kwargs) -> "ServiceInterface":
+    async def as_service(
+        cls: Type[T], *actor_args, **actor_kwargs
+    ) -> "ServiceInterface":
         """
-        Convenience method to spawn this actor as a Service using default configuration.
-        If `.options()` was called, it will use the bound ServiceConfig;
-        otherwise defaults to 1 replica, 1 proc.
+        Spawns this actor as a Service using the configuration stored in `.options()`,
+        or defaults if `.options()` was not called.
+
+        The configuration values stored in the subclass returned by `.options()` (like
+        `procs` and `num_replicas`) are used to construct a ServiceConfig instance.
+        If no configuration was stored, defaults to a single replica with one process.
         """
         # Lazy import to avoid top-level dependency issues
         from forge.controller.service import Service, ServiceInterface
 
-        # Use _service_config if already set by options(), else default
-        cfg = getattr(cls, "_service_config", None)
-        if cfg is None:
-            cfg = ServiceConfig(num_replicas=1, procs=1)
-            # dynamically create a configured subclass for consistency
-            cls = type(f"{cls.__name__}Service", (cls,), {"_service_config": cfg})
+        cfg_kwargs = {
+            "procs": cls.procs,
+            "hosts": cls.hosts,
+            "with_gpus": cls.with_gpus,
+            "num_replicas": cls.num_replicas,
+            **cls._extra_config,  # all extra fields
+        }
+        cfg = ServiceConfig(**cfg_kwargs)
 
         logger.info("Spawning Service Actor for %s", cls.__name__)
-        service = Service(cfg, cls, actor_kwargs)
+        service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         return ServiceInterface(service, cls)
 
@@ -154,7 +163,7 @@ class ForgeActor(Actor):
         os.environ["MASTER_PORT"] = port
 
     @classmethod
-    async def launch(cls, *, process_config: ProcessConfig, **kwargs) -> "ForgeActor":
+    async def launch(cls, *args, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -167,11 +176,17 @@ class ForgeActor(Actor):
         a homogeneous set of actors on a single proc mesh.
 
         """
-        proc_mesh = await get_proc_mesh(process_config=process_config)
+        # Build process config
+        cfg = ProcessConfig(
+            procs=cls.procs,
+            hosts=cls.hosts,
+            with_gpus=cls.with_gpus,
+        )
 
-        # TODO - expand support so name can stick within kwargs
+        proc_mesh = await get_proc_mesh(process_config=cfg)
+
         actor_name = kwargs.pop("name", cls.__name__)
-        actor = await proc_mesh.spawn(actor_name, cls, **kwargs)
+        actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
 
         if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
@@ -181,9 +196,21 @@ class ForgeActor(Actor):
         return actor
 
     @classmethod
+    async def as_actor(cls: Type[T], *args, **actor_kwargs) -> T:
+        """
+        Spawns a single actor using the configuration stored in `.options()`, or defaults.
+
+        The configuration values stored in the subclass returned by `.options()` (like
+        `procs`) are used to construct a ProcessConfig instance.
+        If no configuration was stored, defaults to a single process with no GPU.
+        """
+        logger.info("Spawning single actor %s", cls.__name__)
+        actor = await cls.launch(*args, **actor_kwargs)
+        return actor
+
+    @classmethod
     async def shutdown(cls, actor: "ForgeActor"):
         """Shuts down an actor.
-
         This method is used by `Service` to teardown a replica.
         """
         if actor._proc_mesh is None:

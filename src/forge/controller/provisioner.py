@@ -289,9 +289,9 @@ def _get_provisioner():
 
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
     return await _get_provisioner().get_proc_mesh(
-        num_procs=config.num_procs,
+        num_procs=config.procs,
         with_gpus=config.with_gpus,
-        num_hosts=config.num_hosts,
+        num_hosts=config.hosts,
     )
 
 
