@@ -35,11 +35,11 @@ async def _perf_metrics_cm(
     Notes:
         - Uses CUDA events for synchronization when sync_cuda_event=True and CUDA is available.
         - Only the outermost scope tracks memory to avoid torch.cuda.max_memory_allocated() conflicts.
+             i.e. foo(bar()) will only track memory for foo().
         - Inner scopes skip memory metrics with a one-time warning.
         - DISABLE_PERF_METRICS='true' skips all metrics.
         - METRICS_USE_CUDA_SYNC='true' forces CUDA event sync (overrides sync_cuda_event arg).
-        - Metrics use flat naming (e.g., {prefix}_duration_avg (s)).
-        - Process-local, suitable for Ray multi-GPU setups (one GPU per process).
+        - Process-local
     """
     if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
         yield
