@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+# Usage: python -m apps.toy_rl.sumdigits --config apps/toy_rl/sumdigits.yaml
 
 import asyncio
 import random
@@ -449,14 +449,12 @@ async def main(cfg: DictConfig):
         reward_actor,
         ref_model,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        Trainer.options(**cfg.services.trainer).as_service(**cfg.trainer),
-        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
-            **cfg.replay_buffer
-        ),
-        RewardActor.options(**cfg.services.reward_actor).as_service(),
-        RefModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
+        ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
+        RewardActor.options(**cfg.actors.reward_actor).as_actor(),
+        RefModel.options(**cfg.actors.ref_model).as_actor(**cfg.ref_model),
     )
 
     print("All services initialized successfully!")
