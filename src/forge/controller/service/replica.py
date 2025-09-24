@@ -240,7 +240,7 @@ class Replica:
             # Execute the request
             success = True
             try:
-                result = await endpoint_func.fanout(*request.args, **request.kwargs)
+                result = await endpoint_func.call(*request.args, **request.kwargs)
                 # Unwrap ValueMesh if configured to return first rank result
                 if self.return_first_rank_result:
                     _, first_result = next(result.items())

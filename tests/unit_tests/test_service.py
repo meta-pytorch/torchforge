@@ -87,11 +87,11 @@ async def test_as_actor_with_args_config():
     actor = await Counter.options(procs=1).as_actor(5)
 
     try:
-        assert await actor.value.route() == 5
+        assert await actor.value.choose() == 5
 
         # Test increment
-        await actor.incr.route()
-        assert await actor.value.route() == 6
+        await actor.incr.choose()
+        assert await actor.value.choose() == 6
 
     finally:
         await Counter.shutdown(actor)
@@ -104,11 +104,11 @@ async def test_as_actor_default_usage():
     actor = await Counter.as_actor(v=7)
     try:
         # Check initial value
-        assert await actor.value.route() == 7
+        assert await actor.value.choose() == 7
 
         # Test increment
-        await actor.incr.route()
-        assert await actor.value.route() == 8
+        await actor.incr.choose()
+        assert await actor.value.choose() == 8
 
     finally:
         await Counter.shutdown(actor)
@@ -125,7 +125,7 @@ async def test_options_applies_config():
 
     actor = await actor_cls.as_actor(v=3)
     try:
-        assert await actor.value.route() == 3
+        assert await actor.value.choose() == 3
     finally:
         await Counter.shutdown(actor)
 
@@ -712,7 +712,8 @@ async def test_broadcast_fanout_vs_route():
             replica_metrics["total_requests"]
             for replica_metrics in metrics["replicas"].values()
         )
-        # incr.fanout() (3 requests) + value.fanout() (3 requests) + incr.route() (1 request) + value.fanout() (3 requests) = 10 total
+        # incr.fanout() (3 requests) + value.fanout() (3 requests) +
+        # incr.route() (1 request) + value.fanout() (3 requests) = 10 total
         assert total_requests == 10
 
     finally:
