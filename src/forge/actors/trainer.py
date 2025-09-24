@@ -95,13 +95,13 @@ class RLTrainer(ForgeActor):
     activation_checkpoint: ActivationCheckpoint = field(
         default_factory=ActivationCheckpoint
     )
+    use_vllm_builtin_load: bool = False
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
-    use_vllm_builtin_loading: bool = False
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -145,7 +145,7 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {"loss", "state_dict_key", "use_dcp", "use_vllm_builtin_loading"}:
+        for key in {"loss", "state_dict_key", "use_dcp", "use_vllm_builtin_load"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.step)
@@ -251,7 +251,7 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
-        if self.use_vllm_builtin_loading:
+        if self.use_vllm_builtin_load:
             await self._push_weights_hf_nonsharded(policy_version)
         else:
             await self._push_weights_sharded(policy_version)

@@ -28,9 +28,9 @@ from forge.actors.torchstore_utils import (
 
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
+# Removed WeightSyncConfig - using boolean flag instead
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
@@ -132,7 +132,7 @@ class EngineConfig(EngineArgs):
 class Policy(ForgeActor):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
-    use_vllm_builtin_loading: bool = False
+    use_vllm_builtin_load: bool = False
     test_blah_blah: int = 0
     available_devices: str | None = None
     # Gets set up by setup
@@ -152,6 +152,7 @@ class Policy(ForgeActor):
             self.engine_config = EngineConfig.from_dict(self.engine_config)
         if isinstance(self.sampling_config, Mapping):
             self.sampling_config = SamplingConfig.from_dict(self.sampling_config)
+        # No conversion needed for boolean flag
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -160,6 +161,7 @@ class Policy(ForgeActor):
         process_config: ProcessConfig,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
+        use_vllm_builtin_load: bool = False,
         available_devices: str | None = None,
         **kwargs,
     ) -> "Policy":
@@ -198,6 +200,7 @@ class Policy(ForgeActor):
             cls,
             engine_config=engine_config,
             sampling_config=sampling_config,
+            use_vllm_builtin_load=use_vllm_builtin_load,
             available_devices=available_devices,
             policy_worker=workers,
         )
@@ -392,8 +395,7 @@ class Policy(ForgeActor):
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
         logger.info(f"Policy {self=}")
-        logger.info(f"use_vllm_builtin_loading={self.use_vllm_builtin_loading}")
-        if self.use_vllm_builtin_loading:
+        if self.use_vllm_builtin_load:
             await self.policy_worker._update_hf_nonsharded.call(version=policy_version)
         else:
             await self.policy_worker._update_sharded.call(version=policy_version)

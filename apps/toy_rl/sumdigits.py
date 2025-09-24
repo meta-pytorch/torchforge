@@ -10,7 +10,7 @@ import asyncio
 import random
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -19,12 +19,13 @@ import torchstore as ts
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.torchstore_utils import get_param_key
+from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
+
 from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.util.metric_logging import get_metric_logger
-
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -255,7 +256,10 @@ class Trainer(ForgeActor):
     learning_rate: float = 1e-5
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
-    use_vllm_builtin_loading: bool = False
+    use_vllm_builtin_load: bool = False
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -342,7 +346,7 @@ class Trainer(ForgeActor):
     @endpoint
     async def push_weights(self, version: int):
         """Update policy model weights with trainer's current weights."""
-        if self.use_vllm_builtin_loading:
+        if self.use_vllm_builtin_load:
             await self._push_weights_hf_nonsharded(version)
             return None
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
