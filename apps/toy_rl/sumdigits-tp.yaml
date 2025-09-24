@@ -15,7 +15,7 @@ dataset:
 policy:
   engine_config:
     model: ${model}
-    tensor_parallel_size: 4
+    tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:
