@@ -14,6 +14,7 @@ import logging
 import pytest
 from forge.controller import ForgeActor
 from forge.controller.service import (
+    BatchRouter,
     LeastLoadedRouter,
     Replica,
     ReplicaState,
