@@ -19,7 +19,6 @@ TorchForge is organized into several key modules, each providing specialized fun
 - [Environments](api_envs.md) - Training and inference environments
 
 **Tools & Utilities**
-- [CLI](api_cli.md) - Command line interface
 - [Utilities](api_util.md) - General utility functions and helpers
 
 ```{toctree}
@@ -32,6 +31,5 @@ api_data
 api_losses
 api_envs
 api_controller
-api_cli
 api_util
 ```

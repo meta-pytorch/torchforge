@@ -13,8 +13,57 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 import sys
+from unittest.mock import MagicMock
 
 import pytorch_sphinx_theme2
+
+# Add the source directory to Python path so modules can be imported
+sys.path.insert(0, os.path.abspath("../../src"))
+
+
+# Mock problematic modules that might be missing during doc build
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+
+# Simple and reliable mocking approach
+MOCK_MODULES = [
+    "six",
+    "torch",
+    "torch.nn",
+    "torch.distributed",
+    "transformers",
+    "huggingface_hub",
+    "ray",
+    "datasets",
+    "accelerate",
+    "peft",
+    "monarch",
+    "monarch._src",
+    "monarch._src.actor",
+    "monarch._src.actor.allocator",
+    "monarch._src.actor.shape",
+    "monarch.actor",
+    "monarch.tools",
+    "monarch.tools.components",
+]
+
+for mod_name in MOCK_MODULES:
+    try:
+        __import__(mod_name)
+    except ImportError:
+        sys.modules[mod_name] = Mock()
+
+# Try to import the modules to ensure they're available
+try:
+    import forge
+    import forge.controller
+
+    print("Successfully imported forge.controller")
+except ImportError as e:
+    print(f"Warning: Could not import forge.controller: {e}")
 
 
 project = "torchforge"
