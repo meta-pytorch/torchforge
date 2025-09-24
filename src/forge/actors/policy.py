@@ -200,7 +200,7 @@ class Policy(PolicyInterface):
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
-        await policy.setup.fanout()
+        await policy.setup.call()
         return policy
 
     @classmethod
@@ -216,7 +216,7 @@ class Policy(PolicyInterface):
 
         # TODO - may want to expand stop to gracefully respond to
         # ongoing requests.
-        await actor.stop.fanout()
+        await actor.stop.call()
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._policy_proc)
 
@@ -224,7 +224,7 @@ class Policy(PolicyInterface):
     async def setup(self):
         # Set up policy_worker
         assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.fanout()
+        await self.policy_worker.setup.call()
 
         self.request_id = 0
         self.policy_version = 0
@@ -251,7 +251,7 @@ class Policy(PolicyInterface):
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        kv_cache_configs = await self.policy_worker.setup_kv_cache.fanout()
+        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
         self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_config.cache_config.num_cpu_blocks = 0
@@ -358,7 +358,7 @@ class Policy(PolicyInterface):
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.policy_worker.execute_model.fanout(
+            worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
             # the results of `execute_model` is gathered on the driver rank (rank 0)
@@ -388,14 +388,14 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.fanout(version=policy_version)
+        await self.policy_worker.update.call(version=policy_version)
         self.policy_version = policy_version
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
     async def _get_model_params(self) -> dict[str, torch.Tensor]:
         """Get the current model parameters. Only for testing purposes."""
-        val_mesh = await self.policy_worker._get_model_params.fanout()
+        val_mesh = await self.policy_worker._get_model_params.call()
         sharded_state_dicts = {}
         for idx, val in val_mesh.items():
             sharded_state_dicts[idx["gpus"]] = val
