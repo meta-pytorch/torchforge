@@ -7,7 +7,7 @@
 from .interface import ServiceInterface, Session, SessionContext
 from .metrics import ServiceMetrics
 from .replica import Replica, ReplicaMetrics, ReplicaState
-from .router import BatchRouter, LeastLoadedRouter, RoundRobinRouter, SessionRouter
+from .router import LeastLoadedRouter, RoundRobinRouter, SessionRouter
 from .service import Service, ServiceActor, ServiceConfig
 
 __all__ = [
@@ -24,5 +24,4 @@ __all__ = [
     "LeastLoadedRouter",
     "RoundRobinRouter",
     "SessionRouter",
-    "BatchRouter",
 ]

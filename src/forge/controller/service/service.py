@@ -35,6 +35,7 @@ Example:
 import asyncio
 import logging
 import pprint
+import time
 import uuid
 from typing import Dict, List
 
@@ -110,6 +111,13 @@ class Service:
         self._default_router = RoundRobinRouter()
         self._session_router = SessionRouter(fallback_router=LeastLoadedRouter())
 
+        # Batching
+        self._max_batch_size = self._cfg.max_batch_size
+        self._batch_max_wait_s = self._cfg.batch_max_wait_s
+        self._batch_task: asyncio.Task | None = None
+        self._running_batch_loop = False
+        self._batch_queue: asyncio.Queue = asyncio.Queue()
+
         # Initialize all replicas
         replicas = []
         num_replicas = self._cfg.num_replicas
@@ -137,6 +145,60 @@ class Service:
         self._health_task = asyncio.create_task(
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
+
+        # Start batch loop if batching enabled
+        if self._max_batch_size > 1:
+            self._running_batch_loop = True
+            self._batch_task = asyncio.create_task(self._batch_loop())
+
+    async def _batch_loop(self):
+        """Background task that continuously processes batches of routing requests.
+
+        This is the core batching logic that runs in a separate asyncio task.
+        It collects requests from the queue and processes them in batches based
+        on size and time constraints.
+
+        The loop follows these steps:
+        1. Wait for the first request to start a new batch
+        2. Collect additional requests until batch_max_size or batch_max_wait_s is reached
+        3. Make a single routing decision for the entire batch
+        4. Fulfill all futures with the selected replica
+
+        This process repeats indefinitely until the task is cancelled.
+        """
+        while self._running_batch_loop:
+            batch_futs = []
+
+            # Wait for first request
+            fut = await self._batch_queue.get()
+            batch_futs.append(fut)
+            start_time = time.monotonic()
+
+            while True:
+                try:
+                    timeout = max(
+                        0, self._batch_max_wait_s - (time.monotonic() - start_time)
+                    )
+                    fut = await asyncio.wait_for(
+                        self._batch_queue.get(), timeout
+                    )  # wait for timeout or until self._queue.get() finishes
+                    batch_futs.append(fut)
+
+                    if len(batch_futs) >= self._max_batch_size:
+                        break
+                except asyncio.TimeoutError:
+                    break
+
+            healthy_replicas = self._get_healthy_replicas()
+
+            # One routing decision for the whole batch
+            replica = self._default_router.get_replica(
+                healthy_replicas, None, self._session_replica_map
+            )
+
+            # Fulfill all futures with the chosen replica
+            for fut in batch_futs:
+                fut.set_result(replica)
 
     async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
         """
@@ -211,7 +273,7 @@ class Service:
         Raises:
             RuntimeError: If no healthy replicas are available
         """
-        healthy_replicas = [r for r in self._replicas if r.healthy]
+        healthy_replicas = self._get_healthy_replicas()
 
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for broadcast call")
@@ -280,9 +342,7 @@ class Service:
         )
 
         # Find healthy replicas
-        healthy_replicas = [
-            r for r in self._replicas if r.healthy and r != failed_replica
-        ]
+        healthy_replicas = self._get_healthy_replicas()
 
         if not healthy_replicas:
             # No healthy replicas, fail all requests
@@ -334,7 +394,7 @@ class Service:
         """Updates service-level metrics."""
         self._metrics.total_sessions = len(self._active_sessions)
         self._metrics.total_replicas = len(self._replicas)
-        self._metrics.healthy_replicas = sum(1 for r in self._replicas if r.healthy)
+        self._metrics.healthy_replicas = len(self._get_healthy_replicas())
         # Store direct references to replica metrics for aggregation
         self._metrics.replica_metrics = {}
         for replica in self._replicas:
@@ -446,6 +506,10 @@ class Service:
         # Update metrics
         self._update_service_metrics()
 
+    def _get_healthy_replicas(self) -> list[Replica]:
+        """Returns a list of healthy replicas."""
+        return [r for r in self._replicas if r.healthy]
+
     async def _health_loop(self, poll_rate_s: float):
         """Runs the health loop to monitor and recover replicas.
 
@@ -476,14 +540,24 @@ class Service:
 
     async def _get_replica(self, sess_id: str | None) -> "Replica":
         """Get a replica for the given session ID."""
-        healthy_replicas = [r for r in self._replicas if r.healthy]
-        if sess_id is None:
-            # No session, use the default router
-            return self._default_router.get_replica(healthy_replicas)
 
-        return self._session_router.get_replica(
-            healthy_replicas, sess_id, self._session_replica_map
-        )
+        if sess_id:
+            # Stateful routing always uses session router
+            healthy_replicas = self._get_healthy_replicas()
+            return self._session_router.get_replica(
+                healthy_replicas, sess_id, self._session_replica_map
+            )
+
+        # Stateless: batching
+        if self._max_batch_size > 1:
+            fut = asyncio.Future()
+            healthy_replicas = self._get_healthy_replicas()
+            self._batch_queue.put_nowait(fut)
+            return await fut
+        else:
+            # No batching, pick immediately
+            healthy_replicas = self._get_healthy_replicas()
+            return self._default_router.get_replica(healthy_replicas)
 
     async def stop(self):
         logger.debug("Stopping service...")
@@ -582,7 +656,7 @@ class Service:
             # Load balancing state
             # Service-level state
             "total_replicas": len(self._replicas),
-            "healthy_replica_count": sum(1 for r in self._replicas if r.healthy),
+            "healthy_replica_count": len(self._get_healthy_replicas()),
             "shutdown_requested": self._shutdown_requested,
             # Metrics summary
             "total_sessions": len(self._active_sessions),
