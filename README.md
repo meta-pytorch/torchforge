@@ -1,8 +1,26 @@
-# forge
+# <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> Forge
 
-#### A PyTorch native platform for post-training generative AI models
+
+#### A PyTorch native agentic library for RL post-training and agentic development
 
 ## Overview
+Forge was built with one core principle in mind: researchers should write algorithms, not infrastructure. Forge introduces a “service”-centric architecture that provides the right abstractions for distributed complexity. When you need fine-grained control over placement, fault handling or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
+
+Key features:
+- Usability for rapid research (isolating the RL loop from infrastructure)
+- Hackability for power users (all parts of the RL loop can be easily modified without interacting with infrastructure)
+- Scalability (ability so shift between async and syncronous training and across thousands of GPUs)
+
+> ⚠️ **Early Development Warning** Monarch is currently in an experimental
+> stage. You should expect bugs, incomplete features, and APIs that may change
+> in future versions. The project welcomes bugfixes, but to make sure things are
+> well coordinated you should discuss any significant change before starting the
+> work. It's recommended that you signal your intention to contribute in the
+> issue tracker, either by filing a new issue or by claiming an existing one.
+
+## 📖 Documentation
+
+View Forge's hosted documentation [at this link](https://meta-pytorch.org/forge/).
 
 ## Installation
 
