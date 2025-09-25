@@ -7,7 +7,6 @@
 import asyncio
 import logging
 from dataclasses import asdict
-from typing import Callable
 
 import pytest
 import pytest_asyncio
@@ -20,9 +19,7 @@ from forge.actors.trainer import RLTrainer
 from forge.controller.service import ServiceConfig
 
 from forge.controller.service.service import uuid
-from monarch.actor import current_rank, endpoint
-from torch.distributed.checkpoint._nested_dict import flatten_state_dict
-from torch.distributed.tensor import DTensor, Replicate
+from monarch.actor import endpoint
 
 
 requires_cuda = pytest.mark.skipif(
@@ -228,7 +225,7 @@ class TestWeightSync:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
 
-        await policy.update_weights.call(policy_version=v1)
+        await policy.update_weights.fanout(policy_version=v1)
         all_errs = await policy._test_validate_model_params.fanout(
             validate_fn_all_zeros
         )
@@ -237,7 +234,7 @@ class TestWeightSync:
                 assert not e, f"Validation failed with exception: {e}"
 
         # Reloading v0, getting back original weights
-        await policy.update_weights.call(policy_version=v0)
+        await policy.update_weights.fanout(policy_version=v0)
         all_errs = await policy._test_validate_model_params.fanout(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
@@ -274,9 +271,7 @@ class TestWeightSync:
         )
         policy, rl_trainer = await asyncio.gather(
             *[
-                Policy.options(service_config=service_config).as_service(
-                    **policy_config
-                ),
+                Policy.options(**asdict(service_config)).as_service(**policy_config),
                 MockRLTrainer.options(
                     procs=trainer_worker_size, with_gpus=True, num_replicas=1
                 ).as_service(**trainer_cfg_tp),
@@ -286,26 +281,28 @@ class TestWeightSync:
         v0 = uuid.uuid4().int
         v1 = v0 + 1
 
-        await rl_trainer.push_weights.call(policy_version=v0)
+        await rl_trainer.push_weights.fanout(policy_version=v0)
         # Setting everything to zero
-        await rl_trainer.mock_train_step.call()
-        await rl_trainer.push_weights.call(policy_version=v1)
-        await policy._test_save_model_params.call()
+        await rl_trainer.mock_train_step.fanout()
+        await rl_trainer.push_weights.fanout(policy_version=v1)
+        await policy._test_save_model_params.fanout()
 
         # Sanity check that before update all the tests pass
-        all_errs = await policy._test_validate_model_params.call(validate_fn)
+        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
 
-        await policy.update_weights.call(policy_version=v1)
-        all_errs = await policy._test_validate_model_params.call(validate_fn_all_zeros)
+        await policy.update_weights.fanout(policy_version=v1)
+        all_errs = await policy._test_validate_model_params.fanout(
+            validate_fn_all_zeros
+        )
         for errs in all_errs:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
         # Reloading v0, getting back original weights
-        await policy.update_weights.call(policy_version=v0)
-        all_errs = await policy._test_validate_model_params.call(validate_fn)
+        await policy.update_weights.fanout(policy_version=v0)
+        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
         for errs in all_errs:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
