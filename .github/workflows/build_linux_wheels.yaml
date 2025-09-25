@@ -34,7 +34,7 @@ jobs:
         id: filter
         run: |
           echo '${{ needs.generate-matrix.outputs.matrix }}' \
-            | jq 'del(.include[] | select(.gpu_arch_version == "13.0"))' \
+            | jq -c 'del(.include[] | select(.gpu_arch_version == "13.0"))' \
             > matrix.json
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
   build:
