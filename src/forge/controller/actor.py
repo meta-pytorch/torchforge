@@ -206,6 +206,7 @@ class ForgeActor(Actor):
         """
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(*args, **actor_kwargs)
+        logger.info("Successfully spawned single actor %s", cls.__name__)
         return actor
 
     @classmethod
