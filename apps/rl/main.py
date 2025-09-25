@@ -135,10 +135,8 @@ def simple_grpo_loss(
 
 
 async def run(cfg: DictConfig):
-    trainer = await RLTrainer.options(
-        procs=1, with_gpus=True, num_replicas=4
-    ).as_service(**cfg.trainer)
-    replay_buffer = await ReplayBuffer.options(procs=1, num_replicas=1).as_service(
+    trainer = await RLTrainer.options(procs=1, with_gpus=True).as_actor(**cfg.trainer)
+    replay_buffer = await ReplayBuffer.options(procs=1, num_replicas=1).as_actor(
         **cfg.replay_buffer
     )
 
