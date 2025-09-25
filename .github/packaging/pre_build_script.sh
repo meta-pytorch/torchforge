@@ -6,7 +6,7 @@ set -euxo pipefail
 # their wheels into dist/.
 
 VLLM_BRANCH="v0.10.0"
-MONARCH_COMMIT="2a1e99a5a41b043e6a310d19537d0a37fce315e5"
+MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
 TORCHTITAN_COMMIT="main"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
