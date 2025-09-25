@@ -286,8 +286,12 @@ async def main(cfg: DictConfig):
                 return
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
-            # TODO: this shall be part of the responses metadata instead of a separate call
-            version = await policy.get_version.route()
+            assert (
+                len(responses) > 0
+            ), "Sanity check: Responses should NEVER return empty"
+            assert (
+                version := responses[0].generator_version
+            ) is not None, "Response must indicate a version"
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,

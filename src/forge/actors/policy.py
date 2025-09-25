@@ -402,11 +402,6 @@ class Policy(PolicyInterface):
         return sharded_state_dicts
 
     @endpoint
-    async def get_version(self) -> int:
-        """Get the current policy version."""
-        return self.policy_version
-
-    @endpoint
     async def stop(self):
         self.running = False
 
@@ -426,6 +421,7 @@ class Policy(PolicyInterface):
                     prompt_ids=torch.tensor(prompt_token_ids),
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
+                    generator_version=self.policy_version,
                 )
             )
 
