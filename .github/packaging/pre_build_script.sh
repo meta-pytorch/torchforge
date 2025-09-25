@@ -91,8 +91,9 @@ build_torchstore() {
 
 
 append_date() {
+    cd ${GITHUB_WORKSPACE}/${REPOSITORY}
     # Appends the current date and time to the Forge wheel
-    version_file="${REPOSITORY}/assets/version.txt"
+    version_file="assets/version.txt"
     echo "version file: $version_file"
     init_file="src/forge/__init__.py"
     if [[ -n "$BUILD_VERSION" ]]; then
