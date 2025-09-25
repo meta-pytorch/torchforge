@@ -7,7 +7,7 @@ set -euxo pipefail
 
 VLLM_BRANCH="v0.10.0"
 MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
-TORCHTITAN_COMMIT="main"
+TORCHTITAN_COMMIT="82f0287b966f1735819a377a9a09e7a303c55faa"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
 
@@ -94,7 +94,6 @@ append_date() {
     cd ${GITHUB_WORKSPACE}/${REPOSITORY}
     # Appends the current date and time to the Forge wheel
     version_file="assets/version.txt"
-    echo "version file: $version_file"
     init_file="src/forge/__init__.py"
     if [[ -n "$BUILD_VERSION" ]]; then
         # Update the version in version.txt
@@ -110,7 +109,6 @@ append_date() {
 
 # build_vllm
 # build_monarch
-echo "Done building Monarch, building date"
 # build_torchstore
+build_torchtitan
 append_date
-echo "done appending date"
