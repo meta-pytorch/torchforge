@@ -403,13 +403,13 @@ class Policy(PolicyInterface):
     @endpoint
     async def _test_save_model_params(self):
         """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info("[Policy] start saving model parameters before update for testing")
+        logger.info("[Policy] save model parameters for testing.")
         await self.policy_worker._test_save_model_params.call()
 
     @endpoint
     async def _test_validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
-        logger.info("[Policy] start validating model parameters post update")
+        logger.info("[Policy] start validating model parameters.")
         return await self.policy_worker._test_validate_model_params.call(validate_fn)
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
@@ -552,9 +552,7 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def _test_save_model_params(self):
         """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info(
-            "[PolicyWorker] start saving model parameters before update for testing"
-        )
+        logger.info("[PolicyWorker] save model parameters for testing.")
         for name, param in self.worker.model_runner.model.named_parameters():
             self._test_prev_params[name] = param.detach().cpu()
         logger.info(
@@ -565,7 +563,7 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def _test_validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
-        logger.info("[PolicyWorker] start validating model parameters post update")
+        logger.info("[PolicyWorker] start validating model parameters.")
         return validate_fn(
             self._test_prev_params, self.worker.model_runner.model, logger
         )

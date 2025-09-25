@@ -59,14 +59,14 @@ def get_configs(
 
 class MockRLTrainer(RLTrainer):
     @endpoint
-    async def mock_train_step(self):
-        """Mock train step. This simply sets all model weights to zero."""
+    async def zero_out_model_states(self):
+        """This simply sets all model weights to zero."""
         for model_part in self.engine.model_parts:
             sd = model_part.state_dict()
             for k in sd.keys():
                 if not torch.is_floating_point(sd[k]):
                     logger.info(
-                        f"[MockRLTrainer] mock_train_step(): skipping non-float param {k}"
+                        f"[MockRLTrainer] zero_out_model_states(): skipping non-float param {k}"
                     )
                     continue
                 sd[k] *= 0.0
@@ -215,7 +215,7 @@ class TestWeightSync:
 
         await rl_trainer.push_weights.fanout(policy_version=v0)
         # Setting everything to zero
-        await rl_trainer.mock_train_step.fanout()
+        await rl_trainer.zero_out_model_states.fanout()
         await rl_trainer.push_weights.fanout(policy_version=v1)
         await policy._test_save_model_params.fanout()
 
@@ -283,7 +283,7 @@ class TestWeightSync:
 
         await rl_trainer.push_weights.fanout(policy_version=v0)
         # Setting everything to zero
-        await rl_trainer.mock_train_step.fanout()
+        await rl_trainer.zero_out_model_states.fanout()
         await rl_trainer.push_weights.fanout(policy_version=v1)
         await policy._test_save_model_params.fanout()
 
