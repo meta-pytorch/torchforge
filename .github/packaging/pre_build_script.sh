@@ -58,7 +58,11 @@ build_monarch() {
     git checkout $MONARCH_COMMIT
 
     pip install -r build-requirements.txt
-    USE_TENSOR_ENGINE=1 pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
+    export USE_TENSOR_ENGINE=1
+    export RUST_BACKTRACE=1
+    export CARGO_TERM_VERBOSE=true
+    export CARGO_TERM_COLOR=always
+    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
 build_torchtitan() {
