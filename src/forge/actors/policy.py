@@ -403,39 +403,30 @@ class Policy(PolicyInterface):
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
-            timer = StepTimer("policy_perf/run_loop", sync_cuda_event=False)
-            await timer.start()
 
             scheduler_output = self.scheduler.schedule()
-            await timer.step("schedule")
 
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
-            await timer.step("execute_model")
 
             # the results of `execute_model` is gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
             await asyncio.sleep(0)  # Release control before processing outputs
-            await timer.step("update_from_output")
 
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
                 iteration_stats=None,
             )
-            await timer.step("process_outputs")
 
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     completions = self._to_completions(request_output)
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(completions)
-
-            await timer.step("to_completions")
-            await timer.end()
 
     @endpoint
     async def update_weights(self, policy_version: int):

@@ -154,12 +154,6 @@ class RLTrainer(ForgeActor):
         self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
-    @record_perf_metrics(
-        "trainer_perf/fwd_bwd",
-        track_time=False,
-        track_memory=True,
-        sync_cuda_event=False,
-    )
     def forward_backward(
         self, inputs: dict[str, Tensor], targets: dict[str, Tensor]
     ) -> Tensor:
