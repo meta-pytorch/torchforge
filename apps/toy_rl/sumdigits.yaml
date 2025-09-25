@@ -13,6 +13,7 @@ dataset:
 
 # Policy configuration
 policy:
+  use_dcp: false
   engine_config:
     model: ${model}
     tensor_parallel_size: 1
@@ -23,6 +24,7 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+
 
 # Trainer configuration
 trainer:
