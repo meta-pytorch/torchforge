@@ -9,6 +9,10 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
+# Main loop configuration
+rollout_threads: 4
+training_threads: 1
+
 # Dataset configuration
 dataset:
   path: "openai/gsm8k"
@@ -106,7 +110,7 @@ services:
     with_gpus: false
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
+    num_replicas: 6
     with_gpus: true
   trainer:
     procs: 1

@@ -354,17 +354,26 @@ async def main(cfg: DictConfig):
                 await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
-    print("Starting GRPO training loops...")
-    # TODO: Start multiple rollouts once all serivces support it
-    rollout_task = asyncio.create_task(continuous_rollouts())
-    training_task = asyncio.create_task(continuous_training())
+    num_rollout_threads = cfg.get("rollout_threads", 1)
+    num_training_threads = cfg.get("training_threads", 1)
+    print(
+        f"Starting GRPO with {num_rollout_threads} rollout threads, {num_training_threads} training threads"
+    )
+    rollout_tasks = [
+        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+    ]
+    training_tasks = [
+        asyncio.create_task(continuous_training()) for _ in range(num_training_threads)
+    ]
 
     try:
-        await asyncio.gather(rollout_task, training_task)
+        await asyncio.gather(*rollout_tasks, *training_tasks)
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        rollout_task.cancel()
-        training_task.cancel()
+        for rollout_task in rollout_tasks:
+            rollout_task.cancel()
+        for training_task in training_tasks:
+            training_task.cancel()
     finally:
         print("Shutting down...")
         await asyncio.gather(
