@@ -92,7 +92,8 @@ build_torchstore() {
 
 append_date() {
     # Appends the current date and time to the Forge wheel
-    version_file="assets/version.txt"
+    version_file="${REPOSITORY}/assets/version.txt"
+    echo "version file: $version_file"
     init_file="src/forge/__init__.py"
     if [[ -n "$BUILD_VERSION" ]]; then
         # Update the version in version.txt
@@ -107,7 +108,7 @@ append_date() {
 
 
 # build_vllm
-build_monarch
+# build_monarch
 echo "Done building Monarch, building date"
 # build_torchstore
 append_date
