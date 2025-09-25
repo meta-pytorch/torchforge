@@ -8,6 +8,7 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/rithesh-forge-grpo-590341
 
 # Dataset configuration
 dataset:
@@ -33,6 +34,7 @@ policy:
     procs: ${policy.engine_config.tensor_parallel_size}
     with_gpus: true
     hosts: 1
+  checkpoint_path: ${checkpoint_folder}
 
 # Trainer configuration
 trainer:
@@ -51,7 +53,7 @@ trainer:
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
-    dtype: bfloat16
+    # dtype: bfloat16
     gc_freq: 1
   compile:
     enable: false
@@ -70,6 +72,7 @@ trainer:
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
+    folder: ${checkpoint_folder}
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
@@ -87,7 +90,7 @@ ref_model:
     flavor: 1.7B
     hf_assets_path: /mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
   training:
-    dtype: bfloat16
+    # dtype: bfloat16
     gc_freq: 1
   compile:
     enable: false

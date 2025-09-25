@@ -42,7 +42,7 @@ EDITABLE_WORKSPACE_PATHS = [
     f"{WORK_DIR}/{workspace}" for workspace in EDITABLE_WORKSPACES
 ]
 
-JOB_NAME = "rithesh-forge-grpo-eccb6f"
+JOB_NAME = "rithesh-forge-grpo-590341"
 
 
 def _get_port() -> str:
@@ -198,7 +198,7 @@ class Provisioner:
 
     async def get_mast_allocator(
         self,
-        task_group: str = "mesh0",
+        task_group: str,
         monarch_port: int = 26600,
         num_hosts: int = 1,
         num_gpus: int = 8,
@@ -210,13 +210,6 @@ class Provisioner:
                 remote_allocator_port=26600,  # This is the default monarch port
             ),
         )
-        spec = AllocSpec(
-            AllocConstraints({MastAllocator.ALLOC_LABEL_TASK_GROUP: task_group}),
-            hosts=num_hosts,
-            gpus=num_gpus,
-        )
-        # allocation = await allocator.allocate(spec)
-        # return allocation
         alloc_constraints = AllocConstraints(
             {MastAllocator.ALLOC_LABEL_TASK_GROUP: task_group}
         )
@@ -227,41 +220,7 @@ class Provisioner:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
         logger.debug(f"Creating remote server for alloc {name}")
-        # appdef = hyperactor.host_mesh(
-        #     image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
-        # )
-        # for role in appdef.roles:
-        #     # Note - this is hardcoded to SLURM
-        #     # We got this with sinfo
-        #     role.resource.memMB = 2062607
-        #     role.resource.cpu = 128
-        #     role.resource.gpu = 8
-
-        # # TODO - multi scheduler support
-        # server_config = Config(
-        #     scheduler="slurm",
-        #     appdef=appdef,
-        #     workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
-        # )
-        # server_info = await commands.get_or_create(
-        #     "forge_job",
-        #     server_config,
-        #     force_restart=False,
-        # )
-        # alloc = RemoteAllocator(
-        #     world_id=name,
-        #     initializer=TorchXRemoteAllocInitializer(server_info.server_handle),
-        # )
-        # server_name = f"slurm:///{server_info.name}"
-        # return (
-        #     HostMesh(Shape(["hosts"], NDSlice.new_row_major([num_hosts])), alloc),
-        #     server_name,
-        # )
         server_name = f"mast_conda:///{JOB_NAME}"
-
-        # allocation = await self.get_mast_allocator(task_group=name)
-        # return allocation, server_name
-
         alloc, alloc_constraints = await self.get_mast_allocator(task_group=name)
         return (
             HostMesh(
@@ -273,7 +232,11 @@ class Provisioner:
         )
 
     async def get_proc_mesh(
-        self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
+        self,
+        num_procs: int,
+        mesh_name: str,
+        with_gpus: bool = False,
+        num_hosts: int | None = None,
     ):
         """Gets a proc mesh.
 
@@ -284,15 +247,10 @@ class Provisioner:
             server_name = None
             if num_hosts is not None and num_hosts > 0:
                 created_hosts = len(self._server_names)
-                _name = f"policy"
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=_name,
+                    name=mesh_name,
                     num_hosts=num_hosts,
                 )
-                # allocation, server_name = await self.create_host_mesh(
-                #     name=_name,
-                #     num_hosts=num_hosts,
-                # )
                 host_id = uuid.uuid1()
                 gpu_manager = GpuManager()
                 self._host_gpu_map[host_id] = gpu_manager
@@ -392,11 +350,12 @@ def _get_provisioner():
     return _provisioner
 
 
-async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
+async def get_proc_mesh(config: ProcessConfig, mesh_name: str) -> ProcMesh:
     return await _get_provisioner().get_proc_mesh(
         num_procs=config.procs,
         with_gpus=config.with_gpus,
         num_hosts=config.hosts,
+        mesh_name=mesh_name,
     )
 
 

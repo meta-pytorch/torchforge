@@ -10,11 +10,11 @@ import math
 import sys
 from typing import Any, Type, TypeVar
 
-from monarch.actor import Actor, current_rank, current_size, endpoint
-
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
+
+from monarch.actor import Actor, current_rank, current_size, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -183,9 +183,15 @@ class ForgeActor(Actor):
             with_gpus=cls.with_gpus,
         )
 
-        proc_mesh = await get_proc_mesh(process_config=cfg)
-
         actor_name = kwargs.pop("name", cls.__name__)
+        mesh_name = actor_name
+        if actor_name == "RLTrainer":
+            mesh_name = "learner"
+        elif actor_name == "ReferenceModel":
+            mesh_name = "ref"
+
+        proc_mesh = await get_proc_mesh(process_config=cfg, mesh_name=mesh_name)
+
         actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
 

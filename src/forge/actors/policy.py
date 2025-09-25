@@ -154,11 +154,14 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
+        checkpoint_path: str | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
-        worker_procs = await get_proc_mesh(process_config=process_config)
+        worker_procs = await get_proc_mesh(
+            process_config=process_config, mesh_name="policy"
+        )
 
         # TODO - issues/144 we will want to ensure colocation with workers
         # We're currently locating the Policy on the local host proc mesh
@@ -171,7 +174,9 @@ class Policy(PolicyInterface):
         policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
 
-        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+        policy_proc = await get_proc_mesh(
+            process_config=policy_proc_config, mesh_name="policy"
+        )
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
@@ -179,7 +184,10 @@ class Policy(PolicyInterface):
         vllm_config = engine_config.create_vllm_config()
         vllm_config.model_config.trust_remote_code = True
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+            "vllm_worker",
+            PolicyWorker,
+            vllm_config=vllm_config,
+            checkpoint_path=checkpoint_path,
         )
 
         if isinstance(sampling_config, Mapping):
@@ -449,6 +457,7 @@ class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+    checkpoint_path: str = ""
 
     def __post_init__(self):
         super().__init__()
@@ -473,7 +482,9 @@ class PolicyWorker(ForgeActor):
             self.vllm_config.parallel_config.tensor_parallel_size, self.rank
         )
 
-        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        checkpoint_id = (
+            f"{self.checkpoint_path}{DELIM}{self.state_dict_key}{DELIM}{version}"
+        )
         dcp_metadata = None
         if self.use_dcp:
             dcp_metadata = await ts.get(checkpoint_id)
