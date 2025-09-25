@@ -6,7 +6,7 @@ group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-8B"
+model: "Qwen/Qwen3-30B-A3B"
 off_by_n: 1 # Off by one by default
 
 # Dataset configuration
@@ -21,8 +21,9 @@ dataset:
 policy:
   engine_config:
     model: ${model}
-    tensor_parallel_size: 2
+    tensor_parallel_size: 8
     pipeline_parallel_size: 1
+    enable_expert_parallel: true
     enforce_eager: false
   sampling_config:
     n: ${group_size}
@@ -78,27 +79,6 @@ replay_buffer:
   # 2 GPUs for the trainer and we're using full FSDP.
   dp_size: 2
 
-# Reference model configuration
-ref_model:
-  model:
-    name: qwen3
-    flavor: 8B
-    hf_assets_path: hf://${model}
-  training:
-    dtype: bfloat16
-  compile:
-    enable: false
-  parallelism:
-    data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
-    pipeline_parallel_degree: 1
-    context_parallel_degree: 1
-    expert_parallel_degree: 1
-  checkpoint:
-    initial_load_path: hf://${model}
-    initial_load_in_hf: true
-
 # All resource allocations
 services:
   dataset:
@@ -110,17 +90,13 @@ services:
     num_replicas: 1
     with_gpus: true
   trainer:
-    procs: 2
+    procs: 8
     num_replicas: 1
     with_gpus: true
   replay_buffer:
     procs: 1
     num_replicas: 1
     with_gpus: false
-  ref_model:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
   compute_advantages:
     procs: 1
     num_replicas: 1
