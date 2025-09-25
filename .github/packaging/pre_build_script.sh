@@ -107,7 +107,7 @@ append_date() {
 
 
 # build_vllm
-# build_monarch
+build_monarch
 # build_torchstore
 build_torchtitan
 append_date
