@@ -13,10 +13,10 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional
 
-from monarch.actor import ActorError
-
 from forge.controller import ForgeActor
 from forge.types import ProcessConfig
+
+from monarch.actor import ActorError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -159,6 +159,7 @@ class Replica:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
 
+            self.actor_kwargs["replica"] = self.idx
             self.actor = await self.actor_def.options(
                 **asdict(self.proc_config)
             ).as_actor(*self.actor_args, **self.actor_kwargs)

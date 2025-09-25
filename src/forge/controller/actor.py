@@ -184,11 +184,14 @@ class ForgeActor(Actor):
         )
 
         actor_name = kwargs.pop("name", cls.__name__)
+        replica = kwargs.pop("replica", 0)
         mesh_name = actor_name
         if actor_name == "RLTrainer":
-            mesh_name = "learner"
+            mesh_name = f"trainer_{replica}"
         elif actor_name == "ReferenceModel":
-            mesh_name = "ref"
+            mesh_name = f"ref_model_{replica}"
+        elif actor_name == "Policy":
+            mesh_name = f"policy_{replica}"
 
         proc_mesh = await get_proc_mesh(process_config=cfg, mesh_name=mesh_name)
 

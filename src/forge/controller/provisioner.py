@@ -42,7 +42,7 @@ EDITABLE_WORKSPACE_PATHS = [
     f"{WORK_DIR}/{workspace}" for workspace in EDITABLE_WORKSPACES
 ]
 
-JOB_NAME = "rithesh-forge-grpo-590341"
+JOB_NAME = "rithesh-forge-grpo-e468f0"
 
 
 def _get_port() -> str:
@@ -306,7 +306,7 @@ class Provisioner:
                 # Once we have true HostMesh support, we can do this on proc 0 of each host
                 # then spin up the proc meshes with the environment afterwards.
                 hostname, port = await setup.get_info.choose()
-                await setup.mount.choose(mount_dst="/mnt/wsfuse", procs_per_host=8)
+                await setup.mount.call(mount_dst="/mnt/wsfuse", procs_per_host=8)
                 procs._hostname = hostname
                 procs._port = port
                 procs._gpu_ids = gpu_ids

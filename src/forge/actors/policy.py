@@ -159,8 +159,10 @@ class Policy(PolicyInterface):
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
+        replica = kwargs.pop("replica", 0)
+        mesh_name = f"policy_{replica}"
         worker_procs = await get_proc_mesh(
-            process_config=process_config, mesh_name="policy"
+            process_config=process_config, mesh_name=mesh_name
         )
 
         # TODO - issues/144 we will want to ensure colocation with workers
@@ -175,7 +177,7 @@ class Policy(PolicyInterface):
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(
-            process_config=policy_proc_config, mesh_name="policy"
+            process_config=policy_proc_config, mesh_name=mesh_name
         )
 
         if isinstance(engine_config, Mapping):

@@ -8,7 +8,7 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/rithesh-forge-grpo-590341
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/qwen32B_1
 
 # Dataset configuration
 dataset:
@@ -22,7 +22,7 @@ dataset:
 policy:
   engine_config:
     model: /mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
-    tensor_parallel_size: 1
+    tensor_parallel_size: 8
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:
@@ -59,7 +59,7 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: 8
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -97,12 +97,12 @@ ref_model:
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    tensor_parallel_degree: 8
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    initial_load_path: /wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
+    initial_load_path: /mnt/wsfuse/rithesh/hf/Qwen3_1_7B/snapshots/model
     initial_load_in_hf: true
 
 # All resource allocations
@@ -113,11 +113,11 @@ services:
     with_gpus: false
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
+    num_replicas: 2
     with_gpus: true
     hosts: 1
   trainer:
-    procs: 1
+    procs: ${trainer.parallelism.data_parallel_shard_degree}
     num_replicas: 1
     with_gpus: true
     hosts: 1
@@ -126,8 +126,8 @@ services:
     num_replicas: 1
     with_gpus: false
   ref_model:
-    procs: 1
-    num_replicas: 1
+    procs: ${ref_model.parallelism.tensor_parallel_degree}
+    num_replicas: 2
     with_gpus: true
     hosts: 1
   compute_advantages:

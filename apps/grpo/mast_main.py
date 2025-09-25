@@ -53,9 +53,7 @@ def _add_additional_packages(packages: Packages) -> Packages:
     return packages
 
 
-def _build_appdef(
-    num_learner_hosts: int, num_policy_hosts: int, num_ref_hosts: int
-) -> specs.AppDef:
+def _build_appdef(cfg) -> specs.AppDef:
 
     # create the app definition for the worker
     remote_work_dir = "/packages/monarch_default_workspace/workspace/"
@@ -68,21 +66,24 @@ def _build_appdef(
         **hyperactor.DEFAULT_NCCL_ENVS,
         **hyperactor.DEFAULT_TORCH_ENVS,
         **{"TORCHX_RUN_PYTHONPATH": f"{REMOTE_END_PYTHONPATH}:{remote_work_dir}"},
-        # **{
-        #     "HF_HUB_OFFLINE": "1",
-        #     "TRANSFORMERS_OFFLINE": "1",
-        #     "HF_DATASETS_OFFLINE": "1",
-        # },
     }
 
     packages = Packages()
     sku = "gtt_any"
+    meshes = []
+    for mesh_name, config in cfg["services"].items():
+        num_replicas = config["num_replicas"]
+        with_gpus = bool(config["with_gpus"])
+        num_hosts = int(config.get("hosts", 0))
+        # Create list of mesh names with indices and num_hosts
+        if with_gpus and num_hosts > 0:
+            mesh_list = [
+                f"{mesh_name}_{i}:{num_hosts}:{sku}" for i in range(num_replicas)
+            ]
+            meshes.extend(mesh_list)
+
     appdef = hyperactor.host_mesh_conda(
-        meshes=[
-            f"{LEARNER_MESH_NAME}:{num_learner_hosts}:{sku}",
-            f"{POLICY_MESH_NAME}:{num_policy_hosts}:{sku}",
-            f"{REF_MESH_NAME}:{num_ref_hosts}:{sku}",
-        ],
+        meshes=meshes,
         additional_packages=_add_additional_packages(packages),
         timeout_sec=1 * 60 * 60,  # Kill the job if idle for 1 hour
         env=default_envs,
@@ -90,7 +91,8 @@ def _build_appdef(
 
     for role in appdef.roles:
         role.resource.capabilities["server_sub_types"] = [
-            role.resource.capabilities["server_sub_types"][2]
+            # role.resource.capabilities["server_sub_types"][2]  # hardcoded to ROCE
+            role.resource.capabilities["server_sub_types"][1]  # hardcoded to ROCE
         ]
 
     return appdef
@@ -143,61 +145,63 @@ async def main(cfg: DictConfig):
     debugpy.wait_for_client()
     print("Attached!")
 
-    # await asyncio.sleep(0)
+    # # await asyncio.sleep(0)
 
-    # job_name = "rithesh-forge-grpo-9dc76e"
-    _job_name = create_job_name()
-    handle = create_server_handle(_job_name)
-    server_spec = info(handle)
-    if server_spec and server_spec.state == AppState.RUNNING:
-        print(f"Job {_job_name} is already running. Skipping launch.")
-        return server_spec
+    # # job_name = "rithesh-forge-grpo-9dc76e"
+    # _job_name = create_job_name()
+    # handle = create_server_handle(_job_name)
+    # server_spec = info(handle)
+    # if server_spec and server_spec.state == AppState.RUNNING:
+    #     print(f"Job {_job_name} is already running. Skipping launch.")
+    #     return server_spec
 
-    config = Config(
-        scheduler="mast_conda",
-        scheduler_args={
-            # NOTE: default config. Use args to set your own values
-            "hpcIdentity": "genai_llm_pretraining_data",
-            "hpcJobOncall": "monarch",
-            "hpcClusterUuid": "MastGenAICluster",
-            "rmAttribution": "gen_ai_cluster_elastic",
-            "localityConstraints": ["region", "pci"],
-        },
-        appdef=_build_appdef(1, 1, 1),
-        workspace=Workspace(
-            dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACE_PATHS],
-        ),
-    )
+    # config = Config(
+    #     scheduler="mast_conda",
+    #     scheduler_args={
+    #         # NOTE: default config. Use args to set your own values
+    #         "hpcIdentity": "genai_llm_pretraining_data",
+    #         "hpcJobOncall": "monarch",
+    #         "hpcClusterUuid": "MastProdCluster",
+    #         "rmAttribution": "pytorch4all_clients_approved",
+    #         # "hpcClusterUuid": "MastGenAICluster",
+    #         # "rmAttribution": "gen_ai_llama_systems_training",
+    #         # "localityConstraints": ["region", "pci"],
+    #     },
+    #     appdef=_build_appdef(cfg),
+    #     workspace=Workspace(
+    #         dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACE_PATHS],
+    #     ),
+    # )
 
-    await commands.get_or_create(_job_name, config)
+    # await commands.get_or_create(_job_name, config)
 
-    check_interval_seconds = 3
-    from datetime import datetime
+    # check_interval_seconds = 3
+    # from datetime import datetime
 
-    start = datetime.now()
+    # start = datetime.now()
 
-    # This should run pretty fast in seconds
-    while True:
-        server_spec = info(handle)
+    # # This should run pretty fast in seconds
+    # while True:
+    #     server_spec = info(handle)
 
-        if not server_spec:  # server not found
-            await asyncio.sleep(check_interval_seconds)
-            continue
+    #     if not server_spec:  # server not found
+    #         await asyncio.sleep(check_interval_seconds)
+    #         continue
 
-        # We need to make sure a job has been submitted before detaching the client.
-        if server_spec.state < AppState.PENDING:  # UNSUBMITTED or SUBMITTED
-            print(
-                f"Waiting for {handle} to be {AppState.PENDING} (current: {server_spec.state}); "
-                f"will check again in {check_interval_seconds} seconds. "
-                f"Total wait time: {datetime.now() - start}",
-                end="\r",
-            )
-            await asyncio.sleep(check_interval_seconds)
-        else:
-            break
+    #     # We need to make sure a job has been submitted before detaching the client.
+    #     if server_spec.state < AppState.PENDING:  # UNSUBMITTED or SUBMITTED
+    #         print(
+    #             f"Waiting for {handle} to be {AppState.PENDING} (current: {server_spec.state}); "
+    #             f"will check again in {check_interval_seconds} seconds. "
+    #             f"Total wait time: {datetime.now() - start}",
+    #             end="\r",
+    #         )
+    #         await asyncio.sleep(check_interval_seconds)
+    #     else:
+    #         break
 
-    print(f"\nJob {_job_name} has launched. Detached the client now.")
-    print("I am here")
+    # print(f"\nJob {_job_name} has launched. Detached the client now.")
+    # print("I am here")
 
     # (policy,) = await asyncio.gather(
     #     Policy.options(**cfg.services.policy).as_service(**cfg.policy),
@@ -213,13 +217,13 @@ async def main(cfg: DictConfig):
     #     ),
     # )
 
-    # ref_model = (
-    #     await ReferenceModel.options(**cfg.services.ref_model).as_service(
-    #         **cfg.ref_model
-    #     ),
-    # )
+    ref_model = (
+        await ReferenceModel.options(**cfg.services.ref_model).as_service(
+            **cfg.ref_model
+        ),
+    )
 
-    # print("All services initialized successfully!")
+    print("All services initialized successfully!")
 
 
 if __name__ == "__main__":
