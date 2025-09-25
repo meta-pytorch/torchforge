@@ -64,15 +64,20 @@ def _build_appdef(
         **hyperactor.DEFAULT_NCCL_ENVS,
         **hyperactor.DEFAULT_TORCH_ENVS,
         **{"TORCHX_RUN_PYTHONPATH": f"{REMOTE_END_PYTHONPATH}:{remote_work_dir}"},
+        # **{
+        #     "HF_HUB_OFFLINE": "1",
+        #     "TRANSFORMERS_OFFLINE": "1",
+        #     "HF_DATASETS_OFFLINE": "1",
+        # },
     }
 
     packages = Packages()
     sku = "gtt_any"
     appdef = hyperactor.host_mesh_conda(
         meshes=[
-            f"{LEARNER_MESH_NAME}:{num_learner_hosts}:{sku}",
+            # f"{LEARNER_MESH_NAME}:{num_learner_hosts}:{sku}",
             f"{POLICY_MESH_NAME}:{num_policy_hosts}:{sku}",
-            f"{REF_MESH_NAME}:{num_ref_hosts}:{sku}",
+            # f"{REF_MESH_NAME}:{num_ref_hosts}:{sku}",
         ],
         additional_packages=_add_additional_packages(packages),
         timeout_sec=1 * 60 * 60,  # Kill the job if idle for 1 hour
@@ -107,7 +112,7 @@ async def main(cfg: DictConfig):
 
     # await asyncio.sleep(0)
 
-    # # # job_name = "rithesh-forge-grpo-9dc76e"
+    # job_name = "rithesh-forge-grpo-9dc76e"
     # _job_name = create_job_name()
     # handle = create_server_handle(_job_name)
     # server_spec = info(handle)
@@ -164,6 +169,10 @@ async def main(cfg: DictConfig):
     (policy,) = await asyncio.gather(
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
     )
+    prompt = "What is 3+5?"
+    completions = await policy.generate.choose(prompt=prompt)
+    for completion in completions:
+        print(completion)
     print("All services initialized successfully!")
 
 

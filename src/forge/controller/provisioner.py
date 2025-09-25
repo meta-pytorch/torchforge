@@ -42,7 +42,7 @@ EDITABLE_WORKSPACE_PATHS = [
     f"{WORK_DIR}/{workspace}" for workspace in EDITABLE_WORKSPACES
 ]
 
-JOB_NAME = "rithesh-forge-grpo-df89bf"
+JOB_NAME = "rithesh-forge-grpo-eccb6f"
 
 
 def _get_port() -> str:
@@ -65,6 +65,18 @@ class _SetupActor(Actor):
             # Only use one rank per host to mount the directory
             return
         self.mount_mnt_directory(mount_dst)
+
+    @endpoint
+    def check_path(self, path) -> bool:
+        if os.path.exists(path):
+            return True
+        return False
+
+    @endpoint
+    def list_files(self, path) -> list[str]:
+        if os.path.exists(path):
+            return os.listdir(path)
+        return ["NO FILES EXIST"]
 
     def mount_mnt_directory(self, mount_dst: str) -> None:
         # Sanity check of the mounted directory
