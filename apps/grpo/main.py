@@ -25,7 +25,6 @@ from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
 
-# from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -200,7 +199,6 @@ class DatasetActor(ForgeActor):
     data_split: str = "train"
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
-    seed: int | None = None
 
     @endpoint
     def setup(self):
@@ -229,7 +227,7 @@ class DatasetActor(ForgeActor):
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
         ds = ds.map(gsm8k_transform)
-        ds = ds.shuffle(seed=self.seed)
+        ds = ds.shuffle()
         self._iterator = iter(ds)
 
     @endpoint
@@ -359,7 +357,6 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("kl/training_step", metrics["kl"], training_step)
                 mlogger.log("loss/training_step", metrics["loss"], training_step)
-                exit()
                 await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
