@@ -13,7 +13,7 @@ BUILD_DIR="$HOME/forge-build"
 
 # Push everything to the dist folder, so
 # the final action pushes everything together
-WHL_DIR="${REPOSITORY}/dist"
+WHL_DIR="${GITHUB_WORKSPACE}/${REPOSITORY}/dist"
 
 mkdir -p $BUILD_DIR
 mkdir -p $WHL_DIR
