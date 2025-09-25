@@ -9,12 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from monarch.actor import endpoint, ProcMesh
-
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 from forge.actors.policy import Policy
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data_models.completion import Completion
+
+from forge.types import ProcessConfig
 
 
 @dataclass
@@ -36,19 +37,39 @@ class LLMJudge(ForgeActor):
     async def launch(
         cls: type["LLMJudge"],
         *,
-        process_config: ProcessConfig,
         policy_cfg: Mapping,
         **kwargs,
     ):
+        process_config: ProcessConfig = ProcessConfig(
+            procs=cls.procs,
+            hosts=cls.hosts,
+            with_gpus=cls.with_gpus,
+        )
         judge_procs = await get_proc_mesh(process_config=process_config)
         policy = await Policy.options(**policy_cfg.services.policy).as_service(
             **policy_cfg.policy
         )
-        print("Launch policy type: ", type(policy))
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Debug prints
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        print("~~~~~~~~~Internal state ", await policy._get_internal_state())
+        _service = object.__getattribute__(policy, "_service")
+        print("~~~~~~~~~ replica.actor vars", vars(_service._replicas[0].actor))
+        policy_instance = await policy._return_self.choose()
+        print("~~~~~~~~~ replica.actor policy", policy_instance)
+        print("~~~~~~~~~ replica.actor vars policy", vars(policy_instance))
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         actor_name = kwargs.pop("name", cls.__name__)
         llm_judge = await judge_procs.spawn(actor_name, cls, generator=policy)
         llm_judge._judge_proc = judge_procs
+
+        print("~~~~~~~~~~~~~~~~~~~~~~~REJOICE: LLMJudge setup was able to Spawn")
+        print("~~~~~~~~~~~~~~~~~~~~~~~REJOICE: LLMJudge setup was able to Spawn")
+        print("~~~~~~~~~~~~~~~~~~~~~~~REJOICE: LLMJudge setup was able to Spawn")
+        print("~~~~~~~~~~~~~~~~~~~~~~~REJOICE: LLMJudge setup was able to Spawn")
 
         await llm_judge.setup.call()
         return llm_judge

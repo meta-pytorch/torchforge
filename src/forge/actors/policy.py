@@ -150,7 +150,6 @@ class Policy(PolicyInterface):
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
-        # process_config: ProcessConfig,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
@@ -271,6 +270,11 @@ class Policy(PolicyInterface):
         """Start the replica's processing loop if not already running."""
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
+
+    @endpoint
+    async def _return_self(self):
+        """Returns the current policy object, for debugging purposes."""
+        return self
 
     @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> list[Completion]:
