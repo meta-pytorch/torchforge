@@ -91,6 +91,7 @@ services:
     with_gpus: true
   trainer:
     procs: 8
+    hosts: 1
     num_replicas: 1
     with_gpus: true
   replay_buffer:
