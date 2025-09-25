@@ -11,9 +11,8 @@ TORCHTITAN_COMMIT="82f0287b966f1735819a377a9a09e7a303c55faa"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
 
-# Push everything to the dist folder, so
-# the final action pushes everything together
-WHL_DIR="${GITHUB_WORKSPACE}/${REPOSITORY}/dist"
+# Push other files to the dist folder
+WHL_DIR="${GITHUB_WORKSPACE}/wheels/dist"
 
 mkdir -p $BUILD_DIR
 mkdir -p $WHL_DIR
