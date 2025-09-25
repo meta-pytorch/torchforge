@@ -8,7 +8,6 @@ import logging
 import math
 import os
 import shutil
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Callable
@@ -38,6 +37,8 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.perf_tracker import record_perf_metrics, StepTimer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -153,6 +154,12 @@ class RLTrainer(ForgeActor):
         self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
+    @record_perf_metrics(
+        "trainer_perf/fwd_bwd",
+        track_time=False,
+        track_memory=True,
+        sync_cuda_event=False,
+    )
     def forward_backward(
         self, inputs: dict[str, Tensor], targets: dict[str, Tensor]
     ) -> Tensor:
@@ -220,15 +227,22 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    def train_step(
+    @record_perf_metrics(
+        "trainer_perf", track_time=False, track_memory=True, sync_cuda_event=False
+    )
+    async def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+
+        # Log timesteps
+        timer = StepTimer("trainer_perf/step", sync_cuda_event=False)
+        await timer.start()
+
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
         batch_to_device(local_targets, self.engine.device)
-
         # compute policy logprobs
         # TODO implement gradient accumulation
         # with GradientAccumulation(
@@ -236,25 +250,53 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        loss = self.forward_backward(local_inputs, local_targets)
+        loss = await self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
+        await timer.step("forward_backward")
+
+        # Get learning rate from scheduler
+        current_lr = (
+            self.engine.lr_schedulers.get_last_lr()[0]
+            if hasattr(self.engine.lr_schedulers, "get_last_lr")
+            else 0.001
+        )
+        await record_metric("trainer/learning_rate", current_lr, ReductionType.MIN)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
+        await timer.step("optimizer_step")
+
+        # Record training metrics
+        # TODO: delete item() to avoid cpu-gpu sync
+        loss = loss.detach().cpu().item()
+        await record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
+        await record_metric("trainer/avg_grpo_loss", loss, ReductionType.MEAN)
+
+        # TODO: Extract actual KL divergence and policy entropy from the loss computation
+        # These are placeholder values until the loss function exposes these metrics
+        # await record_metric("trainer/step/avg_kl_divergence", 0.0, ReductionType.MEAN)
+        # await record_metric("trainer/step/std_kl_divergence", 0.0, ReductionType.STD)
+        # await record_metric("trainer/step/avg_policy_entropy", 0.0, ReductionType.MEAN)
 
         self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
         )
-
-        return loss.item()
+        await timer.step("save_checkpoint")
+        await timer.end()
+        return loss
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
+
+        timer = StepTimer("trainer_perf/push_weights", sync_cuda_event=False)
+        await timer.start()
+
+        await record_metric("trainer/count_weight_pushes", 1, ReductionType.SUM)
+
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
-        start_time = time.perf_counter()
         # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
@@ -264,16 +306,18 @@ class RLTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
+        await timer.step("flatten_state_dict")
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+        await timer.step("state_dict_to_hf")
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
         )
-        conversion_time = time.perf_counter()
+        await timer.step("state_dict_hf_to_vllm")
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         if self.use_dcp:
             # TODO - DCP should probably be being saved to NFS explicitly?
@@ -293,13 +337,12 @@ class RLTrainer(ForgeActor):
                     delim=DELIM,
                     current_policy_version=policy_version,
                 )
+            await timer.step("save_using_dcp")
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
-        end_time = time.perf_counter()
-        logger.info(
-            f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
-            f"(to_vllm: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
-        )
+            await timer.step("save_using_torchstore")
+
+        await timer.end()
 
     @endpoint
     async def cleanup(self) -> None:

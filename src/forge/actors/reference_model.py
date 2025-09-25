@@ -27,6 +27,8 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
+from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.perf_tracker import record_perf_metrics, StepTimer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -88,11 +90,33 @@ class ReferenceModel(ForgeActor):
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
 
     @endpoint
+    @record_perf_metrics(
+        "reference_perf/forward",
+        track_time=False,
+        track_memory=True,
+        sync_cuda_event=False,
+    )
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+
+        # Record reference model metrics
+        await record_metric(
+            "reference_perf/forward/count_forward_passes", 1, ReductionType.SUM
+        )
+        await record_metric(
+            "reference_perf/forward/avg_sequence_length",
+            input_ids.shape[1],
+            ReductionType.MEAN,
+        )
+
+        timer = StepTimer("reference_perf/forward", sync_cuda_event=False)
+        await timer.start()
         self.engine.gc_handler.run(self.step)
+        await timer.step("garbage_collection")
+
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
+        await timer.step("to_device")
         # optional_context_parallel_ctx = (
         #     dist_utils.create_context_parallel_ctx(
         #         cp_mesh=parallel_dims.world_mesh["cp"],
@@ -116,4 +140,6 @@ class ReferenceModel(ForgeActor):
         self.step += 1
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
+        await timer.step("forward")
+        await timer.end()
         return logits

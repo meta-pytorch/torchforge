@@ -9,6 +9,11 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
+# Observability configuration
+wandb:
+  project: "my_project"
+  group: "grpo_exp_${oc.env:USER}"
+
 # Dataset configuration
 dataset:
   path: "openai/gsm8k"
@@ -29,6 +34,10 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+  process_config:
+    procs: 1
+    with_gpus: true
+    hosts: 0
 
 # Trainer configuration
 trainer:

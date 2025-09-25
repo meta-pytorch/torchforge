@@ -12,6 +12,8 @@ from typing import Any, Callable
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
+from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.perf_tracker import record_perf_metrics_ctx
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -41,8 +43,12 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def add(self, episode: "Episode") -> None:
         self.buffer.append(episode)
+        await record_metric("buffer/add/count_episodes_added", 1, ReductionType.SUM)
 
     @endpoint
+    @record_perf_metrics_ctx(
+        "buffer_perf/sample", track_time=True, track_memory=False, sync_cuda_event=False
+    )
     async def sample(
         self, curr_policy_version: int, batch_size: int | None = None
     ) -> tuple[tuple[Any, ...], ...] | None:
@@ -56,14 +62,34 @@ class ReplayBuffer(ForgeActor):
         Returns:
             A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
+        # Record sample request metric
+        await record_metric("buffer/sample/count_sample_requests", 1, ReductionType.SUM)
+
         bsz = batch_size if batch_size is not None else self.batch_size
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
-        self._evict(curr_policy_version)
+        await self._evict(curr_policy_version)
 
         if total_samples > len(self.buffer):
             return None
+
+        # Calculate buffer utilization
+        utilization_pct = (
+            (total_samples / len(self.buffer)) * 100 if len(self.buffer) > 0 else 0
+        )
+
+        await record_metric(
+            "buffer/sample/avg_buffer_utilization",
+            len(self.buffer),
+            ReductionType.MEAN,
+        )
+
+        await record_metric(
+            "buffer/sample/avg_buffer_utilization_pct",
+            utilization_pct,
+            ReductionType.MEAN,
+        )
 
         # TODO: prefetch samples in advance
         idx_to_sample = self.sampler(range(len(self.buffer)), k=total_samples)
@@ -91,9 +117,9 @@ class ReplayBuffer(ForgeActor):
         Args:
             curr_policy_version (int): The current policy version.
         """
-        self._evict(curr_policy_version)
+        await self._evict(curr_policy_version)
 
-    def _evict(self, curr_policy_version: int) -> None:
+    async def _evict(self, curr_policy_version: int) -> None:
         buffer_len_before_evict = len(self.buffer)
         self.buffer = [
             trajectory
@@ -102,9 +128,32 @@ class ReplayBuffer(ForgeActor):
         ]
         buffer_len_after_evict = len(self.buffer)
 
+        # Record evict metrics
+        policy_staleness = [
+            curr_policy_version - ep.policy_version for ep in self.buffer
+        ]
+        if policy_staleness:
+            await record_metric(
+                "buffer/evict/avg_policy_staleness",
+                sum(policy_staleness) / len(policy_staleness),
+                ReductionType.MEAN,
+            )
+            await record_metric(
+                "buffer/evict/max_policy_staleness",
+                max(policy_staleness),
+                ReductionType.MAX,
+            )
+
+        # Record eviction metrics
+        evicted_count = buffer_len_before_evict - buffer_len_after_evict
+        if evicted_count > 0:
+            await record_metric(
+                "buffer/evict/sum_episodes_evicted", evicted_count, ReductionType.SUM
+            )
+
         logger.debug(
             f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
-            f"{buffer_len_before_evict - buffer_len_after_evict} episodes expired, {buffer_len_after_evict} episodes left"
+            f"{evicted_count} episodes expired, {buffer_len_after_evict} episodes left"
         )
 
     @endpoint
