@@ -22,6 +22,9 @@ class LocalFetcherActor(Actor):
     GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
+    def __init__(self, global_logger=None):
+        self.global_logger = global_logger
+
     @endpoint
     async def log_and_reset(
         self, step: int, return_state: bool = False
@@ -44,12 +47,15 @@ class LocalFetcherActor(Actor):
 
     @endpoint
     async def init_collector(
-        self, metadata_per_primary_backend: Dict[str, Dict[str, Any]]
+        self,
+        metadata_per_primary_backend: Dict[str, Dict[str, Any]],
     ):
         from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
-        await collector.init_local_backends(metadata_per_primary_backend)
+        await collector.init_local_backends(
+            metadata_per_primary_backend, self.global_logger
+        )
 
     @endpoint
     async def shutdown(self):
@@ -136,6 +142,11 @@ class GlobalLoggingActor(Actor):
 
     @endpoint
     async def deregister_fetcher(self, name: str):
+        if name not in self.fetchers:
+            logger.warning(
+                f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
+            )
+            return
         del self.fetchers[name]
 
     @endpoint

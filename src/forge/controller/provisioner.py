@@ -160,14 +160,16 @@ class Provisioner:
             LocalFetcherActor,
         )
 
-        local_fetcher_actor = await procs.spawn(
-            "local_fetcher_actor", LocalFetcherActor
-        )
-        procs._local_fetcher = local_fetcher_actor
-
+        # Ensure global_logger exists FIRST in this process context
         global_logger = await get_or_spawn_controller(
             "global_logger", GlobalLoggingActor
         )
+
+        local_fetcher_actor = await procs.spawn(
+            "local_fetcher_actor", LocalFetcherActor, global_logger
+        )
+        procs._local_fetcher = local_fetcher_actor
+
         process_name = f"proc_mesh_{id(procs)}"
         await global_logger.register_fetcher.call_one(local_fetcher_actor, process_name)
 

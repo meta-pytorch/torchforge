@@ -21,7 +21,6 @@ class ReductionType(Enum):
     SUM = "sum"
     MAX = "max"
     MIN = "min"
-    COUNT = "count"
     STD = "std"
 
     @property
@@ -31,7 +30,6 @@ class ReductionType(Enum):
             ReductionType.SUM: SumAccumulator,
             ReductionType.MAX: MaxAccumulator,
             ReductionType.MIN: MinAccumulator,
-            ReductionType.COUNT: CountAccumulator,
             ReductionType.STD: StdAccumulator,
         }
         return mapping[self]
@@ -293,30 +291,6 @@ class MinAccumulator(MetricAccumulator):
         self.min_val = float("inf")
 
 
-class CountAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
-        super().__init__(reduction)
-        self.count = 0
-
-    def append(self, value: Any) -> None:
-        self.count += 1
-
-    def get_value(self) -> int:
-        return self.count
-
-    def get_state(self) -> Dict[str, Any]:
-        return {"reduction_type": self.reduction_type.value, "count": self.count}
-
-    @classmethod
-    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> int:
-        if not states:
-            return 0
-        return sum(s["count"] for s in states)
-
-    def reset(self) -> None:
-        self.count = 0
-
-
 class MetricCollector:
     """
     Per-rank singleton for accumulating, retrieving or flushing metrics to backends.
@@ -354,7 +328,9 @@ class MetricCollector:
         self.rank = current_rank().rank
 
     async def init_local_backends(
-        self, metadata_per_primary_backend: Dict[str, Dict[str, Any]]
+        self,
+        metadata_per_primary_backend: Dict[str, Dict[str, Any]],
+        global_logger=None,
     ) -> None:
         """Initializes collector with logger_backends from global config.
 
@@ -362,15 +338,23 @@ class MetricCollector:
         Called once per-rank by LocalFetcherActor.
         """
         if self._initialized_async:
+            logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
             return
 
-        from monarch.actor import get_or_spawn_controller
+        # Allow passing global_logger directly to avoid controller context issues
+        if global_logger is None:
+            logger.debug(
+                f"Rank {self.rank}: No global_logger provided, spawning controller"
+            )
+            from monarch.actor import get_or_spawn_controller
 
-        from forge.observability.metric_actors import GlobalLoggingActor
+            from forge.observability.metric_actors import GlobalLoggingActor
 
-        global_logger = await get_or_spawn_controller(
-            "global_logger", GlobalLoggingActor
-        )
+            global_logger = await get_or_spawn_controller(
+                "global_logger", GlobalLoggingActor
+            )
+        else:
+            logger.debug(f"Rank {self.rank}: Using provided global_logger")
 
         config = await global_logger.get_config.call_one()
         if config is None:
