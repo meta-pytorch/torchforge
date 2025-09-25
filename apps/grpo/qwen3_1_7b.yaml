@@ -16,6 +16,7 @@ dataset:
   data_split: "train"
   streaming: true
   model: ${model}
+  seed: 0
 
 # Policy configuration
 policy:
@@ -24,6 +25,7 @@ policy:
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
+    # gpu_memory_utilization: 0.9
   sampling_config:
     n: ${group_size}
     max_tokens: ${max_res_tokens}

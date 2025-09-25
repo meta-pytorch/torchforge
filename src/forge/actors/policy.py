@@ -56,6 +56,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+# os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+
+
 @dataclass
 class SamplingConfig:
     """

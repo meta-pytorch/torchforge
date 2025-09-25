@@ -212,17 +212,17 @@ class RLTrainer(ForgeActor):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
                     logits = model_parts[0](**inputs)
-                    loss = self.loss(logits, **targets)
+                    loss, kl = self.loss(logits, **targets)
                 # need to free to before bwd to avoid peaking memory
                 del logits
                 loss.backward()
 
-        return loss
+        return loss, kl
 
     @endpoint
     def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
-    ) -> float:
+    ) -> dict[str, float]:
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
@@ -236,8 +236,9 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        loss = self.forward_backward(local_inputs, local_targets)
+        loss, kl = self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
+        torch.distributed.all_reduce(kl)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
@@ -249,7 +250,7 @@ class RLTrainer(ForgeActor):
             last_step=self.step == self.num_training_steps,
         )
 
-        return loss.item()
+        return {"loss": loss.item(), "kl": kl.item()}
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:

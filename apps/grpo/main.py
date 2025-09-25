@@ -24,6 +24,8 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
+
+# from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -148,13 +150,17 @@ def simple_grpo_loss(
 ) -> torch.Tensor:
     logprobs = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    # Calculate KL divergence with padding masked out and then average over the sequence
+    kl_mean_no_padding = (
+        (kl * padding_mask).sum(dim=1) / (padding_mask.sum(dim=1).clamp(min=1.0))
+    ).mean()
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
     per_token_loss = -(per_token_policy_loss - beta * kl)
     loss = (
         ((per_token_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
     ).mean()
-    return loss
+    return loss, kl_mean_no_padding
 
 
 @dataclass
@@ -194,6 +200,7 @@ class DatasetActor(ForgeActor):
     data_split: str = "train"
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
+    seed: int | None = None
 
     @endpoint
     def setup(self):
@@ -222,7 +229,7 @@ class DatasetActor(ForgeActor):
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
         ds = ds.map(gsm8k_transform)
-        ds = ds.shuffle()
+        ds = ds.shuffle(seed=self.seed)
         self._iterator = iter(ds)
 
     @endpoint
@@ -348,9 +355,11 @@ async def main(cfg: DictConfig):
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.route(inputs, targets)
+                metrics = await trainer.train_step.route(inputs, targets)
                 training_step += 1
-                mlogger.log("loss/training_step", loss, training_step)
+                mlogger.log("kl/training_step", metrics["kl"], training_step)
+                mlogger.log("loss/training_step", metrics["loss"], training_step)
+                exit()
                 await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
