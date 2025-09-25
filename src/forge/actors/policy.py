@@ -40,6 +40,8 @@ from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.v1.engine.parallel_sampling import ParentRequest
 from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
+from vllm.v1.structured_output import StructuredOutputManager
+from vllm.worker.worker_base import WorkerWrapperBase
 
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 
