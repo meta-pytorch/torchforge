@@ -94,25 +94,6 @@ def collate(batches: list[list[Episode]]):
     return inputs, targets
 
 
-def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
-    beta: float = 0.1,
-) -> torch.Tensor:
-    logprobs = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
-    ).mean()
-    return loss
-
-
 def compute_logprobs(
     logits: Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> Tensor:
@@ -154,10 +135,10 @@ def simple_grpo_loss(
 
 
 async def run(cfg: DictConfig):
-    trainer = await RLTrainer.options(procs=1, with_gpus=True).as_actor(
+    trainer = await RLTrainer.options(**cfg.actors.trainer).as_actor(
         **cfg.trainer, loss=simple_grpo_loss
     )
-    replay_buffer = await ReplayBuffer.options(procs=1, num_replicas=1).as_actor(
+    replay_buffer = await ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
         **cfg.replay_buffer, collate=collate
     )
 
