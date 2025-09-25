@@ -108,5 +108,7 @@ append_date() {
 
 # build_vllm
 build_monarch
+echo "Done building Monarch, building date"
 # build_torchstore
 append_date
+echo "done appending date"
