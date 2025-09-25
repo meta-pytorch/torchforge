@@ -257,7 +257,7 @@ class TestWeightSync:
             procs=worker_size, with_gpus=True, num_replicas=1
         ).as_service(**trainer_cfg)
 
-        await rl_trainer.push_weights.choose(policy_version=0)
+        await rl_trainer.push_weights.route(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
             worker_size=worker_size, tp_size=worker_size, model_name=self.model
@@ -265,9 +265,9 @@ class TestWeightSync:
         policy = await Policy.options(**asdict(service_config)).as_service(
             **policy_config
         )
-        await policy.update_weights.call()
+        await policy.update_weights.fanout()
         # 4. Validate weights
-        loaded_state_dict = await policy._get_model_params.choose()
+        loaded_state_dict = await policy._get_model_params.route()
         validate_loaded_tensors_equals_original(
             loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
         )
@@ -297,7 +297,7 @@ class TestWeightSync:
             procs=trainer_worker_size, with_gpus=True, num_replicas=1
         ).as_service(**trainer_cfg_tp)
 
-        await rl_trainer.push_weights.call(policy_version=0)
+        await rl_trainer.push_weights.fanout(policy_version=0)
         # 3. Policy pull weights
         policy_config, service_config = get_configs(
             worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
@@ -305,13 +305,13 @@ class TestWeightSync:
         policy = await Policy.options(**asdict(service_config)).as_service(
             **policy_config
         )
-        await policy.update_weights.call()
+        await policy.update_weights.fanout()
 
         # validate loaded shard of each worker againt manually calculated shard (expected shard).
 
         # 4. Validate weight shards. We compare vLLM loades shard content with
         #    Directly loaded HF shard content.
-        sharded_state_dicts = await policy._get_model_params.call()
+        sharded_state_dicts = await policy._get_model_params.fanout()
         validate_loaded_tensors_equals_original(
             sharded_state_dicts[0][0], expected_sd, tensor_parallel_size=tp_size, rank=0
         )
