@@ -39,7 +39,7 @@ async def run(cfg: DictConfig):
     n = 100
     start = time.time()
     response_outputs: list[Completion] = await asyncio.gather(
-        *[policy.generate.choose(prompt=prompt) for _ in range(n)]
+        *[policy.generate.route(prompt=prompt) for _ in range(n)]
     )
     end = time.time()
 
