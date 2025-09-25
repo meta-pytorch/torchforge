@@ -12,7 +12,7 @@ policy:
 services:
   policy:
     procs: 4
-    hosts: 1
+    # hosts: 1
     num_replicas: 1
     with_gpus: true
 

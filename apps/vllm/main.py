@@ -36,7 +36,7 @@ async def run(cfg: DictConfig):
     import time
 
     print("Requesting generation...")
-    n = 100
+    n = 5
     start = time.time()
     response_outputs: list[Completion] = await asyncio.gather(
         *[policy.generate.choose(prompt=prompt) for _ in range(n)]
