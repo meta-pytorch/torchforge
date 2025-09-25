@@ -24,8 +24,21 @@ jobs:
       with-rocm: disable
       with-cpu: disable
       python-versions: '["3.10", "3.11", "3.12"]'
-  build:
+  filter-matrix:
+    runs-on: ubuntu-latest
     needs: generate-matrix
+    outputs:
+      matrix: ${{ steps.filter.outputs.matrix }}
+    steps:
+      - name: Filter out CUDA 13 # vLLM v0.10.0 does not built with CUDA 13
+        id: filter
+        run: |
+          echo '${{ needs.generate-matrix.outputs.matrix }}' \
+            | jq 'del(.include[] | select(.gpu_arch_version == "13.0"))' \
+            > matrix.json
+          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+  build:
+    needs: filter-matrix
     name: ${{ matrix.repository }}
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
