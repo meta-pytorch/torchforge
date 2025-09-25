@@ -149,7 +149,6 @@ class Policy(PolicyInterface):
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
-        process_config: ProcessConfig,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
@@ -157,6 +156,11 @@ class Policy(PolicyInterface):
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
+        process_config: ProcessConfig = ProcessConfig(
+            procs=cls.procs,
+            hosts=cls.hosts,
+            with_gpus=cls.with_gpus,
+        )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # TODO - issues/144 we will want to ensure colocation with workers
@@ -166,8 +170,8 @@ class Policy(PolicyInterface):
         # Once we can create multiple proc meshes on a host mesh, we can ensure
         # host colocation
         policy_proc_config = copy(process_config)
-        policy_proc_config.num_procs = 1
-        policy_proc_config.num_hosts = None
+        policy_proc_config.procs = 1
+        policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
@@ -454,6 +458,9 @@ class PolicyWorker(ForgeActor):
     # used for tesing purposes only
     _test_prev_params = {}
 
+    def __post_init__(self):
+        super().__init__()
+
     @endpoint
     async def setup(self):
         # TODO: remove ["gpus"] when monarch implements a flat rank
@@ -506,9 +513,11 @@ class PolicyWorker(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
-        start = time.time()
+        start = time.perf_counter()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
+        logger.info(
+            f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
+        )
 
     @endpoint
     async def setup_kv_cache(self):

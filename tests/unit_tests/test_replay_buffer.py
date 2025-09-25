@@ -11,15 +11,12 @@ import pytest_asyncio
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.types import Trajectory
 
-from monarch.actor import proc_mesh
-
 
 class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
-        mesh = await proc_mesh(gpus=1)
-        replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=True).as_actor(
+            batch_size=2, max_policy_age=1
         )
         await replay_buffer.setup.call()
         return replay_buffer
@@ -112,10 +109,9 @@ class TestReplayBuffer:
     @pytest.mark.asyncio
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
-        mesh = await proc_mesh(gpus=1)
         # Create replay buffer with dp_size=3
-        replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1, dp_size=3
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=True).as_actor(
+            batch_size=2, max_policy_age=1, dp_size=3
         )
         await replay_buffer.setup.call()
 

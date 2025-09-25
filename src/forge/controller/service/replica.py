@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -103,6 +103,7 @@ class Replica:
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
     actor_def: type[ForgeActor]
+    actor_args: tuple
     actor_kwargs: dict
 
     # The Actor that this replica is running
@@ -157,11 +158,10 @@ class Replica:
         try:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
-            self.actor = await self.actor_def.launch(
-                process_config=self.proc_config,
-                **self.actor_kwargs,
-            )
 
+            self.actor = await self.actor_def.options(
+                **asdict(self.proc_config)
+            ).as_actor(*self.actor_args, **self.actor_kwargs)
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()
