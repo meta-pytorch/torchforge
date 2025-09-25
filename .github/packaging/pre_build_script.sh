@@ -45,11 +45,11 @@ build_monarch() {
 
     if command -v dnf &>/dev/null; then
         dnf install -y clang-devel \
-            libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+            libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel fmt-devel
     elif command -v apt-get &>/dev/null; then
         apt-get update
         apt-get install -y clang libunwind-dev \
-            libibverbs-dev librdmacm-dev
+            libibverbs-dev librdmacm-dev libfmt-dev
     fi
 
     cd "$BUILD_DIR"
