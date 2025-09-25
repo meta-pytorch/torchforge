@@ -100,10 +100,8 @@ async def _perf_metrics_cm(
             else:
                 duration = time.perf_counter() - start_time
 
-            await record_metric(
-                f"{prefix}/duration_avg_s", duration, ReductionType.MEAN
-            )
-            await record_metric(f"{prefix}/duration_max_s", duration, ReductionType.MAX)
+            record_metric(f"{prefix}/duration_avg_s", duration, ReductionType.MEAN)
+            record_metric(f"{prefix}/duration_max_s", duration, ReductionType.MAX)
 
         if local_memory:
             end_mem = (
@@ -117,12 +115,8 @@ async def _perf_metrics_cm(
                 if torch.cuda.is_available()
                 else 0
             )
-            await record_metric(
-                f"{prefix}/memory_delta_avg_gb", delta, ReductionType.MEAN
-            )
-            await record_metric(
-                f"{prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX
-            )
+            record_metric(f"{prefix}/memory_delta_avg_gb", delta, ReductionType.MEAN)
+            record_metric(f"{prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX)
 
 
 def record_perf_metrics(
@@ -199,12 +193,12 @@ class StepTimer:
 
     Example:
         timer = StepTimer("trainer_perf/step", aggregations=[ReductionType.MEAN])
-        await timer.start()
+        timer.start()
         foo()
-        await timer.step("foo")
+        timer.step("foo")
         bar()
-        await timer.step("bar")
-        await timer.end()
+        timer.step("bar")
+        timer.end()
 
         Metrics logged:
             trainer_perf/step/foo/duration_avg (s)
@@ -229,7 +223,7 @@ class StepTimer:
         self.start_event = None
         self.last_event = None
 
-    async def start(self):
+    def start(self):
         """Start the timer."""
         if self.sync_cuda_event and torch.cuda.is_available():
             self.start_event = torch.cuda.Event(enable_timing=True)
@@ -238,7 +232,7 @@ class StepTimer:
         self.start_time = time.perf_counter()
         self.last_time = self.start_time
 
-    async def step(self, step_name: str, aggregations: list[ReductionType] = None):
+    def step(self, step_name: str, aggregations: list[ReductionType] = None):
         """
         Record timing for a step within the timer's scope.
 
@@ -268,7 +262,7 @@ class StepTimer:
         if self.last_time is not None or self.last_event:
             for reduction_type in aggs:
                 suffix = self._get_suffix_for_reduction_type(reduction_type)
-                await record_metric(
+                record_metric(
                     f"{self.prefix}/{suffix}_{step_name}_duration_s",
                     duration,
                     reduction_type,
@@ -281,7 +275,7 @@ class StepTimer:
             return "avg"
         return reduction_type.name.lower()
 
-    async def end(self, aggregations: list[ReductionType] = None):
+    def end(self, aggregations: list[ReductionType] = None):
         """End the timer and record total duration.
 
         Args:
@@ -302,7 +296,7 @@ class StepTimer:
 
         for reduction_type in aggs:
             suffix = self._get_suffix_for_reduction_type(reduction_type)
-            await record_metric(
+            record_metric(
                 f"{self.prefix}/total_duration_{suffix}_s",
                 duration,
                 reduction_type,

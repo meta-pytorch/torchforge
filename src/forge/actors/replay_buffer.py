@@ -43,7 +43,7 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def add(self, episode: "Episode") -> None:
         self.buffer.append(episode)
-        await record_metric("buffer/add/count_episodes_added", 1, ReductionType.SUM)
+        record_metric("buffer/add/count_episodes_added", 1, ReductionType.SUM)
 
     @endpoint
     @record_perf_metrics_ctx(
@@ -63,7 +63,7 @@ class ReplayBuffer(ForgeActor):
             A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
         # Record sample request metric
-        await record_metric("buffer/sample/count_sample_requests", 1, ReductionType.SUM)
+        record_metric("buffer/sample/count_sample_requests", 1, ReductionType.SUM)
 
         bsz = batch_size if batch_size is not None else self.batch_size
         total_samples = self.dp_size * bsz
@@ -79,13 +79,13 @@ class ReplayBuffer(ForgeActor):
             (total_samples / len(self.buffer)) * 100 if len(self.buffer) > 0 else 0
         )
 
-        await record_metric(
+        record_metric(
             "buffer/sample/avg_buffer_utilization",
             len(self.buffer),
             ReductionType.MEAN,
         )
 
-        await record_metric(
+        record_metric(
             "buffer/sample/avg_buffer_utilization_pct",
             utilization_pct,
             ReductionType.MEAN,
@@ -133,12 +133,12 @@ class ReplayBuffer(ForgeActor):
             curr_policy_version - ep.policy_version for ep in self.buffer
         ]
         if policy_staleness:
-            await record_metric(
+            record_metric(
                 "buffer/evict/avg_policy_staleness",
                 sum(policy_staleness) / len(policy_staleness),
                 ReductionType.MEAN,
             )
-            await record_metric(
+            record_metric(
                 "buffer/evict/max_policy_staleness",
                 max(policy_staleness),
                 ReductionType.MAX,
@@ -147,7 +147,7 @@ class ReplayBuffer(ForgeActor):
         # Record eviction metrics
         evicted_count = buffer_len_before_evict - buffer_len_after_evict
         if evicted_count > 0:
-            await record_metric(
+            record_metric(
                 "buffer/evict/sum_episodes_evicted", evicted_count, ReductionType.SUM
             )
 

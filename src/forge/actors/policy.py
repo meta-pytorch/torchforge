@@ -51,7 +51,7 @@ from forge.data_models.prompt import to_prompt
 
 from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics, StepTimer
+from forge.observability.perf_tracker import StepTimer
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,8 @@ class Policy(PolicyInterface):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
+        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
+        # do logging within PolicyWorker
         workers = await worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config
         )
@@ -274,12 +276,6 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    @record_perf_metrics(
-        "policy_perf/generate",
-        track_time=False,
-        track_memory=True,
-        sync_cuda_event=False,
-    )
     async def generate(self, prompt: str, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
@@ -291,18 +287,16 @@ class Policy(PolicyInterface):
             RequestOutput: vLLM class with the generated response.
         """
         timer = StepTimer("policy_perf/generate", sync_cuda_event=False)
-        await timer.start()
+        timer.start()
 
         # Record policy generation metrics
-        await record_metric("policy/generate/count_requests", 1, ReductionType.SUM)
+        record_metric("policy/generate/count_requests", 1, ReductionType.SUM)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
         # Record policy generation metrics
-        await record_metric(
-            "policy/generate/count_generate_requests", 1, ReductionType.SUM
-        )
+        record_metric("policy/generate/count_generate_requests", 1, ReductionType.SUM)
 
         # Wraps prompt into a dict
         prompt_dict: dict[str, str] = convert_input(prompt=prompt)
@@ -316,7 +310,7 @@ class Policy(PolicyInterface):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
-        await timer.step("prompt_truncation")
+        timer.step("prompt_truncation")
 
         # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
@@ -330,7 +324,7 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
-        await timer.step("process_inputs")
+        timer.step("process_inputs")
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -362,7 +356,7 @@ class Policy(PolicyInterface):
 
         completions = await request_fut
 
-        await record_metric(
+        record_metric(
             "policy/generate/count_sequences_completed",
             len(completions),
             ReductionType.SUM,
@@ -370,20 +364,20 @@ class Policy(PolicyInterface):
 
         for completion in completions:
             num_generated_tokens = len(completion.token_ids)
-            await record_metric(
+            record_metric(
                 "policy/generate/sum_tokens_generated",
                 num_generated_tokens,
                 ReductionType.SUM,
             )
 
-            await record_metric(
+            record_metric(
                 "policy/generate/avg_tokens_generated",
                 num_generated_tokens,
                 ReductionType.MEAN,
             )
 
-        await timer.step("generate")
-        await timer.end()
+        timer.step("generate")
+        timer.end()
 
         return completions
 
@@ -434,12 +428,12 @@ class Policy(PolicyInterface):
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
             # Record pending requests metrics
-            await record_metric(
+            record_metric(
                 "policy_perf/update_weights/avg_pending_requests",
                 len(curr_requests),
                 ReductionType.MEAN,
             )
-            await record_metric(
+            record_metric(
                 "policy_perf/update_weights/max_pending_requests",
                 len(curr_requests),
                 ReductionType.MAX,
@@ -448,7 +442,7 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         # Record weight update metrics
-        await record_metric(
+        record_metric(
             "policy/update_weights/count_weight_updates", 1, ReductionType.SUM
         )
 

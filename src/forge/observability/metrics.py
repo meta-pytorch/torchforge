@@ -85,7 +85,7 @@ def get_actor_name_with_rank() -> str:
     return rank_name
 
 
-async def record_metric(
+def record_metric(
     key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
 ) -> None:
     """
@@ -103,7 +103,7 @@ async def record_metric(
     `forge.observability.metric_actors.GlobalLoggingActor`
     """
     collector = MetricCollector()
-    await collector.push(key, value, reduction)
+    collector.push(key, value, reduction)
 
 
 def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
@@ -375,7 +375,7 @@ class MetricCollector:
 
         self._initialized_async = True
 
-    async def push(
+    def push(
         self, key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
     ) -> None:
         if not self._initialized_async:

@@ -230,7 +230,7 @@ class RLTrainer(ForgeActor):
 
         # Log timesteps
         timer = StepTimer("trainer_perf/step", sync_cuda_event=False)
-        await timer.start()
+        timer.start()
 
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
@@ -244,9 +244,9 @@ class RLTrainer(ForgeActor):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
-        loss = await self.forward_backward(local_inputs, local_targets)
+        loss = self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
-        await timer.step("forward_backward")
+        timer.step("forward_backward")
 
         # Get learning rate from scheduler
         current_lr = (
@@ -254,41 +254,41 @@ class RLTrainer(ForgeActor):
             if hasattr(self.engine.lr_schedulers, "get_last_lr")
             else 0.001
         )
-        await record_metric("trainer/learning_rate", current_lr, ReductionType.MIN)
+        record_metric("trainer/learning_rate", current_lr, ReductionType.MIN)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
-        await timer.step("optimizer_step")
+        timer.step("optimizer_step")
 
         # Record training metrics
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().cpu().item()
-        await record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
-        await record_metric("trainer/avg_grpo_loss", loss, ReductionType.MEAN)
+        record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
+        record_metric("trainer/avg_grpo_loss", loss, ReductionType.MEAN)
 
         # TODO: Extract actual KL divergence and policy entropy from the loss computation
         # These are placeholder values until the loss function exposes these metrics
-        # await record_metric("trainer/step/avg_kl_divergence", 0.0, ReductionType.MEAN)
-        # await record_metric("trainer/step/std_kl_divergence", 0.0, ReductionType.STD)
-        # await record_metric("trainer/step/avg_policy_entropy", 0.0, ReductionType.MEAN)
+        # record_metric("trainer/step/avg_kl_divergence", 0.0, ReductionType.MEAN)
+        # record_metric("trainer/step/std_kl_divergence", 0.0, ReductionType.STD)
+        # record_metric("trainer/step/avg_policy_entropy", 0.0, ReductionType.MEAN)
 
         self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
         )
-        await timer.step("save_checkpoint")
-        await timer.end()
+        timer.step("save_checkpoint")
+        timer.end()
         return loss
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
 
         timer = StepTimer("trainer_perf/push_weights", sync_cuda_event=False)
-        await timer.start()
+        timer.start()
 
-        await record_metric("trainer/count_weight_pushes", 1, ReductionType.SUM)
+        record_metric("trainer/count_weight_pushes", 1, ReductionType.SUM)
 
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         # TODO:
@@ -300,18 +300,18 @@ class RLTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
-        await timer.step("flatten_state_dict")
+        timer.step("flatten_state_dict")
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        await timer.step("state_dict_to_hf")
+        timer.step("state_dict_to_hf")
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
         )
-        await timer.step("state_dict_hf_to_vllm")
+        timer.step("state_dict_hf_to_vllm")
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         if self.use_dcp:
             # TODO - DCP should probably be being saved to NFS explicitly?
@@ -331,12 +331,12 @@ class RLTrainer(ForgeActor):
                     delim=DELIM,
                     current_policy_version=policy_version,
                 )
-            await timer.step("save_using_dcp")
+            timer.step("save_using_dcp")
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
-            await timer.step("save_using_torchstore")
+            timer.step("save_using_torchstore")
 
-        await timer.end()
+        timer.end()
 
     @endpoint
     async def cleanup(self) -> None:
