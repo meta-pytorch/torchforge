@@ -106,7 +106,7 @@ append_date() {
 }
 
 
-# build_vllm
+build_vllm
 build_monarch
 # build_torchstore
 build_torchtitan
