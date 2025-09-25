@@ -106,8 +106,8 @@ def collate(batches: list[list[Episode]]):
         response = [e.response_tensor for e in batch]
         response = torch.stack(response)  # [b x s]
 
-        ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
+        # mock out the ref logprobs for now
+        ref_logprobs = torch.zeros(len(batch), batch[0].response_len)  # [b x s]
 
         advantages = [e.advantage for e in batch]
         advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
@@ -146,9 +146,9 @@ def simple_grpo_loss(
     beta: float = 0.1,
 ) -> torch.Tensor:
     logprobs = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    # kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
+    per_token_loss = -(per_token_policy_loss)
     loss = (
         ((per_token_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
@@ -156,19 +156,19 @@ def simple_grpo_loss(
     return loss
 
 
-# @dataclass
-# class RewardActor(ForgeActor):
-#     """Reward actor that uses a list of scoring functions."""
+@dataclass
+class RewardActor(ForgeActor):
+    """Reward actor that uses a list of scoring functions."""
 
-#     reward_functions: list[Callable]
+    reward_functions: list[Callable]
 
-#     @endpoint
-#     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
-#         total_rewards = 0.0
-#         for reward_fn in self.reward_functions:
-#             reward = reward_fn(prompt, response, target)
-#             total_rewards += reward
-#         return total_rewards / len(self.reward_functions)
+    @endpoint
+    async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
+        total_rewards = 0.0
+        for reward_fn in self.reward_functions:
+            reward = reward_fn(prompt, response, target)
+            total_rewards += reward
+        return total_rewards / len(self.reward_functions)
 
 
 class ComputeAdvantages(ForgeActor):
@@ -315,11 +315,11 @@ async def main(cfg: DictConfig):
                 )
 
             # Calculate reference logprobs
-            ref_logits = await ref_model.forward.choose(input_ids)
-            ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
-            for i, episode in enumerate(group.episodes):
-                episode.ref_logprobs = ref_logprobs[i]
-            del ref_logits, ref_logprobs, input_ids
+            # ref_logits = await ref_model.forward.choose(input_ids)
+            # ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
+            # for i, episode in enumerate(group.episodes):
+            #     episode.ref_logprobs = ref_logprobs[i]
+            # del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.choose(group)
@@ -372,7 +372,7 @@ async def main(cfg: DictConfig):
             trainer.shutdown(),
             replay_buffer.shutdown(),
             compute_advantages.shutdown(),
-            ref_model.shutdown(),
+            # ref_model.shutdown(),
             reward_actor.shutdown(),
         )
         # TODO - add a global shutdown that implicitly shuts down all services
