@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .endpoint import BatchedServiceEndpoint, service_endpoint
 from .interface import ServiceInterface, Session, SessionContext
 from .metrics import ServiceMetrics
 from .replica import Replica, ReplicaMetrics, ReplicaState
@@ -24,4 +25,6 @@ __all__ = [
     "LeastLoadedRouter",
     "RoundRobinRouter",
     "SessionRouter",
+    "BatchedServiceEndpoint",
+    "service_endpoint",
 ]

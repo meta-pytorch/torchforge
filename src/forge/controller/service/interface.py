@@ -12,19 +12,15 @@ including session management, context propagation, and dynamic endpoint registra
 
 import contextvars
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Generic, List, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
-from .replica import Replica
+from .endpoint import ServiceEndpoint, ServiceEndpointV2
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-P = ParamSpec("P")
-R = TypeVar("R")
 
 
 @dataclass
@@ -77,94 +73,6 @@ class SessionContext:
             self.session_id = None
 
 
-class ServiceEndpoint(Generic[P, R]):
-    """
-    This extends Monarch's actor APIs for service endpoints.
-    - `route(*args, **kwargs)`: Routes the request to a single replica.
-    - `fanout(*args, **kwargs)`: Broadcasts the request to all healthy replicas.
-
-    Monarch's native actor APIs do not apply for services.
-    """
-
-    def __init__(self, service, endpoint_name: str):
-        self.service = service
-        self.endpoint_name = endpoint_name
-
-    async def route(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        """Chooses a replica to call based on context and load balancing strategy."""
-        # Extract sess_id from kwargs if present
-        sess_id = kwargs.pop("sess_id", None)
-        return await self.service._call(sess_id, self.endpoint_name, *args, **kwargs)
-
-    async def fanout(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
-        """Broadcasts a request to all healthy replicas and returns the results as a list."""
-        result = await self.service.call_all(self.endpoint_name, *args, **kwargs)
-        return result
-
-    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        raise NotImplementedError(
-            "You tried to use choose() on a service, not an actor. "
-            "Services only support route() and fanout()."
-        )
-
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
-        raise NotImplementedError(
-            "You tried to use call() on a service, not an actor. "
-            "Services only support route() and fanout()."
-        )
-
-    async def call_one(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        raise NotImplementedError(
-            "You tried to use a call_one() on a service, not an actor. "
-            "Services only support route() and fanout()."
-        )
-
-    async def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
-        raise NotImplementedError(
-            "You tried to use broadcast() on a service, not an actor. "
-            "Services only support route() and fanout()."
-        )
-
-    async def generate(self, *args: P.args, **kwargs: P.kwargs):
-        raise NotImplementedError(
-            "You tried to use generate() on a service, not an actor. "
-            "Services only support route() and fanout()."
-        )
-
-
-class ServiceEndpointV2(Generic[P, R]):
-    """An endpoint object specific to services.
-
-    This loosely mimics the Endpoint APIs exposed in Monarch, with
-    a few key differences:
-    - Only choose and call are retained (dropping stream and call_one)
-    - Call returns a list directly rather than a ValueMesh.
-
-    These changes are made with Forge use cases in mind, but can
-    certainly be expanded/adapted in the future.
-
-    """
-
-    def __init__(self, actor_mesh, endpoint_name: str):
-        self.actor_mesh = actor_mesh
-        self.endpoint_name = endpoint_name
-
-    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        """Chooses a replica to call based on context and load balancing strategy."""
-        # Extract sess_id from kwargs if present
-        sess_id = kwargs.pop("sess_id", None)
-        return await self.actor_mesh.call.call_one(
-            sess_id, self.endpoint_name, *args, **kwargs
-        )
-
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
-        """Broadcasts a request to all healthy replicas and returns the results as a list."""
-        result = await self.actor_mesh.call_all.call_one(
-            self.endpoint_name, *args, **kwargs
-        )
-        return result
-
-
 class ServiceInterface:
     """
     A lightweight interface to the base Service class.
@@ -183,9 +91,26 @@ class ServiceInterface:
         for attr_name in dir(actor_def):
             attr_value = getattr(actor_def, attr_name)
             if isinstance(attr_value, EndpointProperty):
+                # Decorated with @endpoint
                 # Create a ServiceEndpoint that will route through the Service Actor
                 endpoint = ServiceEndpoint(self._service, attr_name)
-                setattr(self, attr_name, endpoint)
+            elif hasattr(attr_value, "_service_endpoint_config"):
+                print("reached here")
+                # Decorated with @service_endpoint
+                # Create a ServiceEndpoint with batch routing config
+                cfg = attr_value._service_endpoint_config
+                endpoint = ServiceEndpoint(
+                    self._service,
+                    attr_name,
+                    router=cfg["router"],
+                    batch_size=cfg["batch_size"],
+                    batch_timeout=cfg["batch_timeout"],
+                )
+                print("reached here. cfg: ", cfg)
+            else:
+                # Not decorated with @endpoint or @service_endpoint
+                continue
+            setattr(self, attr_name, endpoint)
 
     # Session management methods - handled by ServiceInterface
     async def start_session(self) -> str:
@@ -306,17 +231,3 @@ class ServiceInterfaceV2:
         raise AttributeError(
             f"'{self.__class__.__name__}' object has no attribute '{name}'"
         )
-
-
-class Router(ABC):
-    """Abstract base class for routing logic."""
-
-    @abstractmethod
-    def get_replica(
-        self,
-        healthy_replicas: List[Replica],
-        sess_id: str | None = None,
-        session_map: Dict[str, int] | None = None,
-    ) -> Replica:
-        """Select a replica from the list based on routing logic."""
-        pass

@@ -6,13 +6,27 @@
 
 
 import logging
+from abc import ABC, abstractmethod
 from typing import Dict, List
 
-from .interface import Router
 from .replica import Replica
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+class Router(ABC):
+    """Abstract base class for routing logic."""
+
+    @abstractmethod
+    def get_replica(
+        self,
+        healthy_replicas: List[Replica],
+        sess_id: str | None = None,
+        session_map: Dict[str, int] | None = None,
+    ) -> Replica:
+        """Select a replica from the list based on routing logic."""
+        pass
 
 
 class RoundRobinRouter(Router):
