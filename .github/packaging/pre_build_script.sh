@@ -45,7 +45,8 @@ build_monarch() {
 
     if command -v dnf &>/dev/null; then
         dnf install -y clang-devel \
-            libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel fmt-devel
+            libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel fmt-devel \
+            libunwind-devel
     elif command -v apt-get &>/dev/null; then
         apt-get update
         apt-get install -y clang libunwind-dev \
