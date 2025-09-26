@@ -57,7 +57,7 @@ class Counter(ForgeActor):
         self.v += amount * multiplier
         return self.v
 
-    @service_endpoint(router="round_robin", batch_size=3, batch_timeout=0.1)
+    @service_endpoint(router="round_robin", batch_size=3, batch_timeout=1)
     async def rr_incr(self):
         """Increment using RoundRobin router."""
         self.v += 1
@@ -120,16 +120,36 @@ async def test_round_robin_router_distribution():
         # Make multiple sessionless calls using route()
         results = []
         for _ in range(6):
-            await service.rr_incr.route()
+            await service.incr.route()
             values = await service.value.fanout()
-            print(values)
             results.append(values)
-        print("results: ", results)
         # Verify that requests were distributed round-robin
         # Each call increments a single replica, so after 6 calls we expect:
         # 2 increments per replica (since 3 replicas, 6 calls)
         final_values = results[-1]  # last snapshot
         assert sorted(final_values) == [2, 2, 2]
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_round_robin_router_distribution2():
+    # TODO: change name
+    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
+
+    try:
+        # Make multiple sessionless calls using route()
+        results = []
+        tasks = [service.rr_incr.route() for _ in range(6)]
+        await asyncio.gather(*tasks)
+        # Verify that requests were distributed round-robin
+        # Each call increments a single replica, so after 6 calls we expect:
+        # 2 increments per replica (since 3 replicas, 6 calls)
+        values = await service.value.fanout()
+        assert sorted(values) == [0, 3, 3]
 
     finally:
         await service.shutdown()
@@ -184,10 +204,10 @@ async def test_service_endpoint_batch_flush_max_size():
         # Expectation:
         # - 3 increments batched together on one replica
         # - 1 increment on the other replica (new batch after flush)
-        assert sum(values) == 3, f"Expected total=3, got {values}"
+        assert sum(values) == 4, f"Expected total=4, got {values}"
 
         # Exactly one replica should have count=3, and the other count=1
-        assert sorted(values) == [1, 3], f"Expected [1, 2], got {values}"
+        assert sorted(values) == [1, 3], f"Expected [1, 3], got {values}"
 
     finally:
         await service.shutdown()

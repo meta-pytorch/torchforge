@@ -90,12 +90,10 @@ class ServiceInterface:
         # Inspect the actor_def directly to find endpoints
         for attr_name in dir(actor_def):
             attr_value = getattr(actor_def, attr_name)
-            if isinstance(attr_value, EndpointProperty):
-                # Decorated with @endpoint
-                # Create a ServiceEndpoint that will route through the Service Actor
-                endpoint = ServiceEndpoint(self._service, attr_name)
-            elif hasattr(attr_value, "_service_endpoint_config"):
-                print("reached here")
+            # logger.info(f"Endpoint name: {attr_name}")
+
+            if hasattr(attr_value, "_service_endpoint_config"):
+                # logger.info("reached here")
                 # Decorated with @service_endpoint
                 # Create a ServiceEndpoint with batch routing config
                 cfg = attr_value._service_endpoint_config
@@ -106,7 +104,14 @@ class ServiceInterface:
                     batch_size=cfg["batch_size"],
                     batch_timeout=cfg["batch_timeout"],
                 )
-                print("reached here. cfg: ", cfg)
+                # logger.info("reached here. cfg: ", cfg)
+
+            elif isinstance(attr_value, EndpointProperty):
+                # logger.info(f"EndpointProperty name: {attr_name}")
+
+                # Decorated with @endpoint
+                # Create a ServiceEndpoint that will route through the Service Actor
+                endpoint = ServiceEndpoint(self._service, attr_name)
             else:
                 # Not decorated with @endpoint or @service_endpoint
                 continue
