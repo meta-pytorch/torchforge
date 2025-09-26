@@ -105,7 +105,7 @@ class ServiceInterface:
                     )
 
             elif isinstance(attr_value, EndpointProperty):
-                # Decorated with @endpoint
+                # This was defined as a standard Monarch endpoint
                 # Create a ServiceEndpoint that will route through the Service Actor
                 endpoint = ServiceEndpoint(self._service, attr_name)
             else:
