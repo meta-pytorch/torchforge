@@ -338,11 +338,13 @@ class Trainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, version: int):
+    async def push_weights(self, version: int, vllm_tp_DEPRECATED: int) -> None:
         """Update policy model weights with trainer's current weights."""
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
-            self.model.state_dict(), num_layers=self.model.config.num_hidden_layers
+            self.model.state_dict(),
+            num_layers=self.model.config.num_hidden_layers,
+            vllm_tp=vllm_tp_DEPRECATED,
         )
         start_time = time.time()
         await ts.put_state_dict(new_sd, key)
@@ -433,6 +435,8 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
+    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
@@ -464,16 +468,18 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token.route()
         while True:
             # Pass rollout_count for curriculum learning
-            sample = await dataloader.sample.choose(rollout_count)
+            sample = await dataloader.sample.route(rollout_count)
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generate.choose(prompt)
-            version = await policy.get_version.choose()
+            responses = await policy.generate.route(prompt)
+            assert len(responses) > 0
+            version = responses[0].generator_version
+            assert version is not None, "Response must indicate a version"
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,
@@ -491,13 +497,13 @@ async def main(cfg: DictConfig):
                 episode.response_tokens = response.token_ids
                 episode.response = response.text
                 episode.response_logprobs = response.logprobs
-                episode.ref_logprobs = await ref_model.forward.choose(episode)
-                episode.reward = await reward_actor.evaluate_response.choose(
+                episode.ref_logprobs = await ref_model.forward.route(episode)
+                episode.reward = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
                 episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
-                await replay_buffer.add.choose(episode)
+                await replay_buffer.add.route(episode)
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
@@ -510,18 +516,20 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch[0])
+                loss = await trainer.train_step.route(batch[0])
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.call(training_step)
-                await policy.update_weights.call(training_step)
+                await trainer.push_weights.fanout(
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
+                await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
-                await replay_buffer.clear.call()
+                await replay_buffer.clear.fanout()
 
     print("Starting training loop.")
     # TODO: Start multiple rollouts once all serivces support it
