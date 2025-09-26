@@ -102,7 +102,7 @@ class RLTrainer(ForgeActor):
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
-    dcp_path: str = ""
+    dcp_path: str = "forge_dcp_tmp"
     vllm_tp_DEPRECATED: int = 1  # noqa: N815
 
     def __post_init__(self):
