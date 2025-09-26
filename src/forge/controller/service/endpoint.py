@@ -26,10 +26,30 @@ R = TypeVar("R")
 class ServiceEndpoint(Generic[P, R]):
     """
     This extends Monarch's actor APIs for service endpoints.
-    - `route(*args, **kwargs)`: Routes the request to a single replica.
-    - `fanout(*args, **kwargs)`: Broadcasts the request to all healthy replicas.
+    ServiceEndpoint provides the basic, non-batched routing API for Forge services.
 
-    Monarch's native actor APIs do not apply for services.
+    Args:
+        service: The underlying service object that owns replicas.
+        endpoint_name (str): The name of the endpoint method.
+        router (str, optional): Routing strategy for stateless requests.
+                 Supported values:
+                   - "round_robin": cycle through replicas in order.
+                   - "leastloaded": pick the replica with the lowest load.
+                 Default: "round_robin".
+
+    Supported methods:
+        - `route`: Send a request to a single replica, chosen by the configured router
+        (e.g. round-robin, least-loaded).
+        - `fanout`: Broadcasts the request to all healthy replicas.
+
+    Notes:
+        - Support `@endpoint()` and `@service_endpoint(router='..')` decorators.
+        - To specify router, use `@service_endpoint(router='..')`.
+        - Retry logic: If `max_attempts > 1`, failed calls may be retried on a different replica
+        if the first one becomes unhealthy.
+        - Session-aware routing: If a `sess_id` is provided, requests are routed via
+        `SessionRouter` for sticky session behavior.
+        - Monarch's native actor APIs do not apply for services.
     """
 
     def __init__(
@@ -41,10 +61,14 @@ class ServiceEndpoint(Generic[P, R]):
         self.service = service
         self.endpoint_name = endpoint_name
 
+        # Primary router (stateless routing)
         self.router = self._resolve_router(router)
+
+        # Session-aware router for sticky sessions
         self.session_router = SessionRouter(fallback_router=self.router)
 
-        self.max_attempts = 1  # number of tries for routing = initial + retries
+        # Number of routing attempts (initial + retries)
+        self.max_attempts = 1
 
     def _resolve_router(self, router_name: str) -> Router:
         """Convert a router name into a router object.
@@ -64,7 +88,12 @@ class ServiceEndpoint(Generic[P, R]):
         )
 
     async def route(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        """Chooses a replica to call based on context and load balancing strategy."""
+        """
+        Route a single request to one replica.
+
+        Retries up to `self.max_attempts` times if the chosen replica fails
+        and is marked unhealthy. Sticky session mapping is cleared on retry.
+        """
         # Extract sess_id from kwargs if present
         sess_id = kwargs.pop("sess_id", None)
 
@@ -89,7 +118,12 @@ class ServiceEndpoint(Generic[P, R]):
                 raise
 
     async def _choose_replica(self, sess_id: str | None) -> "Replica":
-        """Get a replica for the given session ID."""
+        """
+        Select a replica to handle the request.
+
+        - If `sess_id` is provided, use the session router for sticky sessions.
+        - Otherwise, use the stateless router to pick among healthy replicas.
+        """
 
         # Stateful routing always uses session router
         if sess_id:
@@ -149,11 +183,32 @@ class ServiceEndpoint(Generic[P, R]):
 
 class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
     """
-    A ServiceEndpoint that supports request batch routing.
+    A ServiceEndpoint variant that supports request batching.
 
-    Features:
-    - Maintains a batch queue
-    - Spawns a background task to group requests into batches
+    Args:
+        service: The underlying service object that owns replicas.
+        endpoint_name (str): The name of the endpoint method.
+        router (str, optional): Routing strategy for stateless requests.
+                 Supported values:
+                   - "round_robin": cycle through replicas in order.
+                   - "leastloaded": pick the replica with the lowest load.
+                 Default: "round_robin".
+        batch_size (int, optional): Maximum number of requests to group together
+                 in a single batch before dispatching. Default: 8.
+        batch_timeout (float, optional): Maximum time (in seconds) to wait before
+                 dispatching a batch. Default: 0.01.
+
+    Key features:
+        - Collects requests into batches of up to `batch_size`.
+        - Uses a background asyncio task (`_batch_loop`) to manage the queue.
+        - Makes one routing decision per batch, and assigns the chosen replica
+        to all requests in that batch.
+        - Provides the same API (`route`, `fanout`, `stop`) as ServiceEndpoint.
+
+    Usage:
+        class MyForgeActor(ForgeActor):
+            @service_endpoint(router="round_robin", batch_size=16, batch_timeout=0.05)
+            async def forward(self, x): ...
     """
 
     def __init__(
@@ -173,7 +228,13 @@ class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
         self.batch_task = asyncio.create_task(self._batch_loop())
 
     async def _choose_replica(self, sess_id: str | None) -> "Replica":
-        """Get a replica for the given session ID."""
+        """
+        Overridden to support batching.
+
+        - Session requests bypass batching and use sticky session router.
+        - Stateless requests are enqueued; the batch loop will fulfill their
+          Future with a chosen replica.
+        """
 
         # Stateful routing always uses session router
         if sess_id:
@@ -204,11 +265,12 @@ class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
         while self._running_batch_loop:
             batch_futs = []
 
-            # Wait for first request
+            # Wait for the first request to start a batch
             fut = await self._batch_queue.get()
             batch_futs.append(fut)
             start_time = time.monotonic()
 
+            # Collect additional requests until batch size or timeout
             while True:
                 try:
                     timeout = max(
@@ -224,9 +286,8 @@ class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
                 except asyncio.TimeoutError:
                     break
 
+            # Make one routing decision for the batch
             healthy_replicas = self.service._get_healthy_replicas()
-
-            # One routing decision for the whole batch
             replica = self.router.get_replica(
                 healthy_replicas, None, self.service._session_replica_map
             )
@@ -278,7 +339,6 @@ class ServiceEndpointV2(Generic[P, R]):
 def service_endpoint(
     *,
     router="round_robin",
-    session_router="leastloaded",
     batch_size=1,
     batch_timeout=0.01,
     propagate=None,
@@ -300,7 +360,6 @@ def service_endpoint(
         )
         ep._service_endpoint_config = dict(
             router=router,
-            session_router=session_router,
             batch_size=batch_size,
             batch_timeout=batch_timeout,
         )
