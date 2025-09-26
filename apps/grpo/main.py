@@ -358,9 +358,7 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.route(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.fanout(
-                    training_step, vllm_tp_DEPRECATED=policy_tp_size
-                )
+                await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")
