@@ -25,6 +25,6 @@ __all__ = [
     "LeastLoadedRouter",
     "RoundRobinRouter",
     "SessionRouter",
-    "BatchedServiceEndpoint",
     "service_endpoint",
+    "BatchedServiceEndpoint",
 ]

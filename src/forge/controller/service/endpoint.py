@@ -206,6 +206,34 @@ class ServiceEndpoint(Generic[P, R]):
         self._running_batch_loop = False
 
 
+class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
+    """
+    A ServiceEndpoint that supports request batch routing.
+
+    Args:
+        router: The underlying Router instance used to make routing decisions
+        session_router: The fallback Router for session-based routing.
+        batch_max_size: Maximum number of requests to collect in a single batch (default: 8)
+        batch_max_wait_s: Maximum time to wait before processing a batch in seconds (default: 0.01)
+
+    Features:
+    - Maintains a batch queue
+    - Spawns a background task to group requests into batches
+    """
+
+    def __init__(
+        self,
+        service,
+        endpoint_name: str,
+        router: str = "round_robin",
+        session_router: str = "leastloaded",
+        batch_size: int = 1,
+        batch_timeout: float = 0.1,
+    ):
+
+        super().__init__(service, endpoint_name)
+
+
 class ServiceEndpointV2(Generic[P, R]):
     """An endpoint object specific to services.
 

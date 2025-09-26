@@ -11,16 +11,11 @@ including session management, context propagation, and dynamic endpoint registra
 """
 
 import contextvars
-import logging
 from dataclasses import dataclass
 
 from monarch._src.actor.endpoint import EndpointProperty
 
 from .endpoint import ServiceEndpoint, ServiceEndpointV2
-
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 @dataclass
@@ -108,7 +103,9 @@ class ServiceInterface:
                 endpoint = ServiceEndpoint(self._service, attr_name)
             else:
                 # Not decorated with @endpoint or @service_endpoint
-                continue
+                raise ValueError(
+                    f"Attribute '{attr_name}' is not a valid service endpoint"
+                )
             setattr(self, attr_name, endpoint)
 
     # Session management methods - handled by ServiceInterface

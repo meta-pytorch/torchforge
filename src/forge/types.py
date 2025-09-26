@@ -118,8 +118,6 @@ class ServiceConfig:
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
     return_first_rank_result: bool = True
-    max_batch_size: int = 1
-    batch_max_wait_s: float = 0.01
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.

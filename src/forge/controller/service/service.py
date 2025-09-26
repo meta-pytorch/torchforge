@@ -35,7 +35,6 @@ Example:
 import asyncio
 import logging
 import pprint
-import time
 import uuid
 from typing import Dict, List
 
@@ -111,13 +110,6 @@ class Service:
         self._default_router = RoundRobinRouter()
         self._session_router = SessionRouter(fallback_router=LeastLoadedRouter())
 
-        # Batching
-        self._max_batch_size = self._cfg.max_batch_size
-        self._batch_max_wait_s = self._cfg.batch_max_wait_s
-        self._batch_task: asyncio.Task | None = None
-        self._running_batch_loop = False
-        self._batch_queue: asyncio.Queue = asyncio.Queue()
-
         # Initialize all replicas
         replicas = []
         num_replicas = self._cfg.num_replicas
@@ -146,60 +138,6 @@ class Service:
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
 
-        # Start batch loop if batching enabled
-        if self._max_batch_size > 1:
-            self._running_batch_loop = True
-            self._batch_task = asyncio.create_task(self._batch_loop())
-
-    async def _batch_loop(self):
-        """Background task that continuously processes batches of routing requests.
-
-        This is the core batching logic that runs in a separate asyncio task.
-        It collects requests from the queue and processes them in batches based
-        on size and time constraints.
-
-        The loop follows these steps:
-        1. Wait for the first request to start a new batch
-        2. Collect additional requests until batch_max_size or batch_max_wait_s is reached
-        3. Make a single routing decision for the entire batch
-        4. Fulfill all futures with the selected replica
-
-        This process repeats indefinitely until the task is cancelled.
-        """
-        while self._running_batch_loop:
-            batch_futs = []
-
-            # Wait for first request
-            fut = await self._batch_queue.get()
-            batch_futs.append(fut)
-            start_time = time.monotonic()
-
-            while True:
-                try:
-                    timeout = max(
-                        0, self._batch_max_wait_s - (time.monotonic() - start_time)
-                    )
-                    fut = await asyncio.wait_for(
-                        self._batch_queue.get(), timeout
-                    )  # wait for timeout or until self._queue.get() finishes
-                    batch_futs.append(fut)
-
-                    if len(batch_futs) >= self._max_batch_size:
-                        break
-                except asyncio.TimeoutError:
-                    break
-
-            healthy_replicas = self._get_healthy_replicas()
-
-            # One routing decision for the whole batch
-            replica = self._default_router.get_replica(
-                healthy_replicas, None, self._session_replica_map
-            )
-
-            # Fulfill all futures with the chosen replica
-            for fut in batch_futs:
-                fut.set_result(replica)
-
     async def _call(
         self, replica: "Replica", sess_id: str | None, function: str, *args, **kwargs
     ):
@@ -217,64 +155,6 @@ class Service:
         await replica.enqueue_request(request)
 
         return await request.future
-
-    # async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
-    #     """
-    #     Routes a function call to the appropriate replica with load balancing and fault tolerance.
-
-    #     This is the core routing method that handles:
-    #     - Session-based routing for stateful calls
-    #     - Round-robin load balancing for stateless calls
-    #     - Custom routing based on context hints
-    #     - Automatic retry on replica failures
-    #     - Request queuing and processing
-
-    #     Args:
-    #         sess_id: Optional session ID for stateful routing
-    #         function: Name of the actor endpoint to call
-    #         *args: Positional arguments to pass to the endpoint
-    #         **kwargs: Keyword arguments to pass to the endpoint
-
-    #     Returns:
-    #         The result from the actor endpoint execution
-
-    #     Raises:
-    #         RuntimeError: If no healthy replicas are available
-    #         Exception: Any exception raised by the actor endpoint
-    #     """
-    #     # Check context variables for session state if no explicit sess_id
-    #     if sess_id is None:
-    #         ctx = _session_context.get(None)
-    #         if ctx:
-    #             sess_id = ctx["session_id"]
-
-    #     replica = await self._get_replica(sess_id)
-
-    #     # Create a ServiceRequest object to queue
-    #     request = ServiceRequest(
-    #         session_id=sess_id,
-    #         function=function,
-    #         args=args,
-    #         kwargs=kwargs,
-    #         future=asyncio.Future(),
-    #     )
-
-    #     # Queue the request using replica's method
-    #     await replica.enqueue_request(request)
-
-    #     # Wait for the result
-    #     try:
-    #         return await request.future
-    #     except Exception as e:
-    #         # If the replica failed, try to retry once
-    #         if not replica.healthy:
-    #             logger.debug(
-    #                 f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
-    #             )
-    #             return await self._retry_request_on_healthy_replica(
-    #                 sess_id, function, *args, **kwargs
-    #             )
-    #         raise
 
     async def call_all(self, function: str, *args, **kwargs) -> List:
         """
@@ -326,17 +206,6 @@ class Service:
                 results.append(None)
 
         return results
-
-    # async def _retry_request_on_healthy_replica(
-    #     self, sess_id: str | None, function: str, *args, **kwargs
-    # ):
-    #     """Retries a failed request on a healthy replica."""
-    #     # Force reassignment to a healthy replica (only for session-based calls)
-    #     if sess_id is not None and sess_id in self._session_replica_map:
-    #         del self._session_replica_map[sess_id]
-
-    #     # Retry the call (this will assign to a new healthy replica)
-    #     return await self._call(sess_id, function, *args, **kwargs)
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
@@ -555,26 +424,6 @@ class Service:
                 self._replicas_to_recover.extend(failed_replicas)
 
             await asyncio.sleep(poll_rate_s)
-
-    # async def _get_replica(self, sess_id: str | None) -> "Replica":
-    #     """Get a replica for the given session ID."""
-
-    #     if sess_id:
-    #         # Stateful routing always uses session router
-    #         healthy_replicas = self._get_healthy_replicas()
-    #         return self._session_router.get_replica(
-    #             healthy_replicas, sess_id, self._session_replica_map
-    #         )
-
-    #     # Stateless: batching
-    #     if self._max_batch_size > 1:
-    #         fut = asyncio.Future()
-    #         self._batch_queue.put_nowait(fut)
-    #         return await fut
-    #     else:
-    #         # No batching, pick immediately
-    #         healthy_replicas = self._get_healthy_replicas()
-    #         return self._default_router.get_replica(healthy_replicas)
 
     async def stop(self):
         logger.debug("Stopping service...")
