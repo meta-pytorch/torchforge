@@ -108,7 +108,7 @@ class GlobalLoggingActor(Actor):
 
         Args:
             config (Dict[str, Any]): Config for metric logging where keys are backend names,
-                e.g. {"console": {"log_per_rank": True}, "wandb": {"log_per_rank": False}}
+                e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
         """
         self.config = config
 

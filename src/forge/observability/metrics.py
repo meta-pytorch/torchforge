@@ -386,10 +386,9 @@ class MetricCollector:
             return
 
         self.accumulators: Dict[str, MetricAccumulator] = {}
-        self._is_initialized = False
         self.rank = current_rank().rank
         self.logger_backends: List[LoggerBackend] = []
-        self._is_initialized = True
+        self._is_initialized = False
 
     async def init_backends(
         self,
@@ -545,7 +544,7 @@ class ConsoleBackend(LoggerBackend):
     ) -> None:
         self.prefix = (
             get_actor_name_with_rank()
-            if self.logger_backend_config.get("log_per_rank", True)
+            if self.logger_backend_config.get("reduce_across_ranks", True)
             else "GLOBAL"
         )
 
