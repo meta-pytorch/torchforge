@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from monarch.actor import Actor, endpoint
+from monarch.actor import Actor, endpoint, get_or_spawn_controller
 
 from forge.observability.metrics import (
     get_logger_backend_class,
@@ -17,6 +17,23 @@ from forge.observability.metrics import (
 )
 
 logger = logging.getLogger(__name__)
+
+_global_logger = None
+
+
+async def get_metric_logger():
+    """Get or spawn the global logging actor.
+
+    Returns:
+        GlobalLoggingActor: The global logging actor instance.
+
+    Example:
+        mlogger = await get_global_logger()
+        # spawn your processes ...
+        await mlogger.init_backends(config)
+    """
+    _global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
+    return _global_logger
 
 
 class LocalFetcherActor(Actor):
@@ -152,7 +169,7 @@ class GlobalLoggingActor(Actor):
 
         # Self-init for respawned actors
         if self.config:
-            logger.debug(f"Initializing new LocalFetchActor {name}")
+            logger.debug(f"Initializing new LocalFetcherActor {name}")
             await fetcher.init_backends.call(
                 self.metadata_per_primary_backend, self.config
             )

@@ -11,10 +11,10 @@ import time
 
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.observability.metric_actors import GlobalLoggingActor
+from forge.observability.metric_actors import get_metric_logger
 from forge.observability.metrics import record_metric, ReductionType
 
-from monarch.actor import current_rank, endpoint, get_or_spawn_controller
+from monarch.actor import current_rank, endpoint
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -66,18 +66,18 @@ async def main():
     generator = await GeneratorActor.options(**service_config).as_service()
 
     # Now init config on global (inits backends eagerly across fetchers)
-    global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
-    await global_logger.init_backends.call_one(config)
+    mlogger = await get_metric_logger()
+    await mlogger.init_backends.call_one(config)
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
         await trainer.train_step.call(i)
         for sub in range(3):
             await generator.generate_step.call(i, sub)
-        await global_logger.flush.call_one(i)
+        await mlogger.flush.call_one(i)
 
     # shutdown
-    await asyncio.gather(global_logger.shutdown.call_one())
+    await mlogger.shutdown.call_one()
 
     await asyncio.gather(
         trainer.shutdown(),
