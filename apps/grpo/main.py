@@ -24,6 +24,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
+from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -132,9 +133,9 @@ def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
     context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1]
-    logprobs = torch.log_softmax(logits / temperature, dim=-1).to(input_ids.device)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+    logits = logits[:, context_length - 1 : -1].to(input_ids.device)
+    scaled_logits = logits / temperature
+    logprobs = selective_log_softmax(scaled_logits, input_ids)
     return logprobs
 
 
@@ -242,6 +243,8 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
+    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
@@ -278,16 +281,20 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token.route()
         while True:
-            sample = await dataloader.sample.choose()
+            sample = await dataloader.sample.route()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generate.choose(prompt)
-            # TODO: this shall be part of the responses metadata instead of a separate call
-            version = await policy.get_version.choose()
+            responses = await policy.generate.route(prompt)
+            assert (
+                len(responses) > 0
+            ), "Sanity check: Responses should NEVER return empty"
+            assert (
+                version := responses[0].generator_version
+            ) is not None, "Response must indicate a version"
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,
@@ -311,29 +318,29 @@ async def main(cfg: DictConfig):
                 episode.response = response.text
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
-                episode.reward = await reward_actor.evaluate_response.choose(
+                episode.reward = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
 
             # Calculate reference logprobs
-            ref_logits = await ref_model.forward.choose(input_ids)
+            ref_logits = await ref_model.forward.route(input_ids)
             ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.choose(group)
+            advantages = await compute_advantages.compute.route(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.choose(episode)
+                await replay_buffer.add.route(episode)
 
             # Log metrics
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.choose()
+            buffer_size = await replay_buffer._numel.route()
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
@@ -343,16 +350,18 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.choose(inputs, targets)
+                loss = await trainer.train_step.route(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(training_step)
-                await policy.update_weights.call(training_step)
+                await trainer.push_weights.fanout(
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
+                await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

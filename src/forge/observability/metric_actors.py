@@ -6,12 +6,34 @@
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from monarch.actor import Actor, endpoint
+from monarch.actor import Actor, endpoint, get_or_spawn_controller
 
+from forge.observability.metrics import (
+    get_logger_backend_class,
+    MetricCollector,
+    reduce_metrics_states,
+)
 
 logger = logging.getLogger(__name__)
+
+_global_logger = None
+
+
+async def get_metric_logger():
+    """Get or spawn the global logging actor.
+
+    Returns:
+        GlobalLoggingActor: The global logging actor instance.
+
+    Example:
+        mlogger = await get_global_logger()
+        # spawn your processes ...
+        await mlogger.init_backends(config)
+    """
+    _global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
+    return _global_logger
 
 
 class LocalFetcherActor(Actor):
@@ -22,8 +44,11 @@ class LocalFetcherActor(Actor):
     GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
+    def __init__(self, global_logger: Optional["GlobalLoggingActor"] = None) -> None:
+        self.global_logger = global_logger
+
     @endpoint
-    async def log_and_reset(
+    async def flush(
         self, step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
@@ -36,24 +61,24 @@ class LocalFetcherActor(Actor):
             Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
-        from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
-        result = await collector.log_and_reset(step, return_state=return_state)
+        result = await collector.flush(step, return_state=return_state)
         return result
 
     @endpoint
-    async def init_collector(
-        self, metadata_per_primary_backend: Dict[str, Dict[str, Any]]
+    async def init_backends(
+        self,
+        metadata_per_primary_backend: Dict[str, Dict[str, Any]],
+        config: Dict[str, Any],
     ):
-        from forge.observability.metrics import MetricCollector
+        """Init local (per-rank) logger backends and MetricCollector."""
 
         collector = MetricCollector()
-        await collector.init_local_backends(metadata_per_primary_backend)
+        await collector.init_backends(metadata_per_primary_backend, config)
 
     @endpoint
     async def shutdown(self):
-        from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
         await collector.shutdown()
@@ -63,7 +88,20 @@ class GlobalLoggingActor(Actor):
     """Coordinates metric logging across all ranks for every training step.
 
     Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
-    and per-rank and global reduction logging modes."""
+    for per-rank and/or global reduction logging modes.
+
+    If a backend config has flag `reduce_across_ranks=False`, an instance of the backend
+    is initialized per-rank, otherwise it is done once globally.
+
+    This GlobalLoggingActor should be spawned once in the controller. A LocalFetcherActor
+    is automatically spawned per-rank in `forge.controller.provisioner.py` and registered
+    with this actor. The LocalFetcherActor is responsible for instantiating
+    the per-rank MetricCollector.
+
+    In summary, the flow is:
+    - GlobalLoggingActor init_backends() -> LocalFetcherActor init_backends() -> per-rank MetricCollector
+    - GlobalLoggingActor flush() -> LocalFetcherActor flush() -> per-rank MetricCollector flush
+    """
 
     def __init__(self):
         self.fetchers: Dict[str, LocalFetcherActor] = {}
@@ -72,60 +110,55 @@ class GlobalLoggingActor(Actor):
         self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
 
     @endpoint
-    async def initialize_backends(self, config: Dict[str, Any]):
+    async def init_backends(self, config: Dict[str, Any]):
         """
-        Sets config on global actor and inits backends; broadcasts to registered per-rank fetchers.
+        Sets config in global actor, so other actors can get it, then eagerly initializes backend and MetricCollectors
+        in all registered fetchers.
 
-        - Validates unique backend classes;
-        - Extracts metadata from a primary logger to be shared with secondary loggers (e.g., shared run IDs) for per-rank modes.
-        - Eagerly inits metric collectors on fetchers.
+        A backend is always initialized in the controller (primary backend) and can be used as a logger or as a source
+        for metadata to be shared with per-rank backends, e.g. shared run IDs for wandb.
+
+        The backend instantiation is controlled by the backend config flag `reduce_across_ranks`: if False,
+        a per-rank backend is initialized, i.e. if there are 2 ranks, each will have its own backend,
+        and will log independently, i.e. each rank will have its own run in wandb.
+
+        Else, if True, the GlobalLoggingActor will fetch all local metrics collectors to get their states
+        and reduce them to a single value, which will be logged by the primary backend in this controller.
 
         Args:
-            config (Dict[str, Any]): Config for metric logging
+            config (Dict[str, Any]): Config for metric logging where keys are backend names,
+                e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
         """
         self.config = config
 
-        # Validate unique classes
-        classes = [b["class"] for b in config["backends"]]
-        if len(set(classes)) != len(classes):
-            raise ValueError("Duplicate logger_backend classes in config")
-
-        # Init global logger_backends and states where needed
-        from forge.observability.metrics import get_logger_backend_class
-
-        for backend_config in config["backends"]:
-            cls_name = backend_config["class"]
-            backend = get_logger_backend_class(cls_name)(backend_config)
+        for backend_name, backend_config in config.items():
+            backend = get_logger_backend_class(backend_name)(backend_config)
             await backend.init(role="global")
 
             # Extract metadata from primary logger to be shared with secondary loggers
             # and store it
-            log_per_rank = backend_config.get("log_per_rank", True)
-            if log_per_rank:
+            reduce_across_ranks = backend_config.get("reduce_across_ranks", True)
+            if not reduce_across_ranks:
                 primary_backend_metadata = (
                     backend.get_metadata_for_secondary_ranks() or {}
                 )
-                self.metadata_per_primary_backend[cls_name] = primary_backend_metadata
+                self.metadata_per_primary_backend[
+                    backend_name
+                ] = primary_backend_metadata
 
             # Store global logger backends
-            if not log_per_rank:
-                self.global_logger_backends[cls_name] = backend
+            if reduce_across_ranks:
+                self.global_logger_backends[backend_name] = backend
 
-        # Eager init collectors on all registered fetchers in parallel, passing primary states
+        # Eager init collectors on all registered fetchers in parallel, passing primary states and config
         if self.fetchers:
             tasks = [
-                fetcher.init_collector.call(self.metadata_per_primary_backend)
+                fetcher.init_backends.call(
+                    self.metadata_per_primary_backend, self.config
+                )
                 for fetcher in self.fetchers.values()
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
-
-    @endpoint
-    def get_config(self) -> Dict[str, Any] | None:
-        """
-        Returns the stored logging config for MetricCollector to query during init,
-        so local backends can be initialized in their own process.
-        """
-        return self.config
 
     @endpoint
     async def register_fetcher(self, fetcher: LocalFetcherActor, name: str):
@@ -134,8 +167,21 @@ class GlobalLoggingActor(Actor):
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
         self.fetchers[name] = fetcher
 
+        # Self-init for respawned actors
+        if self.config:
+            logger.debug(f"Initializing new LocalFetcherActor {name}")
+            await fetcher.init_backends.call(
+                self.metadata_per_primary_backend, self.config
+            )
+
     @endpoint
     async def deregister_fetcher(self, name: str):
+        if name not in self.fetchers:
+            logger.warning(
+                f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
+                "Available fetchers: {self.fetchers.keys()}"
+            )
+            return
         del self.fetchers[name]
 
     @endpoint
@@ -151,20 +197,25 @@ class GlobalLoggingActor(Actor):
             return
 
         config = self.config
-        has_reduce = any(not b.get("log_per_rank", True) for b in config["backends"])
+        # if reduce_across_ranks=True, we need to reduce the states from all ranks
+        # and log with the primary backend
+        requires_reduce = any(
+            backend_config.get("reduce_across_ranks", True)
+            for backend_config in config.values()
+        )
 
         logger.debug(f"Global flush for step {step}: {len(self.fetchers)} fetchers")
 
-        # Broadcast log_and_reset to all fetchers
+        # Broadcast flush to all fetchers
         results = await asyncio.gather(
             *[
-                f.log_and_reset.call(step, return_state=has_reduce)
+                f.flush.call(step, return_state=requires_reduce)
                 for f in self.fetchers.values()
             ],
             return_exceptions=True,
         )
 
-        if has_reduce:
+        if requires_reduce:
             # Handle exceptions and extract values from ValueMesh results
             all_local_states = []
             for result in results:
@@ -172,7 +223,7 @@ class GlobalLoggingActor(Actor):
                     logger.warning(f"Flush failed on a fetcher: {result}")
                     continue
 
-                # result is a generator that outputs {{'gpus': i/N}, {metric_key1: metric_state1, ...}}]
+                # result is a generator that outputs a pair [{'gpus': i/N}, {metric_key1: metric_state1, ...}}]
                 for gpu_info, local_metric_state in result.items():
                     if isinstance(local_metric_state, dict):
                         all_local_states.append(local_metric_state)
@@ -186,8 +237,6 @@ class GlobalLoggingActor(Actor):
                 return
 
             # Reduce
-            from forge.observability.metrics import reduce_metrics_states
-
             reduced_metrics = reduce_metrics_states(all_local_states)
 
             # Log to each global logger_backend
@@ -196,6 +245,10 @@ class GlobalLoggingActor(Actor):
                 logger_backend,
             ) in self.global_logger_backends.items():
                 await logger_backend.log(reduced_metrics, step)
+
+    @endpoint
+    def get_fetcher_count(self) -> int:
+        return len(self.fetchers)
 
     @endpoint
     async def shutdown(self):
