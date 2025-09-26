@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from monarch._src.actor.endpoint import EndpointProperty
 
-from .endpoint import ServiceEndpoint, ServiceEndpointV2
+from .endpoint import BatchedServiceEndpoint, ServiceEndpoint, ServiceEndpointV2
 
 
 @dataclass
@@ -89,13 +89,20 @@ class ServiceInterface:
                 # Decorated with @service_endpoint
                 # Create a ServiceEndpoint with batch routing config
                 cfg = attr_value._service_endpoint_config
-                endpoint = ServiceEndpoint(
-                    self._service,
-                    attr_name,
-                    router=cfg["router"],
-                    batch_size=cfg["batch_size"],
-                    batch_timeout=cfg["batch_timeout"],
-                )
+                if cfg["batch_size"] > 1:
+                    endpoint = BatchedServiceEndpoint(
+                        self._service,
+                        attr_name,
+                        router=cfg["router"],
+                        batch_size=cfg["batch_size"],
+                        batch_timeout=cfg["batch_timeout"],
+                    )
+                else:
+                    endpoint = ServiceEndpoint(
+                        self._service,
+                        attr_name,
+                        router=cfg["router"],
+                    )
 
             elif isinstance(attr_value, EndpointProperty):
                 # Decorated with @endpoint
@@ -103,9 +110,7 @@ class ServiceInterface:
                 endpoint = ServiceEndpoint(self._service, attr_name)
             else:
                 # Not decorated with @endpoint or @service_endpoint
-                raise ValueError(
-                    f"Attribute '{attr_name}' is not a valid service endpoint"
-                )
+                continue
             setattr(self, attr_name, endpoint)
 
     # Session management methods - handled by ServiceInterface
