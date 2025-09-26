@@ -95,7 +95,7 @@ class RLTrainer(ForgeActor):
     activation_checkpoint: ActivationCheckpoint = field(
         default_factory=ActivationCheckpoint
     )
-    use_vllm_builtin_load: bool = False
+    use_vllm_builtin_load: bool = True
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
@@ -250,13 +250,13 @@ class RLTrainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, policy_version: int) -> None:
-        if self.use_vllm_builtin_load:
-            await self._push_weights_hf_nonsharded(policy_version)
-        else:
-            await self._push_weights_sharded(policy_version)
+    async def push_weights_DEPRECATED(self, policy_version: int) -> None:  # noqa: N802
+        """[Deprecated] This method pushes weights to torchstore in the vllm format,
+        which is buggy and not scalable to other models.
+        Deprecated in favor of push_weights."""
+        return await self._push_weights_DEPRECATED(policy_version)
 
-    async def _push_weights_sharded(self, policy_version: int) -> None:
+    async def _push_weights_DEPRECATED(self, policy_version: int) -> None:  # noqa: N802
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
@@ -299,8 +299,12 @@ class RLTrainer(ForgeActor):
 
         logger.debug(f"Pushed weights to {key} in {end_time - start_time:.2f} seconds")
 
-    async def _push_weights_hf_nonsharded(self, policy_version: int) -> None:
-        """Push weights to torchstore in HF format, non-sharded."""
+    @endpoint
+    async def push_weights(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format."""
+        if not self.use_vllm_builtin_load:
+            return await self._push_weights_DEPRECATED(policy_version)
+
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
 

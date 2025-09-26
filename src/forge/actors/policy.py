@@ -131,7 +131,7 @@ class EngineConfig(EngineArgs):
 class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
-    use_vllm_builtin_load: bool = False
+    use_vllm_builtin_load: bool = True
     test_blah_blah: int = 0
     available_devices: str | None = None
     # Gets set up by setup
@@ -394,9 +394,21 @@ class Policy(PolicyInterface):
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
         if self.use_vllm_builtin_load:
-            await self.policy_worker._update_hf_nonsharded.call(version=policy_version)
+            await self.policy_worker.update.call(version=policy_version)
         else:
-            await self.policy_worker._update_sharded.call(version=policy_version)
+            await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+        self.policy_version = policy_version
+        logger.info(f"Weight update completed (now v{self.policy_version})")
+
+    @endpoint
+    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
+        # TODO: If generating long sequences, this might be long and will block policy weight updates
+        curr_requests = [fut for _, fut in self.requests.values()]
+        if curr_requests:
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            await asyncio.gather(*curr_requests)
+
+        await self.policy_worker.update_DEPRECATED.call(version=policy_version)
         self.policy_version = policy_version
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
@@ -508,8 +520,9 @@ class PolicyWorker(ForgeActor):
             )
 
     @endpoint
-    async def _update_sharded(self, version: int):
-        """Update model weights by reading state dict from torchstore"""
+    async def update_DEPRECATED(self, version: int):  # noqa: N802
+        """Update model weights by reading state dict from torchstore.
+        Deprecated. This uses manual sharding logic which is buggy."""
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
@@ -518,7 +531,7 @@ class PolicyWorker(ForgeActor):
         logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
 
     @endpoint
-    async def _update_hf_nonsharded(self, version: int):
+    async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         model = self.worker.model_runner.model
         prefix = get_param_prefix(version)

@@ -10,7 +10,7 @@ import asyncio
 import random
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -29,7 +29,6 @@ from forge.util.metric_logging import get_metric_logger
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
-from torch.functional import _return_counts
 
 from torchstore.state_dict_utils import DELIM
 from transformers import AutoModelForCausalLM
@@ -256,7 +255,7 @@ class Trainer(ForgeActor):
     learning_rate: float = 1e-5
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
-    use_vllm_builtin_load: bool = False
+    use_vllm_builtin_load: bool = True
 
     def __post_init__(self):
         super().__init__()
@@ -344,11 +343,15 @@ class Trainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, version: int):
+    async def push_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
+        """Update policy model weights with trainer's current weights.
+        This method pushes weights to torchstore in the vllm format,
+        which is buggy and not scalable to other models. Deprecated.
+        """
+        return await self._push_weights_DEPRECATED(policy_version)
+
+    async def _push_weights_DEPRECATED(self, version: int):  # noqa: N802
         """Update policy model weights with trainer's current weights."""
-        if self.use_vllm_builtin_load:
-            await self._push_weights_hf_nonsharded(version)
-            return None
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
             self.model.state_dict(), num_layers=self.model.config.num_hidden_layers
@@ -360,8 +363,11 @@ class Trainer(ForgeActor):
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
 
-    async def _push_weights_hf_nonsharded(self, policy_version: int) -> None:
-        """Push weights to torchstore in HF format, non-sharded."""
+    @endpoint
+    async def push_weights(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format."""
+        if not self.use_vllm_builtin_load:
+            return await self._push_weights_DEPRECATED(policy_version)
         hf_state_dict = self.model.state_dict()
         for name, param in hf_state_dict.items():
             key = get_param_key(policy_version, name)
