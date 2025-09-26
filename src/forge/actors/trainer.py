@@ -252,7 +252,9 @@ class RLTrainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, policy_version: int, vllm_tp_DEPRECATED: int = 1) -> None:
+    async def push_weights(
+        self, policy_version: int, vllm_tp_DEPRECATED: int = 1
+    ) -> None:
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         start_time = time.perf_counter()
         # TODO:
