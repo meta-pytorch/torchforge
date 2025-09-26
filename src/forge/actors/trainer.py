@@ -17,9 +17,6 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
-
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -38,6 +35,9 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -271,8 +271,9 @@ class RLTrainer(ForgeActor):
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
-            sd=hf_state_dict, num_layers=self.engine.model_args.n_layers,
-            tp=tp_DEPRECATED
+            sd=hf_state_dict,
+            num_layers=self.engine.model_args.n_layers,
+            tp=tp_DEPRECATED,
         )
         conversion_time = time.perf_counter()
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
@@ -325,12 +326,14 @@ def _shard_and_concat(sources: list[torch.Tensor], dim: int, tp: int) -> torch.T
 
     combined_shards = []
     for shard_idx in range(tp):
-        combined= torch.cat([s[shard_idx] for s in sharded_sources], dim=dim)
+        combined = torch.cat([s[shard_idx] for s in sharded_sources], dim=dim)
         combined_shards.append(combined)
     return torch.cat(combined_shards, dim=dim)
 
 
-def _qwen3_hf_to_vllm(sd: dict[str, torch.Tensor], num_layers: int, tp: int) -> dict[str, torch.Tensor]:
+def _qwen3_hf_to_vllm(
+    sd: dict[str, torch.Tensor], num_layers: int, tp: int
+) -> dict[str, torch.Tensor]:
     """Convert transformers state dict to vLLM format. Specifically, this fuses
     QKV projection and MLP gate_up_proj layers.
 
@@ -408,6 +411,5 @@ def _qwen3_hf_to_vllm(sd: dict[str, torch.Tensor], num_layers: int, tp: int) -> 
             load_sd[prefix + "mlp.gate_up_proj.bias"] = _shard_and_concat(
                 [gate_bias, up_bias], dim=0, tp=tp
             )
-
 
     return load_sd
