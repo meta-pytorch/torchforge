@@ -221,14 +221,10 @@ class TestWeightSync:
             v0 = uuid.uuid4().int
             v1 = v0 + 1
 
-            await rl_trainer.push_weights.fanout(
-                policy_version=v0, vllm_tp_DEPRECATED=tp_size
-            )
+            await rl_trainer.push_weights.fanout(policy_version=v0)
             # Setting everything to zero
             await rl_trainer.zero_out_model_states.fanout()
-            await rl_trainer.push_weights.fanout(
-                policy_version=v1, vllm_tp_DEPRECATED=tp_size
-            )
+            await rl_trainer.push_weights.fanout(policy_version=v1)
             await policy._test_save_model_params.fanout()
 
             # Sanity check that before update all the tests pass
@@ -305,14 +301,10 @@ class TestWeightSync:
             v0 = uuid.uuid4().int
             v1 = v0 + 1
 
-            await rl_trainer.push_weights.fanout(
-                policy_version=v0, vllm_tp_DEPRECATED=tp_size
-            )
+            await rl_trainer.push_weights.fanout(policy_version=v0)
             # Setting everything to zero
             await rl_trainer.zero_out_model_states.fanout()
-            await rl_trainer.push_weights.fanout(
-                policy_version=v1, vllm_tp_DEPRECATED=tp_size
-            )
+            await rl_trainer.push_weights.fanout(policy_version=v1)
             await policy._test_save_model_params.fanout()
 
             # Sanity check that before update all the tests pass
