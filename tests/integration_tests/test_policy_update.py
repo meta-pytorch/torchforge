@@ -7,10 +7,9 @@
 import asyncio
 import logging
 from dataclasses import asdict
+from tempfile import TemporaryDirectory
 
 import pytest
-import pytest_asyncio
-
 import torch
 import torchstore as ts
 from forge.actors.policy import EngineConfig, Policy, SamplingConfig
@@ -146,8 +145,7 @@ class TestWeightSync:
 
     model = "Qwen/Qwen3-1.7B"
 
-    @pytest_asyncio.fixture
-    async def trainer_cfg(self):
+    def default_trainer_cfg(self):
         cached_dir = snapshot_download(repo_id=self.model)
         return {
             "model": {
@@ -162,8 +160,7 @@ class TestWeightSync:
             },
         }
 
-    @pytest_asyncio.fixture
-    async def trainer_cfg_tp(self):
+    def default_trainer_cfg_tp(self):
         # NB: TP size is set to  2.
         cached_dir = snapshot_download(repo_id=self.model)
         return {
@@ -182,7 +179,10 @@ class TestWeightSync:
 
     @pytest.mark.asyncio
     @requires_cuda
-    async def test_policy_update_single(self, trainer_cfg):
+    @pytest.mark.parametrize(
+        "use_dcp", [pytest.param(True, id="use_dcp"), pytest.param(False, id="no_dcp")]
+    )
+    async def test_policy_update_single(self, use_dcp):
         """
         Test the weight synchronization process between RLTrainer and Policy.
 
@@ -198,53 +198,64 @@ class TestWeightSync:
 
         await ts.initialize()
 
-        policy_config, service_config = get_configs(
-            worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
-        )
-        policy, rl_trainer = await asyncio.gather(
-            *[
-                Policy.options(**asdict(service_config)).as_service(**policy_config),
-                MockRLTrainer.options(
-                    procs=trainer_worker_size, with_gpus=True, num_replicas=1
-                ).as_service(**trainer_cfg),
-            ]
-        )
+        trainer_cfg = self.default_trainer_cfg()
+        trainer_cfg["use_dcp"] = use_dcp
+        with TemporaryDirectory(dir="/dev/shm/") as tmpdir:
+            if use_dcp:
+                trainer_cfg["dcp_path"] = tmpdir
 
-        v0 = uuid.uuid4().int
-        v1 = v0 + 1
+            policy_config, service_config = get_configs(
+                worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
+            )
+            policy, rl_trainer = await asyncio.gather(
+                *[
+                    Policy.options(**asdict(service_config)).as_service(
+                        **policy_config
+                    ),
+                    MockRLTrainer.options(
+                        procs=trainer_worker_size, with_gpus=True, num_replicas=1
+                    ).as_service(**trainer_cfg),
+                ]
+            )
 
-        await rl_trainer.push_weights.fanout(policy_version=v0)
-        # Setting everything to zero
-        await rl_trainer.zero_out_model_states.fanout()
-        await rl_trainer.push_weights.fanout(policy_version=v1)
-        await policy._test_save_model_params.fanout()
+            v0 = uuid.uuid4().int
+            v1 = v0 + 1
 
-        # Sanity check that before update all the tests pass
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            await rl_trainer.push_weights.fanout(policy_version=v0)
+            # Setting everything to zero
+            await rl_trainer.zero_out_model_states.fanout()
+            await rl_trainer.push_weights.fanout(policy_version=v1)
+            await policy._test_save_model_params.fanout()
 
-        await policy.update_weights.fanout(policy_version=v1)
-        all_errs = await policy._test_validate_model_params.fanout(
-            validate_fn_all_zeros
-        )
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            # Sanity check that before update all the tests pass
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
 
-        # Reloading v0, getting back original weights
-        await policy.update_weights.fanout(policy_version=v0)
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            await policy.update_weights.fanout(policy_version=v1)
+            all_errs = await policy._test_validate_model_params.fanout(
+                validate_fn_all_zeros
+            )
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
 
-        await ts.shutdown()
+            # Reloading v0, getting back original weights
+            await policy.update_weights.fanout(policy_version=v0)
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            await ts.shutdown()
 
     @pytest.mark.asyncio
     @requires_cuda
-    async def test_policy_update_tp(self, trainer_cfg_tp):
+    @pytest.mark.parametrize(
+        "use_dcp", [pytest.param(True, id="use_dcp"), pytest.param(False, id="no_dcp")]
+    )
+    async def test_policy_update_tp(self, use_dcp):
         """
         Test the weight synchronization process between RLTrainer and Policy.
 
@@ -266,45 +277,54 @@ class TestWeightSync:
 
         await ts.initialize()
 
-        policy_config, service_config = get_configs(
-            worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
-        )
-        policy, rl_trainer = await asyncio.gather(
-            *[
-                Policy.options(**asdict(service_config)).as_service(**policy_config),
-                MockRLTrainer.options(
-                    procs=trainer_worker_size, with_gpus=True, num_replicas=1
-                ).as_service(**trainer_cfg_tp),
-            ]
-        )
+        trainer_cfg = self.default_trainer_cfg_tp()
+        trainer_cfg["use_dcp"] = use_dcp
 
-        v0 = uuid.uuid4().int
-        v1 = v0 + 1
+        with TemporaryDirectory(dir="/dev/shm/") as tmpdir:
+            if use_dcp:
+                trainer_cfg["dcp_path"] = tmpdir
 
-        await rl_trainer.push_weights.fanout(policy_version=v0)
-        # Setting everything to zero
-        await rl_trainer.zero_out_model_states.fanout()
-        await rl_trainer.push_weights.fanout(policy_version=v1)
-        await policy._test_save_model_params.fanout()
+            policy_config, service_config = get_configs(
+                worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
+            )
+            policy, rl_trainer = await asyncio.gather(
+                *[
+                    Policy.options(**asdict(service_config)).as_service(
+                        **policy_config
+                    ),
+                    MockRLTrainer.options(
+                        procs=trainer_worker_size, with_gpus=True, num_replicas=1
+                    ).as_service(**trainer_cfg),
+                ]
+            )
 
-        # Sanity check that before update all the tests pass
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            v0 = uuid.uuid4().int
+            v1 = v0 + 1
 
-        await policy.update_weights.fanout(policy_version=v1)
-        all_errs = await policy._test_validate_model_params.fanout(
-            validate_fn_all_zeros
-        )
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
-        # Reloading v0, getting back original weights
-        await policy.update_weights.fanout(policy_version=v0)
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            await rl_trainer.push_weights.fanout(policy_version=v0)
+            # Setting everything to zero
+            await rl_trainer.zero_out_model_states.fanout()
+            await rl_trainer.push_weights.fanout(policy_version=v1)
+            await policy._test_save_model_params.fanout()
 
-        await ts.shutdown()
+            # Sanity check that before update all the tests pass
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            await policy.update_weights.fanout(policy_version=v1)
+            all_errs = await policy._test_validate_model_params.fanout(
+                validate_fn_all_zeros
+            )
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+            # Reloading v0, getting back original weights
+            await policy.update_weights.fanout(policy_version=v0)
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            await ts.shutdown()

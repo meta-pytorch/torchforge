@@ -102,6 +102,7 @@ class RLTrainer(ForgeActor):
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+    dcp_path: str = ""
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -150,7 +151,13 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {"loss", "state_dict_key", "use_dcp", "use_vllm_builtin_load"}:
+        for key in {
+            "loss",
+            "state_dict_key",
+            "use_dcp",
+            "use_vllm_builtin_load",
+            "dcp_path",
+        }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.step)
@@ -331,7 +338,7 @@ class RLTrainer(ForgeActor):
             # but I don't want too much deviation between the two code paths
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
-                dcp_id = f"{self.state_dict_key}{DELIM}{key}"
+                dcp_id = f"{self.dcp_path}/{key}"
                 metadata = dcp.save(
                     checkpoint_id=dcp_id,
                     state_dict={name: param},

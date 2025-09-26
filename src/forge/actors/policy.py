@@ -47,6 +47,7 @@ from forge.actors.torchstore_utils import (
     extract_param_name,
     get_param_key,
     get_param_prefix,
+    load_tensor_from_dcp,
 )
 
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
@@ -158,7 +159,6 @@ class Policy(PolicyInterface):
         *,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
-        use_vllm_builtin_load: bool = False,
         available_devices: str | None = None,
         **kwargs,
     ) -> "Policy":
@@ -202,9 +202,9 @@ class Policy(PolicyInterface):
             cls,
             engine_config=engine_config,
             sampling_config=sampling_config,
-            use_vllm_builtin_load=use_vllm_builtin_load,
             available_devices=available_devices,
             policy_worker=workers,
+            **kwargs,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -478,10 +478,11 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
-    # TODO: remove this later since no plumbing exists to change this value
+    # TODO: remove this later since no plumbing exists to change this value.
+    # Also, whether to use dcp or not can be inferred from torchstore get() call.
     use_dcp: bool = True
-    # Cache hf param names on first update call to ensure the integrity of following updates
-    hf_param_names = set()
+    # Cache hf param names on first update call.
+    hf_param_names = []
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -557,24 +558,23 @@ class PolicyWorker(ForgeActor):
         matching_keys = await ts.keys(prefix)
         logger.debug(f"{matching_keys=}")
         if not self.hf_param_names:
-            self.hf_param_names = set(model.state_dict().keys())
-        hf_names = [extract_param_name(key) for key in matching_keys]
-        if self.hf_param_names != set(hf_names):
-            logger.error(
-                f"[PolicyWorker::update] model parameter names do not match. {self.hf_param_names=} {hf_names=}"
-            )
-            raise RuntimeError("Model parameter names do not match")
-        logger.debug(f"[PolicyWorker::update] {version=} got {hf_names=}")
+            self.hf_param_names = [extract_param_name(key) for key in matching_keys]
         loaded_weights = set()
         # We can't pass a generator since vllm load_weights is not async.
         # Instead, we just call load_weights with one parameter at a time.
-        for name in hf_names:
+        for name in self.hf_param_names:
             param_key = get_param_key(version, name)
             tensor_or_handle = await ts.get(param_key)
             if isinstance(tensor_or_handle, torch.Tensor):
                 param = tensor_or_handle
             elif isinstance(tensor_or_handle, DcpHandle):
-                param = load_dcp_tensor(tensor_or_handle)
+                param = load_tensor_from_dcp(tensor_or_handle, name)
+                logger.debug(f"Loaded {name} from DCP with handle {tensor_or_handle}")
+            else:
+                raise RuntimeError(
+                    f"Unexpected type for {param_key}: {type(tensor_or_handle)}"
+                )
+            loaded = model.load_weights([(name, param)])
             del param
             loaded_weights.update(loaded)
 
