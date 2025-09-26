@@ -39,6 +39,8 @@ import time
 import uuid
 from typing import Dict, List
 
+from monarch.actor import Actor, endpoint
+
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
@@ -50,8 +52,6 @@ from forge.controller.service.router import (
     SessionRouter,
 )
 from forge.types import ServiceConfig
-
-from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

@@ -8,7 +8,6 @@ Tests for router.py and batch routing in ServiceEndpoint
 """
 
 import asyncio
-import contextlib
 import logging
 
 import pytest
@@ -135,9 +134,8 @@ async def test_round_robin_router_distribution():
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_round_robin_router_distribution2():
-    # TODO: change name
-    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
+async def test_round_robin_router_distribution_with_batching():
+    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas with batch routing."""
     service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
 
     try:
