@@ -523,7 +523,7 @@ async def main(cfg: DictConfig):
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
                 await trainer.push_weights.call(
-                  training_step, vllm_tp_DEPRECATED=policy_tp_size
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
                 )
                 await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence

@@ -359,7 +359,7 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.call(
-                  training_step, vllm_tp_DEPRECATED=policy_tp_size
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
                 )
                 await policy.update_weights.fanout(training_step)
 
