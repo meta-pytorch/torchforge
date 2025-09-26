@@ -56,7 +56,7 @@ class Counter(ForgeActor):
         self.v += amount * multiplier
         return self.v
 
-    @service_endpoint(router="round_robin", batch_size=3, batch_timeout=1)
+    @service_endpoint(router=RoundRobinRouter(), batch_size=3, batch_timeout=1)
     async def rr_incr(self):
         """Increment using RoundRobin router."""
         self.v += 1

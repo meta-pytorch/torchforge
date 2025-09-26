@@ -17,7 +17,7 @@ from typing_extensions import ParamSpec
 
 from .replica import Replica
 
-from .router import LeastLoadedRouter, RoundRobinRouter, Router, SessionRouter
+from .router import RoundRobinRouter, Router, SessionRouter
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -25,67 +25,34 @@ R = TypeVar("R")
 
 class ServiceEndpoint(Generic[P, R]):
     """
-    This extends Monarch's actor APIs for service endpoints.
-    ServiceEndpoint provides the basic, non-batched routing API for Forge services.
+    ServiceEndpoint extends Monarch's native actor APIs for service functionality.
 
-    Args:
-        service: The underlying service object that owns replicas.
-        endpoint_name (str): The name of the endpoint method.
-        router (str, optional): Routing strategy for stateless requests.
-                 Supported values:
-                   - "round_robin": cycle through replicas in order.
-                   - "leastloaded": pick the replica with the lowest load.
-                 Default: "round_robin".
+    Services provide fault tolerance and load balancing on top of Monarch actors, exposing the following endpoints:
 
-    Supported methods:
-        - `route`: Send a request to a single replica, chosen by the configured router
+    - `route`: Send a request to a single replica, chosen by the configured router
         (e.g. round-robin, least-loaded).
-        - `fanout`: Broadcasts the request to all healthy replicas.
+    - `fanout`: Broadcasts the request to all healthy replicas.
 
-    Notes:
-        - Supports Monarch's `@endpoint()` as well as service's `@service_endpoint(router='..')` decorators.
-        - To specify router, use `@service_endpoint(router='..')`.
-        - Retry logic: If `max_attempts > 1`, failed calls may be retried on a different replica
-        if the first one becomes unhealthy.
-        - Session-aware routing: If a `sess_id` is provided, requests are routed via
-        `SessionRouter` for sticky session behavior.
-        - Monarch's native actor APIs do not apply for services.
+    Note that Monarch's native actor APIs are not accessible through service endpoints.
     """
 
     def __init__(
         self,
         service,
         endpoint_name: str,
-        router: str = "round_robin",
+        router: Router = RoundRobinRouter(),
     ):
         self.service = service
         self.endpoint_name = endpoint_name
 
         # Primary router (stateless routing)
-        self.router = self._resolve_router(router)
+        self.router = router
 
         # Session-aware router for sticky sessions
         self.session_router = SessionRouter(fallback_router=self.router)
 
         # Number of routing attempts (initial + retries)
         self.max_attempts = 1
-
-    def _resolve_router(self, router_name: str) -> Router:
-        """Convert a router name into a router object.
-
-        Args:
-            router_name (str): a router name. Supported routers: "round_robin", "leastloaded".
-
-        Returns:
-            Router: A Router object.
-        """
-        if router_name == "round_robin":
-            return RoundRobinRouter()
-        if router_name == "leastloaded":
-            return LeastLoadedRouter()
-        raise ValueError(
-            f"Unknown router name: {router_name}. Supported routers: 'round_robin', 'leastloaded'."
-        )
 
     async def route(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """
@@ -188,11 +155,11 @@ class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
     Args:
         service: The underlying service object that owns replicas.
         endpoint_name (str): The name of the endpoint method.
-        router (str, optional): Routing strategy for stateless requests.
+        router (Router, optional): A Router object specifing routing strategy for stateless requests.
                  Supported values:
-                   - "round_robin": cycle through replicas in order.
-                   - "leastloaded": pick the replica with the lowest load.
-                 Default: "round_robin".
+                   - RoundRobinRouter(): cycle through replicas in order.
+                   - LeastLoadedRouter(): pick the replica with the lowest load.
+                 Default: RoundRobinRouter().
         batch_size (int, optional): Maximum number of requests to group together
                  in a single batch before dispatching. Default: 8.
         batch_timeout (float, optional): Maximum time (in seconds) to wait before
@@ -215,7 +182,7 @@ class BatchedServiceEndpoint(ServiceEndpoint[P, R]):
         self,
         service,
         endpoint_name: str,
-        router: str = "round_robin",
+        router: Router = RoundRobinRouter(),
         batch_size: int = 8,
         batch_timeout: float = 0.01,
     ):
@@ -338,9 +305,9 @@ class ServiceEndpointV2(Generic[P, R]):
 
 def service_endpoint(
     *,
-    router="round_robin",
-    batch_size=1,
-    batch_timeout=0.01,
+    router: Router = RoundRobinRouter(),
+    batch_size: int = 1,
+    batch_timeout: float = 0.01,
     propagate=None,
     explicit_response_port=False,
 ):
@@ -349,7 +316,7 @@ def service_endpoint(
 
     Example:
         class MyForgeActor(ForgeActor):
-            @service_endpoint(router="round_robin", batch_size=16, batch_timeout=0.05)
+            @service_endpoint(router=RoundRobinRouter(), batch_size=16, batch_timeout=0.05)
             async def predict(self, x): ...
     """
 
