@@ -9,6 +9,7 @@
 import asyncio
 import uuid
 from dataclasses import dataclass
+from tempfile import TemporaryDirectory
 from typing import Any, Callable
 
 import torch
@@ -392,6 +393,10 @@ if __name__ == "__main__":
 
     @parse
     def _main(cfg):
-        asyncio.run(main(cfg))
+        with TemporaryDirectory(prefix="forge_run_", dir="/dev/shm") as dcp_path:
+            print(f"Using DCP path: {dcp_path}")
+            cfg.trainer.dcp_path = dcp_path
+            print(cfg)
+            asyncio.run(main(cfg))
 
     _main()  # @parse grabs the cfg from CLI
