@@ -299,7 +299,7 @@ class RLTrainer(ForgeActor):
         end_time = time.perf_counter()
         logger.info(
             f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
-            f"(to_vllm: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
+            f"(hg to vllm conversion: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
         )
 
     @endpoint
