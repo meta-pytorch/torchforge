@@ -101,7 +101,6 @@ class ProcessConfig:
     procs: int = 1
     with_gpus: bool = False
     hosts: int | None = None
-    scheduler: Scheduler = Scheduler.LOCAL
     mesh_name: str | None = None
 
 
@@ -127,7 +126,6 @@ class ServiceConfig:
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
     return_first_rank_result: bool = True
-    scheduler: Scheduler = Scheduler.LOCAL
     mesh_name: str | None = None
 
     def to_process_config(self) -> ProcessConfig:
@@ -138,7 +136,6 @@ class ServiceConfig:
             procs=self.procs,
             with_gpus=self.with_gpus,
             hosts=self.hosts,
-            scheduler=self.scheduler,
             mesh_name=self.mesh_name,
         )
 

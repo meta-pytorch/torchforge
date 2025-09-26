@@ -7,7 +7,10 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/qwen1_7B_2
+scheduler: mast
+job_name: forge-grpo
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/1
+
 
 # Dataset configuration
 dataset:
@@ -110,44 +113,37 @@ services:
     procs: 1
     num_replicas: 1
     with_gpus: false
-    scheduler: mast
     mesh_name: dataset
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 2
     with_gpus: true
     hosts: 1
-    scheduler: mast
     mesh_name: policy
   trainer:
     procs: ${trainer.parallelism.data_parallel_shard_degree}
     num_replicas: 1
     with_gpus: true
     hosts: 1
-    scheduler: mast
     mesh_name: trainer
   replay_buffer:
     procs: 1
     num_replicas: 1
     with_gpus: false
-    scheduler: mast
     mesh_name: replay_buffer
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
     num_replicas: 2
     with_gpus: true
     hosts: 1
-    scheduler: mast
     mesh_name: ref_model
   compute_advantages:
     procs: 1
     num_replicas: 1
     with_gpus: false
-    scheduler: mast
     mesh_name: compute_advantages
   reward_actor:
     procs: 1
     num_replicas: 1
     with_gpus: false
-    scheduler: mast
     mesh_name: reward_actor
