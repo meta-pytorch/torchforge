@@ -36,7 +36,7 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors.torchstore_utils import DcpHandle, get_param_key
+from forge.actors._torchstore_utils import DcpHandle, get_param_key
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device

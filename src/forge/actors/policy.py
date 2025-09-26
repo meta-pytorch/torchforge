@@ -42,7 +42,7 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.actors.torchstore_utils import (
+from forge.actors._torchstore_utils import (
     DcpHandle,
     extract_param_name,
     get_param_key,
@@ -562,6 +562,7 @@ class PolicyWorker(ForgeActor):
         loaded_weights = set()
         # We can't pass a generator since vllm load_weights is not async.
         # Instead, we just call load_weights with one parameter at a time.
+        start = time.perf_counter()
         for name in self.hf_param_names:
             param_key = get_param_key(version, name)
             tensor_or_handle = await ts.get(param_key)
@@ -577,8 +578,9 @@ class PolicyWorker(ForgeActor):
             loaded = model.load_weights([(name, param)])
             del param
             loaded_weights.update(loaded)
-
-        logger.info(f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters")
+        logger.info(
+            f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters, took {time.perf_counter() - start} seconds"
+        )
         logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
