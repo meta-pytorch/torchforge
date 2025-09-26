@@ -24,6 +24,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.util.metric_logging import get_metric_logger
+from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -132,9 +133,9 @@ def compute_logprobs(
     logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
 ) -> torch.Tensor:
     context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1]
-    logprobs = torch.log_softmax(logits / temperature, dim=-1).to(input_ids.device)
-    logprobs = torch.gather(logprobs, 2, input_ids.unsqueeze(-1)).squeeze(-1)
+    logits = logits[:, context_length - 1 : -1].to(input_ids.device)
+    scaled_logits = logits / temperature
+    logprobs = selective_log_softmax(scaled_logits, input_ids)
     return logprobs
 
 
@@ -242,6 +243,8 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
+    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
@@ -286,8 +289,12 @@ async def main(cfg: DictConfig):
                 return
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
-            # TODO: this shall be part of the responses metadata instead of a separate call
-            version = await policy.get_version.route()
+            assert (
+                len(responses) > 0
+            ), "Sanity check: Responses should NEVER return empty"
+            assert (
+                version := responses[0].generator_version
+            ) is not None, "Response must indicate a version"
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,
@@ -351,7 +358,9 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(training_step)
+                await trainer.push_weights.call(
+                  training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
                 await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")
