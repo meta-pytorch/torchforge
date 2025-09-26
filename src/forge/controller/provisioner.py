@@ -28,6 +28,8 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
+from forge.observability.metric_actors import GlobalLoggingActor, LocalFetcherActor
+
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -156,10 +158,6 @@ class Provisioner:
         store it at GlobalLoggingActor. Backends (e.g. wandb) should be eagerly instantiated
         later in main by calling `global_logger.initialize_backends.call_one(logging_config)`
         """
-        from forge.observability.metric_actors import (
-            GlobalLoggingActor,
-            LocalFetcherActor,
-        )
 
         local_fetcher_actor = await procs.spawn(
             "local_fetcher_actor", LocalFetcherActor
@@ -254,8 +252,6 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
-                from forge.observability.metric_actors import GlobalLoggingActor
-
                 global_logger = await get_or_spawn_controller(
                     "global_logger", GlobalLoggingActor
                 )

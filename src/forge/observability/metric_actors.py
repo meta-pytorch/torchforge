@@ -10,6 +10,11 @@ from typing import Any, Dict, Optional
 
 from monarch.actor import Actor, endpoint
 
+from forge.observability.metrics import (
+    get_logger_backend_class,
+    MetricCollector,
+    reduce_metrics_states,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +44,6 @@ class LocalFetcherActor(Actor):
             Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
-        from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
         result = await collector.flush(step, return_state=return_state)
@@ -52,14 +56,12 @@ class LocalFetcherActor(Actor):
         config: Dict[str, Any],
     ):
         """Init local (per-rank) logger backends and MetricCollector."""
-        from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
         await collector.init_backends(metadata_per_primary_backend, config)
 
     @endpoint
     async def shutdown(self):
-        from forge.observability.metrics import MetricCollector
 
         collector = MetricCollector()
         await collector.shutdown()
@@ -111,9 +113,6 @@ class GlobalLoggingActor(Actor):
                 e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
         """
         self.config = config
-
-        # Init global logger_backends and states where needed
-        from forge.observability.metrics import get_logger_backend_class
 
         for backend_name, backend_config in config.items():
             backend = get_logger_backend_class(backend_name)(backend_config)
@@ -221,8 +220,6 @@ class GlobalLoggingActor(Actor):
                 return
 
             # Reduce
-            from forge.observability.metrics import reduce_metrics_states
-
             reduced_metrics = reduce_metrics_states(all_local_states)
 
             # Log to each global logger_backend
