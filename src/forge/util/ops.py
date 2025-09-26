@@ -56,6 +56,15 @@ def compute_logprobs(
 ) -> torch.Tensor:
     """
     Computes the log probabilities of the input tokens given the model logits and temperature.
+
+    Args:
+        logits (`torch.Tensor`):
+            The model output logits of shape `(batch_size, sequence_length, vocab_size)`.
+        input_ids (`torch.Tensor`):
+            The input token ids of shape `(batch_size, target_sequence_length)`.
+        temperature (`float`, *optional*, defaults to 1.0):
+            The temperature value for scaling logits before computing log probabilities.
+
     """
     context_length = logits.shape[1] - input_ids.shape[1]
     logits = logits[:, context_length - 1 : -1].to(input_ids.device)
