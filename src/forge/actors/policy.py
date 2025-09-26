@@ -164,6 +164,7 @@ class Policy(PolicyInterface):
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
         use_dcp: bool = True,
+        checkpoint_path: str | None = None,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -195,7 +196,11 @@ class Policy(PolicyInterface):
 
         vllm_config = engine_config.create_vllm_config()
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
+            "vllm_worker",
+            PolicyWorker,
+            vllm_config=vllm_config,
+            use_dcp=use_dcp,
+            checkpoint_path=checkpoint_path,
         )
 
         if isinstance(sampling_config, Mapping):
@@ -489,6 +494,7 @@ class PolicyWorker(ForgeActor):
     use_dcp: bool = True
     # Cache hf param names on first update call.
     hf_param_names = []
+    checkpoint_path: str | None = None
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -517,6 +523,10 @@ class PolicyWorker(ForgeActor):
         )
 
         checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
+        if self.checkpoint_path is not None and self.use_dcp:
+            checkpoint_id = (
+                f"{self.checkpoint_path}{DELIM}{self.state_dict_key}{DELIM}{version}"
+            )
         dcp_metadata = None
         if self.use_dcp:
             dcp_metadata = await ts.get(checkpoint_id)
