@@ -27,7 +27,10 @@ build_vllm() {
 
     python use_existing_torch.py
     pip install -r requirements/build.txt
-    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
+    export VERBOSE=1
+    export CMAKE_VERBOSE_MAKEFILE=1
+    export FORCE_CMAKE=1
+    pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
 build_monarch() {
