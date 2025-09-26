@@ -16,7 +16,7 @@ from forge.observability.metrics import record_metric, ReductionType
 
 from monarch.actor import current_rank, endpoint, get_or_spawn_controller
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class TrainActor(ForgeActor):
@@ -53,8 +53,7 @@ async def main():
         "wandb": {
             "project": "my_project",
             "group": group,
-            "mode": "wandb_rank_0_reduce_all",
-            "log_per_rank": False,
+            "reduce_across_ranks": True,
         },
     }
 

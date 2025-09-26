@@ -110,6 +110,7 @@ class GlobalLoggingActor(Actor):
             config (Dict[str, Any]): Config for metric logging where keys are backend names,
                 e.g. {"console": {"log_per_rank": True}, "wandb": {"log_per_rank": False}}
         """
+        self.config = config
 
         # Init global logger_backends and states where needed
         from forge.observability.metrics import get_logger_backend_class
@@ -149,6 +150,13 @@ class GlobalLoggingActor(Actor):
         If there are 2 processes, each with 2 replicas with N gpus, we would
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
         self.fetchers[name] = fetcher
+
+        # Self-init for respawned actors
+        if self.config:
+            logger.debug(f"Initializing new LocalFetchActor {name}")
+            await fetcher.init_backends.call(
+                self.metadata_per_primary_backend, self.config
+            )
 
     @endpoint
     async def deregister_fetcher(self, name: str):
@@ -222,6 +230,10 @@ class GlobalLoggingActor(Actor):
                 logger_backend,
             ) in self.global_logger_backends.items():
                 await logger_backend.log(reduced_metrics, step)
+
+    @endpoint
+    def get_fetcher_count(self) -> int:
+        return len(self.fetchers)
 
     @endpoint
     async def shutdown(self):

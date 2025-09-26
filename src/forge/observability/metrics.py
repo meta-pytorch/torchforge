@@ -295,6 +295,55 @@ class MinAccumulator(MetricAccumulator):
         self.min_val = float("inf")
 
 
+class StdAccumulator(MetricAccumulator):
+    def __init__(self, reduction: ReductionType):
+        super().__init__(reduction)
+        self.sum = 0.0
+        self.sum_sq = 0.0
+        self.count = 0
+
+    def append(self, value: Any) -> None:
+        v = float(value.item() if hasattr(value, "item") else value)
+        self.sum += v
+        self.sum_sq += v * v
+        self.count += 1
+
+    def get_value(self) -> float:
+        if self.count == 0:
+            return 0.0
+        if self.count == 1:
+            return 0.0
+        mean = self.sum / self.count
+        variance = (self.sum_sq / self.count) - (mean * mean)
+        return max(0.0, variance) ** 0.5
+
+    def get_state(self) -> Dict[str, Any]:
+        return {
+            "reduction_type": self.reduction_type.value,
+            "sum": self.sum,
+            "sum_sq": self.sum_sq,
+            "count": self.count,
+        }
+
+    @classmethod
+    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> float:
+        total_sum = sum(s["sum"] for s in states)
+        total_sum_sq = sum(s["sum_sq"] for s in states)
+        total_count = sum(s["count"] for s in states)
+        if total_count == 0:
+            return 0.0
+        if total_count == 1:
+            return 0.0
+        mean = total_sum / total_count
+        variance = (total_sum_sq / total_count) - (mean * mean)
+        return max(0.0, variance) ** 0.5
+
+    def reset(self) -> None:
+        self.sum = 0.0
+        self.sum_sq = 0.0
+        self.count = 0
+
+
 #############
 # Collector #
 #############
@@ -319,6 +368,7 @@ class MetricCollector:
     def __new__(cls):
         """Singleton per-rank, ensures one instance per process."""
         rank = current_rank().rank
+
         if rank not in cls._instances:
             inst = super().__new__(cls)
             cls._instances[rank] = inst
@@ -332,12 +382,14 @@ class MetricCollector:
         return inst
 
     def __init__(self):
-        if hasattr(self, "_initialized_sync"):
+        if hasattr(self, "_is_initialized"):
             return
+
         self.accumulators: Dict[str, MetricAccumulator] = {}
-        self._initialized_async = False
+        self._is_initialized = False
         self.rank = current_rank().rank
         self.logger_backends: List[LoggerBackend] = []
+        self._is_initialized = True
 
     async def init_backends(
         self,
@@ -353,7 +405,7 @@ class MetricCollector:
                 logger backend, e.g., {"wandb": {"run_id": "abc123"}}.
             config (Dict[str, Any]): Logger backend configuration, e.g. {"wandb": {"project": "my_project"}}.
         """
-        if self._initialized_async:
+        if self._is_initialized:
             logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
             return
 
@@ -368,11 +420,14 @@ class MetricCollector:
             )
             self.logger_backends.append(logger_backend)
 
-        self._initialized_async = True
+        self._is_initialized = True
 
     def push(
         self, key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
     ) -> None:
+        if not self._is_initialized:
+            raise ValueError("Collector not initialized—call init first")
+
         if key not in self.accumulators:
             self.accumulators[key] = reduction.accumulator_class(reduction)
 
@@ -388,10 +443,10 @@ class MetricCollector:
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
-            Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
+            Dict[str, Dict[str, Dict[str, Any]]]: Dict of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
-        if not self._initialized_async:
+        if not self._is_initialized:
             logger.debug(
                 f"Collector not yet initialized for {get_actor_name_with_rank()}. Call init_backends first."
             )
@@ -424,7 +479,7 @@ class MetricCollector:
 
     async def shutdown(self):
         """Shutdown logger_backends if initialized."""
-        if not self._initialized_async:
+        if not self._is_initialized:
             logger.debug(
                 f"Collector for {get_actor_name_with_rank()} not initialized. Skipping shutdown"
             )
@@ -621,55 +676,6 @@ class WandbBackend(LoggerBackend):
         if self.run:
             self.run.finish()
             logger.info(f"WandbBackend {self.name}: Finished run")
-
-
-class StdAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
-        super().__init__(reduction)
-        self.sum = 0.0
-        self.sum_sq = 0.0
-        self.count = 0
-
-    def append(self, value: Any) -> None:
-        v = float(value.item() if hasattr(value, "item") else value)
-        self.sum += v
-        self.sum_sq += v * v
-        self.count += 1
-
-    def get_value(self) -> float:
-        if self.count == 0:
-            return 0.0
-        if self.count == 1:
-            return 0.0
-        mean = self.sum / self.count
-        variance = (self.sum_sq / self.count) - (mean * mean)
-        return max(0.0, variance) ** 0.5
-
-    def get_state(self) -> Dict[str, Any]:
-        return {
-            "reduction_type": self.reduction_type.value,
-            "sum": self.sum,
-            "sum_sq": self.sum_sq,
-            "count": self.count,
-        }
-
-    @classmethod
-    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> float:
-        total_sum = sum(s["sum"] for s in states)
-        total_sum_sq = sum(s["sum_sq"] for s in states)
-        total_count = sum(s["count"] for s in states)
-        if total_count == 0:
-            return 0.0
-        if total_count == 1:
-            return 0.0
-        mean = total_sum / total_count
-        variance = (total_sum_sq / total_count) - (mean * mean)
-        return max(0.0, variance) ** 0.5
-
-    def reset(self) -> None:
-        self.sum = 0.0
-        self.sum_sq = 0.0
-        self.count = 0
 
 
 def get_logger_backend_class(cls_name: str) -> type[LoggerBackend]:
