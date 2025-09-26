@@ -43,6 +43,7 @@ from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
 from forge.actors.torchstore_utils import (
+    DcpHandle,
     extract_param_name,
     get_param_key,
     get_param_prefix,
@@ -477,7 +478,10 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
+    # TODO: remove this later since no plumbing exists to change this value
     use_dcp: bool = True
+    # Cache hf param names on first update call to ensure the integrity of following updates
+    hf_param_names = set()
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -549,21 +553,33 @@ class PolicyWorker(ForgeActor):
         """Update model weights by reading state dict from torchstore"""
         model = self.worker.model_runner.model
         prefix = get_param_prefix(version)
-        self.logger.debug(f"{prefix=}")
+        logger.debug(f"{prefix=}")
         matching_keys = await ts.keys(prefix)
-        self.logger.debug(f"{matching_keys=}")
-        # TODO: find a way to save the original huggingface parameter names.
+        logger.debug(f"{matching_keys=}")
+        if not self.hf_param_names:
+            self.hf_param_names = set(model.state_dict().keys())
         hf_names = [extract_param_name(key) for key in matching_keys]
-        self.logger.debug(f"{hf_names=}")
+        if self.hf_param_names != set(hf_names):
+            logger.error(
+                f"[PolicyWorker::update] model parameter names do not match. {self.hf_param_names=} {hf_names=}"
+            )
+            raise RuntimeError("Model parameter names do not match")
+        logger.debug(f"[PolicyWorker::update] {version=} got {hf_names=}")
         loaded_weights = set()
         # We can't pass a generator since vllm load_weights is not async.
         # Instead, we just call load_weights with one parameter at a time.
         for name in hf_names:
-            param = await ts.get(get_param_key(version, name))
-            loaded = model.load_weights([(name, param)])
+            param_key = get_param_key(version, name)
+            tensor_or_handle = await ts.get(param_key)
+            if isinstance(tensor_or_handle, torch.Tensor):
+                param = tensor_or_handle
+            elif isinstance(tensor_or_handle, DcpHandle):
+                param = load_dcp_tensor(tensor_or_handle)
             del param
             loaded_weights.update(loaded)
-        self.logger.info(f"Updated {len(loaded_weights)} parameters")
+
+        logger.info(f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters")
+        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
     async def setup_kv_cache(self):

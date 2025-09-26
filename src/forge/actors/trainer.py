@@ -36,7 +36,7 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors.torchstore_utils import get_param_key
+from forge.actors.torchstore_utils import DcpHandle, get_param_key
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
@@ -326,9 +326,22 @@ class RLTrainer(ForgeActor):
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        for name, param in hf_state_dict.items():
-            key = get_param_key(policy_version, name)
-            await ts.put(key, param)
+        if self.use_dcp:
+            # we could use dcp.save() to save the whole state dict,
+            # but I don't want too much deviation between the two code paths
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                dcp_id = f"{self.state_dict_key}{DELIM}{key}"
+                metadata = dcp.save(
+                    checkpoint_id=dcp_id,
+                    state_dict={name: param},
+                )
+                dcp_handle = DcpHandle(checkpoint_id=dcp_id, metadata=metadata)
+                await ts.put(key, dcp_handle)
+        else:
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                await ts.put(key, param)
 
     @endpoint
     async def cleanup(self) -> None:
