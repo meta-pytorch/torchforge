@@ -12,7 +12,7 @@ from typing import Any, Type, TypeVar
 
 from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 
-from forge.types import ProcessConfig, Scheduler, ServiceConfig
+from forge.types import ProcessConfig, ServiceConfig
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
@@ -58,7 +58,6 @@ class ForgeActor(Actor):
         hosts: int | None = None,
         with_gpus: bool = False,
         num_replicas: int = 1,
-        scheduler: Scheduler = Scheduler.LOCAL,
         mesh_name: str | None = None,
         **kwargs,
     ) -> Type[T]:
@@ -93,7 +92,6 @@ class ForgeActor(Actor):
             "hosts": hosts,
             "with_gpus": with_gpus,
             "num_replicas": num_replicas,
-            "scheduler": scheduler,
             "mesh_name": mesh_name,
             "_extra_config": kwargs,
         }
@@ -120,7 +118,6 @@ class ForgeActor(Actor):
             "hosts": cls.hosts,
             "with_gpus": cls.with_gpus,
             "num_replicas": cls.num_replicas,
-            "scheduler": cls.scheduler,
             "mesh_name": cls.mesh_name,
             **cls._extra_config,  # all extra fields
         }
@@ -187,7 +184,6 @@ class ForgeActor(Actor):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
-            scheduler=cls.scheduler,
             mesh_name=cls.mesh_name,
         )
 

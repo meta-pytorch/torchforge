@@ -16,7 +16,7 @@ from typing import Optional
 
 import torchx.specs as specs
 
-from forge.controller.provisioner import BaseProvisioner, GpuManager
+from forge.controller.provisioner import BaseProvisioner, GpuManager, JOB_NAME_KEY
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._src.actor.meta.allocator import MastAllocator, MastAllocatorConfig
 
@@ -47,90 +47,6 @@ REMOTE_WORK_DIR = "/packages/monarch_default_workspace/workspace/"
 EDITABLE_WORKSPACE_PATHS = [
     f"{WORK_DIR}/{workspace}" for workspace in EDITABLE_WORKSPACES
 ]
-
-
-def add_additional_packages(packages: Packages) -> Packages:
-    packages.add_package("oil.oilfs:stable")
-    packages.add_package("manifold.manifoldfs")
-    return packages
-
-
-def build_appdef(cfg) -> specs.AppDef:
-
-    # create the app definition for the worker
-    REMOTE_END_PYTHONPATH = ":".join(
-        [f"{REMOTE_WORK_DIR}{workspace}" for workspace in EDITABLE_WORKSPACE_PATHS]
-    )
-
-    default_envs = {
-        **hyperactor.DEFAULT_NVRT_ENVS,
-        **hyperactor.DEFAULT_NCCL_ENVS,
-        **hyperactor.DEFAULT_TORCH_ENVS,
-        **{"TORCHX_RUN_PYTHONPATH": f"{REMOTE_END_PYTHONPATH}:{REMOTE_WORK_DIR}"},
-    }
-
-    packages = Packages()
-    meshes = []
-    for mesh_name, config in cfg["services"].items():
-        num_replicas = config["num_replicas"]
-        with_gpus = bool(config["with_gpus"])
-        num_hosts = int(config.get("hosts", 0))
-        # Create list of mesh names with indices and num_hosts
-        if with_gpus and num_hosts > 0:
-            mesh_list = [
-                f"{mesh_name}_{i}:{num_hosts}:{SKU}" for i in range(num_replicas)
-            ]
-            meshes.extend(mesh_list)
-
-    appdef = hyperactor.host_mesh_conda(
-        meshes=meshes,
-        additional_packages=add_additional_packages(packages),
-        timeout_sec=TIMEOUT_SEC,
-        env=default_envs,
-    )
-
-    for role in appdef.roles:
-        role.resource.capabilities["server_sub_types"] = [
-            # role.resource.capabilities["server_sub_types"][2]  # hardcoded to ROCE
-            role.resource.capabilities["server_sub_types"][1]  # hardcoded to ROCE
-        ]
-
-    return appdef
-
-
-def create_job_name():
-    return f"{USER}-forge-{uuid.uuid4().hex[:6]}"
-
-
-def create_server_handle(job_name: str) -> str:
-    return f"{SCHEDULER_NAME}:///{job_name}"
-
-
-async def lauch_mast_job(cfg: DictConfig, job_name: str | None = None):
-    _job_name = job_name or create_job_name()
-    handle = create_server_handle(_job_name)
-    server_spec = info(handle)
-    if server_spec and server_spec.state == AppState.RUNNING:
-        print(f"Job {_job_name} is already running. Skipping launch.")
-        return server_spec
-
-    config = Config(
-        scheduler="mast_conda",
-        scheduler_args={
-            # NOTE: TODO: support passing these args from CLI
-            "hpcIdentity": "genai_llm_pretraining_data",
-            "hpcJobOncall": "monarch",
-            "hpcClusterUuid": "MastProdCluster",
-            "rmAttribution": "pytorch4all_clients_approved",
-        },
-        appdef=build_appdef(cfg),
-        workspace=Workspace(
-            dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACE_PATHS],
-        ),
-    )
-
-    await commands.get_or_create(_job_name, config)
-    return server_spec
 
 
 def _get_port() -> str:
@@ -205,7 +121,7 @@ class MastSetupActor(Actor):
 
 
 class MastProvisioner(BaseProvisioner):
-    def __init__(self, job_name: str | None = None):
+    def __init__(self, cfg: DictConfig | None = None):
         self._server_names = []
         self._proc_server_map = {}
         self._lock = asyncio.Lock()
@@ -225,7 +141,14 @@ class MastProvisioner(BaseProvisioner):
         self._host_gpu_map = {
             self._this_host_id: GpuManager(available_local_devices),
         }
-        self.job_name = job_name or create_job_name()
+        assert cfg is not None
+        self.cfg = cfg
+        job_name = cfg.get(JOB_NAME_KEY, None)
+        self.job_name = job_name or self.create_job_name()
+
+    async def initialize(self):
+        """Call this after creating the instance"""
+        await self.launch_mast_job()
 
     async def get_mast_allocator(
         self,
@@ -340,3 +263,81 @@ class MastProvisioner(BaseProvisioner):
         async with self._lock:
             for server_name in self._server_names:
                 commands.kill(server_name)
+
+    async def launch_mast_job(self):
+        handle = self.create_server_handle()
+        server_spec = info(handle)
+        if server_spec and server_spec.state == AppState.RUNNING:
+            print(f"Job {self.job_name} is already running. Skipping launch.")
+            return server_spec
+
+        config = Config(
+            scheduler="mast_conda",
+            scheduler_args={
+                # NOTE: TODO: support passing these args from CLI
+                "hpcIdentity": "genai_llm_pretraining_data",
+                "hpcJobOncall": "monarch",
+                "hpcClusterUuid": "MastProdCluster",
+                "rmAttribution": "pytorch4all_clients_approved",
+            },
+            appdef=self.build_appdef(),
+            workspace=Workspace(
+                dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACE_PATHS],
+            ),
+        )
+
+        await commands.get_or_create(self.job_name, config)
+        return server_spec
+
+    def add_additional_packages(self, packages: Packages) -> Packages:
+        packages.add_package("oil.oilfs:stable")
+        packages.add_package("manifold.manifoldfs")
+        return packages
+
+    def build_appdef(self) -> specs.AppDef:
+
+        # create the app definition for the worker
+        REMOTE_END_PYTHONPATH = ":".join(
+            [f"{REMOTE_WORK_DIR}{workspace}" for workspace in EDITABLE_WORKSPACE_PATHS]
+        )
+
+        default_envs = {
+            **hyperactor.DEFAULT_NVRT_ENVS,
+            **hyperactor.DEFAULT_NCCL_ENVS,
+            **hyperactor.DEFAULT_TORCH_ENVS,
+            **{"TORCHX_RUN_PYTHONPATH": f"{REMOTE_END_PYTHONPATH}:{REMOTE_WORK_DIR}"},
+        }
+
+        packages = Packages()
+        meshes = []
+        for mesh_name, config in self.cfg["services"].items():
+            num_replicas = config["num_replicas"]
+            with_gpus = bool(config["with_gpus"])
+            num_hosts = int(config.get("hosts", 0))
+            # Create list of mesh names with indices and num_hosts
+            if with_gpus and num_hosts > 0:
+                mesh_list = [
+                    f"{mesh_name}_{i}:{num_hosts}:{SKU}" for i in range(num_replicas)
+                ]
+                meshes.extend(mesh_list)
+
+        appdef = hyperactor.host_mesh_conda(
+            meshes=meshes,
+            additional_packages=self.add_additional_packages(packages),
+            timeout_sec=TIMEOUT_SEC,
+            env=default_envs,
+        )
+
+        for role in appdef.roles:
+            role.resource.capabilities["server_sub_types"] = [
+                # role.resource.capabilities["server_sub_types"][2]  # hardcoded to ROCE
+                role.resource.capabilities["server_sub_types"][1]  # hardcoded to ROCE
+            ]
+
+        return appdef
+
+    def create_job_name(self):
+        return f"{USER}-forge-{uuid.uuid4().hex[:6]}"
+
+    def create_server_handle(self) -> str:
+        return f"{SCHEDULER_NAME}:///{self.job_name}"

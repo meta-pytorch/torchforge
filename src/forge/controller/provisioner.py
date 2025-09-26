@@ -13,7 +13,7 @@ import os
 import socket
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Mapping, Optional
+from typing import Optional
 
 import monarch
 
@@ -24,9 +24,13 @@ from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
+from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+JOB_NAME_KEY = "job_name"
+SCHEDULER_KEY = "scheduler"
 
 
 def _get_port() -> str:
@@ -295,20 +299,31 @@ class Provisioner(BaseProvisioner):
 _provisioner: BaseProvisioner | None = None
 
 
-def _get_provisioner(scheduler: Scheduler = Scheduler.LOCAL):
+async def init_provisioner(cfg: DictConfig | None = None):
     global _provisioner
     if not _provisioner:
+        scheduler = Scheduler.LOCAL
+        if cfg is not None:
+            scheduler = cfg.get(SCHEDULER_KEY, Scheduler.LOCAL.value)
         if scheduler == Scheduler.MAST.value:
             from forge.controller.launcher.mast import MastProvisioner
 
-            _provisioner = MastProvisioner("rithesh-forge-c8072a")
+            _provisioner = MastProvisioner(cfg=cfg)
+            await _provisioner.initialize()
         else:
             _provisioner = Provisioner()
     return _provisioner
 
 
+async def _get_provisioner():
+    if not _provisioner:
+        await init_provisioner()
+    return _provisioner
+
+
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
-    return await _get_provisioner(config.scheduler).get_proc_mesh(
+    provisioner = await _get_provisioner()
+    return await provisioner.get_proc_mesh(
         num_procs=config.procs,
         with_gpus=config.with_gpus,
         num_hosts=config.hosts,
@@ -317,9 +332,11 @@ async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
-    return await _get_provisioner().stop_proc_mesh(proc_mesh=proc_mesh)
+    provisioner = await _get_provisioner()
+    return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
 async def shutdown():
     logger.info("Shutting down provisioner..")
-    await _get_provisioner().shutdown()
+    provisioner = await _get_provisioner()
+    return await provisioner.shutdown()
