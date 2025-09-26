@@ -1,5 +1,4 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.qwen3_1_7b --config apps/grpo/qwen3_1_7b.yaml
 
 # Global configuration
 group_size: 8
@@ -8,7 +7,7 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/qwen1_7B_1
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/qwen1_7B_2
 
 # Dataset configuration
 dataset:
