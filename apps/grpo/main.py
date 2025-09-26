@@ -7,6 +7,7 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+import pprint
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -250,7 +251,8 @@ async def main(cfg: DictConfig):
         freq=1,
         project="grpo-training",
     )
-
+    print("job config:")
+    pprint.pprint(cfg)
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
     (
