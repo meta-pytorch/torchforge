@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from forge.util.ops import selective_log_softmax
 
 
-class TestOps:
+class TestSelectiveLogSoftmax:
     @pytest.mark.timeout(10)
     def test_basic_2d(self):
         """Test basic 2D case."""

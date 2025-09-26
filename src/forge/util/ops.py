@@ -49,3 +49,16 @@ def selective_log_softmax(logits: torch.Tensor, index: torch.Tensor) -> torch.Te
             per_token_logps.append(row_per_token_logps)
         per_token_logps = torch.stack(per_token_logps)
     return per_token_logps
+
+
+def compute_logprobs(
+    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
+) -> torch.Tensor:
+    """
+    Computes the log probabilities of the input tokens given the model logits and temperature.
+    """
+    context_length = logits.shape[1] - input_ids.shape[1]
+    logits = logits[:, context_length - 1 : -1].to(input_ids.device)
+    scaled_logits = logits / temperature
+    logprobs = selective_log_softmax(scaled_logits, input_ids)
+    return logprobs
