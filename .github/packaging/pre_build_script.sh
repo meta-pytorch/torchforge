@@ -30,6 +30,7 @@ build_vllm() {
     export VERBOSE=1
     export CMAKE_VERBOSE_MAKEFILE=1
     export FORCE_CMAKE=1
+    export MAX_JOBS=4 # don't resource starve the host
     pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
