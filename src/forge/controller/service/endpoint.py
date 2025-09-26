@@ -43,7 +43,7 @@ class ServiceEndpoint(Generic[P, R]):
         - `fanout`: Broadcasts the request to all healthy replicas.
 
     Notes:
-        - Support `@endpoint()` and `@service_endpoint(router='..')` decorators.
+        - Supports Monarch's `@endpoint()` as well as service's `@service_endpoint(router='..')` decorators.
         - To specify router, use `@service_endpoint(router='..')`.
         - Retry logic: If `max_attempts > 1`, failed calls may be retried on a different replica
         if the first one becomes unhealthy.
