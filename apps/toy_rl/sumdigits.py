@@ -342,7 +342,9 @@ class Trainer(ForgeActor):
         """Update policy model weights with trainer's current weights."""
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
-            self.model.state_dict(), num_layers=self.model.config.num_hidden_layers, vllm_tp=vllm_tp_DEPRECATED
+            self.model.state_dict(),
+            num_layers=self.model.config.num_hidden_layers,
+            vllm_tp=vllm_tp_DEPRECATED,
         )
         start_time = time.time()
         await ts.put_state_dict(new_sd, key)
@@ -522,7 +524,9 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.fanout(training_step, vllm_tp_DEPRECATED=policy_tp_size)
+                await trainer.push_weights.fanout(
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
                 await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.fanout()
