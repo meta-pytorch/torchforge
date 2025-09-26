@@ -132,7 +132,6 @@ class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     use_vllm_builtin_load: bool = True
-    test_blah_blah: int = 0
     available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
