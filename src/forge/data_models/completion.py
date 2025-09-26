@@ -33,3 +33,6 @@ class Completion:
 
     # the reason for stopping the generation
     stop_reason: str | None = None
+
+    # the version identifier of the model when the generation was performed
+    generator_version: int | None = None
