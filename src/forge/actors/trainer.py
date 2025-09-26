@@ -252,7 +252,7 @@ class RLTrainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, policy_version: int, tp_DEPRECATED: int = 1) -> None:
+    async def push_weights(self, policy_version: int, vllm_tp_DEPRECATED: int = 1) -> None:
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         start_time = time.perf_counter()
         # TODO:
@@ -273,7 +273,7 @@ class RLTrainer(ForgeActor):
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict,
             num_layers=self.engine.model_args.n_layers,
-            tp=tp_DEPRECATED,
+            vllm_tp=vllm_tp_DEPRECATED,
         )
         conversion_time = time.perf_counter()
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
@@ -332,7 +332,7 @@ def _shard_and_concat(sources: list[torch.Tensor], dim: int, tp: int) -> torch.T
 
 
 def _qwen3_hf_to_vllm(
-    sd: dict[str, torch.Tensor], num_layers: int, tp: int
+    sd: dict[str, torch.Tensor], num_layers: int, vllm_tp: int
 ) -> dict[str, torch.Tensor]:
     """Convert transformers state dict to vLLM format. Specifically, this fuses
     QKV projection and MLP gate_up_proj layers.
