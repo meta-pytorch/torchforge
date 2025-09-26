@@ -168,8 +168,7 @@ class Provisioner:
         global_logger = await get_or_spawn_controller(
             "global_logger", GlobalLoggingActor
         )
-        process_name = f"proc_mesh_{id(procs)}"
-        await global_logger.register_fetcher.call_one(local_fetcher_actor, process_name)
+        await global_logger.register_fetcher.call_one(local_fetcher_actor, procs)
 
     async def get_proc_mesh(
         self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
@@ -259,8 +258,7 @@ class Provisioner:
                 global_logger = await get_or_spawn_controller(
                     "global_logger", GlobalLoggingActor
                 )
-                process_name = f"proc_mesh_{id(proc_mesh)}"
-                await global_logger.deregister_fetcher.call_one(process_name)
+                await global_logger.deregister_fetcher.call_one(proc_mesh)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]

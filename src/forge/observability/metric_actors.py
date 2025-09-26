@@ -163,6 +163,7 @@ class GlobalLoggingActor(Actor):
         if name not in self.fetchers:
             logger.warning(
                 f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
+                "Available fetchers: {self.fetchers.keys()}"
             )
             return
         del self.fetchers[name]
