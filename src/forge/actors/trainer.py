@@ -17,6 +17,9 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -35,9 +38,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -275,6 +275,8 @@ class RLTrainer(ForgeActor):
         )
         conversion_time = time.perf_counter()
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
+        if self.checkpoint.folder is not None and self.use_dcp:
+            key = f"{self.checkpoint.folder}{DELIM}{self.state_dict_key}{DELIM}{policy_version}"
         if self.use_dcp:
             # TODO - DCP should probably be being saved to NFS explicitly?
             # Right now it will only save everything locally
