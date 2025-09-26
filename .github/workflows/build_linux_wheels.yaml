@@ -28,7 +28,7 @@ jobs:
           "include": [
             {
               "python_version": "3.10",
-              "gpu_arch_type": "cuda",
+              "gpu_arch_type": "cpu",
               "gpu_arch_version": "12.9",
               "desired_cuda": "cu129",
               "container_image": "pytorch/manylinux2_28-builder:cuda12.9",
