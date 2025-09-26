@@ -101,14 +101,14 @@ ref_model:
 
 # All resource allocations
 services:
-  policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
-    with_gpus: true
   dataset:
     procs: 1
     num_replicas: 1
     with_gpus: false
+  policy:
+    procs: ${policy.engine_config.tensor_parallel_size}
+    num_replicas: 1
+    with_gpus: true
   ref_model:
     procs: 1
     num_replicas: 1

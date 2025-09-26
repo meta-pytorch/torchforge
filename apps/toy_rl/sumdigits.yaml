@@ -42,14 +42,14 @@ replay_buffer:
   dp_size: 1
 
 services:
-  policy:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
   dataset:
     procs: 1
     num_replicas: 1
     with_gpus: false
+  policy:
+    procs: 1
+    num_replicas: 1
+    with_gpus: true
   reward_actor:
     procs: 1
     num_replicas: 1
