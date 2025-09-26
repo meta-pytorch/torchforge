@@ -111,7 +111,6 @@ services:
   trainer:
     procs: 1
     num_replicas: 1
-    hosts: 1
     with_gpus: true
   replay_buffer:
     procs: 1
