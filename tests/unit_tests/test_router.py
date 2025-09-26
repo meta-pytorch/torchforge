@@ -76,20 +76,21 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
     return replica
 
 
-@pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_service_endpoint_retry_succeeds_on_second_attempt():
-    """Ensure that retry logic executes when the first replica fails."""
-    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
+@pytest.mark.timeout(10)
+async def test_service_as_actor_preserves_normal_usage():
+    """Ensure that using `as_actor` does not break normal semantics."""
+    service = await Counter.as_actor(5)
 
     try:
-        # Allow retries
-        service.max_attempts = 2
+        assert await service.value.choose() == 5
 
-        result = await service.flaky.route()
-        assert result == "ok"  # success after retry
+        # Test increment
+        await service.rr_incr.choose()
+        assert await service.value.choose() == 6
+
     finally:
-        await service.shutdown()
+        await Counter.shutdown(service)
 
 
 # Router Tests
