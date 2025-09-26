@@ -8,17 +8,19 @@ import asyncio
 
 from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
-from forge.controller.launcher.mast import lauch_mast_job
+from forge.controller.provisioner import init_provisioner, SCHEDULER_KEY
 
+from forge.types import Scheduler
 from omegaconf import DictConfig
 
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
+    if cfg.get(SCHEDULER_KEY, Scheduler.MAST.value) != Scheduler.MAST.value:
+        raise ValueError("Schuduler must be MAST.")
 
-    # TODO: Remove this once we have a better way to launch mast jobs
-    harcoded_job_name = "rithesh-forge-c8072a"
-    spec = await lauch_mast_job(cfg, job_name=harcoded_job_name)
+    # init mast provisioner
+    await init_provisioner(cfg)
     await grpo_main(cfg)
 
 

@@ -173,7 +173,6 @@ class Policy(PolicyInterface):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
-            scheduler=cls.scheduler,
             mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
