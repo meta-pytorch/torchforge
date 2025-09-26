@@ -259,7 +259,7 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
+        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
@@ -267,9 +267,9 @@ async def main(cfg: DictConfig):
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
-        ReferenceModel.options(**cfg.actors.ref_model).as_actor(**cfg.ref_model),
-        RewardActor.options(**cfg.actors.reward_actor).as_actor(
+        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
@@ -326,14 +326,14 @@ async def main(cfg: DictConfig):
             advantages = await compute_advantages.compute.route(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.route(episode)
+                await replay_buffer.add.choose(episode)
 
             # Log metrics
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.route()
+            buffer_size = await replay_buffer._numel.choose()
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
@@ -343,15 +343,15 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.route(inputs, targets)
+                loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")
@@ -370,8 +370,8 @@ async def main(cfg: DictConfig):
         await asyncio.gather(
             dataloader.shutdown(),
             policy.shutdown(),
-            trainer.shutdown(),
-            replay_buffer.shutdown(),
+            RLTrainer.shutdown(trainer),
+            ReplayBuffer.shutdown(replay_buffer),
             compute_advantages.shutdown(),
             ref_model.shutdown(),
             reward_actor.shutdown(),

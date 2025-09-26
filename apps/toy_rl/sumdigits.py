@@ -449,12 +449,12 @@ async def main(cfg: DictConfig):
         reward_actor,
         ref_model,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
+        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
-        RewardActor.options(**cfg.actors.reward_actor).as_actor(),
-        RefModel.options(**cfg.actors.ref_model).as_actor(**cfg.ref_model),
+        RewardActor.options(**cfg.services.reward_actor).as_service(),
+        RefModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
     )
 
     print("All services initialized successfully!")
@@ -495,7 +495,7 @@ async def main(cfg: DictConfig):
                 )
                 episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
-                await replay_buffer.add.route(episode)
+                await replay_buffer.add.choose(episode)
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
@@ -508,18 +508,18 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.route(batch[0])
+                loss = await trainer.train_step.choose(batch[0])
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
-                await replay_buffer.clear.fanout()
+                await replay_buffer.clear.call()
 
     print("Starting training loop.")
     # TODO: Start multiple rollouts once all serivces support it
@@ -537,8 +537,8 @@ async def main(cfg: DictConfig):
         await asyncio.gather(
             dataloader.shutdown(),
             policy.shutdown(),
-            trainer.shutdown(),
-            replay_buffer.shutdown(),
+            Trainer.shutdown(trainer),
+            ReplayBuffer.shutdown(replay_buffer),
             reward_actor.shutdown(),
         )
         # TODO - add a global shutdown that implicitly shuts down all services

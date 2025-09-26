@@ -51,24 +51,28 @@ services:
     hosts: 1
     num_replicas: 1
     with_gpus: true
-
-actors:
   dataset:
     procs: 1
+    num_replicas: 1
     with_gpus: false
+  compute_advantages:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+  ref_model:
+    procs: 1
+    num_replicas: 1
+    with_gpus: true
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+
+actors:
   trainer:
     procs: 1
     hosts: 1
     with_gpus: true
   replay_buffer:
-    procs: 1
-    with_gpus: false
-  compute_advantages:
-    procs: 1
-    with_gpus: false
-  ref_model:
-    procs: 1
-    with_gpus: true
-  reward_actor:
     procs: 1
     with_gpus: false
