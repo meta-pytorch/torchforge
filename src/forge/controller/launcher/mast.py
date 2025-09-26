@@ -17,7 +17,7 @@ from typing import Optional
 import torchx.specs as specs
 
 from forge.controller.provisioner import BaseProvisioner, GpuManager
-from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints, AllocSpec
+from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._src.actor.meta.allocator import MastAllocator, MastAllocatorConfig
 
 from monarch._src.actor.shape import NDSlice, Shape
@@ -117,14 +117,11 @@ async def lauch_mast_job(cfg: DictConfig, job_name: str | None = None):
     config = Config(
         scheduler="mast_conda",
         scheduler_args={
-            # NOTE: default config. Use args to set your own values
+            # NOTE: TODO: support passing these args from CLI
             "hpcIdentity": "genai_llm_pretraining_data",
             "hpcJobOncall": "monarch",
             "hpcClusterUuid": "MastProdCluster",
             "rmAttribution": "pytorch4all_clients_approved",
-            # "hpcClusterUuid": "MastGenAICluster",
-            # "rmAttribution": "gen_ai_llama_systems_training",
-            # "localityConstraints": ["region", "pci"],
         },
         appdef=build_appdef(cfg),
         workspace=Workspace(
@@ -150,9 +147,12 @@ class MastSetupActor(Actor):
         return socket.gethostname(), _get_port()
 
     @endpoint
-    def mount(self, mount_dst: str, procs_per_host: int):
-        assert procs_per_host > 0
-        if current_rank().rank % procs_per_host != 0:
+    def mount(self, mount_dst: str):
+        point = current_rank()
+        # The last dimension is the local proc count.
+        last_label = point.extent.labels[-1]
+        proc_count = point.size(last_label)
+        if current_rank().rank % proc_count != 0:
             # Only use one rank per host to mount the directory
             return
         self.mount_mnt_directory(mount_dst)
@@ -205,7 +205,7 @@ class MastSetupActor(Actor):
 
 
 class MastProvisioner(BaseProvisioner):
-    def __init__(self, job_name: str):
+    def __init__(self, job_name: str | None = None):
         self._server_names = []
         self._proc_server_map = {}
         self._lock = asyncio.Lock()
@@ -225,7 +225,7 @@ class MastProvisioner(BaseProvisioner):
         self._host_gpu_map = {
             self._this_host_id: GpuManager(available_local_devices),
         }
-        self.job_name = job_name
+        self.job_name = job_name or create_job_name()
 
     async def get_mast_allocator(
         self,
@@ -296,11 +296,6 @@ class MastProvisioner(BaseProvisioner):
 
                     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
                     os.environ["MASTER_ADDR"] = socket.gethostname()
-                    # Multiple actors trying to call _get_port doesn't work
-                    # os.environ["MASTER_PORT"] = _get_port()
-
-                    # Setting the last digit to the first GPU id allows us to i.e.
-                    # create multiple vLLM instances on the same local host.
                     os.environ["MASTER_PORT"] = f"1234{gpu_ids[0]}"
                     os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
@@ -313,7 +308,7 @@ class MastProvisioner(BaseProvisioner):
                 await procs.initialized
                 setup = await procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
                 hostname, port = await setup.get_info.choose()
-                await setup.mount.call(mount_dst="/mnt/wsfuse", procs_per_host=8)
+                await setup.mount.call(mount_dst="/mnt/wsfuse")
                 procs._hostname = hostname
                 procs._port = port
                 procs._gpu_ids = gpu_ids
