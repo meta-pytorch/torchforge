@@ -12,46 +12,33 @@ permissions:
   contents: read
 
 jobs:
-  generate-matrix:
-    # if: github.repository_owner == 'pytorch'
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
-    with:
-      package-type: wheel
-      os: linux
-      test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
-      with-cuda: enable
-      with-rocm: disable
-      with-cpu: disable
-      python-versions: '["3.10", "3.11", "3.12"]'
-  filter-matrix:
-    runs-on: ubuntu-latest
-    needs: generate-matrix
-    outputs:
-      matrix: ${{ steps.filter.outputs.matrix }}
-    steps:
-      - name: Filter out CUDA 13 # vLLM v0.10.0 does not built with CUDA 13
-        id: filter
-        run: |
-          echo '${{ needs.generate-matrix.outputs.matrix }}' \
-            | jq -c 'del(.include[] | select(.gpu_arch_version == "13.0"))' \
-            > matrix.json
-          echo "Filtered build matrix:"
-          cat matrix.json | jq .
-          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
   build:
-    needs: filter-matrix
-    name: ${{ matrix.repository }}
+    name: forge-cu129
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
+      matrix:
+        include:
+          - python_version: "3.10"
+            gpu_arch_type: "cuda"
+            gpu_arch_version: "12.9"
+            desired_cuda: "cu129"
+            container_image: "pytorch/manylinux2_28-builder:cuda12.9"
+            package_type: "manywheel"
+            build_name: "manywheel-py3_10-cuda12_9"
+            validation_runner: "linux.12xlarge.memory"
+            installation: "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129"
+            channel: "nightly"
+            upload_to_base_bucket: "no"
+            stable_version: "2.8.0"
+            use_split_build: false
     with:
       repository: meta-pytorch/forge
       ref: ""
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       package-name: forge
-      build-matrix: ${{ needs.filter-matrix.outputs.matrix }}
+      build-matrix: ${{ toJSON(matrix) }}
       pre-script: .github/packaging/pre_build_script.sh
       post-script: .github/packaging/post_build_script.sh
       trigger-event: ${{ github.event_name }}
