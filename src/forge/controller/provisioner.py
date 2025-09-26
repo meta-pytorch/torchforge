@@ -151,7 +151,8 @@ class Provisioner:
 
     async def _setup_logging(self, procs: ProcMesh) -> None:
         """Spawn and register local fetcher for metric logging on each process.
-        When a service is spawned, we create for each rank a LocalFetcherActor and
+
+        When any process is created, we create for each rank a LocalFetcherActor and
         store it at GlobalLoggingActor. Backends (e.g. wandb) should be eagerly instantiated
         later in main by calling `global_logger.initialize_backends.call_one(logging_config)`
         """
