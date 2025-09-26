@@ -42,10 +42,6 @@ replay_buffer:
   dp_size: 1
 
 services:
-  dataset:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   policy:
     procs: 1
     num_replicas: 1
@@ -60,6 +56,9 @@ services:
     with_gpus: true
 
 actors:
+  dataset:
+    procs: 1
+    with_gpus: false
   trainer:
     procs: 1
     with_gpus: true

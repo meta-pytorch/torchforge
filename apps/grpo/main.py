@@ -259,7 +259,7 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
@@ -267,7 +267,7 @@ async def main(cfg: DictConfig):
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
@@ -278,9 +278,9 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.route()
+        pad_id = await dataloader.pad_token.choose()
         while True:
-            sample = await dataloader.sample.route()
+            sample = await dataloader.sample.choose()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -323,7 +323,7 @@ async def main(cfg: DictConfig):
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.route(group)
+            advantages = await compute_advantages.compute.choose(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.choose(episode)
@@ -368,11 +368,11 @@ async def main(cfg: DictConfig):
     finally:
         print("Shutting down...")
         await asyncio.gather(
-            dataloader.shutdown(),
+            DatasetActor.shutdown(dataloader),
             policy.shutdown(),
             RLTrainer.shutdown(trainer),
             ReplayBuffer.shutdown(replay_buffer),
-            compute_advantages.shutdown(),
+            ComputeAdvantages.shutdown(compute_advantages),
             ref_model.shutdown(),
             reward_actor.shutdown(),
         )

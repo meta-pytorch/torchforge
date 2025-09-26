@@ -449,7 +449,7 @@ async def main(cfg: DictConfig):
         reward_actor,
         ref_model,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
@@ -462,10 +462,10 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.route()
+        pad_id = await dataloader.pad_token.choose()
         while True:
             # Pass rollout_count for curriculum learning
-            sample = await dataloader.sample.route(rollout_count)
+            sample = await dataloader.sample.choose(rollout_count)
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -535,7 +535,7 @@ async def main(cfg: DictConfig):
     finally:
         print("Shutting down...")
         await asyncio.gather(
-            dataloader.shutdown(),
+            DatasetActor.shutdown(dataloader),
             policy.shutdown(),
             Trainer.shutdown(trainer),
             ReplayBuffer.shutdown(replay_buffer),
