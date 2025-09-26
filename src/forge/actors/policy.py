@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-
 import logging
 import os
 import sys
@@ -156,7 +155,6 @@ class Policy(PolicyInterface):
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
-        process_config: ProcessConfig,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         use_vllm_builtin_load: bool = False,
@@ -165,6 +163,11 @@ class Policy(PolicyInterface):
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
+        process_config: ProcessConfig = ProcessConfig(
+            procs=cls.procs,
+            hosts=cls.hosts,
+            with_gpus=cls.with_gpus,
+        )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # TODO - issues/144 we will want to ensure colocation with workers
@@ -174,8 +177,8 @@ class Policy(PolicyInterface):
         # Once we can create multiple proc meshes on a host mesh, we can ensure
         # host colocation
         policy_proc_config = copy(process_config)
-        policy_proc_config.num_procs = 1
-        policy_proc_config.num_hosts = None
+        policy_proc_config.procs = 1
+        policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
@@ -412,15 +415,6 @@ class Policy(PolicyInterface):
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
-    async def _get_model_params(self) -> dict[str, torch.Tensor]:
-        """Get the current model parameters. Only for testing purposes."""
-        val_mesh = await self.policy_worker._get_model_params.call()
-        sharded_state_dicts = {}
-        for idx, val in val_mesh.items():
-            sharded_state_dicts[idx["gpus"]] = val
-        return sharded_state_dicts
-
-    @endpoint
     async def get_version(self) -> int:
         """Get the current policy version."""
         return self.policy_version
@@ -428,6 +422,18 @@ class Policy(PolicyInterface):
     @endpoint
     async def stop(self):
         self.running = False
+
+    @endpoint
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[Policy] save model parameters for testing.")
+        await self.policy_worker._test_save_model_params.call()
+
+    @endpoint
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[Policy] start validating model parameters.")
+        return await self.policy_worker._test_validate_model_params.call(validate_fn)
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a RequestOutput to a list of Completion objects."""
@@ -445,6 +451,7 @@ class Policy(PolicyInterface):
                     prompt_ids=torch.tensor(prompt_token_ids),
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
+                    generator_version=self.policy_version,
                 )
             )
 
@@ -471,6 +478,12 @@ class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+
+    # used for tesing purposes only
+    _test_prev_params = {}
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -525,9 +538,11 @@ class PolicyWorker(ForgeActor):
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
-        start = time.time()
+        start = time.perf_counter()
         await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.debug(f"Loaded state dict from {key} in {time.time() - start} seconds")
+        logger.info(
+            f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
+        )
 
     @endpoint
     async def update(self, version: int):
@@ -581,15 +596,23 @@ class PolicyWorker(ForgeActor):
         return kv_cache_config
 
     @endpoint
-    async def _get_model_params(self) -> dict[str, torch.Tensor]:
-        model = self.worker.model_runner.model
-        state_dict = {}
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[PolicyWorker] save model parameters for testing.")
+        for name, param in self.worker.model_runner.model.named_parameters():
+            self._test_prev_params[name] = param.detach().cpu()
+        logger.info(
+            "[PolicyWorker] finished saving model parameters, len = %d",
+            len(self._test_prev_params),
+        )
 
-        for name, param in model.named_parameters():
-            if "layers.0" not in name:
-                continue
-            state_dict[name] = param.cpu().detach()
-        return state_dict
+    @endpoint
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[PolicyWorker] start validating model parameters.")
+        return validate_fn(
+            self._test_prev_params, self.worker.model_runner.model, logger
+        )
 
     def setup_worker(self):
         """Build and Instantiate vLLM worker"""

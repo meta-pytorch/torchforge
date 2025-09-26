@@ -11,7 +11,6 @@ from unittest import mock
 
 import pytest
 from forge.controller.provisioner import GpuManager, Provisioner
-from forge.types import ProcessConfig
 
 
 class TestGpuManagerCudaVisibleDevices:
@@ -158,11 +157,10 @@ class TestProvisionerCudaVisibleDevices:
 
         # Note - this can run even on CPU because with_gpus just sets environment
         # variables.
-        config = ProcessConfig(num_procs=2, with_gpus=True, num_hosts=None)
         _ = await provisioner.get_proc_mesh(
-            num_procs=config.num_procs,
-            with_gpus=config.with_gpus,
-            num_hosts=config.num_hosts,
+            num_procs=2,
+            with_gpus=True,
+            num_hosts=None,
         )
         # Verify GPUs were allocated from available set
         remaining_available = local_gpu_manager.get_available_gpus()
