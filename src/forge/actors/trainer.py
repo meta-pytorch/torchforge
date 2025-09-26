@@ -377,7 +377,7 @@ def _qwen3_hf_to_vllm(
         v = sd[prefix + "self_attn.v_proj.weight"]
 
         load_sd[prefix + "self_attn.qkv_proj.weight"] = _shard_and_concat(
-            [q, k, v], dim=0, tp=tp
+            [q, k, v], dim=0, tp=vllm_tp
         )
 
         # Untested: QKV fusion - handle bias if present
@@ -390,14 +390,14 @@ def _qwen3_hf_to_vllm(
             k_bias = sd[k_bias_key]
             v_bias = sd[v_bias_key]
             load_sd[prefix + "self_attn.qkv_proj.bias"] = _shard_and_concat(
-                [q_bias, k_bias, v_bias], dim=0, tp=tp
+                [q_bias, k_bias, v_bias], dim=0, tp=vllm_tp
             )
 
         # MLP gate_up_proj fusion
         gate = sd[prefix + "mlp.gate_proj.weight"]
         up = sd[prefix + "mlp.up_proj.weight"]
         load_sd[prefix + "mlp.gate_up_proj.weight"] = _shard_and_concat(
-            [gate, up], dim=0, tp=tp
+            [gate, up], dim=0, tp=vllm_tp
         )
 
         # Untested: MLP gate_up_proj fusion - handle bias if present
@@ -409,7 +409,7 @@ def _qwen3_hf_to_vllm(
             up_bias = sd[up_bias_key]
             # Same sharding has to happen here
             load_sd[prefix + "mlp.gate_up_proj.bias"] = _shard_and_concat(
-                [gate_bias, up_bias], dim=0, tp=tp
+                [gate_bias, up_bias], dim=0, tp=vllm_tp
             )
 
     return load_sd
