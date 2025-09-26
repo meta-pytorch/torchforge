@@ -1,0 +1,193 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+"""
+Tests for router.py and batch routing in ServiceEndpoint
+"""
+
+import asyncio
+import contextlib
+import logging
+
+import pytest
+from forge.controller import ForgeActor
+from forge.controller.service import (
+    LeastLoadedRouter,
+    Replica,
+    ReplicaState,
+    RoundRobinRouter,
+    service_endpoint,
+    SessionRouter,
+)
+
+from forge.types import ProcessConfig
+from monarch.actor import endpoint
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+class Counter(ForgeActor):
+    """Test actor that maintains a counter with various endpoints."""
+
+    def __init__(self, v: int):
+        self.v = v
+
+    @endpoint
+    async def incr(self):
+        """Increment the counter."""
+        self.v += 1
+
+    @endpoint
+    async def value(self) -> int:
+        """Get the current counter value."""
+        return self.v
+
+    @endpoint
+    async def fail_me(self):
+        """Endpoint that always fails to test error handling."""
+        raise RuntimeError("I was asked to fail")
+
+    @endpoint
+    async def add_to_value(self, amount: int, multiplier: int = 1) -> int:
+        """Add an amount (optionally multiplied) to the current value."""
+        logger.info(f"adding {amount} with {multiplier}")
+        self.v += amount * multiplier
+        return self.v
+
+    @service_endpoint(router="round_robin", batch_size=3, batch_timeout=0.1)
+    async def rr_incr(self):
+        """Increment using RoundRobin router."""
+        self.v += 1
+
+
+def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
+    """Helper to build a replica with specified state and load."""
+    replica = Replica(
+        idx=idx,
+        proc_config=ProcessConfig(),
+        actor_def=Counter,
+        actor_args=(),
+        actor_kwargs={},
+    )
+    replica.state = ReplicaState.HEALTHY if healthy else ReplicaState.UNHEALTHY
+    replica.active_requests = load
+    return replica
+
+
+# Router Tests
+
+
+@pytest.mark.asyncio
+async def test_session_router_fallback_rr_vs_ll():
+    """Switch fallback router to round-robin and verify assignment order."""
+    # Choose RoundRobinRouter as fallback, r1 and r2 should be assigned to different replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = RoundRobinRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx != r2.idx
+    assert set(session_map.values()) == {0, 1}
+
+    # If LeastLoadedRouter as fallback, r1 and r2 should be assigned to same replicas
+    replicas = [make_replica(0, load=0), make_replica(1, load=5)]
+    session_map = {}
+    fallback = LeastLoadedRouter()
+    router = SessionRouter(fallback)
+
+    r1 = router.get_replica(replicas, sess_id="sess1", session_map=session_map)
+    r2 = router.get_replica(replicas, sess_id="sess2", session_map=session_map)
+
+    assert r1.idx == r2.idx == 0
+
+
+# Router integeration tests
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_round_robin_router_distribution():
+    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas."""
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
+
+    try:
+        # Make multiple sessionless calls using route()
+        results = []
+        for _ in range(6):
+            await service.rr_incr.route()
+            values = await service.value.fanout()
+            print(values)
+            results.append(values)
+        print("results: ", results)
+        # Verify that requests were distributed round-robin
+        # Each call increments a single replica, so after 6 calls we expect:
+        # 2 increments per replica (since 3 replicas, 6 calls)
+        final_values = results[-1]  # last snapshot
+        assert sorted(final_values) == [2, 2, 2]
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_session_router_assigns_and_updates_session_map_in_service():
+    """Integration: Service with SessionRouter preserves sticky sessions."""
+    service = await Counter.options(
+        procs=1,
+        num_replicas=2,
+    ).as_service(v=0)
+
+    try:
+        # First call with sess_id -> assign a replica
+        await service.incr.route(sess_id="sess1")
+        values1 = await service.value.fanout()
+
+        # Second call with same sess_id -> must hit same replica
+        await service.incr.route(sess_id="sess1")
+        values2 = await service.value.fanout()
+
+        # Difference should only be on one replica (sticky session)
+        diffs = [v2 - v1 for v1, v2 in zip(values1, values2)]
+        assert (
+            sum(diffs) == 1
+        ), f"Expected exactly one replica to increment, got {diffs}"
+        assert max(diffs) == 1 and min(diffs) == 0
+
+        # Session map in service should reflect assigned replica
+        assigned_idx = service._session_replica_map["sess1"]
+        assert values2[assigned_idx] == values1[assigned_idx] + 1
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_service_endpoint_batch_flush_max_size():
+    """Ensure @service_endpoint batching flushes correctly when max batch size reached."""
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
+
+    try:
+        # Make 3 concurrent requests (batch_size = 3)
+        tasks = [asyncio.create_task(service.rr_incr.route()) for _ in range(4)]
+        await asyncio.gather(*tasks)
+
+        values = await service.value.fanout()
+
+        # Expectation:
+        # - 3 increments batched together on one replica
+        # - 1 increment on the other replica (new batch after flush)
+        assert sum(values) == 3, f"Expected total=3, got {values}"
+
+        # Exactly one replica should have count=3, and the other count=1
+        assert sorted(values) == [1, 3], f"Expected [1, 2], got {values}"
+
+    finally:
+        await service.shutdown()

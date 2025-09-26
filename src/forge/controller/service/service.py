@@ -39,8 +39,6 @@ import time
 import uuid
 from typing import Dict, List
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
@@ -52,6 +50,8 @@ from forge.controller.service.router import (
     SessionRouter,
 )
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -200,39 +200,11 @@ class Service:
             for fut in batch_futs:
                 fut.set_result(replica)
 
-    async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
-        """
-        Routes a function call to the appropriate replica with load balancing and fault tolerance.
+    async def _call(
+        self, replica: "Replica", sess_id: str | None, function: str, *args, **kwargs
+    ):
+        """Send request directly to a chosen replica and wait for result."""
 
-        This is the core routing method that handles:
-        - Session-based routing for stateful calls
-        - Round-robin load balancing for stateless calls
-        - Custom routing based on context hints
-        - Automatic retry on replica failures
-        - Request queuing and processing
-
-        Args:
-            sess_id: Optional session ID for stateful routing
-            function: Name of the actor endpoint to call
-            *args: Positional arguments to pass to the endpoint
-            **kwargs: Keyword arguments to pass to the endpoint
-
-        Returns:
-            The result from the actor endpoint execution
-
-        Raises:
-            RuntimeError: If no healthy replicas are available
-            Exception: Any exception raised by the actor endpoint
-        """
-        # Check context variables for session state if no explicit sess_id
-        if sess_id is None:
-            ctx = _session_context.get(None)
-            if ctx:
-                sess_id = ctx["session_id"]
-
-        replica = await self._get_replica(sess_id)
-
-        # Create a ServiceRequest object to queue
         request = ServiceRequest(
             session_id=sess_id,
             function=function,
@@ -244,19 +216,65 @@ class Service:
         # Queue the request using replica's method
         await replica.enqueue_request(request)
 
-        # Wait for the result
-        try:
-            return await request.future
-        except Exception as e:
-            # If the replica failed, try to retry once
-            if not replica.healthy:
-                logger.debug(
-                    f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
-                )
-                return await self._retry_request_on_healthy_replica(
-                    sess_id, function, *args, **kwargs
-                )
-            raise
+        return await request.future
+
+    # async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
+    #     """
+    #     Routes a function call to the appropriate replica with load balancing and fault tolerance.
+
+    #     This is the core routing method that handles:
+    #     - Session-based routing for stateful calls
+    #     - Round-robin load balancing for stateless calls
+    #     - Custom routing based on context hints
+    #     - Automatic retry on replica failures
+    #     - Request queuing and processing
+
+    #     Args:
+    #         sess_id: Optional session ID for stateful routing
+    #         function: Name of the actor endpoint to call
+    #         *args: Positional arguments to pass to the endpoint
+    #         **kwargs: Keyword arguments to pass to the endpoint
+
+    #     Returns:
+    #         The result from the actor endpoint execution
+
+    #     Raises:
+    #         RuntimeError: If no healthy replicas are available
+    #         Exception: Any exception raised by the actor endpoint
+    #     """
+    #     # Check context variables for session state if no explicit sess_id
+    #     if sess_id is None:
+    #         ctx = _session_context.get(None)
+    #         if ctx:
+    #             sess_id = ctx["session_id"]
+
+    #     replica = await self._get_replica(sess_id)
+
+    #     # Create a ServiceRequest object to queue
+    #     request = ServiceRequest(
+    #         session_id=sess_id,
+    #         function=function,
+    #         args=args,
+    #         kwargs=kwargs,
+    #         future=asyncio.Future(),
+    #     )
+
+    #     # Queue the request using replica's method
+    #     await replica.enqueue_request(request)
+
+    #     # Wait for the result
+    #     try:
+    #         return await request.future
+    #     except Exception as e:
+    #         # If the replica failed, try to retry once
+    #         if not replica.healthy:
+    #             logger.debug(
+    #                 f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
+    #             )
+    #             return await self._retry_request_on_healthy_replica(
+    #                 sess_id, function, *args, **kwargs
+    #             )
+    #         raise
 
     async def call_all(self, function: str, *args, **kwargs) -> List:
         """
@@ -309,16 +327,16 @@ class Service:
 
         return results
 
-    async def _retry_request_on_healthy_replica(
-        self, sess_id: str | None, function: str, *args, **kwargs
-    ):
-        """Retries a failed request on a healthy replica."""
-        # Force reassignment to a healthy replica (only for session-based calls)
-        if sess_id is not None and sess_id in self._session_replica_map:
-            del self._session_replica_map[sess_id]
+    # async def _retry_request_on_healthy_replica(
+    #     self, sess_id: str | None, function: str, *args, **kwargs
+    # ):
+    #     """Retries a failed request on a healthy replica."""
+    #     # Force reassignment to a healthy replica (only for session-based calls)
+    #     if sess_id is not None and sess_id in self._session_replica_map:
+    #         del self._session_replica_map[sess_id]
 
-        # Retry the call (this will assign to a new healthy replica)
-        return await self._call(sess_id, function, *args, **kwargs)
+    #     # Retry the call (this will assign to a new healthy replica)
+    #     return await self._call(sess_id, function, *args, **kwargs)
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
@@ -538,26 +556,25 @@ class Service:
 
             await asyncio.sleep(poll_rate_s)
 
-    async def _get_replica(self, sess_id: str | None) -> "Replica":
-        """Get a replica for the given session ID."""
+    # async def _get_replica(self, sess_id: str | None) -> "Replica":
+    #     """Get a replica for the given session ID."""
 
-        if sess_id:
-            # Stateful routing always uses session router
-            healthy_replicas = self._get_healthy_replicas()
-            return self._session_router.get_replica(
-                healthy_replicas, sess_id, self._session_replica_map
-            )
+    #     if sess_id:
+    #         # Stateful routing always uses session router
+    #         healthy_replicas = self._get_healthy_replicas()
+    #         return self._session_router.get_replica(
+    #             healthy_replicas, sess_id, self._session_replica_map
+    #         )
 
-        # Stateless: batching
-        if self._max_batch_size > 1:
-            fut = asyncio.Future()
-            healthy_replicas = self._get_healthy_replicas()
-            self._batch_queue.put_nowait(fut)
-            return await fut
-        else:
-            # No batching, pick immediately
-            healthy_replicas = self._get_healthy_replicas()
-            return self._default_router.get_replica(healthy_replicas)
+    #     # Stateless: batching
+    #     if self._max_batch_size > 1:
+    #         fut = asyncio.Future()
+    #         self._batch_queue.put_nowait(fut)
+    #         return await fut
+    #     else:
+    #         # No batching, pick immediately
+    #         healthy_replicas = self._get_healthy_replicas()
+    #         return self._default_router.get_replica(healthy_replicas)
 
     async def stop(self):
         logger.debug("Stopping service...")

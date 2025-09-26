@@ -123,8 +123,12 @@ class ServiceInterface:
 
     async def shutdown(self) -> None:
         """
-        Shut down the underlying Service.
+        Shut down the underlying Service and all endpoints.
         """
+        for attr in dir(self):
+            ep = getattr(self, attr)
+            if isinstance(ep, ServiceEndpoint):
+                await ep.stop()
         await self._service.stop()
 
     def session(self) -> "SessionContext":
