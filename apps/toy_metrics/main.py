@@ -71,9 +71,9 @@ async def main():
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
-        await trainer.train_step.call(i)
+        await trainer.train_step.fanout(i)
         for sub in range(3):
-            await generator.generate_step.call(i, sub)
+            await generator.generate_step.fanout(i, sub)
         await mlogger.flush.call_one(i)
 
     # shutdown
