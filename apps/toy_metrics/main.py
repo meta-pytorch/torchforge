@@ -7,7 +7,6 @@
 import asyncio
 
 import logging
-import sys
 import time
 
 from forge.controller.actor import ForgeActor
@@ -21,62 +20,44 @@ logging.basicConfig(level=logging.INFO)
 
 
 class TrainActor(ForgeActor):
+    """Example training actor that records loss metrics."""
+
     @endpoint
     async def train_step(self, step: int):
         rank = current_rank().rank
         value = rank * 1000 + 100 * step
-        print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
-        await record_metric("train/loss", value)
+        print(f"[TRAIN] Rank {rank}: Step {step}, loss={value}")
+        record_metric("train/loss", value)
 
 
 class GeneratorActor(ForgeActor):
+    """Example generation actor that records token count metrics."""
+
     @endpoint
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
         value = rank * 1000 + step * 100 + substep * 10
-        print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
-        await record_metric("generate/tokens", value, ReductionType.SUM)
+        print(f"[GEN] Rank {rank}: Step {step}.{substep}, tokens={value}")
+        record_metric("generate/tokens", value, ReductionType.SUM)
 
 
 # Main
-async def main(mode: str = "wandb_all_log_all"):
-    group = f"experiment_group_{int(time.time())}"
-    if mode == "wandb_all_log_all":
-        backends = [
-            {"class": "console", "log_per_rank": True},
-            {
-                "class": "wandb",
-                "project": "my_project",
-                "group": group,
-                "mode": "wandb_all_log_all",
-                "log_per_rank": True,
-            },
-        ]
-    elif mode == "wandb_rank_0_reduce_all":
-        backends = [
-            {"class": "console", "log_per_rank": False},
-            {
-                "class": "wandb",
-                "project": "my_project",
-                "group": group,
-                "mode": "wandb_rank_0_reduce_all",
-                "log_per_rank": False,
-            },
-        ]
-    else:  # wandb_rank_0_log_all
-        backends = [
-            {
-                "class": "wandb",
-                "project": "my_project",
-                "group": group,
-                "mode": "wandb_rank_0_log_all",
-                "log_per_rank": True,
-            },
-        ]
+async def main():
+    """Example demonstrating distributed metric logging with different backends."""
+    group = f"grpo_exp_{int(time.time())}"
 
-    logging_config = {
-        "backends": backends,
+    # Config format: {backend_name: backend_config_dict}
+    # Each backend can specify log_per_rank to control distributed logging behavior
+    config = {
+        "console": {"log_per_rank": False},
+        "wandb": {
+            "project": "my_project",
+            "group": group,
+            "mode": "wandb_rank_0_reduce_all",
+            "log_per_rank": False,
+        },
     }
+
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
 
     # Spawn services first (triggers registrations via provisioner hook)
@@ -85,7 +66,7 @@ async def main(mode: str = "wandb_all_log_all"):
 
     # Now init config on global (inits backends eagerly across fetchers)
     global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
-    await global_logger.initialize_backends.call_one(logging_config)
+    await global_logger.init_backends.call_one(config)
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
@@ -106,13 +87,4 @@ async def main(mode: str = "wandb_all_log_all"):
 
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "wandb_all_log_all"
-    valid_modes = [
-        "wandb_all_log_all",
-        "wandb_rank_0_log_all",
-        "wandb_rank_0_reduce_all",
-    ]
-    if mode not in valid_modes:
-        print(f"Invalid mode: {mode}. Use {valid_modes}")
-        sys.exit(1)
-    asyncio.run(main(mode))
+    asyncio.run(main())
