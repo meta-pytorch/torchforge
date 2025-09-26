@@ -100,7 +100,6 @@ class RLTrainer(ForgeActor):
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
 
-
     def __post_init__(self):
         """Initializes config types and env variables.
 

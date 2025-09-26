@@ -243,6 +243,7 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
@@ -356,7 +357,7 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.route(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.fanout(training_step, tp_DEPRECATED=policy_tp_size)
                 await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")
