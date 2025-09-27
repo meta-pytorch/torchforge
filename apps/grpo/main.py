@@ -309,7 +309,7 @@ async def main(cfg: DictConfig):
             )
 
             input_ids = torch.ones(
-                (group_size, max_req_tokens + max_req_tokens),
+                (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
                 device="cuda",
             )
