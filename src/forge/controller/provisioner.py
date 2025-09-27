@@ -10,6 +10,9 @@ import functools
 import logging
 
 import os
+
+os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
+os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 import socket
 import uuid
 from abc import ABC, abstractmethod
