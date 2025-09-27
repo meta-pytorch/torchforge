@@ -8,8 +8,9 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 scheduler: mast
-job_name: forge-grpo
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/1
+# job_name: rithesh-forge-mast-pci
+job_name: rithesh-forge-mast-zhu
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/13
 
 
 # Dataset configuration
@@ -23,10 +24,13 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
-    tensor_parallel_size: 1
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-32B/snapshots/d47b0d4ae4b48fde975756bf360a63a9cca8d470
+    tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: false
+    # TODO: Had to disable this becasue vLLm wouldn't like
+    # need to revisit.
+    disable_custom_all_reduce: true
   sampling_config:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -42,8 +46,8 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    flavor: 32B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-32B/snapshots/d47b0d4ae4b48fde975756bf360a63a9cca8d470
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -61,7 +65,7 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: 8
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -69,7 +73,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-32B/snapshots/d47b0d4ae4b48fde975756bf360a63a9cca8d470
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -78,6 +82,10 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  comm:
+    # TODO: revisit this. causing NCCL timeouts on inits when loading CP
+    # from oilfs if the traienr is not in the same region as in PCI
+    init_timeout_seconds: 3600
 
 # Replay buffer configuration
 replay_buffer:
@@ -89,8 +97,8 @@ replay_buffer:
 ref_model:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    flavor: 32B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-32B/snapshots/d47b0d4ae4b48fde975756bf360a63a9cca8d470
   training:
     # dtype: bfloat16
     gc_freq: 1
@@ -99,12 +107,12 @@ ref_model:
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    tensor_parallel_degree: 8
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-32B/snapshots/d47b0d4ae4b48fde975756bf360a63a9cca8d470
     initial_load_in_hf: true
 
 # All resource allocations
