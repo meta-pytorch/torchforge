@@ -26,11 +26,11 @@ def load_tensor_from_dcp(handle: DcpHandle, param_name) -> torch.Tensor:
 
 
 def get_param_prefix(policy_version: int) -> str:
-    return f"policy_ver_{policy_version}"
+    return f"policy_ver_{policy_version:010d}"
 
 
 def get_param_key(policy_version: int, name: str) -> str:
-    return f"policy_ver_{policy_version}{KEY_DELIM}{name}"
+    return f"policy_ver_{policy_version:010d}{KEY_DELIM}{name}"
 
 
 def extract_param_name(key: str) -> str:

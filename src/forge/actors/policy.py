@@ -18,6 +18,21 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.interfaces import Policy as PolicyInterface
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -41,21 +56,6 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    extract_param_name,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
-from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -552,6 +552,9 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
+        logger.info(
+            f"[PolicyWorker::update] start updating weights to version {version}"
+        )
         model = self.worker.model_runner.model
         prefix = get_param_prefix(version)
         logger.debug(f"{prefix=}")
@@ -569,8 +572,9 @@ class PolicyWorker(ForgeActor):
             if isinstance(tensor_or_handle, torch.Tensor):
                 param = tensor_or_handle
             elif isinstance(tensor_or_handle, DcpHandle):
+                logger.info(f"Loading {name} from DCP with handle {tensor_or_handle}")
                 param = load_tensor_from_dcp(tensor_or_handle, name)
-                logger.debug(f"Loaded {name} from DCP with handle {tensor_or_handle}")
+                logger.info(f"Loaded {name} from DCP with handle {tensor_or_handle}")
             else:
                 raise RuntimeError(
                     f"Unexpected type for {param_key}: {type(tensor_or_handle)}"

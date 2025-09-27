@@ -32,7 +32,8 @@ policy:
 
 # Trainer configuration
 trainer:
-  use_dcp: true
+  # TODO: figure out why dcp is not working for 8b, but works for 1.7b with tp=2
+  use_dcp: false
   model:
     name: qwen3
     flavor: 8B
@@ -49,6 +50,7 @@ trainer:
     max_norm: 1.0
     steps: 1000000
     dtype: bfloat16
+    gc_freq: 1
   compile:
     enable: false
   parallelism:
@@ -87,6 +89,7 @@ ref_model:
     hf_assets_path: hf://${model}
   training:
     dtype: bfloat16
+    gc_freq: 1
   compile:
     enable: false
   parallelism:
