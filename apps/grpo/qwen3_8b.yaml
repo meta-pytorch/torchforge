@@ -19,6 +19,7 @@ dataset:
 
 # Policy configuration
 policy:
+  use_vllm_builtin_load: false
   engine_config:
     model: ${model}
     tensor_parallel_size: 2
@@ -33,6 +34,7 @@ policy:
 # Trainer configuration
 trainer:
   vllm_tp_DEPRECATED: ${policy.engine_config.tensor_parallel_size}
+  use_vllm_builtin_load: false
   model:
     name: qwen3
     flavor: 8B
