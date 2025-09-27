@@ -252,8 +252,9 @@ async def drop_weights(version: int):
     # TODO: once we have something like `get_meta()` in torchstore, we can just
     # query the type of the object instead of relying on keys.
     dcp_key = get_dcp_whole_state_dict_key(version)
-    dcp_handle = await ts.get(dcp_key)
-    dcp_handle.drop()
+    if dcp_key in matching_keys:
+        dcp_handle = await ts.get(dcp_key)
+        dcp_handle.drop()
     for key in matching_keys:
         await ts.delete(key)
     elapsed = time.perf_counter() - start_time
