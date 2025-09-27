@@ -248,7 +248,7 @@ async def drop_weights(version: int):
     print(f"Dropping weights @ version {version}")
     start_time = time.perf_counter()
     prefix = get_param_prefix(version)
-    matching_keys = ts.keys(prefix)
+    matching_keys = await ts.keys(prefix)
     # TODO: once we have something like `get_meta()` in torchstore, we can just
     # query the type of the object instead of relying on keys.
     dcp_key = get_dcp_whole_state_dict_key(version)
