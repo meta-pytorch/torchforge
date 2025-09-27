@@ -51,6 +51,7 @@ trainer:
     max_norm: 1.0
     steps: 1000000
     dtype: bfloat16
+    gc_freq: 1
   compile:
     enable: false
   parallelism:
@@ -89,6 +90,7 @@ ref_model:
     hf_assets_path: hf://${model}
   training:
     dtype: bfloat16
+    gc_freq: 1
   compile:
     enable: false
   parallelism:
