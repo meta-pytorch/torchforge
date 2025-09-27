@@ -357,7 +357,7 @@ async def main(cfg: DictConfig):
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.fanout(inputs, targets)
+                loss = await trainer.train_step.route(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.fanout(training_step)
