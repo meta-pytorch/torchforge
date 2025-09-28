@@ -28,6 +28,8 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
+from forge.observability.metric_actors import GlobalLoggingActor, LocalFetcherActor
+
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -151,14 +153,11 @@ class Provisioner:
 
     async def _setup_logging(self, procs: ProcMesh) -> None:
         """Spawn and register local fetcher for metric logging on each process.
-        When a service is spawned, we create for each rank a LocalFetcherActor and
+
+        When any process is created, we create for each rank a LocalFetcherActor and
         store it at GlobalLoggingActor. Backends (e.g. wandb) should be eagerly instantiated
         later in main by calling `global_logger.initialize_backends.call_one(logging_config)`
         """
-        from forge.observability.metric_actors import (
-            GlobalLoggingActor,
-            LocalFetcherActor,
-        )
 
         # Ensure global_logger exists FIRST in this process context
         global_logger = await get_or_spawn_controller(
@@ -170,8 +169,7 @@ class Provisioner:
         )
         procs._local_fetcher = local_fetcher_actor
 
-        process_name = f"proc_mesh_{id(procs)}"
-        await global_logger.register_fetcher.call_one(local_fetcher_actor, process_name)
+        await global_logger.register_fetcher.call_one(local_fetcher_actor, procs)
 
     async def get_proc_mesh(
         self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
@@ -256,13 +254,10 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
-                from forge.observability.metric_actors import GlobalLoggingActor
-
                 global_logger = await get_or_spawn_controller(
                     "global_logger", GlobalLoggingActor
                 )
-                process_name = f"proc_mesh_{id(proc_mesh)}"
-                await global_logger.deregister_fetcher.call_one(process_name)
+                await global_logger.deregister_fetcher.call_one(proc_mesh)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]

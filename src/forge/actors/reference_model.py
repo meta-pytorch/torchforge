@@ -88,6 +88,8 @@ class ReferenceModel(ForgeActor):
     async def setup(self):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+        self.model = self.engine.model_parts[0]  # No pipeline parallelism yet
+        self.model.eval()
 
     @endpoint
     @record_perf_metrics(
@@ -129,14 +131,14 @@ class ReferenceModel(ForgeActor):
         #     else None
         # )
         optional_context_parallel_ctx = None
-        if parallel_dims.pp_enabled:
+        if self.engine.parallel_dims.pp_enabled:
             raise NotImplementedError("PP not implemented yet")
         else:
             # (jackkhuu) Not sure if either context are needed for inference here
             with self.engine.train_context(optional_context_parallel_ctx):
                 with self.engine.maybe_enable_amp:
                     with torch.inference_mode():
-                        logits = model_parts[0](input_ids)
+                        logits = self.model(input_ids)
         self.step += 1
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()

@@ -309,7 +309,9 @@ class RLTrainer(ForgeActor):
         timer.step("state_dict_to_hf")
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
-            sd=hf_state_dict, num_layers=self.engine.model_args.n_layers
+            sd=hf_state_dict,
+            num_layers=self.engine.model_args.n_layers,
+            vllm_tp=vllm_tp_DEPRECATED,
         )
         timer.step("state_dict_hf_to_vllm")
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
@@ -337,6 +339,11 @@ class RLTrainer(ForgeActor):
             timer.step("save_using_torchstore")
 
         timer.end()
+        end_time = time.perf_counter()
+        logger.info(
+            f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
+            f"(hg to vllm conversion: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
+        )
 
     @endpoint
     async def cleanup(self) -> None:
@@ -344,7 +351,31 @@ class RLTrainer(ForgeActor):
             self.engine.checkpointer.close()
 
 
-def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tensor]:
+def _shard_and_concat(sources: list[torch.Tensor], dim: int, tp: int) -> torch.Tensor:
+    """Shard and concatenate tensors along a given dimension.
+
+    Args:
+        source (list[torch.Tensor]): List of tensors to shard and concatenate.
+        dim (int): Dimension along which to shard and concatenate.
+        tp (int): Number of tensor parallel groups.
+
+    Returns:
+        torch.Tensor: Concatenated tensor.
+    """
+    sharded_sources = []
+    for source in sources:
+        sharded_sources.append(torch.chunk(source, tp, dim=dim))
+
+    combined_shards = []
+    for shard_idx in range(tp):
+        combined = torch.cat([s[shard_idx] for s in sharded_sources], dim=dim)
+        combined_shards.append(combined)
+    return torch.cat(combined_shards, dim=dim)
+
+
+def _qwen3_hf_to_vllm(
+    sd: dict[str, torch.Tensor], num_layers: int, vllm_tp: int
+) -> dict[str, torch.Tensor]:
     """Convert transformers state dict to vLLM format. Specifically, this fuses
     QKV projection and MLP gate_up_proj layers.
 
@@ -386,9 +417,12 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
         q = sd[prefix + "self_attn.q_proj.weight"]
         k = sd[prefix + "self_attn.k_proj.weight"]
         v = sd[prefix + "self_attn.v_proj.weight"]
-        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
 
-        # QKV fusion - handle bias if present
+        load_sd[prefix + "self_attn.qkv_proj.weight"] = _shard_and_concat(
+            [q, k, v], dim=0, tp=vllm_tp
+        )
+
+        # Untested: QKV fusion - handle bias if present
         q_bias_key = prefix + "self_attn.q_proj.bias"
         k_bias_key = prefix + "self_attn.k_proj.bias"
         v_bias_key = prefix + "self_attn.v_proj.bias"
@@ -397,24 +431,27 @@ def _qwen3_hf_to_vllm(sd: dict[str, Tensor], num_layers: int) -> dict[str, Tenso
             q_bias = sd[q_bias_key]
             k_bias = sd[k_bias_key]
             v_bias = sd[v_bias_key]
-            load_sd[prefix + "self_attn.qkv_proj.bias"] = torch.cat(
-                [q_bias, k_bias, v_bias], dim=0
+            load_sd[prefix + "self_attn.qkv_proj.bias"] = _shard_and_concat(
+                [q_bias, k_bias, v_bias], dim=0, tp=vllm_tp
             )
 
         # MLP gate_up_proj fusion
         gate = sd[prefix + "mlp.gate_proj.weight"]
         up = sd[prefix + "mlp.up_proj.weight"]
-        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+        load_sd[prefix + "mlp.gate_up_proj.weight"] = _shard_and_concat(
+            [gate, up], dim=0, tp=vllm_tp
+        )
 
-        # MLP gate_up_proj fusion - handle bias if present
+        # Untested: MLP gate_up_proj fusion - handle bias if present
         gate_bias_key = prefix + "mlp.gate_proj.bias"
         up_bias_key = prefix + "mlp.up_proj.bias"
 
         if all(key in sd for key in [gate_bias_key, up_bias_key]):
             gate_bias = sd[gate_bias_key]
             up_bias = sd[up_bias_key]
-            load_sd[prefix + "mlp.gate_up_proj.bias"] = torch.cat(
-                [gate_bias, up_bias], dim=0
+            # Same sharding has to happen here
+            load_sd[prefix + "mlp.gate_up_proj.bias"] = _shard_and_concat(
+                [gate_bias, up_bias], dim=0, tp=vllm_tp
             )
 
     return load_sd

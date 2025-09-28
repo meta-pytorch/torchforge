@@ -338,11 +338,13 @@ class Trainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, version: int):
+    async def push_weights(self, version: int, vllm_tp_DEPRECATED: int) -> None:
         """Update policy model weights with trainer's current weights."""
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
-            self.model.state_dict(), num_layers=self.model.config.num_hidden_layers
+            self.model.state_dict(),
+            num_layers=self.model.config.num_hidden_layers,
+            vllm_tp=vllm_tp_DEPRECATED,
         )
         start_time = time.time()
         await ts.put_state_dict(new_sd, key)
@@ -433,6 +435,8 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
+    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
     mlogger = get_metric_logger(
         "wandb",
         freq=1,
@@ -473,7 +477,9 @@ async def main(cfg: DictConfig):
                 return
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
-            version = await policy.get_version.route()
+            assert len(responses) > 0
+            version = responses[0].generator_version
+            assert version is not None, "Response must indicate a version"
             group = Group.new_group(
                 group_id=rollout_count,
                 group_size=group_size,
@@ -518,7 +524,9 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.fanout(
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
                 await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.fanout()
