@@ -3,287 +3,461 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-
+import inspect
 import logging
 import os
+import threading
 import time
-from contextlib import asynccontextmanager
-from functools import wraps
+from contextlib import contextmanager
+from functools import lru_cache, wraps
+from typing import List, Optional, Protocol, Tuple
 
 import torch
 
 from forge.observability.metrics import record_metric, ReductionType
 
-# Global flags for nesting detection (per process)
-_MEMORY_TRACKING_ACTIVE = False
-_MEMORY_NESTING_WARNED = False
+# Thread-local memory tracking state
+_local = threading.local()
 
 
-@asynccontextmanager
-async def _perf_metrics_cm(
-    prefix: str, track_time: bool, track_memory: bool, sync_cuda_event: bool
-):
+def _is_memory_active() -> bool:
+    """Check if memory tracking is active in current thread.
+    Used to detect nested memory tracking and skip inner tracking."""
+    return getattr(_local, "memory_active", False)
+
+
+def _set_memory_active(value: bool) -> None:
+    """Set memory tracking state for current thread.
+    Used to detect nested memory tracking and skip inner tracking."""
+    _local.memory_active = value
+
+
+@lru_cache(maxsize=1000)
+def _warn_nested_memory_tracking(prefix: str) -> None:
+    """Log nesting warning once per prefix using lru_cache for deduplication. Avoids spamming logs."""
+    logging.warning(
+        f"Nested memory tracking detected in {prefix}. Skipping inner tracking."
+    )
+
+
+"""
+==========
+Step Timer
+==========
+"""
+
+
+class Timer:
     """
-    Shared async context manager for recording performance metrics (time, memory).
+    Multi-step timer that records average and max timing metrics.
+
+    Supports non-blocking CUDA timing via CUDA events and background polling threads;
+
+    Aggregation is handled externally by the metrics system via record_metric.
+
+    User must call start() and end() explicitly.
+    Supports reuse: after calling end(), you may call start() again to begin a new timing session.
+
+    Local env flag DISABLE_PERF_METRICS can be used to skip all timing operations.
+    Local env flag METRIC_TIMER_USES_CUDA can be used to set CUDA timing.
 
     Args:
-        prefix (str): Required prefix for metric keys (e.g., 'trainer_step').
-        track_time (bool): If True, record timing metrics (avg/max duration).
-        track_memory (bool): If True, record memory metrics (delta_end_start/peak, GiB).
-        sync_cuda_event (bool): If True, use CUDA events for precise timing synchronization.
+        prefix (str): Prefix for metric names, e.g. "my_step" -> "my_step/{step_name}/duration_avg_s".
+        use_cuda (bool): Sets CUDA timing if True and CUDA is available.
 
-    Notes:
-        - Uses CUDA events for synchronization when sync_cuda_event=True and CUDA is available.
-        - Only the outermost scope tracks memory to avoid torch.cuda.max_memory_allocated() conflicts.
-             i.e. foo(bar()) will only track memory for foo().
-        - Inner scopes skip memory metrics with a one-time warning.
-        - DISABLE_PERF_METRICS='true' skips all metrics.
-        - METRICS_USE_CUDA_SYNC='true' forces CUDA event sync (overrides sync_cuda_event arg).
-        - Process-local
+    Example:
+        timer = Timer("my_prefix")
+        timer.start()
+        time.sleep(0.1)  # Work for step "a"
+        timer.step("my_step_a")
+        for i in range(1, 4):  # 3 iterations
+            time.sleep(i/10)  # 0.1, 0.2, 0.3 seconds
+            timer.step("my_step_b")
+        timer.end()  # Records metrics, including total time end-start.
+
+        >>> Records:
+        >>> my_prefix/my_step_a/duration_avg_s: 0.1
+        >>> my_prefix/my_step_a/duration_max_s: 0.1
+        >>> my_prefix/my_step_b/duration_avg_s: 0.2 # Average of 0.1, 0.2, 0.3
+        >>> my_prefix/my_step_b/duration_max_s: 0.3 # Max of 0.1, 0.2, 0.3
+        >>> my_prefix/total_duration_avg_s: 0.7 # Total: 0.1 + 0.1 + 0.2 + 0.3
+        >>> my_prefix/total_duration_max_s: 0.7
+
+        # Can reuse the same timer after end()
+        timer.start()  # Begin new session
+        timer.step("step1")
+        timer.end()
     """
-    if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
-        yield
-        return
 
-    do_sync = (
-        os.getenv("METRICS_USE_CUDA_SYNC", "false").lower() == "true" or sync_cuda_event
-    )
-    global _MEMORY_TRACKING_ACTIVE, _MEMORY_NESTING_WARNED
+    def __init__(self, prefix: str, use_cuda: bool = False):
+        self.prefix = prefix
+        use_cuda_events = (
+            os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+        ) and torch.cuda.is_available()
+        use_cpu = not use_cuda_events
+        self.timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
+        self._active = False
 
-    # Check nesting; disable memory tracking for inner scopes
-    is_outer_scope = not _MEMORY_TRACKING_ACTIVE
-    local_memory = track_memory and is_outer_scope
-    if track_memory and not is_outer_scope and not _MEMORY_NESTING_WARNED:
-        # TODO: add log_once in forge utilities and remove _MEMORY_NESTING_WARNED
-        logging.warning(
-            f"Nested memory tracking detected in {prefix}. Skipping memory metrics to prioritize outer scope."
+    def start(self) -> None:
+        if self._active:
+            raise ValueError("Timer has already been started")
+        self._active = True
+        self.timer.start()
+
+    def step(self, step_name: str) -> None:
+        if not self._active:
+            raise ValueError("Timer must be started before calling step")
+        self.timer.step(step_name)
+
+    def end(self) -> None:
+        if not self._active:
+            raise ValueError("Timer must be started before calling end")
+        self.timer.step("end")  # dropped from steps, included in total
+        self.timer.wait_for_all()  # only needed for CUDA, no-op for CPU
+        self._record_metrics()
+        self._active = False  # Allow reuse by calling start() again
+
+    def _record_metrics(self) -> None:
+        durations = self.timer.get_all_durations()
+
+        # Total: sum all recorded durations (full timeline including end)
+        total_ms = sum(d_ms for name, d_ms in durations)
+        total_s = total_ms / 1000.0
+        record_metric(
+            f"{self.prefix}/total_duration_avg_s", total_s, ReductionType.MEAN
         )
-        _MEMORY_NESTING_WARNED = True
+        record_metric(f"{self.prefix}/total_duration_max_s", total_s, ReductionType.MAX)
 
-    if local_memory:
-        _MEMORY_TRACKING_ACTIVE = True
-        if torch.cuda.is_available():
-            torch.cuda.reset_max_memory_allocated()
+        # Steps: record each individually (drop last "end")
+        for name, d_ms in durations[:-1]:
+            d_s = d_ms / 1000.0
+            record_metric(
+                f"{self.prefix}/{name}/duration_avg_s", d_s, ReductionType.MEAN
+            )
+            record_metric(
+                f"{self.prefix}/{name}/duration_max_s", d_s, ReductionType.MAX
+            )
 
-    try:
-        # Initialize CUDA events for timing if needed
-        start_event = None
-        end_event = None
-        if do_sync and torch.cuda.is_available() and track_time:
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
-            start_event.record()  # Record start in default stream
 
-        start_time = time.perf_counter() if track_time else 0
-        start_mem = (
-            torch.cuda.memory_allocated() / 1024**3
-            if local_memory and torch.cuda.is_available()
-            else 0
+class _TimerProtocol(Protocol):
+    def start(self) -> None:
+        ...
+
+    def step(self, name: str) -> None:
+        ...
+
+    def wait_for_all(self) -> None:
+        ...
+
+    def get_all_durations(self) -> List[Tuple[str, float]]:
+        ...
+
+
+class _TimerCPU(_TimerProtocol):
+    """
+    CPU timing backend using perf_counter.
+    """
+
+    def __init__(self) -> None:
+        self._durations: List[Tuple[str, float]] = []
+        self._chain_start: Optional[float] = None
+
+    def start(self) -> None:
+        # Reset state for reuse
+        self._durations = []
+        self._chain_start = time.perf_counter()
+
+    def step(self, name: str) -> None:
+        if self._chain_start is None:
+            raise ValueError("Timer must be started before calling step")
+        now = time.perf_counter()
+        delta_ms = (now - self._chain_start) * 1000
+        self._durations.append((name, delta_ms))
+        self._chain_start = now
+
+    def wait_for_all(self) -> None:
+        """No threads for CPU timing - nothing to wait for."""
+        pass
+
+    def get_all_durations(self) -> List[Tuple[str, float]]:
+        return self._durations[:]
+
+
+class _TimerCUDA(_TimerProtocol):
+    """
+    CUDA timing backend with non-blocking events and polling threads.
+    Uses background threads to poll CUDA events without blocking main thread,
+    necessary because CUDA event queries can be expensive and we want to avoid
+    torch.cuda.synchronize() calls during timing operations.
+
+    Reference: https://github.com/meta-pytorch/monarch/blob/main/python/monarch/timer/execution_timer.py
+    """
+
+    def __init__(self) -> None:
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available for timing")
+        self._durations: List[Tuple[str, float]] = []
+        self._threads: List[threading.Thread] = []
+        self._lock = (
+            threading.Lock()
+        )  # Protects _durations and _threads from concurrent access
+        self._chain_start: Optional[torch.cuda.Event] = None
+
+    def start(self) -> None:
+        # Reset state for reuse
+        self._durations = []
+        with self._lock:
+            self._threads = []
+        stream = torch.cuda.current_stream()
+        start_event = torch.cuda.Event(enable_timing=True)
+        start_event.record(stream)
+        self._chain_start = start_event
+
+    def step(self, name: str) -> None:
+        if self._chain_start is None:
+            raise ValueError("Timer must be started before calling step")
+
+        # Pre-allocate slot with placeholder to preserve ordering when pooling
+        with self._lock:
+            idx = len(self._durations)
+            self._durations.append((name, -1.0))  # Placeholder, -1 indicates pending
+
+        stream = torch.cuda.current_stream()
+        end_event = torch.cuda.Event(enable_timing=True)
+        end_event.record(stream)
+
+        thread = threading.Thread(
+            daemon=True,  # Use daemon threads: auto-terminate on process exit to prevent leaks/hangs.
+            # Polls are short-lived and non-critical; explicit end() joins fully anyway.
+            target=self._poll_and_store,
+            args=(idx, name, self._chain_start, end_event),
         )
+        thread.start()
 
-        yield
+        with self._lock:
+            self._threads.append(thread)
 
-        # Record end event and compute duration
-        duration = 0
-        if track_time:
-            if do_sync and torch.cuda.is_available() and start_event and end_event:
-                end_event.record()  # Record end in default stream
-                end_event.synchronize()  # Wait for end event to complete
-                duration = (
-                    start_event.elapsed_time(end_event) / 1000.0
-                )  # Convert ms to seconds
-            else:
-                end_time = time.perf_counter()
-                duration = end_time - start_time
+        # Clean up completed threads to prevent accumulation
+        self._join_completed_threads()
 
-        end_mem = (
-            torch.cuda.memory_allocated() / 1024**3
-            if local_memory and torch.cuda.is_available()
-            else 0
-        )
+        self._chain_start = end_event
 
-        if track_time:
-            await record_metric(
-                f"{prefix}/duration_avg (s)", duration, ReductionType.MEAN
-            )
-            await record_metric(
-                f"{prefix}/duration_max (s)", duration, ReductionType.MAX
-            )
+    def _poll_and_store(
+        self,
+        idx: int,
+        name: str,
+        start_event: torch.cuda.Event,
+        end_event: torch.cuda.Event,
+    ) -> None:
+        """
+        Background thread function that polls CUDA events without blocking.
+        Necessary to avoid torch.cuda.synchronize() calls which would stall GPU work.
+        Polls every 0.01 seconds until event completes, then stores the timing result.
+        """
+        while not end_event.query():
+            time.sleep(0.01)
 
-        if local_memory:
-            delta = end_mem - start_mem
-            peak_mem = (
-                torch.cuda.max_memory_allocated() / 1024**3
-                if torch.cuda.is_available()
-                else 0
-            )
-            await record_metric(
-                f"{prefix}/memory_delta_end_start_avg (GB)", delta, ReductionType.MEAN
-            )
-            await record_metric(
-                f"{prefix}/memory_peak_max (GB)", peak_mem, ReductionType.MAX
-            )
-    except Exception as e:
-        print(f"Warning: Error during perf metrics for {prefix=}: {e}")
-    finally:
-        if local_memory:
-            _MEMORY_TRACKING_ACTIVE = False
-            if torch.cuda.is_available():
-                torch.cuda.reset_max_memory_allocated()
+        elapsed_ms = start_event.elapsed_time(end_event)
+        with self._lock:
+            self._durations[idx] = (name, elapsed_ms)
+
+    def _join_completed_threads(self) -> None:
+        """Clean up completed threads to prevent accumulation."""
+        with self._lock:
+            still_active = []
+            for t in self._threads:
+                if not t.is_alive():
+                    t.join()  # Safe since thread is already done
+                else:
+                    still_active.append(t)
+            self._threads = still_active
+
+    def wait_for_all(self) -> None:
+        """
+        Join all background polling threads to ensure timing measurements are complete.
+        This is CPU-bound waiting (joining threads) and doesn't block GPU operations.
+        Called before reading final timing results to ensure all measurements are available.
+        """
+        with self._lock:
+            threads = self._threads[:]
+
+        for t in threads:
+            t.join()
+
+        with self._lock:
+            self._threads.clear()
+
+    def get_all_durations(self) -> List[Tuple[str, float]]:
+        with self._lock:
+            # Check for unfinished timing (defensive programming)
+            for name, duration in self._durations:
+                if duration < 0:
+                    raise RuntimeError(f"Unfinished timing for {name}")
+            return self._durations[:]
+
+
+"""
+=======================================
+Memory+timer as decorator / ctx manager
+=======================================
+"""
 
 
 def record_perf_metrics(
     prefix: str,
     track_time: bool = True,
     track_memory: bool = False,
-    sync_cuda_event: bool = False,
+    use_cuda: bool = False,
 ):
-    """Decorator for recording performance metrics (time, memory).
-    For details, see _perf_metrics_cm.
+    """
+    Decorator for functions with performance tracking, supporting both sync and async functions by detecting coroutine status.
+    Tracks time and/or memory if enabled, recording metrics via record_metric. Skips if DISABLE_PERF_METRICS env flag is true.
+
+    Args:
+        prefix (str): Prefix for metric names
+        track_time (bool): Whether to track execution time. Defaults to True.
+        track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
+        use_cuda (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_CUDA env var).
+            Defaults to False.
 
     Example:
-        @record_perf_metrics("trainer_step")
-        async def trainer_step(...):
-            ...
+        @record_perf_metrics("my_prefix", track_time=True, track_memory=True)
+        async def my_async_func():
+            pass
+
+        @record_perf_metrics("my_prefix", track_time=True, track_memory=True)
+        def my_sync_func():
+            pass
     """
 
     def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            async with _perf_metrics_cm(
-                prefix, track_time, track_memory, sync_cuda_event
-            ):
-                return await func(*args, **kwargs)
+        if inspect.iscoroutinefunction(func):
 
-        return wrapper
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+                    return await func(*args, **kwargs)
+                with _memory_tracking_cm(prefix, track_memory), _timer_cm(
+                    prefix, track_time, use_cuda
+                ):
+                    return await func(*args, **kwargs)
+
+            return async_wrapper
+        else:
+
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+                    return func(*args, **kwargs)
+                with _memory_tracking_cm(prefix, track_memory), _timer_cm(
+                    prefix, track_time, use_cuda
+                ):
+                    return func(*args, **kwargs)
+
+            return sync_wrapper
 
     return decorator
 
 
-@asynccontextmanager
-async def record_perf_metrics_ctx(
+@contextmanager
+def record_perf_metrics_ctx(
     prefix: str,
     track_time: bool = True,
     track_memory: bool = False,
-    sync_cuda_event: bool = False,
+    use_cuda: bool = False,
 ):
-    """Async context manager for recording performance metrics (time, memory).
-    For details, see _perf_metrics_cm.
+    """
+    Context manager for performance tracking in a code block, combining time and memory metrics.
+    Safe for use in async code; skips if DISABLE_PERF_METRICS env flag is true.
+
+    Args:
+        prefix (str): Prefix for metric names
+        track_time (bool): Whether to track execution time. Defaults to True.
+        track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
+        use_cuda (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_CUDA env var). Defaults to False.
 
     Example:
-        async with record_perf_metrics_ctx("trainer_step"):
-            ...
+       with record_perf_metrics_ctx("my_block", track_time=True, track_memory=True):
+            await some_task()
+            some_other_task()
     """
-    async with _perf_metrics_cm(prefix, track_time, track_memory, sync_cuda_event):
+
+    if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+        yield
+        return
+
+    with _memory_tracking_cm(prefix, track_memory), _timer_cm(
+        prefix, track_time, use_cuda
+    ):
         yield
 
 
-class StepTimer:
-    """Multi-step timer for loops with prefix-based metrics and sync cuda event support.
+@contextmanager
+def _memory_tracking_cm(prefix: str, track_memory: bool):
+    """
+    Context manager for tracking CUDA's memory delta and peak during execution of a function
+    in a process. Metrics are logged and aggregated using `record_metrics`
 
-    Args:
-        prefix (str): Prefix for metric keys (e.g., 'trainer_step/')
-        sync_cuda_event (bool): If True, use CUDA events for precise timing synchronization
+    One challenge is if we have nested functions using this utility. When it is called,
+    it executes `torch.cuda.reset_max_memory_allocated()`. The inner function would wipe
+    the memory stats of the outer function. To avoid this, we use a thread safe variable
+    to mark that memory is currently being tracked. If this hapens, then the inner function
+    does **NOT** track memory and logs a warning once.
+    """
+    is_outer_scope = not _is_memory_active()
+    should_track_memory = track_memory and is_outer_scope and torch.cuda.is_available()
 
-    Example:
-        timer = StepTimer("trainer_perf/step")
-        await timer.start()
-        foo()
-        await timer.step("foo")
-        bar()
-        await timer.step("bar")
-        await timer.end()
+    if track_memory and not is_outer_scope:
+        _warn_nested_memory_tracking(prefix)
 
-        Metrics logged:
-            trainer_perf/step/foo/duration_avg (s)
-            trainer_perf/step/foo/duration_max (s)
+    if should_track_memory:
+        _set_memory_active(True)
+        torch.cuda.reset_max_memory_allocated()
+        start_mem = torch.cuda.memory_allocated()
+    else:
+        start_mem = 0.0
 
-            trainer_perf/step/bar/duration_avg (s)
-            trainer_perf/step/bar/duration_max (s)
+    try:
+        yield
+    finally:
+        if should_track_memory:
+            end_mem = torch.cuda.memory_allocated()
+            delta = (end_mem - start_mem) / 1024**3
+            peak_mem = torch.cuda.max_memory_allocated() / 1024**3
+            record_metric(
+                f"{prefix}/memory_delta_end_start_avg_gb", delta, ReductionType.MEAN
+            )
+            record_metric(f"{prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX)
+            _set_memory_active(False)
+            torch.cuda.reset_max_memory_allocated()
 
-            trainer_perf/step/total_duration_avg (s)
-            trainer_perf/step/total_duration_max (s)
+
+@contextmanager
+def _timer_cm(prefix: str, track_time: bool, use_cuda: bool):
+    """
+    Sync context manager for measuring execution time.
+    Used internally by decorators and async context managers for timing measurements.
     """
 
-    def __init__(self, prefix: str, sync_cuda_event: bool = False):
-        self.prefix = prefix
-        self.sync_cuda_event = (
-            os.getenv("METRICS_USE_CUDA_SYNC", "false").lower() == "true"
-            or sync_cuda_event
-        )
-        self.start_time = None
-        self.last_time = None
-        self.last_event = None
-        self.current_event = None
+    use_cuda_events = (
+        os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+    ) and torch.cuda.is_available()
+    use_cpu = not use_cuda_events
+    timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
 
-    async def start(self):
-        """Start the timer."""
-        if self.sync_cuda_event and torch.cuda.is_available():
-            self.current_event = torch.cuda.Event(enable_timing=True)
-            self.current_event.record()  # Record start in default stream
-        self.start_time = time.perf_counter()
-        self.last_time = self.start_time
-        self.last_event = self.current_event
+    if track_time:
+        timer.start()
 
-    async def step(self, step_name: str):
-        """
-        Record timing for a step within the timer's scope.
-
-        Args:
-            step_name (str): Name of the step for metric suffix
-        """
-        duration = 0
-        if self.sync_cuda_event and torch.cuda.is_available():
-            self.current_event = torch.cuda.Event(enable_timing=True)
-            self.current_event.record()  # Record step end in default stream
-            if self.last_event:
-                self.current_event.synchronize()  # Wait for current event
-                duration = (
-                    self.last_event.elapsed_time(self.current_event) / 1000.0
-                )  # ms to seconds
-            self.last_event = self.current_event
-        else:
-            now = time.perf_counter()
-            if self.last_time is not None:
-                duration = now - self.last_time
-            self.last_time = now
-
-        if self.last_time is not None or self.last_event:
-            await record_metric(
-                f"{self.prefix}/{step_name}/duration_avg (s)",
-                duration,
-                ReductionType.MEAN,
-            )
-            await record_metric(
-                f"{self.prefix}/{step_name}/duration_max (s)",
-                duration,
-                ReductionType.MAX,
-            )
-
-    async def end(self):
-        """End the timer and record total duration."""
-        duration = 0
-        if (
-            self.sync_cuda_event
-            and torch.cuda.is_available()
-            and self.start_time
-            and self.last_event
-        ):
-            end_event = torch.cuda.Event(enable_timing=True)
-            end_event.record()
-            end_event.synchronize()
-            duration = (
-                self.current_event.elapsed_time(end_event) / 1000.0
-                if self.current_event
-                else (time.perf_counter() - self.start_time)
-            )
-        else:
-            total_duration = time.perf_counter() - self.start_time
-            duration = total_duration
-
-        await record_metric(
-            f"{self.prefix}/total_duration_avg (s)", duration, ReductionType.MEAN
-        )
-        await record_metric(
-            f"{self.prefix}/total_duration_max (s)", duration, ReductionType.MAX
-        )
+    try:
+        yield
+    finally:
+        if track_time:
+            timer.step("duration")  # Capture full time from start to here
+            timer.wait_for_all()
+            durations = timer.get_all_durations()
+            # Single block: one duration, record directly
+            if durations:
+                _, d_ms = durations[0]
+                d_s = d_ms / 1000.0
+                record_metric(f"{prefix}/duration_avg_s", d_s, ReductionType.MEAN)
+                record_metric(f"{prefix}/duration_max_s", d_s, ReductionType.MAX)
