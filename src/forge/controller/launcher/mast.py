@@ -279,6 +279,9 @@ class MastProvisioner(BaseProvisioner):
                 "hpcJobOncall": "monarch",
                 "hpcClusterUuid": "MastProdCluster",
                 "rmAttribution": "pytorch4all_clients_approved",
+                # "hpcClusterUuid": "MastGenAICluster",
+                # "rmAttribution": "gen_ai_llama_systems_training",
+                # "localityConstraints": ["region", "pci"],
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
@@ -306,6 +309,10 @@ class MastProvisioner(BaseProvisioner):
             **hyperactor.DEFAULT_NCCL_ENVS,
             **hyperactor.DEFAULT_TORCH_ENVS,
             **{"TORCHX_RUN_PYTHONPATH": f"{REMOTE_END_PYTHONPATH}:{REMOTE_WORK_DIR}"},
+            **{
+                "HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS": "600",
+                "HYPERACTOR_CODE_MAX_FRAME_LENGTH": "1073741824",
+            },
         }
 
         packages = Packages()
@@ -331,7 +338,7 @@ class MastProvisioner(BaseProvisioner):
         for role in appdef.roles:
             role.resource.capabilities["server_sub_types"] = [
                 # role.resource.capabilities["server_sub_types"][2]  # hardcoded to ROCE
-                role.resource.capabilities["server_sub_types"][1]  # hardcoded to ROCE
+                role.resource.capabilities["server_sub_types"][1]  # GTT
             ]
 
         return appdef

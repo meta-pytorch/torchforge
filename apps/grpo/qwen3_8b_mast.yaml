@@ -1,13 +1,16 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 # Global configuration
 group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-1.7B"
+model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
+scheduler: mast
+job_name: rithesh-forge-zhu-qwen8B-ex1r1-dp4tp2
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/20
+
 
 # Dataset configuration
 dataset:
@@ -20,22 +23,30 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: ${model}
-    tensor_parallel_size: 1
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
+    # TODO: Had to disable this becasue vLLm wouldn't like
+    # need to revisit.
+    disable_custom_all_reduce: true
   sampling_config:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+  process_config:
+    procs: ${policy.engine_config.tensor_parallel_size}
+    with_gpus: true
+    hosts: 1
+  checkpoint_path: ${checkpoint_folder}
 
 # Trainer configuration
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: hf://${model}
+    flavor: 8B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -53,22 +64,27 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    data_parallel_shard_degree: 4
+    tensor_parallel_degree: 2
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: hf://${model}
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
+    folder: ${checkpoint_folder}
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  comm:
+    # TODO: revisit this. causing NCCL timeouts on inits when loading CP
+    # from oilfs if the traienr is not in the same region as in PCI
+    init_timeout_seconds: 3600
 
 # Replay buffer configuration
 replay_buffer:
@@ -80,8 +96,8 @@ replay_buffer:
 ref_model:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: hf://${model}
+    flavor: 8B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -95,35 +111,46 @@ ref_model:
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    enable: false
-    initial_load_path: hf://${model}
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
     initial_load_in_hf: true
 
 # All resource allocations
 services:
-  policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
-    with_gpus: true
-  ref_model:
+  dataset:
     procs: 1
     num_replicas: 1
+    with_gpus: false
+    mesh_name: dataset
+  policy:
+    procs: ${policy.engine_config.tensor_parallel_size}
+    num_replicas: 2
     with_gpus: true
+    hosts: 1
+    mesh_name: policy
+  trainer:
+    procs: 8
+    num_replicas: 1
+    with_gpus: true
+    hosts: 1
+    mesh_name: trainer
+  replay_buffer:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+    mesh_name: replay_buffer
+  ref_model:
+    procs: ${ref_model.parallelism.tensor_parallel_degree}
+    num_replicas: 2
+    with_gpus: true
+    hosts: 1
+    mesh_name: ref_model
+  compute_advantages:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+    mesh_name: compute_advantages
   reward_actor:
     procs: 1
     num_replicas: 1
     with_gpus: false
-
-actors:
-  dataset:
-    procs: 1
-    with_gpus: false
-  trainer:
-    procs: 1
-    with_gpus: true
-  replay_buffer:
-    procs: 1
-    with_gpus: false
-  compute_advantages:
-    procs: 1
-    with_gpus: false
+    mesh_name: reward_actor
