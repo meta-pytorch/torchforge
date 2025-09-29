@@ -11,7 +11,7 @@ import time
 
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.observability.metric_actors import get_metric_logger
+from forge.observability.metric_actors import setup_metric_logger
 from forge.observability.metrics import record_metric, ReductionType
 
 from monarch.actor import current_rank, endpoint
@@ -60,13 +60,13 @@ async def main():
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
+    mlogger = await setup_metric_logger()
 
     # Spawn services first (triggers registrations via provisioner hook)
     trainer = await TrainActor.options(**service_config).as_service()
     generator = await GeneratorActor.options(**service_config).as_service()
 
     # Now init config on global (inits backends eagerly across fetchers)
-    mlogger = await get_metric_logger()
     await mlogger.init_backends.call_one(config)
 
     for i in range(3):

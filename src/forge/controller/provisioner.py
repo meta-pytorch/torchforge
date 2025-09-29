@@ -16,19 +16,12 @@ import uuid
 import monarch
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import (
-    Actor,
-    endpoint,
-    get_or_spawn_controller,
-    HostMesh,
-    ProcMesh,
-    this_host,
-)
+from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
-from forge.observability.metric_actors import GlobalLoggingActor, LocalFetcherActor
+from forge.observability.metric_actors import setup_metric_logger
 
 from forge.types import ProcessConfig
 
@@ -151,24 +144,6 @@ class Provisioner:
             server_name,
         )
 
-    async def _setup_logging(self, procs: ProcMesh) -> None:
-        """Spawn and register local fetcher for metric logging on each process.
-
-        When any process is created, we create for each rank a LocalFetcherActor and
-        store it at GlobalLoggingActor. Backends (e.g. wandb) should be eagerly instantiated
-        later in main by calling `global_logger.initialize_backends.call_one(logging_config)`
-        """
-
-        local_fetcher_actor = await procs.spawn(
-            "local_fetcher_actor", LocalFetcherActor
-        )
-        procs._local_fetcher = local_fetcher_actor
-
-        global_logger = await get_or_spawn_controller(
-            "global_logger", GlobalLoggingActor
-        )
-        await global_logger.register_fetcher.call_one(local_fetcher_actor, procs)
-
     async def get_proc_mesh(
         self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
     ):
@@ -243,7 +218,7 @@ class Provisioner:
                 self._proc_server_map[procs] = server_name
 
         # Spawn local logging actor on each process and register with global logger
-        await self._setup_logging(procs)
+        _ = await setup_metric_logger(procs)
 
         return procs
 
@@ -252,9 +227,7 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
-                global_logger = await get_or_spawn_controller(
-                    "global_logger", GlobalLoggingActor
-                )
+                global_logger = await setup_metric_logger(proc_mesh)
                 await global_logger.deregister_fetcher.call_one(proc_mesh)
 
             if hasattr(proc_mesh, "_gpu_ids"):
