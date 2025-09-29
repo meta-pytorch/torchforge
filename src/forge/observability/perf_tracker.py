@@ -66,12 +66,11 @@ class Tracer:
 
     Args:
         prefix (str): Prefix for metric names, e.g. "my_prefix" -> "{my_prefix}/{step_name}/duration_avg_s".
-        track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        time_with_gpu (bool): Sets CUDA timing if True and CUDA is available.
+        timer (str): Timing backend; "cpu" (default) or "gpu".
 
     Example:
-        tracer = Tracer("my_prefix", track_memory=True)
+        tracer = Tracer("my_prefix", track_memory=True, timer="gpu")
         tracer.start()  # Memory tracking starts here
         time.sleep(0.1)  # Work for step "a"
         tracer.step("my_step_a")  # Only affects timing
@@ -99,14 +98,15 @@ class Tracer:
     def __init__(
         self,
         prefix: str,
-        track_time: bool = True,
         track_memory: bool = False,
-        time_with_gpu: bool = False,
+        timer: str = "cpu",  # "cpu" or "gpu"
     ):
+        if timer not in ("cpu", "gpu"):
+            raise ValueError('timer must be "cpu" or "gpu"')
+
         self.prefix = prefix
-        self.track_time = track_time
         self.track_memory = track_memory
-        self.time_with_gpu = time_with_gpu
+        self.time_with_gpu = timer == "gpu"
         self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
         self._active = False
 
@@ -125,15 +125,13 @@ class Tracer:
 
         self._active = True
 
-        # Start timing
-        if self.track_time:
-            time_with_gpu_events = (
-                os.getenv(METRIC_TIMER_USES_CUDA, str(self.time_with_gpu)).lower()
-                == "true"
-            ) and torch.cuda.is_available()
-            use_cpu = not time_with_gpu_events
-            self._timer = _TimerCPU() if use_cpu else _TimerCUDA()
-            self._timer.start()
+        # Start timing (always enabled)
+        time_with_gpu_events = (
+            os.getenv(METRIC_TIMER_USES_CUDA, str(self.time_with_gpu)).lower() == "true"
+        ) and torch.cuda.is_available()
+        use_cpu = not time_with_gpu_events
+        self._timer = _TimerCPU() if use_cpu else _TimerCUDA()
+        self._timer.start()
 
         # Start memory tracking
         if self.track_memory:
@@ -145,8 +143,7 @@ class Tracer:
             return
         if not self._active:
             raise ValueError("Tracer must be started before calling step")
-        if self._timer:
-            self._timer.step(step_name)
+        self._timer.step(step_name)
 
     def stop(self) -> None:
         if self._disable:
@@ -154,11 +151,10 @@ class Tracer:
         if not self._active:
             raise ValueError("Tracer must be started before calling stop")
 
-        # Stop timing
-        if self._timer:
-            self._timer.step("end")  # dropped from steps, included in total
-            self._record_timing_metrics()
-            self._timer = None
+        # Stop timing (always enabled)
+        self._timer.step("end")  # dropped from steps, included in total
+        self._record_timing_metrics()
+        self._timer = None
 
         # Stop memory tracking
         if self._memory_started:
@@ -364,9 +360,8 @@ Memory+timer as decorator / ctx manager
 
 def trace(
     prefix: str,
-    track_time: bool = True,
     track_memory: bool = False,
-    time_with_gpu: bool = False,
+    timer: str = "cpu",  # "cpu" or "gpu"
 ):
     """
     Dual-purpose: Decorator or context manager for performance tracking.
@@ -377,27 +372,28 @@ def trace(
 
     Args:
         prefix (str): Prefix for metric names
-        track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        time_with_gpu (bool): Whether to use CUDA events for timing. Defaults to False.
+        timer (str): Timing backend; "cpu" (default) or "gpu" (requires CUDA).
 
     Decorator Examples:
-        @trace("my_prefix", track_time=True, track_memory=True)
+        @trace("my_prefix", track_memory=True, timer="gpu")
         async def my_async_func():
             pass
 
-        @trace("my_prefix", track_time=True, track_memory=True)
+        @trace("my_prefix", track_memory=True, timer="gpu")
         def my_sync_func():
             pass
 
     Context Manager Example:
-        with trace("my_block", track_time=True, track_memory=True) as tracer:
+        with trace("my_block", track_memory=True, timer="gpu") as tracer:
             tracer.step("fwd")  # Optional: mark steps
             await some_task()
             tracer.step("bwd")  # Optional
             some_other_task()
             # tracer.stop() called automatically on exit
     """
+    if timer not in ("cpu", "gpu"):
+        raise ValueError('timer must be "cpu" or "gpu"')
 
     class _Dual:
         def __call__(self, func):
@@ -406,7 +402,7 @@ def trace(
 
                 @wraps(func)
                 async def async_wrapper(*args, **kwargs):
-                    tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+                    tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
                     tracer.start()
                     try:
                         return await func(*args, **kwargs)
@@ -418,7 +414,7 @@ def trace(
 
                 @wraps(func)
                 def sync_wrapper(*args, **kwargs):
-                    tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+                    tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
                     tracer.start()
                     try:
                         return func(*args, **kwargs)
@@ -429,7 +425,7 @@ def trace(
 
         def __enter__(self):
             """Context manager mode: Return Tracer for steps"""
-            self._tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+            self._tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
             self._tracer.start()
             return self._tracer
 

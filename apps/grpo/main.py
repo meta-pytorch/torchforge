@@ -341,7 +341,7 @@ async def main(cfg: DictConfig):
         rollout_count = 0
         pad_id = await dataloader.pad_token.call_one()
         while True:
-            t = Tracer("main_perf/rollout")
+            t = Tracer("main_perf/continuous_rollouts")
             t.start()
             sample = await dataloader.sample.call_one()
             if sample is None:
@@ -412,19 +412,27 @@ async def main(cfg: DictConfig):
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
-            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
             buffer_size = await replay_buffer._numel.call_one()
-            mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
-            mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1
-            record_metric("main/rollout/count_rollout_iterations", 1, Reduce.SUM)
+            record_metric(
+                "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
+            )
             t.stop()
 
     async def continuous_training():
         training_step = 0
+        restart_tracer = True  # Flag to control when to restart tracer
+
         while True:
+            # Restart tracer when needed (initial start or after completing a training step)
+            # Otherwise, we cannot measure time waiting for buffer
+            if restart_tracer:
+                t = Tracer("main_perf/continuous_training")
+                t.start()
+                restart_tracer = False
+
             batch = await replay_buffer.sample.call_one(
                 curr_policy_version=training_step
             )
@@ -437,15 +445,18 @@ async def main(cfg: DictConfig):
                 inputs, targets = batch
                 loss = await trainer.train_step.call_one(inputs, targets)
                 training_step += 1
-                mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(training_step)
-                await policy.update_weights.fanout(training_step)
+                t.step("train_step")
 
-                t.step("weight_updates")
+                await trainer.push_weights.call(training_step)
+                t.step("push_weights")
+
+                await policy.update_weights.fanout(training_step)
+                t.step("update_weights")
+                t.stop()
+                restart_tracer = True
 
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
-                t.stop()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

@@ -40,7 +40,7 @@ from forge.actors._torchstore_utils import DcpHandle, get_param_key
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import trace, Tracer
+from forge.observability.perf_tracker import Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -233,17 +233,12 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    @trace(
-        "trainer_perf",
-        track_time=False,
-        track_memory=True,
-    )
     async def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
 
         # Log timesteps
-        t = Tracer("trainer_perf/step", time_with_gpu=True)
+        t = Tracer("trainer_perf/step", timer="gpu", track_memory=True)
         t.start()
 
         self.engine.gc_handler.run(self.step)
@@ -355,10 +350,9 @@ class RLTrainer(ForgeActor):
             await ts.put_state_dict(vllm_ready_hf_sd, key)
 
     @endpoint
-    @trace(prefix="rl_trainer_perf/push_weights", track_time=False, track_memory=True)
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
-        t = Tracer("rl_trainer_perf/push_weights", time_with_gpu=True)
+        t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
         t.start()
         if not self.use_vllm_builtin_load:
             result = await self._push_weights_DEPRECATED(

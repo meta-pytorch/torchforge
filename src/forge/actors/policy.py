@@ -296,7 +296,7 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
-        t = Tracer("policy_perf/generate", time_with_gpu=True)
+        t = Tracer("policy_perf/generate", timer="gpu")
         t.start()
 
         # Record policy generation metrics

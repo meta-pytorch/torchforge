@@ -92,9 +92,8 @@ class ReferenceModel(ForgeActor):
     @endpoint
     @trace(
         "reference_perf/forward",
-        track_time=False,
         track_memory=True,
-        time_with_gpu=True,
+        timer="gpu",
     )
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
 
@@ -106,7 +105,7 @@ class ReferenceModel(ForgeActor):
             Reduce.MEAN,
         )
 
-        t = Tracer("reference_perf/forward", time_with_gpu=True)
+        t = Tracer("reference_perf/forward", timer="gpu")
         t.start()
         self.engine.gc_handler.run(self.step)
         t.step("garbage_collection")

@@ -46,7 +46,7 @@ class ReplayBuffer(ForgeActor):
         record_metric("buffer/add/count_episodes_added", 1, Reduce.SUM)
 
     @endpoint
-    @trace("buffer_perf/sample", track_time=True, track_memory=False)
+    @trace("buffer_perf/sample", track_memory=False)
     async def sample(
         self, curr_policy_version: int, batch_size: int | None = None
     ) -> tuple[tuple[Any, ...], ...] | None:
