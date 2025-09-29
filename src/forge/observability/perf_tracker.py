@@ -228,7 +228,6 @@ class _TimerCUDA(_TimerProtocol):
 
         thread = threading.Thread(
             daemon=True,  # Use daemon threads: auto-terminate on process exit to prevent leaks/hangs.
-            # Polls are short-lived and non-critical; explicit end() joins fully anyway.
             target=self._poll_and_store,
             args=(idx, name, self._chain_start, end_event),
         )
