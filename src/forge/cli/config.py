@@ -133,6 +133,36 @@ def _merge_yaml_and_cli_args(yaml_args: Namespace, cli_args: list[str]) -> DictC
     return OmegaConf.merge(yaml_conf, cli_conf)
 
 
+def _resolve_hf_model_path(hf_url: str) -> str:
+    """Resolve HuggingFace model URL to local path using snapshot_download."""
+    if not hf_url.startswith("hf://"):
+        raise ValueError(f"Invalid HuggingFace URL format: {hf_url}")
+
+    repo_name = hf_url.replace("hf://", "")
+    if not repo_name:
+        raise ValueError("Empty repository name in HuggingFace URL")
+
+    try:
+        # First, try to get from cache only (local_files_only=True)
+        # This checks if the model is already cached without downloading
+        try:
+            local_dir = snapshot_download(
+                repo_name, revision="main", local_files_only=True
+            )
+            return local_dir
+        except LocalEntryNotFoundError:
+            # Model not in cache, download it (local_files_only=False)
+            local_dir = snapshot_download(
+                repo_name, revision="main", local_files_only=False
+            )
+            return local_dir
+
+    except Exception as e:
+        raise Exception(
+            f"Failed to resolve HuggingFace model '{repo_name}': {e}"
+        ) from e
+
+
 def resolve_hf_hub_paths(cfg: DictConfig) -> DictConfig:
     """
     Resolves HuggingFace Hub URLs in configuration by downloading models and
@@ -167,35 +197,6 @@ def resolve_hf_hub_paths(cfg: DictConfig) -> DictConfig:
 
     if not OmegaConf.is_config(cfg):
         raise ValueError(f"Input must be an OmegaConf config object, got {type(cfg)}")
-
-    def _resolve_hf_model_path(hf_url: str) -> str:
-        """Resolve HuggingFace model URL to local path using snapshot_download."""
-        if not hf_url.startswith("hf://"):
-            raise ValueError(f"Invalid HuggingFace URL format: {hf_url}")
-
-        repo_name = hf_url.replace("hf://", "")
-        if not repo_name:
-            raise ValueError("Empty repository name in HuggingFace URL")
-
-        try:
-            # First, try to get from cache only (local_files_only=True)
-            # This checks if the model is already cached without downloading
-            try:
-                local_dir = snapshot_download(
-                    repo_name, revision="main", local_files_only=True
-                )
-                return local_dir
-            except LocalEntryNotFoundError:
-                # Model not in cache, download it (local_files_only=False)
-                local_dir = snapshot_download(
-                    repo_name, revision="main", local_files_only=False
-                )
-                return local_dir
-
-        except Exception as e:
-            raise Exception(
-                f"Failed to resolve HuggingFace model '{repo_name}': {e}"
-            ) from e
 
     def _recursively_resolve_paths(obj: Any) -> Any:
         """Recursively resolve hf:// paths in nested data structures."""

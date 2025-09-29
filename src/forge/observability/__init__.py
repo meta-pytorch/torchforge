@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .metric_actors import get_metric_logger, GlobalLoggingActor, LocalFetcherActor
+from .metric_actors import GlobalLoggingActor, LocalFetcherActor, setup_metric_logger
 from .metrics import (
     ConsoleBackend,
     # Utility functions
@@ -32,7 +32,7 @@ __all__ = [
     "reduce_metrics_states",
     "get_actor_name_with_rank",
     "get_logger_backend_class",
-    "get_metric_logger",
+    "setup_metric_logger",
     # Enums
     "ReductionType",
     # Actor classes

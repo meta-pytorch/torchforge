@@ -42,12 +42,18 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-
 from forge.interfaces import Policy as PolicyInterface
 from forge.types import ProcessConfig
 
@@ -126,6 +132,7 @@ class EngineConfig(EngineArgs):
 class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
+    use_vllm_builtin_load: bool = True
     available_devices: str | None = None
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
@@ -144,6 +151,7 @@ class Policy(PolicyInterface):
             self.engine_config = EngineConfig.from_dict(self.engine_config)
         if isinstance(self.sampling_config, Mapping):
             self.sampling_config = SamplingConfig.from_dict(self.sampling_config)
+        # No conversion needed for boolean flag
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -196,6 +204,7 @@ class Policy(PolicyInterface):
             sampling_config=sampling_config,
             available_devices=available_devices,
             policy_worker=workers,
+            **kwargs,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -387,7 +396,22 @@ class Policy(PolicyInterface):
             await asyncio.gather(*curr_requests)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.call(version=policy_version)
+        if self.use_vllm_builtin_load:
+            await self.policy_worker.update.call(version=policy_version)
+        else:
+            await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+        self.policy_version = policy_version
+        logger.info(f"Weight update completed (now v{self.policy_version})")
+
+    @endpoint
+    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
+        # TODO: If generating long sequences, this might be long and will block policy weight updates
+        curr_requests = [fut for _, fut in self.requests.values()]
+        if curr_requests:
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            await asyncio.gather(*curr_requests)
+
+        await self.policy_worker.update_DEPRECATED.call(version=policy_version)
         self.policy_version = policy_version
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
@@ -454,7 +478,11 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
+    # TODO: remove this later since no plumbing exists to change this value.
+    # Also, whether to use dcp or not can be inferred from torchstore get() call.
     use_dcp: bool = True
+    # Cache hf param names on first update call.
+    hf_param_names = []
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -509,8 +537,9 @@ class PolicyWorker(ForgeActor):
             )
 
     @endpoint
-    async def update(self, version: int):
-        """Update model weights by reading state dict from torchstore"""
+    async def update_DEPRECATED(self, version: int):  # noqa: N802
+        """Update model weights by reading state dict from torchstore.
+        Deprecated. This uses manual sharding logic which is buggy."""
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
@@ -519,6 +548,44 @@ class PolicyWorker(ForgeActor):
         logger.info(
             f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
         )
+
+    @endpoint
+    async def update(self, version: int):
+        """Update model weights by reading state dict from torchstore"""
+        logger.info(
+            f"[PolicyWorker::update] start updating weights to version {version}"
+        )
+        model = self.worker.model_runner.model
+        prefix = get_param_prefix(version)
+        logger.debug(f"{prefix=}")
+        matching_keys = await ts.keys(prefix)
+        logger.debug(f"{matching_keys=}")
+        if not self.hf_param_names:
+            self.hf_param_names = [extract_param_name(key) for key in matching_keys]
+        loaded_weights = set()
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        start = time.perf_counter()
+        for name in self.hf_param_names:
+            param_key = get_param_key(version, name)
+            tensor_or_handle = await ts.get(param_key)
+            if isinstance(tensor_or_handle, torch.Tensor):
+                param = tensor_or_handle
+            elif isinstance(tensor_or_handle, DcpHandle):
+                logger.info(f"Loading {name} from DCP with handle {tensor_or_handle}")
+                param = load_tensor_from_dcp(tensor_or_handle, name)
+                logger.info(f"Loaded {name} from DCP with handle {tensor_or_handle}")
+            else:
+                raise RuntimeError(
+                    f"Unexpected type for {param_key}: {type(tensor_or_handle)}"
+                )
+            loaded = model.load_weights([(name, param)])
+            del param
+            loaded_weights.update(loaded)
+        logger.info(
+            f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters, took {time.perf_counter() - start} seconds"
+        )
+        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
     async def setup_kv_cache(self):
