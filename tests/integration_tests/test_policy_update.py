@@ -162,7 +162,7 @@ class TestWeightSync:
                 "No config file provided. Use --config <path> to specify a YAML config file"
             )
 
-        use_dcp = request.config.getoption("--use_dcp")
+        use_dcp_override = request.config.getoption("--use_dcp")
         cfg = self._load_config(config_path=config_path)
 
         trainer_proc_size = cfg.services.trainer.procs
@@ -179,7 +179,6 @@ class TestWeightSync:
         logger.info(f"Model name: {model_card}")
         logger.info(f"Trainer proc size: {trainer_proc_size}")
         logger.info(f"Policy tensor parallel size: {policy_tp_size}")
-        logger.info(f"Use DCP: {use_dcp}")
 
         logger.info("Downloading model checkpoint from HuggingFace Hub")
         cached_dir = snapshot_download(repo_id=model_card)
@@ -199,12 +198,12 @@ class TestWeightSync:
             "initial_load_path": cached_dir,
             "initial_load_in_hf": True,
         }
-        trainer_cfg["use_dcp"] = use_dcp
+        if use_dcp_override is not None:
+            trainer_cfg["use_dcp"] = use_dcp_override
+            logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
 
         with TemporaryDirectory(dir="/dev/shm/") as tmpdir:
-            if use_dcp:
-                trainer_cfg["dcp_path"] = tmpdir
-
+            trainer_cfg["dcp_path"] = tmpdir
             policy, rl_trainer = await asyncio.gather(
                 *[
                     Policy.options(**services_policy_cfg).as_service(**cfg.policy),

@@ -31,8 +31,8 @@ def pytest_addoption(parser):
         "--use_dcp",
         action="store",
         type=str_to_bool,
-        default=True,
-        help="Whether to use DCP for sanity check tests",
+        default=None,
+        help="Overrides the YAML config `trainer.use_dcp` field.",
     )
 
 
