@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 """
-Tests for router.py and batch routing in ServiceEndpoint
+Tests for router.py
 """
 
 import asyncio
@@ -56,8 +56,13 @@ class Counter(ForgeActor):
         self.v += amount * multiplier
         return self.v
 
-    @service_endpoint(router=RoundRobinRouter(), batch_size=3, batch_timeout=1)
+    @service_endpoint(router=RoundRobinRouter())
     async def rr_incr(self):
+        """Increment using RoundRobin router."""
+        self.v += 1
+
+    @service_endpoint(router=RoundRobinRouter(), batch_size=3, batch_timeout=1)
+    async def rr_batch_incr(self):
         """Increment using RoundRobin router."""
         self.v += 1
 
@@ -86,7 +91,7 @@ async def test_service_as_actor_preserves_normal_usage():
         assert await service.value.choose() == 5
 
         # Test increment
-        await service.rr_incr.choose()
+        await service.rr_batch_incr.choose()
         assert await service.value.choose() == 6
 
     finally:
@@ -136,7 +141,7 @@ async def test_round_robin_router_distribution():
         # Make multiple sessionless calls using route()
         results = []
         for _ in range(6):
-            await service.incr.route()
+            await service.rr_incr.route()
             values = await service.value.fanout()
             results.append(values)
         # Verify that requests were distributed round-robin
@@ -158,7 +163,7 @@ async def test_round_robin_router_distribution_with_batching():
     try:
         # Make multiple sessionless calls using route()
         results = []
-        tasks = [service.rr_incr.route() for _ in range(6)]
+        tasks = [service.rr_batch_incr.route() for _ in range(6)]
         await asyncio.gather(*tasks)
         # Verify that requests were distributed round-robin
         # Each call increments a single replica, so after 6 calls we expect:
@@ -211,7 +216,7 @@ async def test_service_endpoint_batch_flush_max_size():
 
     try:
         # Make 3 concurrent requests (batch_size = 3)
-        tasks = [asyncio.create_task(service.rr_incr.route()) for _ in range(4)]
+        tasks = [asyncio.create_task(service.rr_batch_incr.route()) for _ in range(4)]
         await asyncio.gather(*tasks)
 
         values = await service.value.fanout()

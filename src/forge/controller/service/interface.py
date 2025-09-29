@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from monarch._src.actor.endpoint import EndpointProperty
 
-from .endpoint import BatchedServiceEndpoint, ServiceEndpoint, ServiceEndpointV2
+from .endpoint import ServiceEndpoint, ServiceEndpointV2
 
 
 @dataclass
@@ -87,30 +87,20 @@ class ServiceInterface:
             attr_value = getattr(actor_def, attr_name)
             if hasattr(attr_value, "_service_endpoint_config"):
                 # Decorated with @service_endpoint
-                # Create a ServiceEndpoint with batch routing config
                 cfg = attr_value._service_endpoint_config
-                if cfg["batch_size"] > 1:
-                    endpoint = BatchedServiceEndpoint(
-                        self._service,
-                        attr_name,
-                        router=cfg["router"],
-                        batch_size=cfg["batch_size"],
-                        batch_timeout=cfg["batch_timeout"],
-                    )
-                else:
-                    endpoint = ServiceEndpoint(
-                        self._service,
-                        attr_name,
-                        router=cfg["router"],
-                    )
+                # Service manages router creation
+                self._service._set_router(attr_name, cfg)
+                endpoint = ServiceEndpoint(self._service, attr_name)
 
             elif isinstance(attr_value, EndpointProperty):
-                # This was defined as a standard Monarch endpoint
-                # Create a ServiceEndpoint that will route through the Service Actor
+                # Decorated with Monarch @endpoint
+                self._service._set_router(attr_name)
                 endpoint = ServiceEndpoint(self._service, attr_name)
             else:
-                # Not decorated with @endpoint or @service_endpoint
+                # Not an endpoint
                 continue
+
+            # Attach to interface
             setattr(self, attr_name, endpoint)
 
     # Session management methods - handled by ServiceInterface
@@ -126,10 +116,6 @@ class ServiceInterface:
         """
         Shut down the underlying Service and all endpoints.
         """
-        for attr in dir(self):
-            ep = getattr(self, attr)
-            if isinstance(ep, ServiceEndpoint):
-                await ep.stop()
         await self._service.stop()
 
     def session(self) -> "SessionContext":
