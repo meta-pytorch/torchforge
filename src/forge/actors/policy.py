@@ -136,6 +136,7 @@ class Policy(PolicyInterface):
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     use_vllm_builtin_load: bool = True
     available_devices: str | None = None
+    use_dcp: bool = True
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
@@ -162,6 +163,7 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
+        use_dcp: bool = True,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -193,7 +195,7 @@ class Policy(PolicyInterface):
         # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
         # do logging within PolicyWorker
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+            "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
         if isinstance(sampling_config, Mapping):

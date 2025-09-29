@@ -312,15 +312,15 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.services.trainer).as_service(
+        RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
-        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
+        ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
@@ -339,11 +339,11 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.route()
+        pad_id = await dataloader.pad_token.call_one()
         while True:
             t = Tracer("main_perf/rollout")
             t.start()
-            sample = await dataloader.sample.route()
+            sample = await dataloader.sample.call_one()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -403,13 +403,20 @@ async def main(cfg: DictConfig):
             t.step("compute_logprobs")
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.route(group)
+            advantages = await compute_advantages.compute.call_one(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.route(episode)
-                record_metric("main/rollout/avg_advantage", advantage, Reduce.MEAN)
-                record_metric("main/rollout/std_advantage", advantage, Reduce.STD)
-            t.step("advantage_computation")
+
+            # Log metrics
+            avg_response_len = (
+                sum(len(e.response_tokens) for e in group.episodes) / group_size
+            )
+            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
+            buffer_size = await replay_buffer._numel.route()
+            mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
+            avg_reward = sum(e.reward for e in group.episodes) / group_size
+            mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
 
             rollout_count += 1
             record_metric("main/rollout/count_rollout_iterations", 1, Reduce.SUM)
@@ -418,9 +425,6 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            t = Tracer("main_perf/training", time_with_gpu=True)
-            t.start()
-
             batch = await replay_buffer.sample.route(curr_policy_version=training_step)
             if batch is None:
                 # Track time waiting for buffer
@@ -430,13 +434,8 @@ async def main(cfg: DictConfig):
 
                 inputs, targets = batch
                 loss = await trainer.train_step.route(inputs, targets)
-
-                t.step("training_step")
-
-                # Record training metrics
-                record_metric("main/training/count_training_iterations", 1, Reduce.SUM)
-
                 training_step += 1
+                mlogger.log("loss/training_step", loss, training_step)
                 await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
@@ -462,11 +461,11 @@ async def main(cfg: DictConfig):
         await asyncio.gather(mlogger.shutdown.call_one())
 
         await asyncio.gather(
-            dataloader.shutdown(),
+            DatasetActor.shutdown(dataloader),
             policy.shutdown(),
-            trainer.shutdown(),
-            replay_buffer.shutdown(),
-            compute_advantages.shutdown(),
+            RLTrainer.shutdown(trainer),
+            ReplayBuffer.shutdown(replay_buffer),
+            ComputeAdvantages.shutdown(compute_advantages),
             ref_model.shutdown(),
             reward_actor.shutdown(),
         )
