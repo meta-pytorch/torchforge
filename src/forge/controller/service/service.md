@@ -14,11 +14,12 @@ The Service class provides a unified interface for deploying and managing multip
 - **Session Preservation**: Maintains session state during replica failures
 - **Graceful Degradation**: Continues operation with reduced capacity
 
-### **Load Balancing**
-- **Round-Robin**: Default load distribution across healthy replicas
-- **Least-Loaded**: Session assignment to replicas with lowest load
-- **Session Affinity**: Sticky sessions for stateful workloads
-- **Custom Routing**: Extensible routing logic for specialized use cases
+### **Routing & Load Balancing**
+- **Session Affinity**: Sticky sessions for stateful workloads.
+- **Per-Endpoint Routing**: Each endpoint can declare its own router (e.g., round-robin, least-loaded, custom).
+- **Batch Routing**: Endpoints may aggregate multiple requests into batches before routing (via `Batcher`), improving throughput.
+- **Default Routing**: If no router is specified, endpoints use round-robin.
+- **Extensible Routers**: Support for pluggable router classes, e.g. `RoundRobinRouter`, `LeastLoadedRouter`, or user-defined routers.
 
 ### **Comprehensive Metrics**
 - **Request Metrics**: Throughput, latency, success/failure rates
@@ -30,24 +31,32 @@ The Service class provides a unified interface for deploying and managing multip
 - **Context-Aware Sessions**: Automatic session context propagation
 - **Session Lifecycle**: Managed session creation and cleanup
 - **Routing Hints**: Custom session routing based on workload characteristics
-
+- **Batching and Sessions**: Batch routing is applied only for stateless calls; sticky sessions are always preserved
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Client API    │───▶│  Service Layer   │───▶│  Replica Pool   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │                         │
-                              ▼                         ▼
+                               │                        │
+                               │                        │
+                               ▼                        ▼
                        ┌──────────────┐         ┌─────────────┐
-                       │ Autoscaler   │         │ Actor Mesh  │
+                       │ Routers /    │         │ Actor Mesh  │
+                       │ Batchers per │         └─────────────┘
+                       │   Endpoint   │                 │
+                       └──────────────┘                 │
+                              │                         ▼
+                              ▼                 ┌─────────────┐
+                       ┌──────────────┐         │   Health    │
+                       │ Autoscaler   │         │  Monitor    │
                        └──────────────┘         └─────────────┘
-                              │                         │
-                              ▼                         ▼
-                       ┌──────────────┐         ┌─────────────┐
-                       │   Metrics    │         │   Health    │
-                       │  Collector   │         │  Monitor    │
-                       └──────────────┘         └─────────────┘
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │   Metrics    │
+                       │  Collector   │
+                       └──────────────┘
 ```
 
 ## Usage
@@ -55,58 +64,113 @@ The Service class provides a unified interface for deploying and managing multip
 ### Basic Service Setup
 
 ```python
-from forge.controller.service import Service, ServiceConfig
+# Pre-configure a service with multiple replicas
+service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
+await service.shutdown()
 
-# Configure service parameters
-config = ServiceConfig(
-    gpus_per_replica=1,
-    min_replicas=2,
-    max_replicas=10,
-    default_replicas=3,
-    replica_max_concurrent_requests=10,
-)
+# Default usage without calling options
+service = await MyForgeActor.as_service(...)
+await service.shutdown()
 
-# Create service with your actor definition
-service = Service(config, MyActorClass, *actor_args, **actor_kwargs)
-await service.__initialize__()
+# Pre-configure a single actor
+actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
+await actor.shutdown()
+
+# Default usage without calling options
+actor = await MyForgeActor.as_actor(...)
+await actor.shutdown()
 ```
 
-### Session-Based Calls
+### Calling Endpoints
 
+When you access `service.some_endpoint` or `actor.some_endpoint`, you don’t get a plain function — you get an **endpoint object** with a specific API depending on whether you spawned as a **Service** or as an **Actor**.
+
+#### Service Endpoints (`.as_service()`)
+
+Service endpoints are defined with `@endpoint` or `@service_endpoint` and exposed as `ServiceEndpoint` objects.
+
+They support only two methods:
+
+* **`.route(*args, **kwargs)`** → send the request to a single replica, selected by the configured router (round-robin, least-loaded, custom, etc.).
+* **`.fanout(*args, **kwargs)`** → broadcast the request to all healthy replicas and return a list of results.
+
+Other Monarch actor APIs (`call`, `call_one`, `choose`, etc.) are not supported on services.
+
+**Example:**
+
+```python
+# Route to one replica (load-balanced)
+result = await service.predict.route(x)
+
+# Broadcast to all replicas
+results = await service.predict.fanout(x)
+```
+
+#### Actor Endpoints (`.as_actor()`)
+
+When you spawn a raw actor via `.as_actor()`, its functions are [**Monarch `ActorEndpoint` objects**](https://github.com/meta-pytorch/monarch/blob/0a842ad3c4abfb3983eb7ba55ec327c42553ff44/python/monarch/_src/actor/actor_mesh.py#L279).
+
+Highlights of supported APIs:
+- **`.call_one(...)`** – RPC to a single actor (preferred for single-replica calls, stricter than `choose`)
+- **`.call(...)`** – RPC to all actors, returns a `ValueMesh` of results
+- ...
+
+
+### Session-Based Calls
 ```python
 # Context manager for session lifecycle
 async with service.session() as session:
-    result1 = await service.my_endpoint(arg1, arg2)
-    result2 = await service.another_endpoint(arg3)
+    result1 = await service.my_endpoint.route(arg1, arg2)
+    result2 = await service.another_endpoint.fanout(arg3)
     # Session automatically terminated on exit
 
 # Manual session management
 session_id = await service.start_session()
-result = await service.my_endpoint(session_id, arg1, arg2)
+result = await service.my_endpoint.route(arg1, arg2, sess_id=session_id)
 await service.terminate_session(session_id)
 ```
 
 ### Stateless Calls
 
 ```python
-# Direct calls without sessions (uses round-robin load balancing)
-result = await service.my_endpoint(arg1, arg2)
+# Direct calls without sessions (uses the default router unless overridden)
+result = await service.my_endpoint.route(arg1, arg2)
 ```
 
+
+### Batch Routing
+```python
+class MyActor(ForgeActor):
+    @service_endpoint(router=RoundRobinRouter(), batch_size=8, batch_timeout=0.01)
+    async def predict(self, x):
+        return model(x)
+
+service = await MyActor.options(num_replicas=4).as_service()
+
+# 16 requests → grouped into 2 batches of 8, routed round-robin across replicas
+await asyncio.gather(*(service.predict.route(data) for data in inputs))
+```
+**Note:**
+- Setting `batch_size=1` or not passing `batch_size` disables batching. Each request will be routed immediately using the underlying router.
 ### Custom Routing
 
-```python
-# Override _custom_replica_routing for specialized routing logic
-class CustomService(Service):
-    async def _custom_replica_routing(self, sess_id: str | None, **kwargs) -> Optional[Replica]:
-        # Custom routing based on request characteristics
-        if kwargs.get('priority') == 'high':
-            return self._get_least_loaded_replica()
-        return None  # Fall back to default routing
+To implement custom routing logic, define your own `Router` by subclassing and overriding
+the `get_replica` method. Then pass an instance to `@service_endpoint`.
 
-# Use with routing hints
-async with service.session(priority='high') as session:
-    result = await service.my_endpoint(arg1, arg2)
+```python
+class MyCustomRouter(Router):
+    """Example custom router: always picks the first replica."""
+
+    def get_replica(self, healthy_replicas, sess_id=None, session_map=None):
+        if not healthy_replicas:
+            raise RuntimeError("No healthy replicas available")
+        return healthy_replicas[0]
+
+
+class MyActor(ForgeActor):
+    @service_endpoint(router=MyCustomRouter())
+    async def predict(self, x):
+        return model(x)
 ```
 
 ### Monitoring and Metrics
@@ -132,7 +196,12 @@ for replica_idx, replica_metrics in summary['replicas'].items():
 
 ```python
 # Stop the service and all replicas
-await service.stop()
+await service.shutdown()
+```
+
+For single actor:
+```python
+await MyForgeActor.shutdown(actor)
 ```
 
 ## Configuration
@@ -262,10 +331,10 @@ service = Service(config, StreamProcessorActor, window_size=1000)
 - **Low Latency**: Sub-millisecond request routing overhead
 - **High Throughput**: Concurrent request processing across replicas
 - **Elastic Scaling**: Responsive to traffic patterns with configurable thresholds
+- **Batching**: Amortizes routing decisions across multiple requests, improving throughput under high load
 - **Resource Efficient**: Intelligent replica management and load balancing
 - **Fault Resilient**: Automatic recovery from replica failures
 - **Session Aware**: Maintains state consistency for stateful workloads
-
 ## Best Practices
 
 ### Configuration
