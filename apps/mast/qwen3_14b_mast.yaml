@@ -123,7 +123,7 @@ services:
     mesh_name: dataset
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 8
+    num_replicas: 14
     with_gpus: true
     hosts: 1
     mesh_name: policy
@@ -140,7 +140,7 @@ services:
     mesh_name: replay_buffer
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
-    num_replicas: 8
+    num_replicas: 14
     with_gpus: true
     hosts: 1
     mesh_name: ref_model
