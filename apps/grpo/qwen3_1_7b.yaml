@@ -9,6 +9,10 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
+# Main loop configuration
+rollout_threads: 1   # Recommended to set equal to policy.num_replicas
+
+
 # Observability configuration
 metric_logging:
   wandb:

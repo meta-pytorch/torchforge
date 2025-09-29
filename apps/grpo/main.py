@@ -8,6 +8,7 @@
 
 import asyncio
 
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -16,6 +17,10 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
+from forge.actors._torchstore_utils import (
+    get_dcp_whole_state_dict_key,
+    get_param_prefix,
+)
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
@@ -289,6 +294,23 @@ class DatasetActor(ForgeActor):
         return self._tokenizer.pad_token_id
 
 
+async def drop_weights(version: int):
+    print(f"Dropping weights @ version {version}")
+    start_time = time.perf_counter()
+    prefix = get_param_prefix(version)
+    matching_keys = await ts.keys(prefix)
+    # TODO: once we have something like `get_meta()` in torchstore, we can just
+    # query the type of the object instead of relying on keys.
+    dcp_key = get_dcp_whole_state_dict_key(version)
+    if dcp_key in matching_keys:
+        dcp_handle = await ts.get(dcp_key)
+        dcp_handle.drop()
+    for key in matching_keys:
+        await ts.delete(key)
+    elapsed = time.perf_counter() - start_time
+    print(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
+
+
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     group_size = cfg.group_size
@@ -451,22 +473,33 @@ async def main(cfg: DictConfig):
 
                 await policy.update_weights.fanout(training_step)
                 t.step("update_weights")
+
+                if training_step >= 2:
+                    await drop_weights(training_step - 1)
+                    t.step("drop_weights")
+
                 t.stop()
                 restart_tracer = True
 
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
 
-    print("Starting GRPO training loops...")
-    # TODO: Start multiple rollouts once all serivces support it
-    rollout_task = asyncio.create_task(continuous_rollouts())
+    num_rollout_threads = cfg.get("rollout_threads", 1)
+    num_training_threads = cfg.get("training_threads", 1)
+    print(
+        f"Starting GRPO with {num_rollout_threads} rollout threads, {num_training_threads} training threads"
+    )
+    rollout_tasks = [
+        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+    ]
     training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(rollout_task, training_task)
+        await asyncio.gather(*rollout_tasks, training_task)
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        rollout_task.cancel()
+        for rollout_task in rollout_tasks:
+            rollout_task.cancel()
         training_task.cancel()
     finally:
         print("Shutting down...")
