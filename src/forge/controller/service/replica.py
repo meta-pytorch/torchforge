@@ -13,10 +13,10 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional
 
+from monarch.actor import ActorError
+
 from forge.controller import ForgeActor
 from forge.types import ProcessConfig
-
-from monarch.actor import ActorError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

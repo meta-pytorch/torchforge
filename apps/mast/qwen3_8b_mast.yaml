@@ -34,11 +34,7 @@ policy:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0
-    top_p: 1.0
-  process_config:
-    procs: ${policy.engine_config.tensor_parallel_size}
-    with_gpus: true
-    hosts: 1
+    top_p: 1.0=
   checkpoint_path: ${checkpoint_folder}
 
 # Trainer configuration
