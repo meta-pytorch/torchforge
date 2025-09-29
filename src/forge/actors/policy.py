@@ -299,14 +299,10 @@ class Policy(PolicyInterface):
         t = Tracer("policy_perf/generate", timer="gpu")
         t.start()
 
-        # Record policy generation metrics
         record_metric("policy/generate/count_requests", 1, Reduce.SUM)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
-
-        # Record policy generation metrics
-        record_metric("policy/generate/count_generate_requests", 1, Reduce.SUM)
 
         # Wraps prompt into a dict
         prompt_dict: dict[str, str] = convert_input(prompt=prompt)
@@ -365,6 +361,7 @@ class Policy(PolicyInterface):
             self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
+        t.step("generate")
 
         record_metric(
             "policy/generate/count_sequences_completed",
@@ -386,7 +383,6 @@ class Policy(PolicyInterface):
                 Reduce.MEAN,
             )
 
-        t.step("generate")
         t.stop()
 
         return completions

@@ -178,7 +178,7 @@ class RewardActor(ForgeActor):
             reward_fn_name = getattr(
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
-            # # per function reward
+            # per function reward
             record_metric(
                 f"reward/evaluate_response/sum_{reward_fn_name}_reward",
                 reward,
@@ -195,14 +195,14 @@ class RewardActor(ForgeActor):
                 Reduce.STD,
             )
 
-            # # avg total reward
+            # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
                 Reduce.MEAN,
             )
 
-            # # count fn calls
+            # count fn calls
             record_metric(
                 f"reward/evaluate_response/count_{reward_fn_name}_calls",
                 1,
@@ -437,7 +437,6 @@ async def main(cfg: DictConfig):
                 curr_policy_version=training_step
             )
             if batch is None:
-                # Track time waiting for buffer
                 await asyncio.sleep(0.1)
             else:
                 t.step("waiting_for_buffer")
