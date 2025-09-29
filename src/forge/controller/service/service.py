@@ -146,12 +146,12 @@ class Service:
 
         - If a router is already set, leave it unchanged.
         - If cfg is provided, use its router/batching options.
-        - If cfg is missing or incomplete, fall back to defaults:
+        - If cfg is missing or incomplete, ignore and fall back to defaults:
             use a round robin router without batching.
 
         Args:
             endpoint_name: Name of the endpoint (string).
-            cfg: Optional service_endpoint_config dict, may include:
+            cfg: Optional service_endpoint_config dict, include:
                 {
                     "router": Router,
                     "batch_size": int,
@@ -165,17 +165,18 @@ class Service:
         if endpoint_name in self.routers:
             return
 
+        # If config is missing or incomplete, use default router
+        if cfg is None or "router" not in cfg:
+            return
+
         # Resolve base router
-        if cfg and "router" in cfg:
-            if not isinstance(cfg.get("router"), Router):
-                raise ValueError(f"Unknown router type: {cfg['router']}")
-            else:
-                base_router = cfg["router"]
+        if not isinstance(cfg.get("router"), Router):
+            raise ValueError(f"Unknown router type: {cfg['router']}")
         else:
-            base_router = RoundRobinRouter()
+            base_router = cfg["router"]
 
         # Wrap in Batcher if batching requested
-        if cfg and cfg.get("batch_size", 1) > 1:
+        if cfg.get("batch_size", 1) > 1:
             router = Batcher(
                 base_router,
                 get_healthy_replicas=self._get_healthy_replicas,
