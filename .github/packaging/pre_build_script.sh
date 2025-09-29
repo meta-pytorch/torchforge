@@ -30,9 +30,9 @@ build_vllm() {
     export VERBOSE=1
     export CMAKE_VERBOSE_MAKEFILE=1
     export FORCE_CMAKE=1
-    export MAX_JOBS=2 # don't resource starve the host
-    export CMAKE_BUILD_PARALLEL_LEVEL=2
-    export MAKEFLAGS=-j2
+    # export MAX_JOBS=2 # don't resource starve the host
+    # export CMAKE_BUILD_PARALLEL_LEVEL=2
+    # export MAKEFLAGS=-j2
     pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
