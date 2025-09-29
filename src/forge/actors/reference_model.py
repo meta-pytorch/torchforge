@@ -28,7 +28,7 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import trace, Tracer
+from forge.observability.perf_tracker import Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -90,11 +90,6 @@ class ReferenceModel(ForgeActor):
         self.model.eval()
 
     @endpoint
-    @trace(
-        "reference_perf/forward",
-        track_memory=True,
-        timer="gpu",
-    )
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
 
         # Record reference model metrics
@@ -105,7 +100,7 @@ class ReferenceModel(ForgeActor):
             Reduce.MEAN,
         )
 
-        t = Tracer("reference_perf/forward", timer="gpu")
+        t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
         t.start()
         self.engine.gc_handler.run(self.step)
         t.step("garbage_collection")
