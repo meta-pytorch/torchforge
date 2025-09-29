@@ -471,7 +471,11 @@ async def main(cfg: DictConfig):
         training_task.cancel()
     finally:
         print("Shutting down...")
-        await asyncio.gather(mlogger.shutdown.call_one())
+
+        # give mlogger time to shutdown backends, otherwise they can stay running.
+        # TODO (felipemello) find more elegant solution
+        await mlogger.shutdown.call_one()
+        asyncio.sleep(4)
 
         await asyncio.gather(
             DatasetActor.shutdown(dataloader),
