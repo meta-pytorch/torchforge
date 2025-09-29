@@ -5,10 +5,10 @@ group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-14B"
+model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
 scheduler: mast
-job_name: rithesh-forge-zhu-qwen14B-ex1r2-dp4tp2-881
+job_name: forge-qwen-8B
 checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/20
 
 
@@ -23,7 +23,7 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -45,8 +45,8 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 14B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
+    flavor: 8B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -72,7 +72,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -96,8 +96,8 @@ replay_buffer:
 ref_model:
   model:
     name: qwen3
-    flavor: 14B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
+    flavor: 8B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -111,7 +111,7 @@ ref_model:
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
     initial_load_in_hf: true
 
 # All resource allocations
@@ -123,7 +123,7 @@ services:
     mesh_name: dataset
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 8
+    num_replicas: 2
     with_gpus: true
     hosts: 1
     mesh_name: policy
@@ -140,7 +140,7 @@ services:
     mesh_name: replay_buffer
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
-    num_replicas: 8
+    num_replicas: 2
     with_gpus: true
     hosts: 1
     mesh_name: ref_model
