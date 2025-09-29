@@ -26,7 +26,7 @@ from torchtitan.config.job_config import (
     Checkpoint,
     Comm,
     Compile,
-    Float8,
+    Float8Dense,
     LRScheduler,
     Model,
     Optimizer,
@@ -36,7 +36,11 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors._torchstore_utils import DcpHandle, get_param_key
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+)
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
@@ -97,7 +101,7 @@ class RLTrainer(ForgeActor):
     )
     use_vllm_builtin_load: bool = True
     compile: Compile = field(default_factory=Compile)
-    float8: Float8 = field(default_factory=Float8)
+    float8: Float8Dense = field(default_factory=Float8Dense)
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
@@ -328,11 +332,12 @@ class RLTrainer(ForgeActor):
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
+        logger.info(f"Pushing weights for policy version {policy_version}")
         if not self.use_vllm_builtin_load:
             return await self._push_weights_DEPRECATED(
                 policy_version, self.vllm_tp_DEPRECATED
             )
-
+        start_time = time.perf_counter()
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
 
@@ -344,21 +349,24 @@ class RLTrainer(ForgeActor):
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
         if self.use_dcp:
-            # we could use dcp.save() to save the whole state dict,
-            # but I don't want too much deviation between the two code paths
-            for name, param in hf_state_dict.items():
-                key = get_param_key(policy_version, name)
-                dcp_id = f"{self.dcp_path}/{key}"
-                metadata = dcp.save(
-                    checkpoint_id=dcp_id,
-                    state_dict={name: param},
-                )
-                dcp_handle = DcpHandle(checkpoint_id=dcp_id, metadata=metadata)
-                await ts.put(key, dcp_handle)
+            key = get_dcp_whole_state_dict_key(policy_version)
+            dcp_id = f"{self.dcp_path}/{key}"
+            storage_writer = torch.distributed.checkpoint.FileSystemWriter(
+                dcp_id, single_file_per_rank=False, thread_count=8
+            )
+            metadata = dcp.save(storage_writer=storage_writer, state_dict=hf_state_dict)
+            dcp_handle = DcpHandle(
+                checkpoint_id=dcp_id,
+                metadata=metadata,
+                param_names=hf_state_dict.keys(),
+            )
+            await ts.put(key, dcp_handle)
         else:
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
                 await ts.put(key, param)
+        end_time = time.perf_counter()
+        logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 
     @endpoint
     async def cleanup(self) -> None:

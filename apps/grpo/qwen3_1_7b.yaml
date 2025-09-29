@@ -9,6 +9,9 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
+# Main loop configuration
+rollout_threads: 1   # Recommended to set equal to policy.num_replicas
+
 # Dataset configuration
 dataset:
   path: "openai/gsm8k"
@@ -101,31 +104,29 @@ ref_model:
 
 # All resource allocations
 services:
-  dataset:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
-  trainer:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
-  replay_buffer:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   ref_model:
     procs: 1
     num_replicas: 1
     with_gpus: true
-  compute_advantages:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   reward_actor:
     procs: 1
     num_replicas: 1
+    with_gpus: false
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+  trainer:
+    procs: 1
+    with_gpus: true
+  replay_buffer:
+    procs: 1
+    with_gpus: false
+  compute_advantages:
+    procs: 1
     with_gpus: false

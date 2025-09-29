@@ -43,8 +43,8 @@ from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
 from forge.actors._torchstore_utils import (
-    DcpHandle,
     extract_param_name,
+    get_dcp_whole_state_dict_key,
     get_param_key,
     get_param_prefix,
     load_tensor_from_dcp,
@@ -134,6 +134,7 @@ class Policy(PolicyInterface):
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     use_vllm_builtin_load: bool = True
     available_devices: str | None = None
+    use_dcp: bool = True
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
@@ -160,6 +161,7 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
+        use_dcp: bool = True,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -189,7 +191,7 @@ class Policy(PolicyInterface):
 
         vllm_config = engine_config.create_vllm_config()
         workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+            "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
         if isinstance(sampling_config, Mapping):
@@ -481,8 +483,6 @@ class PolicyWorker(ForgeActor):
     # TODO: remove this later since no plumbing exists to change this value.
     # Also, whether to use dcp or not can be inferred from torchstore get() call.
     use_dcp: bool = True
-    # Cache hf param names on first update call.
-    hf_param_names = []
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -560,28 +560,31 @@ class PolicyWorker(ForgeActor):
         logger.debug(f"{prefix=}")
         matching_keys = await ts.keys(prefix)
         logger.debug(f"{matching_keys=}")
-        if not self.hf_param_names:
-            self.hf_param_names = [extract_param_name(key) for key in matching_keys]
+        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         loaded_weights = set()
-        # We can't pass a generator since vllm load_weights is not async.
-        # Instead, we just call load_weights with one parameter at a time.
         start = time.perf_counter()
-        for name in self.hf_param_names:
-            param_key = get_param_key(version, name)
-            tensor_or_handle = await ts.get(param_key)
-            if isinstance(tensor_or_handle, torch.Tensor):
-                param = tensor_or_handle
-            elif isinstance(tensor_or_handle, DcpHandle):
-                logger.info(f"Loading {name} from DCP with handle {tensor_or_handle}")
-                param = load_tensor_from_dcp(tensor_or_handle, name)
-                logger.info(f"Loaded {name} from DCP with handle {tensor_or_handle}")
-            else:
-                raise RuntimeError(
-                    f"Unexpected type for {param_key}: {type(tensor_or_handle)}"
-                )
-            loaded = model.load_weights([(name, param)])
-            del param
-            loaded_weights.update(loaded)
+        # Entire state dict is stored in a single DCP handle
+        if dcp_whole_state_dict_key in matching_keys:
+            logger.info(
+                f"Loading {dcp_whole_state_dict_key} from DCP with handle {dcp_whole_state_dict_key}"
+            )
+            dcp_handle = await ts.get(dcp_whole_state_dict_key)
+            hf_param_names = dcp_handle.param_names
+            for name in hf_param_names:
+                param = load_tensor_from_dcp(dcp_handle, name)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
+        else:  # Load each parameter from torchstore directly without DCP
+            hf_param_names = [extract_param_name(key) for key in matching_keys]
+            # We can't pass a generator since vllm load_weights is not async.
+            # Instead, we just call load_weights with one parameter at a time.
+            for name in hf_param_names:
+                param_key = get_param_key(version, name)
+                param = await ts.get(param_key)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
         logger.info(
             f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters, took {time.perf_counter() - start} seconds"
         )

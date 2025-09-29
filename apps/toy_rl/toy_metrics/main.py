@@ -13,6 +13,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.observability.metric_actors import setup_metric_logger
 from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.perf_tracker import trace, Tracer
 
 from monarch.actor import current_rank, endpoint
 
@@ -23,11 +24,32 @@ class TrainActor(ForgeActor):
     """Example training actor that records loss metrics."""
 
     @endpoint
+    @trace("trainer_perf", track_time=False, track_memory=True, time_with_gpu=False)
     async def train_step(self, step: int):
         rank = current_rank().rank
+
+        # Phase 2: Use Tracer for detailed step timing
+        tracer = Tracer("trainer_perf/step", track_time=True, time_with_gpu=True)
+        tracer.start()
+
+        # Simulate forward pass
+        tracer.step("forward")
+
+        # Simulate backward pass
+        tracer.step("backward")
+
         value = rank * 1000 + 100 * step
-        print(f"[TRAIN] Rank {rank}: Step {step}, loss={value}")
-        record_metric("train/loss", value)
+
+        # Record training metrics
+        record_metric("trainer/avg_grpo_loss", value, ReductionType.MEAN)
+        record_metric("trainer/std_grpo_loss", value, ReductionType.STD)
+        record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
+        record_metric("trainer/learning_rate", 0.001, ReductionType.MEAN)
+
+        print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
+
+        tracer.stop()
+        return value
 
 
 class GeneratorActor(ForgeActor):
@@ -36,9 +58,25 @@ class GeneratorActor(ForgeActor):
     @endpoint
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
-        value = rank * 1000 + step * 100 + substep * 10
-        print(f"[GEN] Rank {rank}: Step {step}.{substep}, tokens={value}")
-        record_metric("generate/tokens", value, ReductionType.SUM)
+
+        with trace(
+            "policy_perf", track_time=True, track_memory=False, time_with_gpu=True
+        ) as tracer:
+
+            value = rank * 1000 + step * 100 + substep * 10
+            tracer.step("time_to_value")
+            # Record generation metrics following the plan
+            record_metric("policy/count_requests", 1, ReductionType.SUM)
+            record_metric(
+                "policy/sum_tokens_requested", 50, ReductionType.SUM
+            )  # Simulated max_tokens
+            record_metric("policy/sum_tokens_generated", value, ReductionType.SUM)
+            record_metric("policy/count_sequences_completed", 1, ReductionType.SUM)
+            record_metric("policy/avg_tokens_per_sample", value, ReductionType.MEAN)
+
+            print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
+
+        return value
 
 
 # Main
