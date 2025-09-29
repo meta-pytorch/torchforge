@@ -199,7 +199,7 @@ class TestMemoryTracking:
         assert_metrics_recorded(
             mock_record_metric_calls,
             {
-                "memory_delta_end_start_avg_gb": 1.0,  # (2GB - 1GB)
+                "memory_delta_peak_start_avg_gb": 2.0,  # (3GB - 1GB)
                 "memory_peak_max_gb": 3.0,  # 3GB peak
             },
         )
@@ -262,7 +262,7 @@ class TestDecoratorAPI:
                 assert_metrics_recorded(
                     mock_record_metric_calls,
                     {
-                        "memory_delta_end_start_avg_gb": 1.0,
+                        "memory_delta_peak_start_avg_gb": 2.0,
                         "memory_peak_max_gb": 3.0,
                     },
                 )

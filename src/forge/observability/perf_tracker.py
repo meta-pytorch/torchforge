@@ -395,7 +395,7 @@ def record_perf_metrics_ctx(
 @contextmanager
 def _memory_tracking_cm(prefix: str, track_memory: bool):
     """
-    Context manager for tracking CUDA's memory delta and peak during execution of a function
+    Context manager for tracking CUDA's memory delta (peak - start) and peak during execution of a function
     in a process. Metrics are logged and aggregated using `record_metrics`
 
     One challenge is if we have nested functions using this utility. When it is called,
@@ -422,10 +422,10 @@ def _memory_tracking_cm(prefix: str, track_memory: bool):
     finally:
         if should_track_memory:
             end_mem = torch.cuda.memory_allocated()
-            delta = (end_mem - start_mem) / 1024**3
             peak_mem = torch.cuda.max_memory_allocated() / 1024**3
+            delta = (peak_mem * 1024**3 - start_mem) / 1024**3
             record_metric(
-                f"{prefix}/memory_delta_end_start_avg_gb", delta, ReductionType.MEAN
+                f"{prefix}/memory_delta_peak_start_avg_gb", delta, ReductionType.MEAN
             )
             record_metric(f"{prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX)
             _set_memory_active(False)
