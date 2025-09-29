@@ -11,7 +11,6 @@ off_by_n: 1 # Off by one by default
 
 # Main loop configuration
 rollout_threads: 1   # Recommended to set equal to policy.num_replicas
-training_threads: 1  # Recommended to set equal to trainer.num_replicas (usually 1)
 
 # Dataset configuration
 dataset:

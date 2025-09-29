@@ -366,18 +366,15 @@ async def main(cfg: DictConfig):
     rollout_tasks = [
         asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
     ]
-    training_tasks = [
-        asyncio.create_task(continuous_training()) for _ in range(num_training_threads)
-    ]
+    training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(*rollout_tasks, *training_tasks)
+        await asyncio.gather(*rollout_tasks, training_task)
     except KeyboardInterrupt:
         print("Training interrupted by user")
         for rollout_task in rollout_tasks:
             rollout_task.cancel()
-        for training_task in training_tasks:
-            training_task.cancel()
+        training_task.cancel()
     finally:
         print("Shutting down...")
         await asyncio.gather(
