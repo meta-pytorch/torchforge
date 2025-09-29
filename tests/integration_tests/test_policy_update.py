@@ -36,7 +36,7 @@ logger.setLevel(logging.INFO)
 Run tests:
 
 pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
-    --config tests/integration_tests/artifacts/qwen3_1_7b_tp.yaml
+    --config tests/integration_tests/artifacts/qwen3_1_7b_tp.yaml --use_dcp=false
 
 pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
         --config apps/grpo/qwen3_8b.yaml
