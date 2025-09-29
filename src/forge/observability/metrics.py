@@ -5,12 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+
+import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from monarch.actor import context, current_rank
-
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,13 @@ def record_metric(
 
     Records are flushed when `forge.observability.metric_actors.GlobalLoggingActor.flush()`
     is called, typically triggered by the training loop at regular intervals.
+
+    Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
     """
+    # Skip metrics collection if disabled for tests
+    if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
+        return
+
     collector = MetricCollector()
     collector.push(key, value, reduction)
 
