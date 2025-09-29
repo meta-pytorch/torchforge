@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -161,6 +162,7 @@ class TestWeightSync:
                 "No config file provided. Use --config <path> to specify a YAML config file"
             )
 
+        use_dcp = request.config.getoption("--use_dcp")
         cfg = self._load_config(config_path=config_path)
 
         trainer_proc_size = cfg.services.trainer.procs
@@ -177,6 +179,7 @@ class TestWeightSync:
         logger.info(f"Model name: {model_card}")
         logger.info(f"Trainer proc size: {trainer_proc_size}")
         logger.info(f"Policy tensor parallel size: {policy_tp_size}")
+        logger.info(f"Use DCP: {use_dcp}")
 
         logger.info("Downloading model checkpoint from HuggingFace Hub")
         cached_dir = snapshot_download(repo_id=model_card)
@@ -196,44 +199,51 @@ class TestWeightSync:
             "initial_load_path": cached_dir,
             "initial_load_in_hf": True,
         }
+        trainer_cfg["use_dcp"] = use_dcp
 
-        policy, rl_trainer = await asyncio.gather(
-            *[
-                Policy.options(**services_policy_cfg).as_service(**cfg.policy),
-                MockRLTrainer.options(**services_trainer_cfg).as_service(**trainer_cfg),
-            ]
-        )
+        with TemporaryDirectory(dir="/dev/shm/") as tmpdir:
+            if use_dcp:
+                trainer_cfg["dcp_path"] = tmpdir
 
-        # Main logic begins here
-        v0 = uuid.uuid4().int
-        v1 = v0 + 1
+            policy, rl_trainer = await asyncio.gather(
+                *[
+                    Policy.options(**services_policy_cfg).as_service(**cfg.policy),
+                    MockRLTrainer.options(**services_trainer_cfg).as_service(
+                        **trainer_cfg
+                    ),
+                ]
+            )
 
-        await rl_trainer.push_weights.fanout(policy_version=v0)
-        # Setting everything to zero
-        await rl_trainer.zero_out_model_states.fanout()
-        await rl_trainer.push_weights.fanout(policy_version=v1)
-        await policy._test_save_model_params.fanout()
+            # Main logic begins here
+            v0 = uuid.uuid4().int
+            v1 = v0 + 1
 
-        # Sanity check that before update all the tests pass
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            await rl_trainer.push_weights.fanout(policy_version=v0)
+            # Setting everything to zero
+            await rl_trainer.zero_out_model_states.fanout()
+            await rl_trainer.push_weights.fanout(policy_version=v1)
+            await policy._test_save_model_params.fanout()
 
-        await policy.update_weights.fanout(policy_version=v1)
-        all_errs = await policy._test_validate_model_params.fanout(
-            validate_fn_all_zeros
-        )
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            # Sanity check that before update all the tests pass
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
 
-        # Reloading v0, getting back original weights
-        await policy.update_weights.fanout(policy_version=v0)
-        all_errs = await policy._test_validate_model_params.fanout(validate_fn)
-        for errs in all_errs:
-            for _, e in errs.items():
-                assert not e, f"Validation failed with exception: {e}"
+            await policy.update_weights.fanout(policy_version=v1)
+            all_errs = await policy._test_validate_model_params.fanout(
+                validate_fn_all_zeros
+            )
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
 
-        logger.info("✅ Weight sharding sanity check passed!")
-        await ts.shutdown()
+            # Reloading v0, getting back original weights
+            await policy.update_weights.fanout(policy_version=v0)
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            logger.info("✅ Weight sharding sanity check passed!")
+            await ts.shutdown()
