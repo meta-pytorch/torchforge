@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 import logging
+import shutil
 from dataclasses import dataclass
 
 import torch
@@ -35,8 +36,6 @@ class DcpHandle:
             self.metadata = None
             self.param_names = None
             return
-
-        import shutil
 
         try:
             shutil.rmtree(self.checkpoint_id, ignore_errors=False)
