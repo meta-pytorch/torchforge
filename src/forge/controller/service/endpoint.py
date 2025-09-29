@@ -8,15 +8,17 @@
 Service endpoint management for the Forge framework.
 """
 
-from typing import Generic, List, TypeVar
+from typing import Any, Generic, List, TypeVar
 
-from monarch.actor import endpoint
+from monarch._src.actor.endpoint import EndpointProperty
+
 from typing_extensions import ParamSpec
 
 from .router import RoundRobinRouter, Router
 
 P = ParamSpec("P")
 R = TypeVar("R")
+Propagator = Any
 
 
 class ServiceEndpoint(Generic[P, R]):
@@ -111,6 +113,30 @@ class ServiceEndpointV2(Generic[P, R]):
         return result
 
 
+class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
+    """
+    Extension of EndpointProperty that carries service-specific
+    routing and batching configuration.
+    """
+
+    def __init__(
+        self,
+        method: Any,
+        propagator: Propagator,
+        explicit_response_port: bool,
+        *,
+        router: Router = RoundRobinRouter(),
+        batch_size: int = 1,
+        batch_timeout: float = 0.01,
+    ) -> None:
+        super().__init__(method, propagator, explicit_response_port)
+        self._service_endpoint_config = dict(
+            router=router,
+            batch_size=batch_size,
+            batch_timeout=batch_timeout,
+        )
+
+
 def service_endpoint(
     *,
     router: Router = RoundRobinRouter(),
@@ -128,16 +154,14 @@ def service_endpoint(
             async def predict(self, x): ...
     """
 
-    def decorator(method):
-        # First wrap in EndpointProperty (so actor has a proper endpoint)
-        ep = endpoint(
-            method, propagate=propagate, explicit_response_port=explicit_response_port
-        )
-        ep._service_endpoint_config = dict(
+    def decorator(method) -> ServiceEndpointProperty:
+        return ServiceEndpointProperty(
+            method,
+            propagator=propagate,
+            explicit_response_port=explicit_response_port,
             router=router,
             batch_size=batch_size,
             batch_timeout=batch_timeout,
         )
-        return ep
 
     return decorator

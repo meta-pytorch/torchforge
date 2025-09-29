@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from monarch._src.actor.endpoint import EndpointProperty
 
-from .endpoint import ServiceEndpoint, ServiceEndpointV2
+from .endpoint import ServiceEndpoint, ServiceEndpointProperty, ServiceEndpointV2
 
 
 @dataclass
@@ -85,23 +85,19 @@ class ServiceInterface:
         # Inspect the actor_def directly to find endpoints
         for attr_name in dir(actor_def):
             attr_value = getattr(actor_def, attr_name)
-            if hasattr(attr_value, "_service_endpoint_config"):
-                # Decorated with @service_endpoint
-                cfg = attr_value._service_endpoint_config
-                # Service manages router creation
+
+            # ServiceEndpointProperty: created by @service_endpoint
+            # EndpointProperty: created by @endpoint
+            if isinstance(attr_value, (EndpointProperty, ServiceEndpointProperty)):
+                cfg = (
+                    attr_value._service_endpoint_config
+                    if isinstance(attr_value, ServiceEndpointProperty)
+                    else None
+                )
+
+                # Register router and attach endpoint
                 self._service._set_router(attr_name, cfg)
-                endpoint = ServiceEndpoint(self._service, attr_name)
-
-            elif isinstance(attr_value, EndpointProperty):
-                # Decorated with Monarch @endpoint
-                self._service._set_router(attr_name)
-                endpoint = ServiceEndpoint(self._service, attr_name)
-            else:
-                # Not an endpoint
-                continue
-
-            # Attach to interface
-            setattr(self, attr_name, endpoint)
+                setattr(self, attr_name, ServiceEndpoint(self._service, attr_name))
 
     # Session management methods - handled by ServiceInterface
     async def start_session(self) -> str:
