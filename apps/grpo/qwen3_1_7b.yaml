@@ -12,7 +12,7 @@ off_by_n: 1 # Off by one by default
 # Observability configuration
 metric_logging:
   wandb:
-    project: "my_project"
+    project: "grpo-training"
     group: "grpo_exp_${oc.env:USER}"
     reduce_across_ranks: True
   console:
