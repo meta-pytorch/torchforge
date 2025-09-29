@@ -9,7 +9,7 @@ model: "Qwen/Qwen3-14B"
 off_by_n: 1 # Off by one by default
 scheduler: mast
 job_name: forge-qwen-14B
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/20
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/23
 
 
 # Dataset configuration
@@ -81,6 +81,8 @@ trainer:
     # TODO: revisit this. causing NCCL timeouts on inits when loading CP
     # from oilfs if the traienr is not in the same region as in PCI
     init_timeout_seconds: 3600
+  use_dcp: true
+  dcp_path: ${checkpoint_folder}
 
 # Replay buffer configuration
 replay_buffer:
@@ -119,7 +121,7 @@ services:
     mesh_name: dataset
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 14
+    num_replicas: 4
     with_gpus: true
     hosts: 1
     mesh_name: policy
@@ -136,7 +138,7 @@ services:
     mesh_name: replay_buffer
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
-    num_replicas: 14
+    num_replicas: 4
     with_gpus: true
     hosts: 1
     mesh_name: ref_model
