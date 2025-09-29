@@ -35,6 +35,8 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
+from forge.actors._torchstore_utils import DcpHandle, get_param_key
+
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, ReductionType
@@ -94,12 +96,15 @@ class RLTrainer(ForgeActor):
     activation_checkpoint: ActivationCheckpoint = field(
         default_factory=ActivationCheckpoint
     )
+    use_vllm_builtin_load: bool = True
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+    dcp_path: str = "forge_dcp_tmp"
+    vllm_tp_DEPRECATED: int = 1  # noqa: N815
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -148,7 +153,14 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {"loss", "state_dict_key", "use_dcp"}:
+        for key in {
+            "loss",
+            "state_dict_key",
+            "use_dcp",
+            "use_vllm_builtin_load",
+            "dcp_path",
+            "vllm_tp_DEPRECATED",
+        }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.step)
@@ -285,13 +297,17 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    async def push_weights(self, policy_version: int, vllm_tp_DEPRECATED: int) -> None:
+    async def push_weights_DEPRECATED(  # noqa: N802
+        self, policy_version: int, vllm_tp_DEPRECATED: int = 1
+    ) -> None:  # noqa: N802
+        """[Deprecated] This method pushes weights to torchstore in the vllm format,
+        which is buggy and not scalable to other models.
+        Deprecated in favor of push_weights."""
+        return await self._push_weights_DEPRECATED(policy_version, vllm_tp_DEPRECATED)
 
-        timer = Timer("trainer_perf/push_weights", use_gpu=True)
-        timer.start()
-
-        record_metric("trainer/count_weight_pushes", 1, ReductionType.SUM)
-
+    async def _push_weights_DEPRECATED(  # noqa: N802
+        self, policy_version: int, vllm_tp_DEPRECATED: int
+    ) -> None:  # noqa: N802
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
@@ -302,20 +318,20 @@ class RLTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
-        timer.step("flatten_state_dict")
+
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        timer.step("state_dict_to_hf")
+
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict,
             num_layers=self.engine.model_args.n_layers,
             vllm_tp=vllm_tp_DEPRECATED,
         )
-        timer.step("state_dict_hf_to_vllm")
+
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         if self.use_dcp:
             # TODO - DCP should probably be being saved to NFS explicitly?
@@ -335,11 +351,54 @@ class RLTrainer(ForgeActor):
                     delim=DELIM,
                     current_policy_version=policy_version,
                 )
-            timer.step("save_using_dcp")
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
-            timer.step("save_using_torchstore")
 
+    @endpoint
+    @record_perf_metrics(
+        prefix="rl_trainer_perf/push_weights", track_time=False, track_memory=True
+    )
+    async def push_weights(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format."""
+        timer = Timer("rl_trainer_perf/push_weights", use_gpu=True)
+        timer.start()
+        if not self.use_vllm_builtin_load:
+            result = await self._push_weights_DEPRECATED(
+                policy_version, self.vllm_tp_DEPRECATED
+            )
+            timer.step("push_weights_DEPRECATED")
+            return result
+
+        if "model" not in self.engine.checkpointer.states:
+            raise RuntimeError("Model state not found in checkpointer state")
+
+        sd = self.engine.checkpointer.states["model"].state_dict()
+        flattened_state_dict, _ = flatten_state_dict(sd)
+        timer.step("flatten_state_dict")
+        if self.engine.checkpointer.sd_adapter is None:
+            raise RuntimeError(
+                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+            )
+        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+        timer.step("to_hf")
+        if self.use_dcp:
+            # we could use dcp.save() to save the whole state dict,
+            # but I don't want too much deviation between the two code paths
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                dcp_id = f"{self.dcp_path}/{key}"
+                metadata = dcp.save(
+                    checkpoint_id=dcp_id,
+                    state_dict={name: param},
+                )
+                dcp_handle = DcpHandle(checkpoint_id=dcp_id, metadata=metadata)
+                await ts.put(key, dcp_handle)
+            timer.step("dcp_save")
+        else:
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                await ts.put(key, param)
+            timer.step("ts_put")
         timer.end()
 
     @endpoint

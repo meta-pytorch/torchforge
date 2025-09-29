@@ -8,7 +8,6 @@
 
 import asyncio
 
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -431,16 +430,9 @@ async def main(cfg: DictConfig):
             batch = await replay_buffer.sample.route(curr_policy_version=training_step)
             if batch is None:
                 # Track time waiting for buffer
-                wait_start = time.perf_counter()
                 await asyncio.sleep(0.1)
-                wait_end = time.perf_counter()
-                record_metric(
-                    "main/training/total_buffer_wait_time_s",
-                    wait_end - wait_start,
-                    ReductionType.SUM,
-                )
             else:
-                timer.step("buffer_sampling")
+                timer.step("waiting_for_buffer")
 
                 inputs, targets = batch
                 loss = await trainer.train_step.route(inputs, targets)
@@ -453,9 +445,7 @@ async def main(cfg: DictConfig):
                 )
 
                 training_step += 1
-                await trainer.push_weights.fanout(
-                    training_step, vllm_tp_DEPRECATED=policy_tp_size
-                )
+                await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
                 timer.step("weight_updates")

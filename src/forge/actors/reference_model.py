@@ -52,6 +52,7 @@ class ReferenceModel(ForgeActor):
     def __post_init__(self):
         """Initializes config types and env variables."""
         super().__init__()
+
         # Instantiate dict fields
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -62,13 +63,9 @@ class ReferenceModel(ForgeActor):
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
 
-        """
-        torchrun normally hands env variables, but we need to do it ourselves
-        in monarch for now.
-        """
+        self.step = 0
         self.rank = current_rank().rank
         self.size = math.prod(current_size().values())
-        self.step = 0
 
         env = {
             "RANK": str(self.rank),
@@ -88,6 +85,7 @@ class ReferenceModel(ForgeActor):
     async def setup(self):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+        self.engine.checkpointer.load()
         self.model = self.engine.model_parts[0]  # No pipeline parallelism yet
         self.model.eval()
 
