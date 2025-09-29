@@ -106,8 +106,8 @@ services:
     num_replicas: 2
     with_gpus: true
   ref_model:
-    procs: 2
-    num_replicas: 1
+    procs: 1
+    num_replicas: 2
     with_gpus: true
   reward_actor:
     procs: 1
