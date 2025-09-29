@@ -161,7 +161,7 @@ class Replica:
 
             self.actor = await self.actor_def.options(
                 **asdict(self.proc_config)
-            ).as_actor(*self.actor_args, _log=False, **self.actor_kwargs)
+            ).as_actor(*self.actor_args, _quiet=True, **self.actor_kwargs)
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()

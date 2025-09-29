@@ -196,7 +196,7 @@ class ForgeActor(Actor):
         return actor
 
     @classmethod
-    async def as_actor(cls: Type[T], *args, _log: bool = True, **actor_kwargs) -> T:
+    async def as_actor(cls: Type[T], *args, _quiet: bool = False, **actor_kwargs) -> T:
         """
         Spawns a single actor using the configuration stored in `.options()`, or defaults.
 
@@ -204,7 +204,7 @@ class ForgeActor(Actor):
         `procs`) are used to construct a ProcessConfig instance.
         If no configuration was stored, defaults to a single process with no GPU.
         """
-        if _log:
+        if not _quiet:
             logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(*args, **actor_kwargs)
         return actor
