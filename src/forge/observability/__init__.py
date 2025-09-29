@@ -19,8 +19,8 @@ from .metrics import (
     MetricCollector,
     MinAccumulator,
     record_metric,
+    Reduce,
     reduce_metrics_states,
-    ReductionType,
     StdAccumulator,
     SumAccumulator,
     WandbBackend,
@@ -38,7 +38,7 @@ __all__ = [
     "Tracer",
     "trace",
     # Enums
-    "ReductionType",
+    "Reduce",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",

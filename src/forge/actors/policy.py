@@ -55,8 +55,8 @@ from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.interfaces import Policy as PolicyInterface
-from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import Timer
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -294,17 +294,17 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
-        timer = Timer("policy_perf/generate", use_gpu=True)
-        timer.start()
+        t = Tracer("policy_perf/generate", time_with_gpu=True)
+        t.start()
 
         # Record policy generation metrics
-        record_metric("policy/generate/count_requests", 1, ReductionType.SUM)
+        record_metric("policy/generate/count_requests", 1, Reduce.SUM)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
         # Record policy generation metrics
-        record_metric("policy/generate/count_generate_requests", 1, ReductionType.SUM)
+        record_metric("policy/generate/count_generate_requests", 1, Reduce.SUM)
 
         # Wraps prompt into a dict
         prompt_dict: dict[str, str] = convert_input(prompt=prompt)
@@ -318,7 +318,7 @@ class Policy(PolicyInterface):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
-        timer.step("prompt_truncation")
+        t.step("prompt_truncation")
 
         # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
@@ -332,7 +332,7 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
-        timer.step("process_inputs")
+        t.step("process_inputs")
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -367,7 +367,7 @@ class Policy(PolicyInterface):
         record_metric(
             "policy/generate/count_sequences_completed",
             len(completions),
-            ReductionType.SUM,
+            Reduce.SUM,
         )
 
         for completion in completions:
@@ -375,17 +375,17 @@ class Policy(PolicyInterface):
             record_metric(
                 "policy/generate/sum_tokens_generated",
                 num_generated_tokens,
-                ReductionType.SUM,
+                Reduce.SUM,
             )
 
             record_metric(
                 "policy/generate/avg_tokens_generated",
                 num_generated_tokens,
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
 
-        timer.step("generate")
-        timer.end()
+        t.step("generate")
+        t.stop()
 
         return completions
 
@@ -439,20 +439,18 @@ class Policy(PolicyInterface):
             record_metric(
                 "policy_perf/update_weights/avg_pending_requests",
                 len(curr_requests),
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
             record_metric(
                 "policy_perf/update_weights/max_pending_requests",
                 len(curr_requests),
-                ReductionType.MAX,
+                Reduce.MAX,
             )
             logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
         # Record weight update metrics
-        record_metric(
-            "policy/update_weights/count_weight_updates", 1, ReductionType.SUM
-        )
+        record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
         if self.use_vllm_builtin_load:

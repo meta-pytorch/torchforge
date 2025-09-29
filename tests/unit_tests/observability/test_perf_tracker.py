@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
-from forge.observability.metrics import ReductionType
+from forge.observability.metrics import Reduce
 
 from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Tracer
 
@@ -21,7 +21,7 @@ from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Trace
 @pytest.fixture
 def mock_record_metric_calls(monkeypatch):
     """Mock record_metric that tracks all calls."""
-    calls: List[Tuple[str, float, ReductionType]] = []
+    calls: List[Tuple[str, float, Reduce]] = []
 
     def mock_record_metric(name, val, red):
         calls.append((name, val, red))

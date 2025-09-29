@@ -39,8 +39,8 @@ from forge.actors._torchstore_utils import DcpHandle, get_param_key
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
-from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics, Timer
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import trace, Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -233,7 +233,7 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    @record_perf_metrics(
+    @trace(
         "trainer_perf",
         track_time=False,
         track_memory=True,
@@ -243,8 +243,8 @@ class RLTrainer(ForgeActor):
     ) -> float:
 
         # Log timesteps
-        timer = Timer("trainer_perf/step", use_gpu=True)
-        timer.start()
+        t = Tracer("trainer_perf/step", time_with_gpu=True)
+        t.start()
 
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
@@ -260,7 +260,7 @@ class RLTrainer(ForgeActor):
         # ) as grad_acc:
         loss = self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
-        timer.step("forward_backward")
+        t.step("forward_backward")
 
         # Get learning rate from scheduler
         current_lr = (
@@ -268,32 +268,32 @@ class RLTrainer(ForgeActor):
             if hasattr(self.engine.lr_schedulers, "get_last_lr")
             else 0.001
         )
-        record_metric("trainer/learning_rate", current_lr, ReductionType.MIN)
+        record_metric("trainer/learning_rate", current_lr, Reduce.MIN)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
-        timer.step("optimizer_step")
+        t.step("optimizer_step")
 
         # Record training metrics
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().cpu().item()
-        record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
-        record_metric("trainer/avg_grpo_loss", loss, ReductionType.MEAN)
+        record_metric("trainer/count_training_steps", 1, Reduce.SUM)
+        record_metric("trainer/avg_grpo_loss", loss, Reduce.MEAN)
 
         # TODO: Extract actual KL divergence and policy entropy from the loss computation
         # These are placeholder values until the loss function exposes these metrics
-        # record_metric("trainer/step/avg_kl_divergence", 0.0, ReductionType.MEAN)
-        # record_metric("trainer/step/std_kl_divergence", 0.0, ReductionType.STD)
-        # record_metric("trainer/step/avg_policy_entropy", 0.0, ReductionType.MEAN)
+        # record_metric("trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
+        # record_metric("trainer/step/std_kl_divergence", 0.0, Reduce.STD)
+        # record_metric("trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
 
         self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
         )
-        timer.step("save_checkpoint")
-        timer.end()
+        t.step("save_checkpoint")
+        t.stop()
         return loss
 
     @endpoint
@@ -355,18 +355,16 @@ class RLTrainer(ForgeActor):
             await ts.put_state_dict(vllm_ready_hf_sd, key)
 
     @endpoint
-    @record_perf_metrics(
-        prefix="rl_trainer_perf/push_weights", track_time=False, track_memory=True
-    )
+    @trace(prefix="rl_trainer_perf/push_weights", track_time=False, track_memory=True)
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
-        timer = Timer("rl_trainer_perf/push_weights", use_gpu=True)
-        timer.start()
+        t = Tracer("rl_trainer_perf/push_weights", time_with_gpu=True)
+        t.start()
         if not self.use_vllm_builtin_load:
             result = await self._push_weights_DEPRECATED(
                 policy_version, self.vllm_tp_DEPRECATED
             )
-            timer.step("push_weights_DEPRECATED")
+            t.step("push_weights_DEPRECATED")
             return result
 
         if "model" not in self.engine.checkpointer.states:
@@ -374,13 +372,13 @@ class RLTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
-        timer.step("flatten_state_dict")
+        t.step("flatten_state_dict")
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        timer.step("to_hf")
+        t.step("to_hf")
         if self.use_dcp:
             # we could use dcp.save() to save the whole state dict,
             # but I don't want too much deviation between the two code paths
@@ -393,13 +391,13 @@ class RLTrainer(ForgeActor):
                 )
                 dcp_handle = DcpHandle(checkpoint_id=dcp_id, metadata=metadata)
                 await ts.put(key, dcp_handle)
-            timer.step("dcp_save")
+            t.step("dcp_save")
         else:
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
                 await ts.put(key, param)
-            timer.step("ts_put")
-        timer.end()
+            t.step("ts_put")
+        t.stop()
 
     @endpoint
     async def cleanup(self) -> None:

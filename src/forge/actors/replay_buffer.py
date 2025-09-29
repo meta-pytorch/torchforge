@@ -12,8 +12,8 @@ from typing import Any, Callable
 from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
-from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import trace
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -43,10 +43,10 @@ class ReplayBuffer(ForgeActor):
     @endpoint
     async def add(self, episode: "Episode") -> None:
         self.buffer.append(episode)
-        record_metric("buffer/add/count_episodes_added", 1, ReductionType.SUM)
+        record_metric("buffer/add/count_episodes_added", 1, Reduce.SUM)
 
     @endpoint
-    @record_perf_metrics("buffer_perf/sample", track_time=True, track_memory=False)
+    @trace("buffer_perf/sample", track_time=True, track_memory=False)
     async def sample(
         self, curr_policy_version: int, batch_size: int | None = None
     ) -> tuple[tuple[Any, ...], ...] | None:
@@ -61,7 +61,7 @@ class ReplayBuffer(ForgeActor):
             A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
         # Record sample request metric
-        record_metric("buffer/sample/count_sample_requests", 1, ReductionType.SUM)
+        record_metric("buffer/sample/count_sample_requests", 1, Reduce.SUM)
 
         bsz = batch_size if batch_size is not None else self.batch_size
         total_samples = self.dp_size * bsz
@@ -80,13 +80,13 @@ class ReplayBuffer(ForgeActor):
         record_metric(
             "buffer/sample/avg_buffer_utilization",
             len(self.buffer),
-            ReductionType.MEAN,
+            Reduce.MEAN,
         )
 
         record_metric(
             "buffer/sample/avg_buffer_utilization_pct",
             utilization_pct,
-            ReductionType.MEAN,
+            Reduce.MEAN,
         )
 
         # TODO: prefetch samples in advance
@@ -134,19 +134,19 @@ class ReplayBuffer(ForgeActor):
             record_metric(
                 "buffer/evict/avg_policy_staleness",
                 sum(policy_staleness) / len(policy_staleness),
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
             record_metric(
                 "buffer/evict/max_policy_staleness",
                 max(policy_staleness),
-                ReductionType.MAX,
+                Reduce.MAX,
             )
 
         # Record eviction metrics
         evicted_count = buffer_len_before_evict - buffer_len_after_evict
         if evicted_count > 0:
             record_metric(
-                "buffer/evict/sum_episodes_evicted", evicted_count, ReductionType.SUM
+                "buffer/evict/sum_episodes_evicted", evicted_count, Reduce.SUM
             )
 
         logger.debug(

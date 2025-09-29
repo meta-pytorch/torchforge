@@ -63,7 +63,7 @@ async def setup_metric_logger(
 
         # Training loop
         for step in range(max_steps):
-            record_metric("loss", 1.2, step, reduction_type=ReductionType.MEAN)
+            record_metric("loss", 1.2, step, reduction_type=Reduce.MEAN)
             # ... training code with record_metric() calls ...
             await mlogger.flush(step)  # Log metrics for this step
 

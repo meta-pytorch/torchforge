@@ -25,8 +25,8 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import setup_metric_logger
-from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import Timer
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -182,31 +182,31 @@ class RewardActor(ForgeActor):
             record_metric(
                 f"reward/evaluate_response/sum_{reward_fn_name}_reward",
                 reward,
-                ReductionType.SUM,
+                Reduce.SUM,
             )
             record_metric(
                 f"reward/evaluate_response/avg_{reward_fn_name}_reward",
                 reward,
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
             record_metric(
                 f"reward/evaluate_response/std_{reward_fn_name}_reward",
                 reward,
-                ReductionType.STD,
+                Reduce.STD,
             )
 
             # # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
 
             # # count fn calls
             record_metric(
                 f"reward/evaluate_response/count_{reward_fn_name}_calls",
                 1,
-                ReductionType.SUM,
+                Reduce.SUM,
             )
 
         avg_reward = total_rewards / len(self.reward_functions)
@@ -273,13 +273,11 @@ class DatasetActor(ForgeActor):
             sample = next(self._iterator)
 
             # Record dataset metrics
-            record_metric(
-                "dataset/sample/count_samples_generated", 1, ReductionType.SUM
-            )
+            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
             record_metric(
                 "dataset/sample/avg_sample_len",
                 len(sample["request"]),
-                ReductionType.MEAN,
+                Reduce.MEAN,
             )
 
             return sample
@@ -343,21 +341,21 @@ async def main(cfg: DictConfig):
         rollout_count = 0
         pad_id = await dataloader.pad_token.route()
         while True:
-            timer = Timer("main_perf/rollout")
-            timer.start()
+            t = Tracer("main_perf/rollout")
+            t.start()
             sample = await dataloader.sample.route()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
 
-            timer.step("data_loading")
+            t.step("data_loading")
 
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
             # TODO: this shall be part of the responses metadata instead of a separate call
             version = await policy.get_version.route()
 
-            timer.step("policy_generation")
+            t.step("policy_generation")
 
             assert (
                 len(responses) > 0
@@ -392,67 +390,61 @@ async def main(cfg: DictConfig):
                     prompt=prompt, response=response.text, target=target
                 )
 
-            timer.step("reward_evaluation")
+            t.step("reward_evaluation")
 
             # Calculate reference logprobs
             ref_logits = await ref_model.forward.route(input_ids)
-            timer.step("reference_model_forward")
+            t.step("reference_model_forward")
 
             ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logits, ref_logprobs, input_ids
-            timer.step("compute_logprobs")
+            t.step("compute_logprobs")
 
             # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.route(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.route(episode)
-                record_metric(
-                    "main/rollout/avg_advantage", advantage, ReductionType.MEAN
-                )
-                record_metric(
-                    "main/rollout/std_advantage", advantage, ReductionType.STD
-                )
-            timer.step("advantage_computation")
+                record_metric("main/rollout/avg_advantage", advantage, Reduce.MEAN)
+                record_metric("main/rollout/std_advantage", advantage, Reduce.STD)
+            t.step("advantage_computation")
 
             rollout_count += 1
-            record_metric("main/rollout/count_rollout_iterations", 1, ReductionType.SUM)
-            timer.end()
+            record_metric("main/rollout/count_rollout_iterations", 1, Reduce.SUM)
+            t.stop()
 
     async def continuous_training():
         training_step = 0
         while True:
-            timer = Timer("main_perf/training", use_gpu=True)
-            timer.start()
+            t = Tracer("main_perf/training", time_with_gpu=True)
+            t.start()
 
             batch = await replay_buffer.sample.route(curr_policy_version=training_step)
             if batch is None:
                 # Track time waiting for buffer
                 await asyncio.sleep(0.1)
             else:
-                timer.step("waiting_for_buffer")
+                t.step("waiting_for_buffer")
 
                 inputs, targets = batch
                 loss = await trainer.train_step.route(inputs, targets)
 
-                timer.step("training_step")
+                t.step("training_step")
 
                 # Record training metrics
-                record_metric(
-                    "main/training/count_training_iterations", 1, ReductionType.SUM
-                )
+                record_metric("main/training/count_training_iterations", 1, Reduce.SUM)
 
                 training_step += 1
                 await trainer.push_weights.fanout(training_step)
                 await policy.update_weights.fanout(training_step)
 
-                timer.step("weight_updates")
+                t.step("weight_updates")
 
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
-                timer.end()
+                t.stop()
 
     print("Starting GRPO training loops...")
     # TODO: Start multiple rollouts once all serivces support it

@@ -16,7 +16,7 @@ from typing import List, Optional, Protocol, Tuple
 import torch
 
 from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
-from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.metrics import record_metric, Reduce
 
 # Thread-local memory tracking state
 _local = threading.local()
@@ -190,9 +190,9 @@ class Tracer:
         delta = (end_mem - self._start_mem) / 1024**3
         peak_mem = torch.cuda.max_memory_allocated() / 1024**3
         record_metric(
-            f"{self.prefix}/memory_delta_end_start_avg_gb", delta, ReductionType.MEAN
+            f"{self.prefix}/memory_delta_end_start_avg_gb", delta, Reduce.MEAN
         )
-        record_metric(f"{self.prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX)
+        record_metric(f"{self.prefix}/memory_peak_max_gb", peak_mem, Reduce.MAX)
         _set_memory_active(False)
         torch.cuda.reset_max_memory_allocated()
         self._memory_started = False
@@ -203,20 +203,14 @@ class Tracer:
         # Total: sum all recorded durations (full timeline including end)
         total_ms = sum(d_ms for name, d_ms in durations)
         total_s = total_ms / 1000.0
-        record_metric(
-            f"{self.prefix}/total_duration_avg_s", total_s, ReductionType.MEAN
-        )
-        record_metric(f"{self.prefix}/total_duration_max_s", total_s, ReductionType.MAX)
+        record_metric(f"{self.prefix}/total_duration_avg_s", total_s, Reduce.MEAN)
+        record_metric(f"{self.prefix}/total_duration_max_s", total_s, Reduce.MAX)
 
         # Steps: record each individually (drop last "end")
         for name, d_ms in durations[:-1]:
             d_s = d_ms / 1000.0
-            record_metric(
-                f"{self.prefix}/{name}/duration_avg_s", d_s, ReductionType.MEAN
-            )
-            record_metric(
-                f"{self.prefix}/{name}/duration_max_s", d_s, ReductionType.MAX
-            )
+            record_metric(f"{self.prefix}/{name}/duration_avg_s", d_s, Reduce.MEAN)
+            record_metric(f"{self.prefix}/{name}/duration_max_s", d_s, Reduce.MAX)
 
 
 class _TimerProtocol(Protocol):
