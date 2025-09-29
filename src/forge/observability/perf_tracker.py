@@ -289,10 +289,10 @@ class _TimerCUDA(_TimerProtocol):
 
     def get_all_durations(self) -> List[Tuple[str, float]]:
         with self._lock:
-            # Check for unfinished timing (defensive programming)
+            # Sanity check
             for name, duration in self._durations:
                 if duration < 0:
-                    raise RuntimeError(f"Unfinished timing for {name}")
+                    raise RuntimeError(f"Unfinished timing for {name}.")
             return self._durations[:]
 
 
