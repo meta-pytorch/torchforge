@@ -16,9 +16,9 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+from forge.actors._torchstore_utils import get_param_key
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.torchstore_utils import get_param_key
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
@@ -552,9 +552,7 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
-                await trainer.push_weights.call(
-                    training_step, vllm_tp_DEPRECATED=policy_tp_size
-                )
+                await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.call()
