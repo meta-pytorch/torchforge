@@ -267,7 +267,7 @@ class TestErrorConditionsAndCompatibility:
             Tracer("test", timer="invalid")
 
         with pytest.raises(ValueError, match='timer must be "cpu" or "gpu"'):
-            trace("test", timer="gpu")
+            trace("test", timer="invalid")
 
         # Valid values should work
         tracer_cpu = Tracer("test", timer="cpu")
