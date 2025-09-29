@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+import getpass
 
 from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
@@ -18,6 +19,10 @@ async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     if cfg.get(SCHEDULER_KEY, Scheduler.MAST.value) != Scheduler.MAST.value:
         raise ValueError("Schuduler must be MAST.")
+
+    if cfg.get(JOB_NAME_KEY, None) is not None:
+        # prepend user name to the job to avoid name collision
+        cfg[JOB_NAME_KEY] = f"{getpass.getuser()}-{cfg[JOB_NAME_KEY]}"
 
     # init mast provisioner
     await init_provisioner(cfg)
