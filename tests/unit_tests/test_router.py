@@ -35,11 +35,6 @@ class Counter(ForgeActor):
         self.v = v
 
     @endpoint
-    async def incr(self):
-        """Increment the counter."""
-        self.v += 1
-
-    @endpoint
     async def value(self) -> int:
         """Get the current counter value."""
         return self.v
@@ -56,14 +51,19 @@ class Counter(ForgeActor):
         self.v += amount * multiplier
         return self.v
 
-    @service_endpoint(router=RoundRobinRouter())
-    async def rr_incr(self):
-        """Increment using RoundRobin router."""
+    @endpoint
+    async def incr(self):
+        """Increment the counter."""
         self.v += 1
 
     @service_endpoint(router=RoundRobinRouter(), batch_size=3, batch_timeout=1)
-    async def rr_batch_incr(self):
-        """Increment using RoundRobin router."""
+    async def rr_batch_incr_bsize3(self):
+        """Increment the round-robin counter with batching (batch size = 3)."""
+        self.v += 1
+
+    @service_endpoint(router=RoundRobinRouter(), batch_size=5, batch_timeout=0.05)
+    async def rr_batch_incr_bsize5(self):
+        """Increment the round-robin counter with batching (batch size = 5)."""
         self.v += 1
 
 
@@ -91,7 +91,7 @@ async def test_service_as_actor_preserves_normal_usage():
         assert await service.value.choose() == 5
 
         # Test increment
-        await service.rr_batch_incr.choose()
+        await service.rr_batch_incr_bsize3.choose()
         assert await service.value.choose() == 6
 
     finally:
@@ -141,7 +141,7 @@ async def test_round_robin_router_distribution():
         # Make multiple sessionless calls using route()
         results = []
         for _ in range(6):
-            await service.rr_incr.route()
+            await service.incr.route()
             values = await service.value.fanout()
             results.append(values)
         # Verify that requests were distributed round-robin
@@ -163,7 +163,7 @@ async def test_round_robin_router_distribution_with_batching():
     try:
         # Make multiple sessionless calls using route()
         results = []
-        tasks = [service.rr_batch_incr.route() for _ in range(6)]
+        tasks = [service.rr_batch_incr_bsize3.route() for _ in range(6)]
         await asyncio.gather(*tasks)
         # Verify that requests were distributed round-robin
         # Each call increments a single replica, so after 6 calls we expect:
@@ -210,24 +210,45 @@ async def test_session_router_assigns_and_updates_session_map_in_service():
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_service_endpoint_batch_flush_max_size():
-    """Ensure @service_endpoint batching flushes correctly when max batch size reached."""
+async def test_independent_batchers_and_routers_per_endpoint():
+    """Ensure multiple @service_endpoint endpoints coexist with independent routers/batchers."""
     service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
 
     try:
-        # Make 3 concurrent requests (batch_size = 3)
-        tasks = [asyncio.create_task(service.rr_batch_incr.route()) for _ in range(4)]
+        # --- First batch: rr_batch_incr_bsize3 (batch_size = 3) ---
+        tasks = [
+            asyncio.create_task(service.rr_batch_incr_bsize3.route()) for _ in range(4)
+        ]
         await asyncio.gather(*tasks)
 
         values = await service.value.fanout()
 
         # Expectation:
-        # - 3 increments batched together on one replica
-        # - 1 increment on the other replica (new batch after flush)
+        # - First 3 requests form one batch → sent to replica R1 (+3).
+        # - Remaining 1 request forms its own batch → goes to replica R2 (+1).
+        # So totals should be [3, 1] (order depends on round robin).
         assert sum(values) == 4, f"Expected total=4, got {values}"
-
-        # Exactly one replica should have count=3, and the other count=1
         assert sorted(values) == [1, 3], f"Expected [1, 3], got {values}"
+
+        # --- Second batch: rr_batch_incr_bsize5 (batch_size = 5) ---
+        tasks = [
+            asyncio.create_task(service.rr_batch_incr_bsize5.route()) for _ in range(7)
+        ]
+        await asyncio.gather(*tasks)
+
+        values = await service.value.fanout()
+
+        # Expectation (RoundRobin between replicas):
+        # Starting from previous state (R1=3, R2=1):
+        # - Next 5 requests form one batch → go to R1 (+5).
+        # - Remaining 2 requests form their own batch → go to R2 (+2).
+        #
+        # Final totals:
+        #   R1 = 3 (previous) + 5 = 8
+        #   R2 = 1 (previous) + 2 = 3
+        # So distribution should be [3, 8].
+        assert sum(values) == 11, f"Expected total=11, got {values}"
+        assert sorted(values) == [3, 8], f"Expected [4, 8], got {values}"
 
     finally:
         await service.shutdown()

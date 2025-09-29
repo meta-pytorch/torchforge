@@ -568,14 +568,13 @@ class Service:
                     logger.info("Health loop task cancelled.")
 
         # Stop all batchers in routers
-        await asyncio.gather(
-            *(
-                router.stop()
-                for router in self.routers.values()
-                if isinstance(router, Batcher)
-            ),
-            return_exceptions=True,
-        )
+        # Stop all batchers
+        batchers = [
+            router for router in self.routers.values() if isinstance(router, Batcher)
+        ]
+        if batchers:
+            await asyncio.gather(*(b.stop() for b in batchers), return_exceptions=True)
+            logger.info("All batcher loop(s) stopped gracefully.")
 
         # Stop all replicas using their stop method
         await asyncio.gather(
