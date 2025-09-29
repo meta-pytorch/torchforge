@@ -29,4 +29,4 @@ chmod +x env_setup.sh
 pip install --force-reinstall --no-deps . && python -m apps.mast.main --config apps/mast/qwen3_1_7b_mast.yaml
 ```
 
-`pip install --force-reinstall --no-deps .` is required every time you make a change to the local codebase.
+⚠️ Important Note: `pip install --force-reinstall --no-deps .` is required every time you make a change to the local codebase. This ensures your latest changes are installed before job submission.
