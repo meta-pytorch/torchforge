@@ -12,8 +12,17 @@ import logging
 import os
 import socket
 import uuid
+from abc import ABC, abstractmethod
+from typing import Optional
 
 import monarch
+
+from forge.observability.metric_actors import (
+    get_or_create_metric_logger,
+    setup_metric_logger,
+)
+
+from forge.types import ProcessConfig, Scheduler
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -21,12 +30,13 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
-from forge.observability.metric_actors import get_or_create_metric_logger
-
-from forge.types import ProcessConfig
+from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+JOB_NAME_KEY = "job_name"
+SCHEDULER_KEY = "scheduler"
 
 
 def _get_port() -> str:
@@ -76,7 +86,54 @@ class GpuManager:
             self.available_gpus.add(int(gpu_id))
 
 
-class Provisioner:
+class BaseProvisioner(ABC):
+    """Abstract base class for resource provisioners."""
+
+    @abstractmethod
+    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
+        """Creates a remote server and a HostMesh on it.
+        Args:
+            name: Name identifier for the host mesh
+            num_hosts: Number of hosts to create
+        Returns:
+            HostMesh: The created host mesh
+        """
+        pass
+
+    @abstractmethod
+    async def get_proc_mesh(
+        self,
+        num_procs: int,
+        with_gpus: bool = False,
+        num_hosts: Optional[int] = None,
+        mesh_name: Optional[str] = None,
+    ) -> ProcMesh:
+        """Gets a proc mesh.
+        Args:
+            num_procs: Number of processes needed
+            with_gpus: Whether GPU support is required
+            num_hosts: Number of hosts (None implies local allocation)
+            mesh_name: Name identifier for the proc mesh
+        Returns:
+            ProcMesh: The allocated process mesh
+        """
+        pass
+
+    @abstractmethod
+    async def stop_proc_mesh(self, proc_mesh: ProcMesh) -> None:
+        """Stops a proc mesh.
+        Args:
+            proc_mesh: The process mesh to stop
+        """
+        pass
+
+    @abstractmethod
+    async def shutdown(self) -> None:
+        """Tears down all remaining remote allocations."""
+        pass
+
+
+class Provisioner(BaseProvisioner):
     """A global resource provisioner."""
 
     def __init__(self):
@@ -145,7 +202,11 @@ class Provisioner:
         )
 
     async def get_proc_mesh(
-        self, num_procs: int, with_gpus: bool = False, num_hosts: int | None = None
+        self,
+        num_procs: int,
+        with_gpus: bool = False,
+        num_hosts: int | None = None,
+        mesh_name: Optional[str] = None,
     ):
         """Gets a proc mesh.
 
@@ -245,28 +306,47 @@ class Provisioner:
                 commands.kill(server_name)
 
 
-_provisioner: Provisioner | None = None
+_provisioner: BaseProvisioner | None = None
 
 
-def _get_provisioner():
+async def init_provisioner(cfg: DictConfig | None = None):
     global _provisioner
     if not _provisioner:
-        _provisioner = Provisioner()
+        scheduler = Scheduler.LOCAL
+        if cfg is not None:
+            scheduler = cfg.get(SCHEDULER_KEY, Scheduler.LOCAL.value)
+        if scheduler == Scheduler.MAST.value:
+            from forge.controller.launcher.mast import MastProvisioner
+
+            _provisioner = MastProvisioner(cfg=cfg)
+            await _provisioner.initialize()
+        else:
+            _provisioner = Provisioner()
+    return _provisioner
+
+
+async def _get_provisioner():
+    if not _provisioner:
+        await init_provisioner()
     return _provisioner
 
 
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
-    return await _get_provisioner().get_proc_mesh(
+    provisioner = await _get_provisioner()
+    return await provisioner.get_proc_mesh(
         num_procs=config.procs,
         with_gpus=config.with_gpus,
         num_hosts=config.hosts,
+        mesh_name=config.mesh_name,
     )
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
-    return await _get_provisioner().stop_proc_mesh(proc_mesh=proc_mesh)
+    provisioner = await _get_provisioner()
+    return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
 async def shutdown():
     logger.info("Shutting down provisioner..")
-    await _get_provisioner().shutdown()
+    provisioner = await _get_provisioner()
+    return await provisioner.shutdown()
