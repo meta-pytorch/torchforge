@@ -1,8 +1,8 @@
 # Toy app Training Configuration
 
 # Global configuration
-group_size: 6
-batch_size: 12
+group_size: 16
+batch_size: 64
 max_req_tokens: 64
 max_res_tokens: 64
 model: "Qwen/Qwen2.5-0.5B-Instruct"
@@ -13,10 +13,9 @@ dataset:
 
 # Policy configuration
 policy:
-  use_dcp: false
   engine_config:
     model: ${model}
-    tensor_parallel_size: 1
+    tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:
@@ -24,12 +23,13 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
-
+  use_vllm_builtin_load: true
 
 # Trainer configuration
 trainer:
   model_name: ${model}
   learning_rate: 1e-5
+  use_vllm_builtin_load: true
 
 # Reference model configuration
 ref_model:

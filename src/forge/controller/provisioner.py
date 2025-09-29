@@ -21,6 +21,8 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
+from forge.observability.metric_actors import setup_metric_logger
+
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -215,11 +217,19 @@ class Provisioner:
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
+        # Spawn local logging actor on each process and register with global logger
+        _ = await setup_metric_logger(procs)
+
         return procs
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
         async with self._lock:
+            # Deregister local logger from global logger
+            if hasattr(proc_mesh, "_local_fetcher"):
+                global_logger = await setup_metric_logger(proc_mesh)
+                await global_logger.deregister_fetcher.call_one(proc_mesh)
+
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)
