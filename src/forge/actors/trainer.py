@@ -36,6 +36,8 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
+from forge.actors._torchstore_utils import DcpHandle, get_param_key
+
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 
@@ -93,12 +95,15 @@ class RLTrainer(ForgeActor):
     activation_checkpoint: ActivationCheckpoint = field(
         default_factory=ActivationCheckpoint
     )
+    use_vllm_builtin_load: bool = True
     compile: Compile = field(default_factory=Compile)
     float8: Float8 = field(default_factory=Float8)
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
+    dcp_path: str = "forge_dcp_tmp"
+    vllm_tp_DEPRECATED: int = 1  # noqa: N815
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -147,7 +152,14 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {"loss", "state_dict_key", "use_dcp"}:
+        for key in {
+            "loss",
+            "state_dict_key",
+            "use_dcp",
+            "use_vllm_builtin_load",
+            "dcp_path",
+            "vllm_tp_DEPRECATED",
+        }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.step)
@@ -252,9 +264,17 @@ class RLTrainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(
+    async def push_weights_DEPRECATED(  # noqa: N802
         self, policy_version: int, vllm_tp_DEPRECATED: int = 1
-    ) -> None:
+    ) -> None:  # noqa: N802
+        """[Deprecated] This method pushes weights to torchstore in the vllm format,
+        which is buggy and not scalable to other models.
+        Deprecated in favor of push_weights."""
+        return await self._push_weights_DEPRECATED(policy_version, vllm_tp_DEPRECATED)
+
+    async def _push_weights_DEPRECATED(  # noqa: N802
+        self, policy_version: int, vllm_tp_DEPRECATED: int
+    ) -> None:  # noqa: N802
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
         start_time = time.perf_counter()
         # TODO:
@@ -304,6 +324,41 @@ class RLTrainer(ForgeActor):
             f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
             f"(hg to vllm conversion: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
         )
+
+    @endpoint
+    async def push_weights(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format."""
+        if not self.use_vllm_builtin_load:
+            return await self._push_weights_DEPRECATED(
+                policy_version, self.vllm_tp_DEPRECATED
+            )
+
+        if "model" not in self.engine.checkpointer.states:
+            raise RuntimeError("Model state not found in checkpointer state")
+
+        sd = self.engine.checkpointer.states["model"].state_dict()
+        flattened_state_dict, _ = flatten_state_dict(sd)
+        if self.engine.checkpointer.sd_adapter is None:
+            raise RuntimeError(
+                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
+            )
+        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+        if self.use_dcp:
+            # we could use dcp.save() to save the whole state dict,
+            # but I don't want too much deviation between the two code paths
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                dcp_id = f"{self.dcp_path}/{key}"
+                metadata = dcp.save(
+                    checkpoint_id=dcp_id,
+                    state_dict={name: param},
+                )
+                dcp_handle = DcpHandle(checkpoint_id=dcp_id, metadata=metadata)
+                await ts.put(key, dcp_handle)
+        else:
+            for name, param in hf_state_dict.items():
+                key = get_param_key(policy_version, name)
+                await ts.put(key, param)
 
     @endpoint
     async def cleanup(self) -> None:

@@ -7,6 +7,7 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+import pprint
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -250,7 +251,8 @@ async def main(cfg: DictConfig):
         freq=1,
         project="grpo-training",
     )
-
+    print("job config:")
+    pprint.pprint(cfg)
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
     (
@@ -307,7 +309,7 @@ async def main(cfg: DictConfig):
             )
 
             input_ids = torch.ones(
-                (group_size, max_req_tokens + max_req_tokens),
+                (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
                 device="cuda",
             )
@@ -358,9 +360,8 @@ async def main(cfg: DictConfig):
                 loss = await trainer.train_step.choose(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.call(
-                    training_step, vllm_tp_DEPRECATED=policy_tp_size
-                )
+
+                await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
 
     print("Starting GRPO training loops...")

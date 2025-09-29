@@ -18,13 +18,14 @@ import torch.nn.functional as F
 import torchstore as ts
 from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
+from forge.actors.torchstore_utils import get_param_key
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
+
 from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.util.metric_logging import get_metric_logger
-
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -250,10 +251,14 @@ class RefModel(ForgeActor):
 class Trainer(ForgeActor):
     """Reinforce Loss Trainer implementation for policy optimization."""
 
-    model_name: str
+    model_name: str = ""
     learning_rate: float = 1e-5
     device: torch.device | None = None
     state_dict_key: str = "model_state_dict"
+    use_vllm_builtin_load: bool = True
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -338,7 +343,18 @@ class Trainer(ForgeActor):
         return loss.item()
 
     @endpoint
-    async def push_weights(self, version: int, vllm_tp_DEPRECATED: int) -> None:
+    async def push_weights_DEPRECATED(  # noqa: N802
+        self, policy_version: int, vllm_tp_DEPRECATED: int = 1
+    ):
+        """Update policy model weights with trainer's current weights.
+        This method pushes weights to torchstore in the vllm format,
+        which is buggy and not scalable to other models. Deprecated.
+        """
+        return await self._push_weights_DEPRECATED(policy_version, vllm_tp_DEPRECATED)
+
+    async def _push_weights_DEPRECATED(  # noqa: N802
+        self, version: int, vllm_tp_DEPRECATED: int
+    ) -> None:
         """Update policy model weights with trainer's current weights."""
         key = f"{self.state_dict_key}{DELIM}{version}"  # Use version as unique id
         new_sd = _qwen3_hf_to_vllm(
@@ -352,6 +368,16 @@ class Trainer(ForgeActor):
         self.logger.debug(
             f"Pushed weights to {key} in {end_time - start_time:.2f} seconds"
         )
+
+    @endpoint
+    async def push_weights(self, policy_version: int) -> None:
+        """Push weights to torchstore in HF format."""
+        if not self.use_vllm_builtin_load:
+            return await self._push_weights_DEPRECATED(policy_version)
+        hf_state_dict = self.model.state_dict()
+        for name, param in hf_state_dict.items():
+            key = get_param_key(policy_version, name)
+            await ts.put(key, param)
 
 
 @dataclass
@@ -444,6 +470,8 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup services ---- #
+    print(f"{cfg.policy=}")
+    print(f"{cfg.services.policy=}")
     await ts.initialize()
     (
         dataloader,

@@ -1,7 +1,6 @@
-# Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+# trainer tp = 2, policy tp = 4
 
-# Global configuration
+# Global confOiguration
 group_size: 8
 batch_size: 16
 max_req_tokens: 512
@@ -9,19 +8,12 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
-# Dataset configuration
-dataset:
-  path: "openai/gsm8k"
-  revision: "main"
-  data_split: "train"
-  streaming: true
-  model: ${model}
 
 # Policy configuration
 policy:
   engine_config:
     model: ${model}
-    tensor_parallel_size: 1
+    tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:
@@ -54,7 +46,7 @@ trainer:
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    tensor_parallel_degree: 2
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
@@ -70,60 +62,13 @@ trainer:
     mode: selective
     selective_ac_option: op
 
-# Replay buffer configuration
-replay_buffer:
-  batch_size: ${batch_size}
-  max_policy_age: ${off_by_n}
-  dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
-
-# Reference model configuration
-ref_model:
-  model:
-    name: qwen3
-    flavor: 1.7B
-    hf_assets_path: hf://${model}
-  training:
-    dtype: bfloat16
-    gc_freq: 1
-  compile:
-    enable: false
-  parallelism:
-    data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
-    pipeline_parallel_degree: 1
-    context_parallel_degree: 1
-    expert_parallel_degree: 1
-  checkpoint:
-    enable: true
-    initial_load_path: hf://${model}
-    initial_load_in_hf: true
-
 # All resource allocations
 services:
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
-  ref_model:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
-  reward_actor:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
-
-actors:
-  dataset:
-    procs: 1
-    with_gpus: false
   trainer:
-    procs: 1
+    procs: 2
+    num_replicas: 1
     with_gpus: true
-  replay_buffer:
-    procs: 1
-    with_gpus: false
-  compute_advantages:
-    procs: 1
-    with_gpus: false
