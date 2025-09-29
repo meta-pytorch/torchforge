@@ -24,7 +24,7 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.observability.metric_actors import setup_metric_logger
+from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.util.ops import selective_log_softmax
@@ -299,7 +299,7 @@ async def main(cfg: DictConfig):
     policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
 
     # initialize before spawning services
-    mlogger = await setup_metric_logger()
+    mlogger = await get_or_create_metric_logger()
 
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())

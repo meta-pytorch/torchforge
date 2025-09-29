@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _global_logger = None
 
 
-async def setup_metric_logger(
+async def get_or_create_metric_logger(
     proc_mesh: ProcMesh | None = None,
 ) -> "GlobalLoggingActor":
     """Initializes a LocalFetcherActor in the specified process mesh (or current process if None),
@@ -29,8 +29,8 @@ async def setup_metric_logger(
     GlobalLoggingActor instance.
 
     There are primarily two ways to use this function:
-    1. In the main process, call `setup_metric_logger()` to get the global logger.
-    2. In service processes, call `setup_metric_logger(proc_mesh)` to register the
+    1. In the main process, call `get_or_create_metric_logger()` to get the global logger.
+    2. In service processes, call `get_or_create_metric_logger(proc_mesh)` to register the
        local fetcher with the global logger.
 
     Args:
@@ -45,11 +45,11 @@ async def setup_metric_logger(
             registered, but only in the process or the global logger.
 
     Example:
-        from forge.observability.metric_actors import setup_metric_logger
+        from forge.observability.metric_actors import get_or_create_metric_logger
         from forge.observability.metrics import record_metric
 
         # Main process setup
-        mlogger = await setup_metric_logger()
+        mlogger = await get_or_create_metric_logger()
 
         # Initialize services...
         policy = await Policy.as_service(...)
