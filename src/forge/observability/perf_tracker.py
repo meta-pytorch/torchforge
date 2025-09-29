@@ -8,12 +8,15 @@ import logging
 import os
 import threading
 import time
+
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import lru_cache, wraps
 from typing import List, Optional, Protocol, Tuple
 
 import torch
 
+from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
 from forge.observability.metrics import record_metric, ReductionType
 
 # Thread-local memory tracking state
@@ -92,28 +95,34 @@ class Timer:
     def __init__(self, prefix: str, use_cuda: bool = False):
         self.prefix = prefix
         use_cuda_events = (
-            os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+            os.getenv(METRIC_TIMER_USES_CUDA, str(use_cuda)).lower() == "true"
         ) and torch.cuda.is_available()
         use_cpu = not use_cuda_events
         self.timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
         self._active = False
+        self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
 
     def start(self) -> None:
+        if self._disable:
+            return
         if self._active:
             raise ValueError("Timer has already been started")
         self._active = True
         self.timer.start()
 
     def step(self, step_name: str) -> None:
+        if self._disable:
+            return
         if not self._active:
             raise ValueError("Timer must be started before calling step")
         self.timer.step(step_name)
 
     def end(self) -> None:
+        if self._disable:
+            return
         if not self._active:
             raise ValueError("Timer must be started before calling end")
         self.timer.step("end")  # dropped from steps, included in total
-        self.timer.wait_for_all()  # only needed for CUDA, no-op for CPU
         self._record_metrics()
         self._active = False  # Allow reuse by calling start() again
 
@@ -146,9 +155,6 @@ class _TimerProtocol(Protocol):
     def step(self, name: str) -> None:
         ...
 
-    def wait_for_all(self) -> None:
-        ...
-
     def get_all_durations(self) -> List[Tuple[str, float]]:
         ...
 
@@ -175,124 +181,113 @@ class _TimerCPU(_TimerProtocol):
         self._durations.append((name, delta_ms))
         self._chain_start = now
 
-    def wait_for_all(self) -> None:
-        """No threads for CPU timing - nothing to wait for."""
-        pass
-
     def get_all_durations(self) -> List[Tuple[str, float]]:
         return self._durations[:]
 
 
 class _TimerCUDA(_TimerProtocol):
-    """
-    CUDA timing backend with non-blocking events and polling threads.
-    Uses background threads to poll CUDA events without blocking main thread,
-    necessary because CUDA event queries can be expensive and we want to avoid
-    torch.cuda.synchronize() calls during timing operations.
-
-    Reference: https://github.com/meta-pytorch/monarch/blob/main/python/monarch/timer/execution_timer.py
+    """CUDA timing backend with non-blocking events and futures.
+    Uses a thread pool to poll CUDA events asynchronously without blocking the main thread.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_workers: int = 2) -> None:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available for timing")
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._futures: List[
+            Tuple[str, Future[float], int]
+        ] = []  # (name, future, submission_index)
         self._durations: List[Tuple[str, float]] = []
-        self._threads: List[threading.Thread] = []
-        self._lock = (
-            threading.Lock()
-        )  # Protects _durations and _threads from concurrent access
         self._chain_start: Optional[torch.cuda.Event] = None
 
     def start(self) -> None:
-        # Reset state for reuse
-        self._durations = []
-        with self._lock:
-            self._threads = []
+        """Call before any steps. Clear state for reuse; record initial event on current stream."""
+        self._futures.clear()
+        self._durations.clear()
         stream = torch.cuda.current_stream()
         start_event = torch.cuda.Event(enable_timing=True)
         start_event.record(stream)
         self._chain_start = start_event
 
     def step(self, name: str) -> None:
+        """Mark the end of a GPU workload segment and start the next, submitting async polling.
+        Records a CUDA end event on the current stream; a background thread polls completion.
+
+        Args:
+            name: Label for this segment's duration
+        """
+        # Submit polling future; chain to next event.
         if self._chain_start is None:
             raise ValueError("Timer must be started before calling step")
-
-        # Pre-allocate slot with placeholder to preserve ordering when pooling
-        with self._lock:
-            idx = len(self._durations)
-            self._durations.append((name, -1.0))  # Placeholder, -1 indicates pending
 
         stream = torch.cuda.current_stream()
         end_event = torch.cuda.Event(enable_timing=True)
         end_event.record(stream)
 
-        thread = threading.Thread(
-            daemon=True,  # Use daemon threads: auto-terminate on process exit to prevent leaks/hangs.
-            target=self._poll_and_store,
-            args=(idx, name, self._chain_start, end_event),
-        )
-        thread.start()
+        def _compute_elapsed(start_event, end_event):
+            # Poll with backoff: starts fast (1ms), grows to cap (50ms) for mixed workloads.
+            sleep_time = 0.001  # Start at 1ms
+            while not end_event.query():
+                time.sleep(sleep_time)
+                sleep_time = min(sleep_time * 1.5, 0.05)  # Backoff, cap at 50ms
+            return start_event.elapsed_time(end_event)
 
-        with self._lock:
-            self._threads.append(thread)
+        future = self._executor.submit(_compute_elapsed, self._chain_start, end_event)
+        index = len(self._futures)
+        self._futures.append((name, future, index))
 
-        # Clean up completed threads to prevent accumulation
-        self._join_completed_threads()
+        if len(self._futures) >= 20:  # clean up every 20 to avoid memory leak
+            self._collect_completed_futures()
 
         self._chain_start = end_event
 
-    def _poll_and_store(
-        self,
-        idx: int,
-        name: str,
-        start_event: torch.cuda.Event,
-        end_event: torch.cuda.Event,
-    ) -> None:
-        """
-        Background thread function that polls CUDA events without blocking.
-        Necessary to avoid torch.cuda.synchronize() calls which would stall GPU work.
-        Polls every 0.01 seconds until event completes, then stores the timing result.
-        """
-        while not end_event.query():
-            time.sleep(0.01)
+    def _collect_completed_futures(self) -> None:
+        """Drain done futures to avoid memory leak; update durations in submission order."""
+        completed = []
+        still_pending = []
+        for name, future, idx in self._futures:
+            if future.done():
+                try:
+                    dur = future.result()
+                    completed.append((idx, name, dur))
+                except Exception as e:
+                    raise RuntimeError(f"Timing failed for {name}: {e}") from e
+            else:
+                still_pending.append((name, future, idx))
 
-        elapsed_ms = start_event.elapsed_time(end_event)
-        with self._lock:
-            self._durations[idx] = (name, elapsed_ms)
+        # Sort completed by submission index to preserve order
+        completed.sort(key=lambda x: x[0])
+        for _, name, dur in completed:
+            self._durations.append((name, dur))
 
-    def _join_completed_threads(self) -> None:
-        """Clean up completed threads to prevent accumulation."""
-        with self._lock:
-            still_active = []
-            for t in self._threads:
-                if not t.is_alive():
-                    t.join()  # Safe since thread is already done
-                else:
-                    still_active.append(t)
-            self._threads = still_active
-
-    def wait_for_all(self) -> None:
-        """
-        Join all background polling threads to ensure timing measurements are complete.
-        This is CPU-bound waiting (joining threads) and doesn't block GPU operations.
-        Called before reading final timing results to ensure all measurements are available.
-        """
-        with self._lock:
-            threads = self._threads[:]
-
-        for t in threads:
-            t.join()
-
-        with self._lock:
-            self._threads.clear()
+        self._futures = still_pending
 
     def get_all_durations(self) -> List[Tuple[str, float]]:
-        with self._lock:
-            # Sanity check
-            for name, duration in self._durations:
-                if duration < 0:
-                    raise RuntimeError(f"Unfinished timing for {name}.")
-            return self._durations[:]
+        """Retrieve list of (name, duration) tuples in submission order after waiting for background polls to finish."""
+        # Wait and collect if pendings; return durations.
+        self._collect_completed_futures()
+        completed = []
+        for name, future, idx in self._futures:
+            try:
+                dur = future.result()
+                completed.append((idx, name, dur))
+            except Exception as e:
+                raise RuntimeError(f"Timing failed for {name}: {e}") from e
+
+        # Sort by submission index to preserve order
+        completed.sort(key=lambda x: x[0])
+        for _, name, dur in completed:
+            self._durations.append((name, dur))
+
+        self._futures.clear()
+        return self._durations[:]
+
+    def __del__(self) -> None:
+        # Fallback cleanup in finalizer; ignores errors to avoid shutdown noise.
+        try:
+            self._executor.shutdown(wait=True)
+        except Exception:
+            return
 
 
 """
@@ -334,7 +329,7 @@ def record_perf_metrics(
 
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
-                if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+                if os.getenv(DISABLE_PERF_METRICS, "false").lower() == "true":
                     return await func(*args, **kwargs)
                 with _memory_tracking_cm(prefix, track_memory), _timer_cm(
                     prefix, track_time, use_cuda
@@ -346,7 +341,7 @@ def record_perf_metrics(
 
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
-                if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+                if os.getenv(DISABLE_PERF_METRICS, "false").lower() == "true":
                     return func(*args, **kwargs)
                 with _memory_tracking_cm(prefix, track_memory), _timer_cm(
                     prefix, track_time, use_cuda
@@ -381,7 +376,7 @@ def record_perf_metrics_ctx(
             some_other_task()
     """
 
-    if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
+    if os.getenv(DISABLE_PERF_METRICS, "false").lower() == "true":
         yield
         return
 
@@ -439,7 +434,7 @@ def _timer_cm(prefix: str, track_time: bool, use_cuda: bool):
     """
 
     use_cuda_events = (
-        os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+        os.getenv(METRIC_TIMER_USES_CUDA, str(use_cuda)).lower() == "true"
     ) and torch.cuda.is_available()
     use_cpu = not use_cuda_events
     timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
@@ -452,7 +447,6 @@ def _timer_cm(prefix: str, track_time: bool, use_cuda: bool):
     finally:
         if track_time:
             timer.step("duration")  # Capture full time from start to here
-            timer.wait_for_all()
             durations = timer.get_all_durations()
             # Single block: one duration, record directly
             if durations:

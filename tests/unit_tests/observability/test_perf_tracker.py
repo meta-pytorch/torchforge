@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
+from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
 from forge.observability.metrics import ReductionType
 
 from forge.observability.perf_tracker import (
@@ -97,7 +98,7 @@ class TestTimer:
         if use_cuda and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        monkeypatch.setenv("METRIC_TIMER_USES_CUDA", str(use_cuda))
+        monkeypatch.setenv(METRIC_TIMER_USES_CUDA, str(use_cuda))
 
         # Test concurrency: run two instances in parallel
         async def async_func_test(task_id: int):
@@ -148,26 +149,17 @@ class TestTimer:
                 0.8, abs=0.02
             )
 
-        # Step "b" should have 3 individual recordings per task: ~0.1s, ~0.2s, ~0.3s
-        b_avg_values = [
-            val
-            for name, val, _ in mock_record_metric_calls
-            if "/b/duration_avg_s" in name
-        ]
-        b_max_values = [
-            val
-            for name, val, _ in mock_record_metric_calls
-            if "/b/duration_max_s" in name
-        ]
-
-        # Each task contributes [0.1, 0.2, 0.3], so we should see these patterns twice
-        expected_b_pattern = [0.1, 0.2, 0.3, 0.1, 0.2, 0.3]
-        assert sorted(b_avg_values) == pytest.approx(
-            sorted(expected_b_pattern), abs=0.005
-        )
-        assert sorted(b_max_values) == pytest.approx(
-            sorted(expected_b_pattern), abs=0.005
-        )
+        # Step "b" should have 3 recordings per task in submission order: [0.1, 0.2, 0.3]
+        expected_b_order = [0.1, 0.2, 0.3]
+        for task_id in [1, 2]:
+            for metric_type in ["avg", "max"]:
+                b_values = [
+                    val
+                    for name, val, _ in mock_record_metric_calls
+                    if f"example_{task_id}/b/duration_{metric_type}_s" in name
+                ]
+                assert len(b_values) == 3
+                assert b_values == pytest.approx(expected_b_order, abs=0.005)
 
     @pytest.mark.parametrize(
         "error_case",
@@ -304,7 +296,7 @@ class TestEnvironmentConfiguration:
 
     def test_disable_all_metrics(self, monkeypatch, mock_record_metric_calls):
         """Test skip for dec and ctx."""
-        monkeypatch.setenv("DISABLE_PERF_METRICS", "true")
+        monkeypatch.setenv(DISABLE_PERF_METRICS, "true")
 
         @record_perf_metrics("disabled_test")
         def func():
@@ -315,6 +307,35 @@ class TestEnvironmentConfiguration:
             pass
         assert not mock_record_metric_calls
 
+    def test_disable_perf_metrics_comprehensive(
+        self, monkeypatch, mock_record_metric_calls
+    ):
+        """Test that DISABLE_PERF_METRICS works for Timer, decorator, and context manager."""
+        monkeypatch.setenv(DISABLE_PERF_METRICS, "true")
+
+        # Test Timer class
+        timer = Timer("disabled_timer")
+        timer.start()
+        timer.step("step1")
+        timer.end()
+
+        # Test decorator
+        @record_perf_metrics("disabled_sync", track_time=True)
+        def sync_func():
+            return "sync_result"
+
+        sync_result = sync_func()
+
+        # Test context manager
+        with record_perf_metrics_ctx("disabled_ctx", track_time=True):
+            pass
+
+        # Verify function still works and no metrics recorded
+        assert sync_result == "sync_result"
+        assert (
+            not mock_record_metric_calls
+        ), "Expected no metrics when DISABLE_PERF_METRICS=true"
+
     def test_env_override_backend_selection(self, monkeypatch):
         """Test METRIC_TIMER_USES_CUDA overrides use_cuda parameter."""
         with patch("torch.cuda.is_available", return_value=True):
@@ -323,11 +344,11 @@ class TestEnvironmentConfiguration:
             assert isinstance(timer1.timer, _TimerCPU)
 
             # Env override: should use CUDA despite use_cuda=False
-            monkeypatch.setenv("METRIC_TIMER_USES_CUDA", "true")
+            monkeypatch.setenv(METRIC_TIMER_USES_CUDA, "true")
             timer2 = Timer("test", use_cuda=False)
             assert isinstance(timer2.timer, _TimerCUDA)
 
             # Env override: should use CPU despite use_cuda=True
-            monkeypatch.setenv("METRIC_TIMER_USES_CUDA", "false")
+            monkeypatch.setenv(METRIC_TIMER_USES_CUDA, "false")
             timer3 = Timer("test", use_cuda=True)
             assert isinstance(timer3.timer, _TimerCPU)
