@@ -114,7 +114,7 @@ class ServiceInterface:
 
     async def shutdown(self) -> None:
         """
-        Shut down the underlying Service and all endpoints.
+        Shut down the underlying Service.
         """
         await self._service.stop()
 
