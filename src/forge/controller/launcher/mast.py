@@ -279,9 +279,6 @@ class MastProvisioner(BaseProvisioner):
                 "hpcJobOncall": "monarch",
                 "hpcClusterUuid": "MastProdCluster",
                 "rmAttribution": "pytorch4all_clients_approved",
-                # "hpcClusterUuid": "MastGenAICluster",
-                # "rmAttribution": "gen_ai_llama_systems_training",
-                # "localityConstraints": ["region", "pci"],
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
