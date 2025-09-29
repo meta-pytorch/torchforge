@@ -283,9 +283,9 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token.call_one()
         while True:
-            sample = await dataloader.sample.choose()
+            sample = await dataloader.sample.call_one()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -332,17 +332,17 @@ async def main(cfg: DictConfig):
             del ref_logits, ref_logprobs, input_ids
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.choose(group)
+            advantages = await compute_advantages.compute.call_one(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.choose(episode)
+                await replay_buffer.add.call_one(episode)
 
             # Log metrics
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.choose()
+            buffer_size = await replay_buffer._numel.call_one()
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
@@ -352,12 +352,14 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.call_one(
+                curr_policy_version=training_step
+            )
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
                 inputs, targets = batch
-                loss = await trainer.train_step.choose(inputs, targets)
+                loss = await trainer.train_step.call_one(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
 

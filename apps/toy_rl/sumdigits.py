@@ -494,10 +494,10 @@ async def main(cfg: DictConfig):
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.choose()
+        pad_id = await dataloader.pad_token.call_one()
         while True:
             # Pass rollout_count for curriculum learning
-            sample = await dataloader.sample.choose(rollout_count)
+            sample = await dataloader.sample.call_one(rollout_count)
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -529,7 +529,7 @@ async def main(cfg: DictConfig):
                 )
                 episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
-                await replay_buffer.add.choose(episode)
+                await replay_buffer.add.call_one(episode)
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
@@ -542,11 +542,13 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.choose(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.call_one(
+                curr_policy_version=training_step
+            )
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                loss = await trainer.train_step.choose(batch[0])
+                loss = await trainer.train_step.call_one(batch[0])
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
                 print(f"loss/training_step: {loss} at training step {training_step}")
