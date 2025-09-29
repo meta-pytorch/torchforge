@@ -1,6 +1,6 @@
-# Forge Environment Setup
+# Forge MAST Environment Setup
 
-This folder contains a setup script to automatically configure your environment for running Forge with MAST jobs.
+A simple setup script to automatically configure your environment for running Forge with MAST jobs.
 
 ## Quick Start
 
@@ -21,7 +21,12 @@ chmod +x env_setup.sh
 # Run the setup
 ./apps/mast/env_setup.sh
 
+```
+
 ### 2. Submit MAST job
 
-# Install the latest changes and submit a job
+```
 pip install --force-reinstall --no-deps . && python -m apps.mast.main --config apps/mast/qwen3_1_7b_mast.yaml
+```
+
+`pip install --force-reinstall --no-deps .` is required every time you make a change to the local codebase.
