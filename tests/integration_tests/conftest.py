@@ -5,15 +5,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
 import pytest
 
+
 def str_to_bool(value):
-    if value.lower() in ('yes', 'true', 't', 'y', '1'):
+    if value.lower() in ("yes", "true", "t", "y", "1"):
         return True
-    elif value.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif value.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
         raise argparse.ArgumentTypeError(f"Boolean value expected, got '{value}'")
+
 
 def pytest_addoption(parser):
     """Add custom command line options for pytest."""
