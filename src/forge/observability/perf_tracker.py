@@ -62,7 +62,7 @@ class Timer:
     Local env flag METRIC_TIMER_USES_CUDA can be used to set CUDA timing.
 
     Args:
-        prefix (str): Prefix for metric names, e.g. "my_step" -> "my_step/{step_name}/duration_avg_s".
+        prefix (str): Prefix for metric names, e.g. "my_prefix" -> "{my_prefix}/{step_name}/duration_avg_s".
         use_cuda (bool): Sets CUDA timing if True and CUDA is available.
 
     Example:
