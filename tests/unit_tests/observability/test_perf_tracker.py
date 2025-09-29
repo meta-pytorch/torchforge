@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
-
 import time
 from contextlib import contextmanager
 from typing import List, Tuple
@@ -13,15 +12,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
+from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
 from forge.observability.metrics import ReductionType
 
-from forge.observability.perf_tracker import (
-    _TimerCPU,
-    _TimerCUDA,
-    record_perf_metrics,
-    record_perf_metrics_ctx,
-    Timer,
-)
+from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Tracer
 
 
 @pytest.fixture
@@ -53,281 +47,331 @@ def mock_cuda_memory():
         yield
 
 
-def assert_metrics_recorded(calls, expected_metrics):
-    """Assert metrics by pattern/value, with reduction checks and count for multiples."""
-    recorded = {name: (val, red) for name, val, red in calls}
-    for pattern, exp_val in expected_metrics.items():
-        # Handle special count checks
-        if pattern == "repeated_count":
-            actual_count = len([c for c in calls if "b/duration" in c[0]])
-            assert (
-                actual_count == exp_val
-            ), f"Expected {exp_val} repeated calls, got {actual_count}"
-            continue
+def assert_metrics_dict_matches(calls, expected_metrics):
+    """Assert recorded metrics match expected dict."""
+    actual_metrics = {name: val for name, val, _ in calls}
 
-        matching = [n for n in recorded if pattern in n]
-        assert len(matching) >= 1, f"No/insufficient matches for: {pattern}"
-        actual_val, actual_red = recorded[matching[0]]
+    for metric_name, expected_val in expected_metrics.items():
+        assert metric_name in actual_metrics, f"Missing metric: {metric_name}"
+        actual_val = actual_metrics[metric_name]
         assert actual_val == pytest.approx(
-            exp_val, abs=0.02
-        ), f"Expected {pattern}≈{exp_val}, got {actual_val}"
-        # Reduction check
-        if "_avg_" in pattern:
-            assert actual_red == ReductionType.MEAN
-        elif "_max_" in pattern:
-            assert actual_red == ReductionType.MAX
+            expected_val, rel=0.1  # 10% relative tolerance for timing tests
+        ), f"Expected {metric_name}={expected_val}, got {actual_val}"
 
 
-class TestTimer:
-    def setup_method(self, method):
-        """Very first cuda call adds ~0.4s to test times, so warmup here."""
-        if torch.cuda.is_available():
-            # Mock record_metric for warmup since fixtures aren't available in setup_method
-            with patch("forge.observability.perf_tracker.record_metric"):
-                warmup_timer = Timer("cuda_warmup", use_gpu=True)
-                warmup_timer.start()
-                warmup_timer.step("init")  # Need a step before end()
-                warmup_timer.end()
+class TracingModes:
+    """Utility to execute the same workflow in different tracing modes."""
 
-    @pytest.mark.parametrize("use_gpu", [False, True])
-    def test_timer_comprehensive_workflow(
-        self, use_gpu, mock_record_metric_calls, monkeypatch
+    @staticmethod
+    async def run_workflow(
+        mode: str, prefix: str, track_time=True, track_memory=False, time_with_gpu=False
     ):
-        """Test Timer + async concurrency: a=~0.1s, b=[0.1,0.2,0.3], total=~0.8s"""
-        if use_gpu and not torch.cuda.is_available():
-            pytest.skip("CUDA not available")
+        """Run the comprehensive test workflow: a=~0.05s, b=[0.05,0.1,0.15], total=~0.4s"""
 
-        monkeypatch.setenv("METRIC_TIMER_USES_GPU", str(use_gpu))
-
-        # Test concurrency: run two instances in parallel
-        async def async_func_test(task_id: int):
-
-            timer = Timer(f"example_{task_id}")
-            timer.start()
-            await asyncio.sleep(0.1)
-            timer.step("a")
+        if mode == "direct":
+            # Direct Tracer usage
+            tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+            tracer.start()
+            await asyncio.sleep(0.05)
+            tracer.step("a")
 
             for i in range(1, 4):  # i = 1, 2, 3
-                await asyncio.sleep(i / 10.0)  # 0.1s, 0.2s, 0.3s
-                timer.step("b")
+                await asyncio.sleep(i * 0.05)  # 0.05s, 0.1s, 0.15s
+                tracer.step("b")
 
-            await asyncio.sleep(0.1)
-            timer.end()
-            return task_id
+            await asyncio.sleep(0.05)
+            tracer.stop()
+            return "direct_done"
 
-        async def run_workflow():
+        elif mode == "decorator":
+            # Decorator usage (no steps available)
+            @trace(prefix, track_time, track_memory, time_with_gpu)
+            async def decorated_workflow():
+                await asyncio.sleep(0.05)  # step "a" equivalent
+                for i in range(1, 4):  # step "b" iterations
+                    await asyncio.sleep(i * 0.05)
+                await asyncio.sleep(0.05)  # final timing
+                return "decorator_done"
+
+            return await decorated_workflow()
+
+        elif mode == "context":
+            # Context manager usage with steps
+            with trace(prefix, track_time, track_memory, time_with_gpu) as tracer:
+                await asyncio.sleep(0.05)
+                tracer.step("a")
+
+                for i in range(1, 4):
+                    await asyncio.sleep(i * 0.05)
+                    tracer.step("b")
+
+                await asyncio.sleep(0.05)
+                return "context_done"
+
+
+class TestTracingModes:
+    """Test all tracing modes with comprehensive workflows."""
+
+    def setup_method(self, method):
+        """CUDA warmup to avoid ~0.4s first-call delay in tests."""
+        if torch.cuda.is_available():
+            with patch("forge.observability.perf_tracker.record_metric"):
+                warmup_tracer = Tracer("cuda_warmup", time_with_gpu=True)
+                warmup_tracer.start()
+                warmup_tracer.step("init")
+                warmup_tracer.stop()
+
+    @pytest.mark.parametrize("mode", ["direct", "decorator", "context"])
+    @pytest.mark.parametrize("time_with_gpu", [False, True])
+    def test_comprehensive_workflow(
+        self, mode, time_with_gpu, mock_record_metric_calls, monkeypatch
+    ):
+        """Test comprehensive workflow: timing + concurrency across all modes."""
+        if time_with_gpu and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+
+        monkeypatch.setenv(METRIC_TIMER_USES_CUDA, str(time_with_gpu))
+
+        async def run_concurrent_tasks():
             start_time = time.perf_counter()
-            results = await asyncio.gather(async_func_test(1), async_func_test(2))
+            results = await asyncio.gather(
+                TracingModes.run_workflow(
+                    mode, f"task1_{mode}", time_with_gpu=time_with_gpu
+                ),
+                TracingModes.run_workflow(
+                    mode, f"task2_{mode}", time_with_gpu=time_with_gpu
+                ),
+            )
             total_time = time.perf_counter() - start_time
             return results, total_time
 
-        results, total_time = asyncio.run(run_workflow())
+        results, total_time = asyncio.run(run_concurrent_tasks())
 
-        # Test concurrency: should be ~1x (0.8s) not 2x (1.6s) if truly concurrent
-        assert results == [1, 2]
+        # Test concurrency: should be ~1x (0.4s) not 2x (0.8s) if truly concurrent
+        assert results[0] == f"{mode}_done"
+        assert results[1] == f"{mode}_done"
         assert (
-            total_time < 1.0  # Should be 0.8, avoid flaky tests
-        ), f"Expected ~0.8s concurrent execution, got {total_time:.3f}s"
+            total_time < 0.5
+        ), f"Expected ~0.4s concurrent execution, got {total_time:.3f}s"
 
-        # Verify metrics for both tasks
-        metrics = {name: val for name, val, _ in mock_record_metric_calls}
+        # Verify backend selection
+        if mode == "direct":
+            tracer = Tracer("backend_test", time_with_gpu=time_with_gpu)
+            tracer.start()
+            if time_with_gpu and torch.cuda.is_available():
+                assert isinstance(tracer._timer, _TimerCUDA), "Expected CUDA timer"
+            else:
+                assert isinstance(tracer._timer, _TimerCPU), "Expected CPU timer"
+            tracer.step("backend_check")
+            tracer.stop()
 
-        # Both tasks should have same timing pattern
-        for task_id in [1, 2]:
-            prefix = f"example_{task_id}"
+        # Verify expected metrics based on mode
+        if mode in ["direct", "context"]:
+            # These modes support steps - should have step and total metrics
+            expected_metrics = {
+                f"task1_{mode}/a/duration_avg_s": 0.05,
+                f"task1_{mode}/a/duration_max_s": 0.05,
+                f"task2_{mode}/a/duration_avg_s": 0.05,
+                f"task2_{mode}/a/duration_max_s": 0.05,
+                f"task1_{mode}/total_duration_avg_s": 0.4,
+                f"task2_{mode}/total_duration_avg_s": 0.4,
+            }
+            # Should also have 3 "b" steps per task (6 total avg + 6 max = 12 "b" metrics)
+            b_metrics = [
+                name for name, _, _ in mock_record_metric_calls if "/b/duration" in name
+            ]
+            assert (
+                len(b_metrics) == 12
+            ), f"Expected 12 'b' metrics, got {len(b_metrics)}"
+        else:  # decorator mode
+            # Decorator mode only has total duration (no steps)
+            expected_metrics = {
+                f"task1_{mode}/total_duration_avg_s": 0.4,
+                f"task1_{mode}/total_duration_max_s": 0.4,
+                f"task2_{mode}/total_duration_avg_s": 0.4,
+                f"task2_{mode}/total_duration_max_s": 0.4,
+            }
 
-            # Step "a" duration ~0.1s for each task
-            assert metrics[f"{prefix}/a/duration_avg_s"] == pytest.approx(0.1, abs=0.02)
-            assert metrics[f"{prefix}/a/duration_max_s"] == pytest.approx(0.1, abs=0.02)
+        assert_metrics_dict_matches(mock_record_metric_calls, expected_metrics)
 
-            # Total duration ~0.8s for each task
-            assert metrics[f"{prefix}/total_duration_avg_s"] == pytest.approx(
-                0.8, abs=0.02
-            )
-            assert metrics[f"{prefix}/total_duration_max_s"] == pytest.approx(
-                0.8, abs=0.02
-            )
+    @pytest.mark.parametrize("mode", ["direct", "context"])
+    def test_memory_tracking(self, mode, mock_record_metric_calls):
+        """Test memory tracking across modes that support it."""
 
-        # Step "b" should have 3 individual recordings per task: ~0.1s, ~0.2s, ~0.3s
-        b_avg_values = [
-            val
-            for name, val, _ in mock_record_metric_calls
-            if "/b/duration_avg_s" in name
+        async def memory_workflow():
+            with mock_cuda_memory():
+                return await TracingModes.run_workflow(
+                    mode, f"mem_{mode}", track_memory=True
+                )
+
+        result = asyncio.run(memory_workflow())
+        assert f"{mode}_done" in result
+
+        # Should record both timing and memory metrics
+        expected_metrics = {
+            f"mem_{mode}/memory_delta_end_start_avg_gb": 1.0,  # 2GB - 1GB
+            f"mem_{mode}/memory_peak_max_gb": 3.0,
+        }
+        assert_metrics_dict_matches(mock_record_metric_calls, expected_metrics)
+
+    def test_nested_memory_tracking_warning(self, caplog, mock_record_metric_calls):
+        """Test nested memory tracking logs warning once per prefix."""
+
+        async def nested_workflow():
+            with mock_cuda_memory():
+                outer_tracer = Tracer("outer", track_memory=True)
+                outer_tracer.start()
+
+                # Inner tracer should warn
+                inner_result = await TracingModes.run_workflow(
+                    "direct", "inner", track_memory=True
+                )
+
+                outer_tracer.step("outer_step")
+                outer_tracer.stop()
+                return inner_result
+
+        with caplog.at_level("WARNING"):
+            result = asyncio.run(nested_workflow())
+
+        assert result == "direct_done"
+        assert "Nested memory tracking detected in inner" in caplog.text
+
+        # Only outer tracer should record memory metrics
+        memory_metrics = [
+            name for name, _, _ in mock_record_metric_calls if "memory_" in name
         ]
-        b_max_values = [
-            val
-            for name, val, _ in mock_record_metric_calls
-            if "/b/duration_max_s" in name
-        ]
+        assert all(
+            "outer/" in m for m in memory_metrics
+        ), "Only outer should track memory"
 
-        # Each task contributes [0.1, 0.2, 0.3], so we should see these patterns twice
-        expected_b_pattern = [0.1, 0.2, 0.3, 0.1, 0.2, 0.3]
-        assert sorted(b_avg_values) == pytest.approx(
-            sorted(expected_b_pattern), abs=0.005
-        )
-        assert sorted(b_max_values) == pytest.approx(
-            sorted(expected_b_pattern), abs=0.005
-        )
+
+class TestErrorConditionsAndCompatibility:
+    """Test error conditions, reuse, and timer backend compatibility."""
 
     @pytest.mark.parametrize(
-        "error_case",
+        "error_case,action",
         [
             ("step_before_start", lambda t: t.step("x")),
-            ("end_before_start", lambda t: t.end()),
+            ("stop_before_start", lambda t: t.stop()),
             ("double_start", lambda t: (t.start(), t.start())),
         ],
     )
-    def test_error_conditions(self, error_case):
-        """User errors should raise ValueError, e.g. step before start."""
-        timer = Timer("test")
-        _, action = error_case
+    def test_tracer_error_conditions(self, error_case, action):
+        """Test tracer error conditions raise appropriate errors."""
+        tracer = Tracer("test_error")
+
+        if error_case == "double_start":
+            tracer.start()  # First start is valid
+
         with pytest.raises(ValueError):
-            action(timer)
+            action(tracer)
 
+    def test_tracer_and_timer_reuse(self, mock_record_metric_calls):
+        """Test both tracer and timer backends can be reused."""
+        # Test Tracer reuse
+        tracer = Tracer("test_reuse")
 
-class TestMemoryTracking:
-    """Memory tracking functionality tests."""
+        # First session
+        tracer.start()
+        time.sleep(0.005)
+        tracer.step("session1")
+        tracer.stop()
 
-    def test_memory_tracking_and_context_manager(self, mock_record_metric_calls):
-        """Test delta/peak via ctx."""
-        with mock_cuda_memory():
-            with record_perf_metrics_ctx(
-                "mem_test", track_time=False, track_memory=True
-            ):
-                pass
+        # Second session (should work)
+        tracer.start()
+        time.sleep(0.01)
+        tracer.step("session2")
+        tracer.stop()
 
-        assert_metrics_recorded(
-            mock_record_metric_calls,
-            {
-                "memory_delta_peak_start_avg_gb": 2.0,  # (3GB - 1GB)
-                "memory_peak_max_gb": 3.0,  # 3GB peak
-            },
-        )
+        # Verify both sessions recorded metrics
+        metrics = [name for name, _, _ in mock_record_metric_calls]
+        assert any("session1" in m for m in metrics)
+        assert any("session2" in m for m in metrics)
 
-    def test_nested_memory_tracking_warning(self, caplog, mock_record_metric_calls):
-        """Test nesting skips with warning, called only once per prefix due to @lru_cache."""
+        # Test CPU timer reuse
+        cpu_timer = _TimerCPU()
+        cpu_timer.start()
+        time.sleep(0.005)
+        cpu_timer.step("cpu_step1")
+        durations1 = cpu_timer.get_all_durations()
 
-        def test_prefix_warns_once(outer_prefix: str, inner_prefix: str):
-            """Helper: nest inner_prefix multiple times, should warn only once."""
-            with mock_cuda_memory():
-                with record_perf_metrics_ctx(outer_prefix, track_memory=True):
-                    for _ in range(3):  # Nest 3 times with same prefix
-                        with record_perf_metrics_ctx(inner_prefix, track_memory=True):
-                            pass
+        cpu_timer.start()
+        time.sleep(0.005)
+        cpu_timer.step("cpu_step2")
+        durations2 = cpu_timer.get_all_durations()
 
-        with caplog.at_level("WARNING"):
-            test_prefix_warns_once("outer1", "prefix1")
-            test_prefix_warns_once("outer2", "prefix2")
+        assert len(durations1) == 1 and durations1[0][0] == "cpu_step1"
+        assert len(durations2) == 1 and durations2[0][0] == "cpu_step2"
 
-        # Should have exactly 2 warnings: one for each unique prefix
-        warning_lines = [
-            line
-            for line in caplog.text.split("\n")
-            if "Nested memory tracking detected" in line
-        ]
-        assert (
-            len(warning_lines) == 2
-        ), f"Expected exactly 2 warnings, got {len(warning_lines)}: {warning_lines}"
-        assert "Nested memory tracking detected in prefix1" in caplog.text
-        assert "Nested memory tracking detected in prefix2" in caplog.text
+        # Test CUDA timer reuse (if available)
+        if torch.cuda.is_available():
+            cuda_timer = _TimerCUDA()
+            cuda_timer.start()
+            cuda_timer.step("cuda_step1")
+            cuda_durations1 = cuda_timer.get_all_durations()
 
+            cuda_timer.start()
+            cuda_timer.step("cuda_step2")
+            cuda_durations2 = cuda_timer.get_all_durations()
 
-class TestDecoratorAPI:
-    """Decorator and context manager API tests."""
+            assert len(cuda_durations1) == 1 and cuda_durations1[0][0] == "cuda_step1"
+            assert len(cuda_durations2) == 1 and cuda_durations2[0][0] == "cuda_step2"
 
-    @pytest.mark.parametrize("track_time,track_memory", [(True, False), (False, True)])
-    def test_decorator_parameter_combinations(
-        self, track_time, track_memory, mock_record_metric_calls
-    ):
-        """Test track_time/track_memory combos."""
-        with mock_cuda_memory():
-
-            @record_perf_metrics(
-                "param_test", track_time=track_time, track_memory=track_memory
-            )
-            def test_func():
-                import time
-
+    def test_exception_handling_context_manager(self, mock_record_metric_calls):
+        """Test context manager properly cleans up on exception."""
+        with pytest.raises(ValueError, match="test exception"):
+            with trace("ctx_exception", track_time=True) as tracer:
                 time.sleep(0.01)
-                return "success"
+                tracer.step("before_error")
+                raise ValueError("test exception")
 
-            result = test_func()
-            assert result == "success"
-
-            if track_time:
-                assert_metrics_recorded(
-                    mock_record_metric_calls, {"duration_avg_s": 0.01}
-                )
-            if track_memory:
-                assert_metrics_recorded(
-                    mock_record_metric_calls,
-                    {
-                        "memory_delta_peak_start_avg_gb": 2.0,
-                        "memory_peak_max_gb": 3.0,
-                    },
-                )
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("use_gather", [False, True])
-    async def test_async_decorator(self, use_gather, mock_record_metric_calls):
-        """Test async, including concurrency via gather."""
-
-        @record_perf_metrics("async_test")
-        async def async_func(task_id=1):
-            await asyncio.sleep(0.02)
-            return task_id
-
-        if use_gather:
-            start = time.perf_counter()
-            results = await asyncio.gather(async_func(1), async_func(2))
-            total = time.perf_counter() - start
-            assert total == pytest.approx(0.02, abs=0.01)  # Concurrent timing
-            assert results == [1, 2]
-            # Should have 2 tasks x 2 metrics each
-            assert len(mock_record_metric_calls) == 4
-        else:
-            result = await async_func()
-            assert result == 1
-            assert_metrics_recorded(mock_record_metric_calls, {"duration_avg_s": 0.02})
-
-    def test_context_manager(self, mock_record_metric_calls):
-        """Test ctx."""
-        import time
-
-        with record_perf_metrics_ctx("ctx_test"):
-            time.sleep(0.01)
-        assert_metrics_recorded(mock_record_metric_calls, {"duration_avg_s": 0.01})
+        # Should still record metrics despite exception
+        metrics = [name for name, _, _ in mock_record_metric_calls]
+        assert any("before_error" in m for m in metrics)
 
 
 class TestEnvironmentConfiguration:
-    """Env config tests."""
+    """Test environment variable configuration."""
 
-    def test_disable_all_metrics(self, monkeypatch, mock_record_metric_calls):
-        """Test skip for dec and ctx."""
-        monkeypatch.setenv("DISABLE_PERF_METRICS", "true")
+    @pytest.mark.parametrize("mode", ["direct", "decorator", "context"])
+    def test_disable_perf_metrics_all_modes(
+        self, mode, monkeypatch, mock_record_metric_calls
+    ):
+        """Test DISABLE_PERF_METRICS disables all modes."""
+        monkeypatch.setenv(DISABLE_PERF_METRICS, "true")
 
-        @record_perf_metrics("disabled_test")
-        def func():
-            return "result"
+        async def disabled_workflow():
+            return await TracingModes.run_workflow(mode, f"disabled_{mode}")
 
-        assert func() == "result"
-        with record_perf_metrics_ctx("disabled_ctx"):
-            pass
-        assert not mock_record_metric_calls
+        result = asyncio.run(disabled_workflow())
+        assert f"{mode}_done" in result
+        assert not mock_record_metric_calls, "Expected no metrics when disabled"
 
-    def test_env_override_backend_selection(self, monkeypatch):
-        """Test METRIC_TIMER_USES_GPU overrides use_gpu parameter."""
-        with patch("torch.cuda.is_available", return_value=True):
-            # Default: should use CPU when use_gpu=False
-            timer1 = Timer("test", use_gpu=False)
-            assert isinstance(timer1.timer, _TimerCPU)
+    @pytest.mark.parametrize(
+        "env_value,expected_backend",
+        [
+            ("true", _TimerCUDA),
+            ("false", _TimerCPU),
+        ],
+    )
+    def test_metric_timer_uses_cuda_override(
+        self, env_value, expected_backend, monkeypatch
+    ):
+        """Test METRIC_TIMER_USES_CUDA env var overrides time_with_gpu parameter."""
+        if env_value == "true" and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
 
-            # Env override: should use CUDA despite use_gpu=False
-            monkeypatch.setenv("METRIC_TIMER_USES_GPU", "true")
-            timer2 = Timer("test", use_gpu=False)
-            assert isinstance(timer2.timer, _TimerCUDA)
+        with patch("torch.cuda.is_available", return_value=True), patch(
+            "forge.observability.perf_tracker.record_metric"
+        ):
+            monkeypatch.setenv(METRIC_TIMER_USES_CUDA, env_value)
 
-            # Env override: should use CPU despite use_gpu=True
-            monkeypatch.setenv("METRIC_TIMER_USES_GPU", "false")
-            timer3 = Timer("test", use_gpu=True)
-            assert isinstance(timer3.timer, _TimerCPU)
+            # Test with time_with_gpu=False (should be overridden by env)
+            tracer = Tracer("env_test", time_with_gpu=False)
+            tracer.start()
+
+            assert isinstance(tracer._timer, expected_backend)
+
+            tracer.step("env_step")
+            tracer.stop()

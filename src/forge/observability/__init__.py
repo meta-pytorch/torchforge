@@ -25,6 +25,7 @@ from .metrics import (
     SumAccumulator,
     WandbBackend,
 )
+from .perf_tracker import trace, Tracer
 
 __all__ = [
     # Main API functions
@@ -33,6 +34,9 @@ __all__ = [
     "get_actor_name_with_rank",
     "get_logger_backend_class",
     "setup_metric_logger",
+    # Performance tracking
+    "Tracer",
+    "trace",
     # Enums
     "ReductionType",
     # Actor classes

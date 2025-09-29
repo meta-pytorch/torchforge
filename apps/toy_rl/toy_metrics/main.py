@@ -13,11 +13,7 @@ from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.observability.metric_actors import setup_metric_logger
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import (
-    record_perf_metrics,
-    record_perf_metrics_ctx,
-    Timer,
-)
+from forge.observability.perf_tracker import trace, Tracer
 
 from monarch.actor import current_rank, endpoint
 
@@ -28,21 +24,19 @@ class TrainActor(ForgeActor):
     """Example training actor that records loss metrics."""
 
     @endpoint
-    @record_perf_metrics(
-        "trainer_perf", track_time=False, track_memory=True, use_gpu=False
-    )
+    @trace("trainer_perf", track_time=False, track_memory=True, time_with_gpu=False)
     async def train_step(self, step: int):
         rank = current_rank().rank
 
-        # Phase 2: Use Timer for detailed step timing
-        timer = Timer("trainer_perf/step", use_gpu=False)
-        timer.start()
+        # Phase 2: Use Tracer for detailed step timing
+        tracer = Tracer("trainer_perf/step", track_time=True, time_with_gpu=True)
+        tracer.start()
 
         # Simulate forward pass
-        timer.step("forward")
+        tracer.step("forward")
 
         # Simulate backward pass
-        timer.step("backward")
+        tracer.step("backward")
 
         value = rank * 1000 + 100 * step
 
@@ -54,7 +48,7 @@ class TrainActor(ForgeActor):
 
         print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
 
-        timer.end()
+        tracer.stop()
         return value
 
 
@@ -65,12 +59,12 @@ class GeneratorActor(ForgeActor):
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
 
-        with record_perf_metrics_ctx(
-            "policy_perf", track_time=True, track_memory=False, use_gpu=False
-        ):
+        with trace(
+            "policy_perf", track_time=True, track_memory=False, time_with_gpu=True
+        ) as tracer:
 
             value = rank * 1000 + step * 100 + substep * 10
-
+            tracer.step("time_to_value")
             # Record generation metrics following the plan
             record_metric("policy/count_requests", 1, ReductionType.SUM)
             record_metric(
