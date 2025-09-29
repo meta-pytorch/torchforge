@@ -406,14 +406,14 @@ async def main(cfg: DictConfig):
             advantages = await compute_advantages.compute.call_one(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.route(episode)
+                await replay_buffer.add.call_one(episode)
 
             # Log metrics
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
             mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.route()
+            buffer_size = await replay_buffer._numel.call_one()
             mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
             mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
@@ -425,7 +425,9 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
+            batch = await replay_buffer.sample.call_one(
+                curr_policy_version=training_step
+            )
             if batch is None:
                 # Track time waiting for buffer
                 await asyncio.sleep(0.1)
@@ -433,10 +435,10 @@ async def main(cfg: DictConfig):
                 t.step("waiting_for_buffer")
 
                 inputs, targets = batch
-                loss = await trainer.train_step.route(inputs, targets)
+                loss = await trainer.train_step.call_one(inputs, targets)
                 training_step += 1
                 mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
 
                 t.step("weight_updates")
