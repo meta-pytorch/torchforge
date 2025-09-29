@@ -115,9 +115,9 @@ class ReplayBuffer(ForgeActor):
         Args:
             curr_policy_version (int): The current policy version.
         """
-        await self._evict(curr_policy_version)
+        self._evict(curr_policy_version)
 
-    async def _evict(self, curr_policy_version: int) -> None:
+    def _evict(self, curr_policy_version: int) -> None:
         buffer_len_before_evict = len(self.buffer)
         self.buffer = [
             trajectory
