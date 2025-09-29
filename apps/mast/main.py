@@ -16,7 +16,7 @@ from omegaconf import DictConfig
 
 
 async def main(cfg: DictConfig):
-    """Main GRPO training loop with rollout and training processes."""
+    """Main module for launching mast jobs for GRPO training."""
     if cfg.get(SCHEDULER_KEY, Scheduler.MAST.value) != Scheduler.MAST.value:
         raise ValueError("Schuduler must be MAST.")
 
