@@ -59,11 +59,11 @@ class Timer:
     Supports reuse: after calling end(), you may call start() again to begin a new timing session.
 
     Local env flag DISABLE_PERF_METRICS can be used to skip all timing operations.
-    Local env flag METRIC_TIMER_USES_CUDA can be used to set CUDA timing.
+    Local env flag METRIC_TIMER_USES_GPU can be used to set CUDA timing.
 
     Args:
         prefix (str): Prefix for metric names, e.g. "my_step" -> "my_step/{step_name}/duration_avg_s".
-        use_cuda (bool): Sets CUDA timing if True and CUDA is available.
+        use_gpu (bool): Sets CUDA timing if True and CUDA is available.
 
     Example:
         timer = Timer("my_prefix")
@@ -89,12 +89,12 @@ class Timer:
         timer.end()
     """
 
-    def __init__(self, prefix: str, use_cuda: bool = False):
+    def __init__(self, prefix: str, use_gpu: bool = False):
         self.prefix = prefix
-        use_cuda_events = (
-            os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+        use_gpu_events = (
+            os.getenv("METRIC_TIMER_USES_GPU", str(use_gpu)).lower() == "true"
         ) and torch.cuda.is_available()
-        use_cpu = not use_cuda_events
+        use_cpu = not use_gpu_events
         self.timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
         self._active = False
 
@@ -307,7 +307,7 @@ def record_perf_metrics(
     prefix: str,
     track_time: bool = True,
     track_memory: bool = False,
-    use_cuda: bool = False,
+    use_gpu: bool = False,
 ):
     """
     Decorator for functions with performance tracking, supporting both sync and async functions by detecting coroutine status.
@@ -317,7 +317,7 @@ def record_perf_metrics(
         prefix (str): Prefix for metric names
         track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        use_cuda (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_CUDA env var).
+        use_gpu (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_GPU env var).
             Defaults to False.
 
     Example:
@@ -338,7 +338,7 @@ def record_perf_metrics(
                 if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
                     return await func(*args, **kwargs)
                 with _memory_tracking_cm(prefix, track_memory), _timer_cm(
-                    prefix, track_time, use_cuda
+                    prefix, track_time, use_gpu
                 ):
                     return await func(*args, **kwargs)
 
@@ -350,7 +350,7 @@ def record_perf_metrics(
                 if os.getenv("DISABLE_PERF_METRICS", "false").lower() == "true":
                     return func(*args, **kwargs)
                 with _memory_tracking_cm(prefix, track_memory), _timer_cm(
-                    prefix, track_time, use_cuda
+                    prefix, track_time, use_gpu
                 ):
                     return func(*args, **kwargs)
 
@@ -364,7 +364,7 @@ def record_perf_metrics_ctx(
     prefix: str,
     track_time: bool = True,
     track_memory: bool = False,
-    use_cuda: bool = False,
+    use_gpu: bool = False,
 ):
     """
     Context manager for performance tracking in a code block, combining time and memory metrics.
@@ -374,7 +374,7 @@ def record_perf_metrics_ctx(
         prefix (str): Prefix for metric names
         track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        use_cuda (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_CUDA env var). Defaults to False.
+        use_gpu (bool): Whether to use CUDA events for timing (overridden by METRIC_TIMER_USES_GPU env var). Defaults to False.
 
     Example:
        with record_perf_metrics_ctx("my_block", track_time=True, track_memory=True):
@@ -387,7 +387,7 @@ def record_perf_metrics_ctx(
         return
 
     with _memory_tracking_cm(prefix, track_memory), _timer_cm(
-        prefix, track_time, use_cuda
+        prefix, track_time, use_gpu
     ):
         yield
 
@@ -433,17 +433,17 @@ def _memory_tracking_cm(prefix: str, track_memory: bool):
 
 
 @contextmanager
-def _timer_cm(prefix: str, track_time: bool, use_cuda: bool):
+def _timer_cm(prefix: str, track_time: bool, use_gpu: bool):
     """
     Sync context manager for measuring execution time.
     Used internally by decorators and async context managers for timing measurements.
     """
 
-    use_cuda_events = (
-        os.getenv("METRIC_TIMER_USES_CUDA", str(use_cuda)).lower() == "true"
+    use_gpu_events = (
+        os.getenv("METRIC_TIMER_USES_GPU", str(use_gpu)).lower() == "true"
     ) and torch.cuda.is_available()
-    use_cpu = not use_cuda_events
-    timer: _TimerProtocol = _TimerCPU() if use_cpu else _TimerCUDA()
+    use_cpu = not use_gpu_events
+    timer: _TimerProtocol = _TimerCUDA() if use_gpu_events else _TimerCPU()
 
     if track_time:
         timer.start()

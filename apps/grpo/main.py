@@ -7,6 +7,7 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+
 import time
 import uuid
 from dataclasses import dataclass
@@ -24,12 +25,11 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.observability.metric_actors import GlobalLoggingActor
+from forge.observability.metric_actors import setup_metric_logger
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import StepTimer
-from forge.util.metric_logging import get_metric_logger
+from forge.observability.perf_tracker import Timer
 from forge.util.ops import selective_log_softmax
-from monarch.actor import endpoint, get_or_spawn_controller
+from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -298,37 +298,11 @@ async def main(cfg: DictConfig):
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
 
-    # Initialize observability system - hardcode the backends configuration
-    backends = [
-        {
-            "class": "console",
-            "log_per_rank": False,
-        }
-    ]
-
-    # Add wandb backend if wandb config is present
-    if hasattr(cfg, "wandb") and cfg.wandb:
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        wandb_backend = {
-            "class": "wandb",
-            "project": cfg.wandb.project,
-            "group": f"{cfg.wandb.group}_{timestamp}",
-            "mode": "wandb_rank_0_reduce_all",
-            "log_per_rank": False,
-        }
-        backends.append(wandb_backend)
-
-    logging_config = {"backends": backends}
-
-    # Initialize global logging system (before services that record metrics)
-    global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
     # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
     policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
-    mlogger = get_metric_logger(
-        "wandb",
-        freq=1,
-        project="grpo-training",
-    )
+
+    # initialize before spawning services
+    mlogger = await setup_metric_logger()
 
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
@@ -356,22 +330,9 @@ async def main(cfg: DictConfig):
         ),
     )
 
-    # Setup logging for the main process (needed for record_metric calls in main)
-    from forge.observability.metric_actors import LocalFetcherActor
-    from monarch.actor import this_proc
-
-    main_fetcher = await this_proc().spawn(
-        "main_local_fetcher", LocalFetcherActor, global_logger
-    )
-    await asyncio.gather(
-        global_logger.register_fetcher.call_one(main_fetcher, "main_local_fetcher")
-    )
-
-    # Initialize backends first (this sets the config)
-    await global_logger.initialize_backends.call_one(logging_config)
-
-    # THEN initialize the main process fetcher (now that config is available)
-    await main_fetcher.init_collector.call_one({})
+    # Initialize logging backends after all processes are spawned (e.g. wandb)
+    metric_logging = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    await mlogger.init_backends.call_one(metric_logging)
 
     print("All services initialized successfully!")
 
@@ -383,7 +344,7 @@ async def main(cfg: DictConfig):
         rollout_count = 0
         pad_id = await dataloader.pad_token.route()
         while True:
-            timer = StepTimer("main_perf/rollout", sync_cuda_event=False)
+            timer = Timer("main_perf/rollout")
             timer.start()
             sample = await dataloader.sample.route()
             if sample is None:
@@ -464,7 +425,7 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         while True:
-            timer = StepTimer("main_perf/training", sync_cuda_event=False)
+            timer = Timer("main_perf/training", use_gpu=True)
             timer.start()
 
             batch = await replay_buffer.sample.route(curr_policy_version=training_step)
@@ -492,13 +453,15 @@ async def main(cfg: DictConfig):
                 )
 
                 training_step += 1
-                await trainer.push_weights.fanout(training_step)
+                await trainer.push_weights.fanout(
+                    training_step, vllm_tp_DEPRECATED=policy_tp_size
+                )
                 await policy.update_weights.fanout(training_step)
 
                 timer.step("weight_updates")
 
                 # Flush metrics every training step to WandB
-                await global_logger.flush.call_one(training_step)
+                await mlogger.flush.call_one(training_step)
                 timer.end()
 
     print("Starting GRPO training loops...")
@@ -514,7 +477,7 @@ async def main(cfg: DictConfig):
         training_task.cancel()
     finally:
         print("Shutting down...")
-        await asyncio.gather(global_logger.shutdown.call_one())
+        await asyncio.gather(mlogger.shutdown.call_one())
 
         await asyncio.gather(
             dataloader.shutdown(),

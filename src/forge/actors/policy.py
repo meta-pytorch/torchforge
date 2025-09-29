@@ -50,7 +50,7 @@ from forge.data_models.prompt import to_prompt
 
 from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import StepTimer
+from forge.observability.perf_tracker import Timer
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -285,7 +285,7 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
-        timer = StepTimer("policy_perf/generate", sync_cuda_event=False)
+        timer = Timer("policy_perf/generate", use_gpu=True)
         timer.start()
 
         # Record policy generation metrics

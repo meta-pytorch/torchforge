@@ -10,9 +10,13 @@ model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 
 # Observability configuration
-wandb:
-  project: "my_project"
-  group: "grpo_exp_${oc.env:USER}"
+metric_logging:
+  wandb:
+    project: "my_project"
+    group: "grpo_exp_${oc.env:USER}"
+    reduce_across_ranks: True
+  console:
+    reduce_across_ranks: True
 
 # Dataset configuration
 dataset:

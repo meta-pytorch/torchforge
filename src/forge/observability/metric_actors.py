@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from monarch.actor import Actor, endpoint, get_or_spawn_controller
+from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
 from forge.observability.metrics import (
     get_logger_backend_class,
@@ -21,19 +21,89 @@ logger = logging.getLogger(__name__)
 _global_logger = None
 
 
-async def get_metric_logger():
-    """Get or spawn the global logging actor.
+async def setup_metric_logger(
+    proc_mesh: ProcMesh | None = None,
+) -> "GlobalLoggingActor":
+    """Initializes a LocalFetcherActor in the specified process mesh (or current process if None),
+    if not already initialized, registers it with the GlobalLoggingActor and returns the
+    GlobalLoggingActor instance.
+
+    There are primarily two ways to use this function:
+    1. In the main process, call `setup_metric_logger()` to get the global logger.
+    2. In service processes, call `setup_metric_logger(proc_mesh)` to register the
+       local fetcher with the global logger.
+
+    Args:
+        proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on. If None,
+            uses `monarch.actor.this_proc()`.
 
     Returns:
-        GlobalLoggingActor: The global logging actor instance.
+        GlobalLoggingActor: The global logging controller.
+
+    Raises:
+        ValueError: If the logging state is inconsistent, i.e. the fetcher is already
+            registered, but only in the process or the global logger.
 
     Example:
-        mlogger = await get_global_logger()
-        # spawn your processes ...
-        await mlogger.init_backends(config)
+        from forge.observability.metric_actors import setup_metric_logger
+        from forge.observability.metrics import record_metric
+
+        # Main process setup
+        mlogger = await setup_metric_logger()
+
+        # Initialize services...
+        policy = await Policy.as_service(...)
+
+        # Initialize logging backends after all local fetchers are registered
+        # so each rank can have its own.
+        await mlogger.init_backends({
+            "console": {"reduce_across_ranks": True},
+            "wandb": {"project": "my_project", "reduce_across_ranks": False}
+        })
+
+        # Training loop
+        for step in range(max_steps):
+            record_metric("loss", 1.2, step, reduction_type=ReductionType.MEAN)
+            # ... training code with record_metric() calls ...
+            await mlogger.flush(step)  # Log metrics for this step
+
+        # Shutdown
+        await mlogger.shutdown()
     """
-    _global_logger = await get_or_spawn_controller("global_logger", GlobalLoggingActor)
-    return _global_logger
+    # Get or create the singleton global logger
+    global _global_logger
+    if _global_logger is None:
+        _global_logger = await get_or_spawn_controller(
+            "global_logger", GlobalLoggingActor
+        )
+    global_logger = _global_logger
+
+    # Determine process context
+    proc = proc_mesh if proc_mesh is not None else this_proc()
+
+    # Check current state for consistency
+    proc_has_local_fetcher = hasattr(proc, "_local_fetcher")
+    global_logger_has_local_fetcher = await global_logger.has_fetcher.call_one(proc)
+
+    # Consistency check: both should be in sync
+    if proc_has_local_fetcher != global_logger_has_local_fetcher:
+        raise ValueError(
+            f"Inconsistent logging state for proc {proc}: "
+            f"proc has _local_fetcher={proc_has_local_fetcher}, "
+            f"but global_logger has registration={global_logger_has_local_fetcher}. "
+            f"This indicates a bug in logging setup/teardown. "
+            f"Both should be True (already setup) or both False (needs setup)."
+        )
+
+    # Setup local_fetcher_actor if needed
+    if not proc_has_local_fetcher:
+        local_fetcher_actor = await proc.spawn(
+            "local_fetcher_actor", LocalFetcherActor, global_logger
+        )
+        await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
+        proc._local_fetcher = local_fetcher_actor
+
+    return global_logger
 
 
 class LocalFetcherActor(Actor):
@@ -46,6 +116,7 @@ class LocalFetcherActor(Actor):
 
     def __init__(self, global_logger: Optional["GlobalLoggingActor"] = None) -> None:
         self.global_logger = global_logger
+        _is_initialized = False
 
     @endpoint
     async def flush(
@@ -61,7 +132,6 @@ class LocalFetcherActor(Actor):
             Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
-
         collector = MetricCollector()
         result = await collector.flush(step, return_state=return_state)
         return result
@@ -73,7 +143,6 @@ class LocalFetcherActor(Actor):
         config: Dict[str, Any],
     ):
         """Init local (per-rank) logger backends and MetricCollector."""
-
         collector = MetricCollector()
         await collector.init_backends(metadata_per_primary_backend, config)
 
@@ -161,7 +230,7 @@ class GlobalLoggingActor(Actor):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     @endpoint
-    async def register_fetcher(self, fetcher: LocalFetcherActor, name: str):
+    async def register_fetcher(self, fetcher: LocalFetcherActor, name: str | ProcMesh):
         """Registers a fetcher with the global actor. Each key represents a process mesh.
         If there are 2 processes, each with 2 replicas with N gpus, we would
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
@@ -175,7 +244,7 @@ class GlobalLoggingActor(Actor):
             )
 
     @endpoint
-    async def deregister_fetcher(self, name: str):
+    async def deregister_fetcher(self, name: str | ProcMesh):
         if name not in self.fetchers:
             logger.warning(
                 f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
@@ -245,6 +314,11 @@ class GlobalLoggingActor(Actor):
                 logger_backend,
             ) in self.global_logger_backends.items():
                 await logger_backend.log(reduced_metrics, step)
+
+    @endpoint
+    def has_fetcher(self, name: str | ProcMesh) -> bool:
+        """Check if a fetcher is registered with the given name."""
+        return name in self.fetchers
 
     @endpoint
     def get_fetcher_count(self) -> int:

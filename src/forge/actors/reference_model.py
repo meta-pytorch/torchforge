@@ -28,7 +28,7 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics, StepTimer
+from forge.observability.perf_tracker import record_perf_metrics, Timer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -96,7 +96,7 @@ class ReferenceModel(ForgeActor):
         "reference_perf/forward",
         track_time=False,
         track_memory=True,
-        sync_cuda_event=False,
+        use_gpu=True,
     )
     async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
 
@@ -110,7 +110,7 @@ class ReferenceModel(ForgeActor):
             ReductionType.MEAN,
         )
 
-        timer = StepTimer("reference_perf/forward", sync_cuda_event=False)
+        timer = Timer("reference_perf/forward", use_gpu=True)
         timer.start()
         self.engine.gc_handler.run(self.step)
         timer.step("garbage_collection")

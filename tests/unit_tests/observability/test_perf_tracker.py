@@ -84,20 +84,20 @@ class TestTimer:
         if torch.cuda.is_available():
             # Mock record_metric for warmup since fixtures aren't available in setup_method
             with patch("forge.observability.perf_tracker.record_metric"):
-                warmup_timer = Timer("cuda_warmup", use_cuda=True)
+                warmup_timer = Timer("cuda_warmup", use_gpu=True)
                 warmup_timer.start()
                 warmup_timer.step("init")  # Need a step before end()
                 warmup_timer.end()
 
-    @pytest.mark.parametrize("use_cuda", [False, True])
+    @pytest.mark.parametrize("use_gpu", [False, True])
     def test_timer_comprehensive_workflow(
-        self, use_cuda, mock_record_metric_calls, monkeypatch
+        self, use_gpu, mock_record_metric_calls, monkeypatch
     ):
         """Test Timer + async concurrency: a=~0.1s, b=[0.1,0.2,0.3], total=~0.8s"""
-        if use_cuda and not torch.cuda.is_available():
+        if use_gpu and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        monkeypatch.setenv("METRIC_TIMER_USES_CUDA", str(use_cuda))
+        monkeypatch.setenv("METRIC_TIMER_USES_GPU", str(use_gpu))
 
         # Test concurrency: run two instances in parallel
         async def async_func_test(task_id: int):
@@ -316,18 +316,18 @@ class TestEnvironmentConfiguration:
         assert not mock_record_metric_calls
 
     def test_env_override_backend_selection(self, monkeypatch):
-        """Test METRIC_TIMER_USES_CUDA overrides use_cuda parameter."""
+        """Test METRIC_TIMER_USES_GPU overrides use_gpu parameter."""
         with patch("torch.cuda.is_available", return_value=True):
-            # Default: should use CPU when use_cuda=False
-            timer1 = Timer("test", use_cuda=False)
+            # Default: should use CPU when use_gpu=False
+            timer1 = Timer("test", use_gpu=False)
             assert isinstance(timer1.timer, _TimerCPU)
 
-            # Env override: should use CUDA despite use_cuda=False
-            monkeypatch.setenv("METRIC_TIMER_USES_CUDA", "true")
-            timer2 = Timer("test", use_cuda=False)
+            # Env override: should use CUDA despite use_gpu=False
+            monkeypatch.setenv("METRIC_TIMER_USES_GPU", "true")
+            timer2 = Timer("test", use_gpu=False)
             assert isinstance(timer2.timer, _TimerCUDA)
 
-            # Env override: should use CPU despite use_cuda=True
-            monkeypatch.setenv("METRIC_TIMER_USES_CUDA", "false")
-            timer3 = Timer("test", use_cuda=True)
+            # Env override: should use CPU despite use_gpu=True
+            monkeypatch.setenv("METRIC_TIMER_USES_GPU", "false")
+            timer3 = Timer("test", use_gpu=True)
             assert isinstance(timer3.timer, _TimerCPU)

@@ -550,7 +550,7 @@ class ConsoleBackend(LoggerBackend):
 
     async def log(self, metrics: Dict[str, Any], step: int) -> None:
         logger.info(f"=== [{self.prefix}] - METRICS STEP {step} ===")
-        for key, value in metrics.items():
+        for key, value in sorted(metrics.items()):
             logger.info(f"  {key}: {value}")
         logger.info("==============================\n")
 

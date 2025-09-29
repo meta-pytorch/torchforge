@@ -29,13 +29,13 @@ class TrainActor(ForgeActor):
 
     @endpoint
     @record_perf_metrics(
-        "trainer_perf", track_time=False, track_memory=True, use_cuda=False
+        "trainer_perf", track_time=False, track_memory=True, use_gpu=False
     )
     async def train_step(self, step: int):
         rank = current_rank().rank
 
         # Phase 2: Use Timer for detailed step timing
-        timer = Timer("trainer_perf/step", use_cuda=False)
+        timer = Timer("trainer_perf/step", use_gpu=False)
         timer.start()
 
         # Simulate forward pass
@@ -66,7 +66,7 @@ class GeneratorActor(ForgeActor):
         rank = current_rank().rank
 
         with record_perf_metrics_ctx(
-            "policy_perf", track_time=True, track_memory=False, use_cuda=False
+            "policy_perf", track_time=True, track_memory=False, use_gpu=False
         ):
 
             value = rank * 1000 + step * 100 + substep * 10

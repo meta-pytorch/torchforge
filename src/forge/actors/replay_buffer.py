@@ -13,7 +13,7 @@ from monarch.actor import endpoint
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics_ctx
+from forge.observability.perf_tracker import record_perf_metrics
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -46,9 +46,7 @@ class ReplayBuffer(ForgeActor):
         record_metric("buffer/add/count_episodes_added", 1, ReductionType.SUM)
 
     @endpoint
-    @record_perf_metrics_ctx(
-        "buffer_perf/sample", track_time=True, track_memory=False, sync_cuda_event=False
-    )
+    @record_perf_metrics("buffer_perf/sample", track_time=True, track_memory=False)
     async def sample(
         self, curr_policy_version: int, batch_size: int | None = None
     ) -> tuple[tuple[Any, ...], ...] | None:

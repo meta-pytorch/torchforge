@@ -38,7 +38,7 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, ReductionType
-from forge.observability.perf_tracker import record_perf_metrics, StepTimer
+from forge.observability.perf_tracker import record_perf_metrics, Timer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -222,14 +222,16 @@ class RLTrainer(ForgeActor):
 
     @endpoint
     @record_perf_metrics(
-        "trainer_perf", track_time=False, track_memory=True, sync_cuda_event=False
+        "trainer_perf",
+        track_time=False,
+        track_memory=True,
     )
     async def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
 
         # Log timesteps
-        timer = StepTimer("trainer_perf/step", sync_cuda_event=False)
+        timer = Timer("trainer_perf/step", use_gpu=True)
         timer.start()
 
         self.engine.gc_handler.run(self.step)
@@ -283,9 +285,9 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    async def push_weights(self, policy_version: int) -> None:
+    async def push_weights(self, policy_version: int, vllm_tp_DEPRECATED: int) -> None:
 
-        timer = StepTimer("trainer_perf/push_weights", sync_cuda_event=False)
+        timer = Timer("trainer_perf/push_weights", use_gpu=True)
         timer.start()
 
         record_metric("trainer/count_weight_pushes", 1, ReductionType.SUM)
@@ -339,11 +341,6 @@ class RLTrainer(ForgeActor):
             timer.step("save_using_torchstore")
 
         timer.end()
-        end_time = time.perf_counter()
-        logger.info(
-            f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
-            f"(hg to vllm conversion: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
-        )
 
     @endpoint
     async def cleanup(self) -> None:
