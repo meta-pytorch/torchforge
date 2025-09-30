@@ -1,10 +1,10 @@
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> Forge
 
 
-#### A PyTorch native agentic library for RL post-training and agentic development
+#### A PyTorch native agentic library for RL post-training and agentic development that lets you focus on algorithms instead of writing infra code.
 
 ## Overview
-Forge was built with one core principle in mind: researchers should write algorithms, not infrastructure. Forge introduces a “service”-centric architecture that provides the right abstractions for distributed complexity. When you need fine-grained control over placement, fault handling or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
+Forge was built with one core principle in mind: researchers should write algorithms, not infrastructure. Forge introduces a “service”-centric architecture that provides the right abstractions for distributed complexity and workloads. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
 
 Key features:
 - Usability for rapid research (isolating the RL loop from infrastructure)
@@ -18,15 +18,15 @@ Key features:
 > work. It's recommended that you signal your intention to contribute in the
 > issue tracker, either by filing a new issue or by claiming an existing one.
 
-## 📖 Documentation
+## 📖 Documentation (Coming Soon)
 
-View Forge's hosted documentation [at this link](https://meta-pytorch.org/forge/).
+View Forge's hosted documentation [at this link (coming soon)](https://meta-pytorch.org/forge/).
 
 ## Installation
 
 ### Basic
 
-Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. For convenience,
+Forge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://pytorch.org/blog/pytorch-vllm-♥%EF%B8%8F/), and [torchtitan](https://github.com/pytorch/torchtitan). For convenience,
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
@@ -40,7 +40,7 @@ conda activate forge
 
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
+After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices), right now this will run Full Fine-Tuning:
 
 ```
 python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml
