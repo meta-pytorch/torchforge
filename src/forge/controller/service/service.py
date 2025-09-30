@@ -110,6 +110,8 @@ class Service:
         # Initialize the routers
         self._default_router = RoundRobinRouter()
         self._session_router = SessionRouter(fallback_router=self._default_router)
+
+        # This keeps the map between the registered endpoints and the routers
         self.routers: dict[str, Router | Batcher] = {}
 
         # Initialize all replicas
@@ -161,9 +163,9 @@ class Service:
             Router | Batcher instance stored in self.routers
         """
 
-        # If router already exists, ignore
+        # If router already exists, raise an exception
         if endpoint_name in self.routers:
-            return
+            raise ValueError(f"Router already exists for endpoint: {endpoint_name}")
 
         # If config is missing or incomplete, use default router
         if cfg is None or "router" not in cfg:
