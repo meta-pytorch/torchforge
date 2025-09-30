@@ -192,7 +192,7 @@ class Service:
         # Store and return
         self.routers[endpoint_name] = router
 
-    async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
+    async def _route(self, sess_id: str | None, function: str, *args, **kwargs):
         """
         Routes a function call to the appropriate replica with load balancing and fault tolerance.
 
@@ -250,7 +250,7 @@ class Service:
                 )
             raise
 
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def _fanout(self, function: str, *args, **kwargs) -> List:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 
@@ -310,7 +310,7 @@ class Service:
             del self._session_replica_map[sess_id]
 
         # Retry the call (this will assign to a new healthy replica)
-        return await self._call(sess_id, function, *args, **kwargs)
+        return await self._route(sess_id, function, *args, **kwargs)
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
