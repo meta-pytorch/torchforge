@@ -4,7 +4,7 @@
 #### A PyTorch native agentic library for RL post-training and agentic development that lets you focus on algorithms instead of writing infra code.
 
 ## Overview
-Forge was built with one core principle in mind: researchers should write algorithms, not infrastructure. Forge introduces a “service”-centric architecture that provides the right abstractions for distributed complexity and workloads. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
+The primary purpose of the Forge ecosystem is to delineate infra concerns from model concerns thereby making RL experimentation easier. Forge delivers this by providing clear RL abstractions and one scalable implementation of these abstractions. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
 
 Key features:
 - Usability for rapid research (isolating the RL loop from infrastructure)
