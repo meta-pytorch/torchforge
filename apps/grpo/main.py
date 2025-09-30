@@ -318,7 +318,9 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # initialize before spawning services
+    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
@@ -345,10 +347,6 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
-
-    # Initialize logging backends after all processes are spawned (e.g. wandb)
-    metric_logging = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    await mlogger.init_backends.call_one(metric_logging)
 
     print("All services initialized successfully!")
 
