@@ -123,15 +123,14 @@ class Tracer:
         if self._active:
             raise ValueError("Tracer has already been started")
 
-        self._active = True
-
         # Start timing (always enabled)
         time_with_gpu_events = (
             os.getenv(METRIC_TIMER_USES_CUDA, str(self.time_with_gpu)).lower() == "true"
         ) and torch.cuda.is_available()
-        use_cpu = not time_with_gpu_events
-        self._timer = _TimerCPU() if use_cpu else _TimerCUDA()
+        self._timer = _TimerCUDA() if time_with_gpu_events else _TimerCPU()
         self._timer.start()
+
+        self._active = True
 
         # Start memory tracking
         if self.track_memory:
@@ -143,7 +142,7 @@ class Tracer:
             return
         if not self._active:
             raise ValueError("Tracer must be started before calling step")
-        self._timer.step(step_name)
+        self._timer.step(step_name)  # pyre-ignore
 
     def stop(self) -> None:
         if self._disable:
@@ -152,7 +151,8 @@ class Tracer:
             raise ValueError("Tracer must be started before calling stop")
 
         # Stop timing (always enabled)
-        self._timer.step("end")  # dropped from steps, included in total
+        # step("end") is dropped from steps, but included in total sum
+        self._timer.step("end")  # pyre-ignore
         self._record_timing_metrics()
         self._timer = None
 
@@ -194,7 +194,7 @@ class Tracer:
         self._memory_started = False
 
     def _record_timing_metrics(self) -> None:
-        durations = self._timer.get_all_durations()
+        durations = self._timer.get_all_durations()  # pyre-ignore
 
         # Total: sum all recorded durations (full timeline including end)
         total_ms = sum(d_ms for name, d_ms in durations)

@@ -145,10 +145,12 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
         if not metric_states:
             continue
 
-        first_reduction_type = metric_states[0]["reduction_type"]
+        first_reduction_type = metric_states[0]["reduction_type"]  # pyre-ignore
 
         # Check consistency
         for state in metric_states:
+            if state is None:
+                continue
             if state["reduction_type"] != first_reduction_type:
                 raise ValueError(
                     f"Mismatched reduction types for key '{key}': {first_reduction_type} vs {state['reduction_type']}"
@@ -369,6 +371,7 @@ class MetricCollector:
     """
 
     _instances: Dict[int, "MetricCollector"] = {}
+    _singleton_rank: int
 
     def __new__(cls):
         """Singleton per-rank, ensures one instance per process."""
@@ -417,10 +420,16 @@ class MetricCollector:
         for backend_name, backend_config in config.items():
             if backend_config.get("reduce_across_ranks", True):
                 continue  # Skip local backend instantiation and use global instead
-            primary_state = metadata_per_primary_backend.get(backend_name, {})
+
+            # get metadata from primary backend if any
+            primary_metadata = {}
+            if metadata_per_primary_backend:
+                primary_metadata = metadata_per_primary_backend.get(backend_name, {})
+
+            # instantiate local backend
             logger_backend = get_logger_backend_class(backend_name)(backend_config)
             await logger_backend.init(
-                role="local", primary_logger_metadata=primary_state
+                role="local", primary_logger_metadata=primary_metadata
             )
             self.logger_backends.append(logger_backend)
 
