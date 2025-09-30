@@ -123,6 +123,7 @@ class LocalFetcherActor(Actor):
         self, step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
+        This should only ever be called by the global logger.
 
         Args:
             step (int): train step used by backends to align all metrics on the same x-axis
