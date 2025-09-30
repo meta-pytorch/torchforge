@@ -198,8 +198,7 @@ class Service:
 
         This is the core routing method that handles:
         - Session-based routing for stateful calls
-        - Round-robin load balancing for stateless calls
-        - Custom routing based on context hints
+        - Per-endpoint router selection (round-robin, least-loaded, batching, etc.)
         - Automatic retry on replica failures
         - Request queuing and processing
 
@@ -222,7 +221,23 @@ class Service:
             if ctx:
                 sess_id = ctx["session_id"]
 
-        replica = await self._get_replica(sess_id=sess_id, endpoint_name=function)
+        healthy_replicas = [r for r in self._replicas if r.healthy]
+        router = self.routers.get(function, self._default_router)
+
+        # Select replica:
+        if sess_id is not None:
+            # Case 1: sticky sessions
+            replica = self._session_router.get_replica(
+                healthy_replicas, sess_id, self._session_replica_map
+            )
+
+        elif isinstance(router, Batcher):
+            # Case 2: batching
+            replica = await router.route()
+
+        else:
+            # Case 3: stateless routing
+            replica = self._default_router.get_replica(healthy_replicas)
 
         # Create a ServiceRequest object to queue
         request = ServiceRequest(
@@ -532,24 +547,6 @@ class Service:
                 self._replicas_to_recover.extend(failed_replicas)
 
             await asyncio.sleep(poll_rate_s)
-
-    async def _get_replica(self, sess_id: str | None, endpoint_name: str) -> "Replica":
-        """Get a replica for the given session ID."""
-        healthy_replicas = [r for r in self._replicas if r.healthy]
-        router = self.routers.get(endpoint_name, self._default_router)
-
-        # Case 1: sticky sessions
-        if sess_id is not None:
-            return self._session_router.get_replica(
-                healthy_replicas, sess_id, self._session_replica_map
-            )
-
-        # Case 2: batching
-        if isinstance(router, Batcher):
-            return await router.route()
-
-        # Case 3: stateless routing
-        return self._default_router.get_replica(healthy_replicas)
 
     async def stop(self):
         logger.debug("Stopping service...")
