@@ -317,6 +317,7 @@ class MastProvisioner(BaseProvisioner):
 
         packages = Packages()
         meshes = []
+        # Process both services and actors configurations
         for mesh_name, config in self.cfg["services"].items():
             num_replicas = config["num_replicas"]
             with_gpus = bool(config["with_gpus"])
@@ -327,6 +328,14 @@ class MastProvisioner(BaseProvisioner):
                     f"{mesh_name}_{i}:{num_hosts}:{SKU}" for i in range(num_replicas)
                 ]
                 meshes.extend(mesh_list)
+
+        for mesh_name, config in self.cfg["actors"].items():
+            num_replicas = 1
+            with_gpus = bool(config["with_gpus"])
+            num_hosts = int(config.get("hosts", 0))
+            # single actors with GPUs
+            if with_gpus:
+                meshes.append(f"{mesh_name}:{num_replicas}:{SKU}")
 
         appdef = hyperactor.host_mesh_conda(
             meshes=meshes,

@@ -8,6 +8,20 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
+scheduler: mast
+job_name: forge-qwen3-1_7b-2a48e
+
+# Main loop configuration
+rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
+
+# Observability configuration
+metric_logging:
+  wandb:
+    project: "grpo-training"
+    group: "grpo_exp_${oc.env:USER}"
+    reduce_across_ranks: True
+  console:
+    reduce_across_ranks: True
 
 # Dataset configuration
 dataset:
@@ -20,7 +34,7 @@ dataset:
 # Policy configuration
 policy:
   engine_config:
-    model: ${model}
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -35,7 +49,7 @@ trainer:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -61,7 +75,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: false
-    initial_load_path: hf://${model}
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -81,7 +95,7 @@ ref_model:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: hf://${model}
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -96,7 +110,7 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: hf://${model}
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
     initial_load_in_hf: true
 
 # All resource allocations
@@ -105,25 +119,35 @@ services:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 2
     with_gpus: true
+    mesh_name: policy
+    hosts: 1
   ref_model:
     procs: 1
     num_replicas: 2
     with_gpus: true
+    mesh_name: ref_model
+    hosts: 1
   reward_actor:
     procs: 1
     num_replicas: 1
     with_gpus: false
+    mesh_name: reward_actor
 
 actors:
   dataset:
     procs: 1
     with_gpus: false
+    mesh_name: dataset
   trainer:
     procs: 1
     with_gpus: true
+    mesh_name: trainer
+    hosts: 1
   replay_buffer:
     procs: 1
     with_gpus: false
+    mesh_name: replay_buffer
   compute_advantages:
     procs: 1
     with_gpus: false
+    mesh_name: compute_advantages
