@@ -3,6 +3,8 @@
 
 #### A PyTorch native agentic library for RL post-training and agentic development that lets you focus on algorithms instead of writing infra code.
 
+> Note: We also support Supervised Fine-Tuning and what you expect from [TorchTune](https://github.com/meta-pytorch/torchtune/issues/2883)
+
 ## Overview
 Forge was built with one core principle in mind: researchers should write algorithms, not infrastructure. Forge introduces a “service”-centric architecture that provides the right abstractions for distributed complexity and workloads. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
 
