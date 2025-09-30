@@ -113,8 +113,7 @@ async def main():
 
     # shutdown
     await mlogger.shutdown.call_one()
-
-    asyncio.sleep(3)
+    await asyncio.sleep(2)
 
     await asyncio.gather(
         trainer.shutdown(),

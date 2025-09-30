@@ -317,9 +317,6 @@ async def main(cfg: DictConfig):
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
 
-    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
-    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
-
     # initialize before spawning services
     mlogger = await get_or_create_metric_logger()
 
@@ -354,9 +351,6 @@ async def main(cfg: DictConfig):
     await mlogger.init_backends.call_one(metric_logging)
 
     print("All services initialized successfully!")
-
-    # Set up a global step counter for consistent metric flushing
-    global_step = 0
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -431,12 +425,6 @@ async def main(cfg: DictConfig):
                 await replay_buffer.add.call_one(episode)
 
             # Log metrics
-            avg_response_len = (
-                sum(len(e.response_tokens) for e in group.episodes) / group_size
-            )
-            buffer_size = await replay_buffer._numel.call_one()
-            avg_reward = sum(e.reward for e in group.episodes) / group_size
-
             rollout_count += 1
             record_metric(
                 "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
@@ -464,7 +452,7 @@ async def main(cfg: DictConfig):
                 t.step("waiting_for_buffer")
 
                 inputs, targets = batch
-                loss = await trainer.train_step.call_one(inputs, targets)
+                await trainer.train_step.call_one(inputs, targets)
                 training_step += 1
                 t.step("train_step")
 
@@ -507,7 +495,7 @@ async def main(cfg: DictConfig):
         # give mlogger time to shutdown backends, otherwise they can stay running.
         # TODO (felipemello) find more elegant solution
         await mlogger.shutdown.call_one()
-        asyncio.sleep(4)
+        await asyncio.sleep(2)
 
         await asyncio.gather(
             DatasetActor.shutdown(dataloader),

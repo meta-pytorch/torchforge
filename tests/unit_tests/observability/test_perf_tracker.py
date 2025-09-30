@@ -7,7 +7,7 @@
 import asyncio
 import time
 from contextlib import contextmanager
-from typing import List, Tuple
+from typing import List, Literal, Tuple, Union
 from unittest.mock import Mock, patch
 
 import pytest
@@ -63,7 +63,11 @@ class TracingModes:
     """Utility to execute the same workflow in different tracing modes."""
 
     @staticmethod
-    async def run_workflow(mode: str, prefix: str, track_memory=False, timer="cpu"):
+    async def run_workflow(
+        mode: str, prefix: str, track_memory=False, timer="cpu"
+    ) -> Union[
+        Literal["direct_done"], Literal["decorator_done"], Literal["context_done"]
+    ]:
         """Run the comprehensive test workflow: a=~0.05s, b=[0.05,0.1,0.15], total=~0.4s"""
 
         if mode == "direct":
@@ -105,6 +109,9 @@ class TracingModes:
 
                 await asyncio.sleep(0.05)
                 return "context_done"
+
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
 
 
 class TestTracingModes:
@@ -199,7 +206,7 @@ class TestTracingModes:
                 )
 
         result = asyncio.run(memory_workflow())
-        assert f"{mode}_done" in result
+        assert result == f"{mode}_done"
 
         # Should record both timing and memory metrics
         expected_metrics = {
@@ -353,7 +360,7 @@ class TestEnvironmentConfiguration:
             return await TracingModes.run_workflow(mode, f"disabled_{mode}")
 
         result = asyncio.run(disabled_workflow())
-        assert f"{mode}_done" in result
+        assert result == f"{mode}_done"
         assert not mock_record_metric_calls, "Expected no metrics when disabled"
 
     @pytest.mark.parametrize(

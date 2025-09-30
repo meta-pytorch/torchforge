@@ -12,6 +12,7 @@ from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, th
 
 from forge.observability.metrics import (
     get_logger_backend_class,
+    LoggerBackend,
     MetricCollector,
     reduce_metrics_states,
 )
@@ -176,7 +177,7 @@ class GlobalLoggingActor(Actor):
     def __init__(self):
         self.fetchers: Dict[str, LocalFetcherActor] = {}
         self.config: Dict[str, Any] | None = None
-        self.global_logger_backends: Dict[str, "LoggerBackend"] = {}
+        self.global_logger_backends: Dict[str, LoggerBackend] = {}
         self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
 
     @endpoint
@@ -235,7 +236,7 @@ class GlobalLoggingActor(Actor):
         """Registers a fetcher with the global actor. Each key represents a process mesh.
         If there are 2 processes, each with 2 replicas with N gpus, we would
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
-        self.fetchers[name] = fetcher
+        self.fetchers[name] = fetcher  # pyre-ignore
 
         # Self-init for respawned actors
         if self.config:
@@ -267,6 +268,12 @@ class GlobalLoggingActor(Actor):
             return
 
         config = self.config
+        if config is None:
+            logger.warning(
+                "GlobalLoggingActor flush() called before init_backends(). "
+                "No backends will be flushed."
+            )
+            return
         # if reduce_across_ranks=True, we need to reduce the states from all ranks
         # and log with the primary backend
         requires_reduce = any(
@@ -289,7 +296,7 @@ class GlobalLoggingActor(Actor):
             # Handle exceptions and extract values from ValueMesh results
             all_local_states = []
             for result in results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.warning(f"Flush failed on a fetcher: {result}")
                     continue
 
