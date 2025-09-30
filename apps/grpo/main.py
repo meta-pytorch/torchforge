@@ -464,7 +464,7 @@ async def main(cfg: DictConfig):
                 t.step("waiting_for_buffer")
 
                 inputs, targets = batch
-                loss = await trainer.train_step.call_one(inputs, targets)
+                loss = await trainer.train_step.call(inputs, targets)
                 training_step += 1
                 t.step("train_step")
 
@@ -474,9 +474,9 @@ async def main(cfg: DictConfig):
                 await policy.update_weights.fanout(training_step)
                 t.step("update_weights")
 
-                if training_step >= 2:
-                    await drop_weights(training_step - 1)
-                    t.step("drop_weights")
+                # if training_step >= 2:
+                #     await drop_weights(training_step - 1)
+                #     t.step("drop_weights")
 
                 t.stop()
                 restart_tracer = True
