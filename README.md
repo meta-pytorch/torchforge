@@ -22,17 +22,17 @@ Key features:
 
 ## 📖 Documentation (Coming Soon)
 
-View Forge's hosted documentation [at this link (coming soon)](https://meta-pytorch.org/forge/).
+View Forge's hosted documentation (coming soon)
 
-## WIP
+## Tutorials
 
-You can also find our notebook tutorials below (coming soon)
+You can also find our notebook tutorials (coming soon)
 
 ## Installation
 
 ### Basic
 
-Forge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://pytorch.org/blog/pytorch-vllm-♥%EF%B8%8F/), and [torchtitan](https://github.com/pytorch/torchtitan). For convenience,
+Forge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). For convenience,
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
