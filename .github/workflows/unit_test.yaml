@@ -28,10 +28,10 @@ jobs:
       - name: Install monarch
         run: python -m pip install monarch-no-torch==0.1.0.dev20250826 --find-links assets/ci
       - name: Install torchstore
-        run: pip install torchstore-0.1.0-py3-none-any.whl --find-links assets/wheels
+        run: pip install --find-links assets/wheels torchstore-0.1.0-py3-none-any.whl
       - name: Install torchtitan
         run: |
-          pip install torchtitan-0.1.0-py3-none-any.whl --find-links assets/wheels
+          pip install --find-links assets/wheels torchtitan-0.1.0-py3-none-any.whl
           pip install tyro
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
