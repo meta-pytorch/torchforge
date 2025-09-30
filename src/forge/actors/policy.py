@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -58,6 +59,7 @@ from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
+from forge.util.lock import Lock
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -243,6 +245,8 @@ class Policy(PolicyInterface):
         self.request_id = 0
         self.policy_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests_lock = Lock()
+
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
         # Setup sampling params
@@ -332,6 +336,9 @@ class Policy(PolicyInterface):
         )
         t.step("process_inputs")
 
+        # Acquire lock to check that requests can be queued
+        await self.requests_lock.acquire()
+
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
         # TODO: Clean up before release
@@ -385,6 +392,9 @@ class Policy(PolicyInterface):
 
         t.stop()
 
+        # Release lock so other requests can be queued
+        await self.requests_lock.release()
+
         return completions
 
     # Abstracted to match vllm
@@ -430,6 +440,9 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def update_weights(self, policy_version: int):
+        # Prevent new requests from being queued while letting in-flight requests queue
+        await self.requests_lock.acquire_exclusive_lock()
+
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
@@ -456,6 +469,9 @@ class Policy(PolicyInterface):
         else:
             await self.policy_worker.update_DEPRECATED.call(version=policy_version)
         self.policy_version = policy_version
+
+        # Release lock so new requests can be queued
+        await self.requests_lock.release_exclusive_lock()
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
