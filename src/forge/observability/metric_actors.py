@@ -97,7 +97,7 @@ async def get_or_create_metric_logger(
 
     # Setup local_fetcher_actor if needed
     if not proc_has_local_fetcher:
-        local_fetcher_actor = await proc.spawn(
+        local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger
         )
         await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
