@@ -40,11 +40,12 @@ from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
+from forge.controller.service.endpoint import ServiceEndpointProperty
+
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
-
 from forge.controller.service.router import (
     Batcher,
     RoundRobinRouter,
@@ -142,25 +143,21 @@ class Service:
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
 
-    def _set_router(self, endpoint_name: str, cfg: dict | None = None) -> None:
+    def _set_router(
+        self, endpoint_name: str, prop: ServiceEndpointProperty | None = None
+    ) -> None:
         """
         Ensure a router exists for the given endpoint.
 
-        - If a router is already set, leave it unchanged.
-        - If cfg is provided, use its router/batching options.
-        - If cfg is missing or incomplete, ignore and fall back to defaults:
-            use a round robin router without batching.
+        - If a router is already set, raise an error.
+        - If a ServiceEndpointProperty is provided, construct its router/batcher
+          using the specified configuration.
+        - If not provided, fall back to a default round-robin router.
 
         Args:
-            endpoint_name: Name of the endpoint (string).
-            cfg: Optional service_endpoint_config dict, include:
-                {
-                    "router": Router,
-                    "batch_size": int,
-                    "batch_timeout": float
-                }
-        Returns:
-            Router | Batcher instance stored in self.routers
+            endpoint_name: Name of the endpoint.
+            prop: Optional ServiceEndpointProperty object with router, batch_size,
+                  and batch_timeout attributes.
         """
 
         # If router already exists, raise an exception
@@ -168,23 +165,25 @@ class Service:
             raise ValueError(f"Router already exists for endpoint: {endpoint_name}")
 
         # If config is missing or incomplete, use default router
-        if cfg is None or "router" not in cfg:
+        if prop is None or not isinstance(prop, ServiceEndpointProperty):
             return
 
         # Resolve base router
-        if not isinstance(cfg.get("router"), Router):
-            raise ValueError(f"Unknown router type: {cfg['router']}")
+        if not isinstance(prop.router, Router):
+            raise ValueError(f"Unknown router type: {prop.router}")
         else:
-            base_router = cfg["router"]
+            base_router = prop.router
+            batch_size = prop.batch_size
+            batch_timeout = prop.batch_timeout
 
         # Wrap in Batcher if batching requested
-        if cfg.get("batch_size", 1) > 1:
+        if batch_size > 1:
             router = Batcher(
                 base_router,
                 get_healthy_replicas=self._get_healthy_replicas,
                 get_session_map=self._get_session_map,
-                batch_size=cfg.get("batch_size", 16),
-                batch_timeout=cfg.get("batch_timeout", 0.01),
+                batch_size=batch_size,
+                batch_timeout=batch_timeout,
             )
         else:
             router = base_router

@@ -160,11 +160,9 @@ class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
         batch_timeout: float = 0.01,
     ) -> None:
         super().__init__(method, propagator, explicit_response_port)
-        self._service_endpoint_config = dict(
-            router=router,
-            batch_size=batch_size,
-            batch_timeout=batch_timeout,
-        )
+        self.router = router
+        self.batch_size = batch_size
+        self.batch_timeout = batch_timeout
 
 
 def service_endpoint(

@@ -13,6 +13,7 @@ import logging
 import pytest
 from forge.controller import ForgeActor
 from forge.controller.service import (
+    Batcher,
     LeastLoadedRouter,
     Replica,
     ReplicaState,
@@ -66,6 +67,11 @@ class Counter(ForgeActor):
         """Increment the round-robin counter with batching (batch size = 5)."""
         self.v += 1
 
+    @service_endpoint(router=RoundRobinRouter())
+    async def rr_batch_incr_bsize1(self):
+        """Increment the round-robin counter with default batch_size=1."""
+        self.v += 1
+
 
 def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
     """Helper to build a replica with specified state and load."""
@@ -96,6 +102,43 @@ async def test_service_as_actor_preserves_normal_usage():
 
     finally:
         await Counter.shutdown(service)
+
+
+@pytest.mark.asyncio
+async def test_service_endpoint_router_and_configurations():
+    """
+    Verify service endpoints are registered with correct router/batching configuration:
+    - rr_batch_incr_bsize1: plain RoundRobinRouter, no batching (batch_size=1, timeout=0.01)
+    - rr_batch_incr_bsize3: Batcher wrapping RoundRobinRouter (batch_size=3, timeout=1)
+    - incr: plain @endpoint, should not appear in service.routers
+    """
+    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
+
+    try:
+        # --- rr_batch_incr_bsize1 ---
+        router1 = service.routers.get("rr_batch_incr_bsize1")
+        assert isinstance(
+            router1, RoundRobinRouter
+        ), f"Expected RoundRobinRouter, got {type(router1)}"
+
+        prop1 = getattr(Counter, "rr_batch_incr_bsize1")
+        assert prop1.batch_size == 1
+        assert prop1.batch_timeout == 0.01
+
+        # --- rr_batch_incr_bsize3 ---
+        router3 = service.routers.get("rr_batch_incr_bsize3")
+
+        assert isinstance(router3, Batcher), f"Expected Batcher, got {type(router3)}"
+        assert router3.batch_size == 3
+        assert router3.batch_timeout == 1
+
+        # --- incr ---
+        assert (
+            "incr" not in service.routers
+        ), "Plain @endpoint should not be in service.routers"
+
+    finally:
+        await service.shutdown()
 
 
 # Router Tests

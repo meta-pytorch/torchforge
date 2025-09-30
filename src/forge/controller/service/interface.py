@@ -89,14 +89,10 @@ class ServiceInterface:
             # ServiceEndpointProperty: created by @service_endpoint
             # EndpointProperty: created by @endpoint
             if isinstance(attr_value, (EndpointProperty, ServiceEndpointProperty)):
-                cfg = (
-                    attr_value._service_endpoint_config
-                    if isinstance(attr_value, ServiceEndpointProperty)
-                    else None
-                )
+                if isinstance(attr_value, ServiceEndpointProperty):
+                    # Register router with service-specific config
+                    self._service._set_router(attr_name, attr_value)
 
-                # Register router and attach endpoint
-                self._service._set_router(attr_name, cfg)
                 setattr(self, attr_name, ServiceEndpoint(self._service, attr_name))
 
     # Session management methods - handled by ServiceInterface
