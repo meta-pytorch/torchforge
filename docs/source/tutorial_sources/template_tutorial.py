@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Template Tutorial
 =================
@@ -20,13 +26,6 @@ Template Tutorial
        * GPU ???
        * Other items 3
 
-If you have a video, add it here like this:
-
-.. raw:: html
-
-   <div style="margin-top:10px; margin-bottom:10px;">
-     <iframe width="560" height="315" src="https://www.youtube.com/embed/IC0_FRiX-sw" frameborder="0" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-   </div>
 
 To test your tutorial locally, you can do one of the following:
 
@@ -49,7 +48,7 @@ To test your tutorial locally, you can do one of the following:
 * Make a copy of this repository and add only your
   tutorial to the `beginner_source` directory removing all other tutorials.
   Then run ``make html``.
-  
+
 Verify that all outputs were generated correctly in the created HTML.
 """
 
@@ -65,8 +64,9 @@ Verify that all outputs were generated correctly in the created HTML.
 # -----
 #
 # Example code (the output below is generated automatically):
-# 
+#
 import torch
+
 x = torch.rand(5, 3)
 print(x)
 
@@ -81,7 +81,7 @@ print(x)
 ######################################################################
 # Conclusion
 # ----------
-# 
+#
 # Summarize the steps and concepts covered. Highlight key takeaways.
 #
 # Further Reading
@@ -89,4 +89,3 @@ print(x)
 #
 # * Link1
 # * Link2
-

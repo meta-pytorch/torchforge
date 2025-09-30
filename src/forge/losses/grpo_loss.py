@@ -10,7 +10,7 @@ from torch import nn
 
 class SimpleGRPOLoss(nn.Module):
     """Simplified GRPO Loss for simplified single step updates.
-    
+
     Inspired by the Hugging Face TRL implementation:
     https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624
     """

@@ -41,7 +41,7 @@ class Packer(ABC, Generic[SampleType]):
     different cases, e.g., standard text, DPO pairs.
 
     A `Packer` is responsible for:
-    
+
     1. Defining how to extract the token count from a raw sample.
     2. Specifying how a raw sample is deconstructed into tensors and added
        to a "pack".
@@ -49,7 +49,7 @@ class Packer(ABC, Generic[SampleType]):
     4. Generating the appropriate attention mask for the packed format.
 
     It is NOT responsible for:
-    
+
     1. Defining the packing strategy (e.g., best-fit, greedy, etc.). This is
        handled by `PackedDataset`.
 
@@ -257,7 +257,7 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
     padding and ensures consistent batch shapes.
 
     The packing process works as follows:
-    
+
     1. PackedDataset fetches samples from the underlying `dataset` and stores them in
        an internal `buffer`.
     2. It traverses the buffer until it finds the first sample that fits in the remaining space

@@ -218,7 +218,7 @@ autodoc_default_flags = ["members", "undoc-members"]
 
 # Additional autodoc configuration
 autodoc_preserve_defaults = True
-autodoc_member_order = 'bysource'
+autodoc_member_order = "bysource"
 
 
 # Autosummary settings
@@ -235,9 +235,7 @@ add_module_names = False
 autosummary_context = {}
 
 # Suppress duplicate object warnings and mocked object warnings
-suppress_warnings = [
-    'autodoc.mock_imports'
-]
+suppress_warnings = ["autodoc.mock_imports"]
 
 # -- Sphinx Gallery configuration -------------------------------------------
 sphinx_gallery_conf = {
