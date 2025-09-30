@@ -29,10 +29,9 @@ class DatasetInfo:
     """Hierarchical metadata for datasets, enabling composition and weight tracking.
 
     Used to build tree structures when composing datasets. For example, a nested
-    `InterleavedDataset` dataset would have this structure:
+    InterleavedDataset dataset would have this structure:
 
-    Example:
-    .. code-block:: python
+    Example::
 
         DatasetInfo(name='parent_interleaved',
             weight=1.0,

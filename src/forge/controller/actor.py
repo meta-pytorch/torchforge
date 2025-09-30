@@ -145,7 +145,9 @@ class ForgeActor(Actor):
         """A temporary workaround to set master addr/port.
 
         TODO - issues/144. This should be done in proc_mesh creation.
+        
         The ideal path:
+        
         - Create a host mesh
         - Grab a host from host mesh, from proc 0 spawn an actor that
           gets addr/port
@@ -155,7 +157,6 @@ class ForgeActor(Actor):
         We can't currently do this because HostMesh only supports single
         proc_mesh creation at the moment. This will be possible once
         we have "proper HostMesh support".
-
         """
         import os
 

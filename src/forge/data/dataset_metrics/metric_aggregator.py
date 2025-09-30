@@ -33,14 +33,16 @@ class MetricsAggregator:
     has a corresponding AggregationHandler. It maintains a single state object for each
     (source, metric_name) pair.
 
-    Internal State Visualization:
-    {
-        ("alpaca", "tokens_seen"): MetricState(value=200.0, agg_type=SUM, ...),
-        ("alpaca", "avg_loss"):    MetricState(value=0.01, agg_type=MEAN, metadata={'sum': ..., 'count': ...}),
-        ("slim_orca", "seq_len"):  MetricState(agg_type=STATS, metadata={'values': deque([...])}),
-    }
+    Internal State Visualization::
+
+        {
+            ("alpaca", "tokens_seen"): MetricState(value=200.0, agg_type=SUM, ...),
+            ("alpaca", "avg_loss"):    MetricState(value=0.01, agg_type=MEAN, metadata={'sum': ..., 'count': ...}),
+            ("slim_orca", "seq_len"):  MetricState(agg_type=STATS, metadata={'values': deque([...])}),
+        }
 
     When preparing metrics for logging, the aggregator follows a two-phase process:
+
     1. Local Aggregation: Each rank aggregates its metrics independently
     2. Distributed Reduction: If in distributed mode, results are combined across ranks
 

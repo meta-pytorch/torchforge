@@ -28,9 +28,11 @@ class Observation:
     """Base class for environment observations.
 
     Contract:
+    
     - Should contain all information needed by an agent to make decisions
     - Should be serializable/deserializable
     - Should be immutable (or treated as such)
+    
     Args:
         done: Whether the episode/conversation is complete
         reward: Optional reward signal (can be boolean, int, or float)

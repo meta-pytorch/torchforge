@@ -151,6 +151,7 @@ docs/source/generated_examples/
 docs/source/gen_modules/
 docs/source/generated/
 docs/source/sg_execution_times.rst
+docs/source/tutorials
 # pytorch-sphinx-theme gets installed here
 docs/src
 

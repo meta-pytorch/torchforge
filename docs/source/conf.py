@@ -17,7 +17,30 @@ import sys
 import pytorch_sphinx_theme2
 
 # Add the source directory to Python path so modules can be imported
-sys.path.insert(0, os.path.abspath("../../src"))
+sys.path.insert(0, os.path.abspath("../../src/forge"))
+
+
+# Determine the version path for deployment
+def get_version_path():
+    """Get the version path based on environment variables or git context."""
+    # Check if we're in CI/CD and get the target folder
+    github_ref = os.environ.get("GITHUB_REF", "")
+
+    # Convert refs/tags/v1.12.0rc3 into 1.12.
+    # Matches the logic in .github/workflows/docs.yml
+    if github_ref.startswith("refs/tags/v"):
+        import re
+
+        match = re.match(r"^refs/tags/v([0-9]+\.[0-9]+)\..*", github_ref)
+        if match:
+            return match.group(1) + "/"
+
+    # Default to main for main branch or local development
+    return "main/"
+
+
+# Set base URL based on deployment context
+version_path = get_version_path()
 
 project = "torchforge"
 copyright = "2025, PyTorch Contributors"
@@ -38,9 +61,12 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx_gallery.gen_gallery",
 ]
 
-html_baseurl = "https://meta-pytorch.org/forge/"  # needed for sphinx-sitemap
+html_baseurl = (
+    f"https://meta-pytorch.org/forge/{version_path}"  # needed for sphinx-sitemap
+)
 sitemap_locales = [None]
 sitemap_excludes = [
     "search.html",
@@ -52,7 +78,7 @@ templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
-exclude_patterns = []
+exclude_patterns = ["tutorials/index.rst"]
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -90,7 +116,7 @@ html_theme_options = {
         },
         {
             "name": "PyPi",
-            "url": "https://pypi.org/project/forge/",
+            "url": "https://pypi.org/project/torchforge/",
             "icon": "fa-brands fa-python",
         },
     ],
@@ -109,9 +135,21 @@ html_context = {
     "github_user": "meta-pytorch",
     "github_repo": "forge",
     "feedback_url": "https://github.com/meta-pytorch/forge",
+    "colab_branch": "gh-pages",
     "github_version": "main",
     "doc_path": "docs/source",
+    "has_sphinx_gallery": True,  # Enable tutorial call-to-action links
 }
+
+# For tutorial repository configuration
+# Note: github_user and github_repo are combined in the template as "{{ github_user }}/{{ github_repo }}"
+# So we keep github_user = "meta-pytorch" and github_repo = "forge" already set above
+# and only need to ensure the branch settings are correct
+tutorial_repo_config = {
+    "github_version": "main",  # This maps to github_branch in the template
+    "colab_branch": "gh-pages",
+}
+html_context.update(tutorial_repo_config)
 
 myst_enable_extensions = [
     "colon_fence",
@@ -127,6 +165,90 @@ autodoc_default_options = {
     "exclude-members": "__weakref__",
 }
 
+# Mock imports for dependencies that aren't available during doc building
+autodoc_mock_imports = [
+    "monarch",
+    "monarch.actor",
+    "monarch.distributed",
+    "torchtitan",
+    "torchtitan.components",
+    "torchtitan.components.loss",
+    "torchstore",
+    "torchdata",
+    "vllm",
+    "vllm.engine",
+    "vllm.engine.arg_utils",
+    "vllm.engine.async_llm_engine",
+    "vllm.sampling_params",
+    "hf_transfer",
+    "torch",
+    "torch.nn",
+    "torch.distributed",
+    "torch.utils",
+    "torch.utils.data",
+    "transformers",
+    "datasets",
+    "tiktoken",
+    "tokenizers",
+    "sentencepiece",
+    "wandb",
+    "tensorboard",
+    "omegaconf",
+    "hydra",
+    "numpy",
+    "pandas",
+    "rich",
+    "rich.console",
+    "rich.progress",
+    "accelerate",
+    "peft",
+    "tqdm",
+    "typing_extensions",
+    "fairscale",
+    "fairscale.nn",
+    "fairscale.nn.model_parallel",
+    "fairscale.nn.model_parallel.initialize",
+    "safetensors",
+    "bitsandbytes",
+    "flash_attn",
+]
+
+# Handle import errors gracefully
+autodoc_default_flags = ["members", "undoc-members"]
+
+# Additional autodoc configuration
+autodoc_preserve_defaults = True
+autodoc_member_order = 'bysource'
+
+
 # Autosummary settings
 autosummary_generate = True
 autosummary_imported_members = True
+autosummary_generate_overwrite = True
+autosummary_mock_imports = autodoc_mock_imports
+
+# Prevent duplicate documentation
+autodoc_inherit_docstrings = False
+add_module_names = False
+
+# Ensure autosummary can find templates
+autosummary_context = {}
+
+# Suppress duplicate object warnings and mocked object warnings
+suppress_warnings = [
+    'autodoc.mock_imports'
+]
+
+# -- Sphinx Gallery configuration -------------------------------------------
+sphinx_gallery_conf = {
+    "examples_dirs": "tutorial_sources",  # Path to examples directory
+    "gallery_dirs": "tutorials",  # Path to generate gallery
+    "filename_pattern": ".*",  # Include all files
+    "download_all_examples": False,
+    "first_notebook_cell": "%matplotlib inline",
+    "plot_gallery": "True",
+    "promote_jupyter_magic": True,
+    "backreferences_dir": None,
+    "write_computation_times": True,
+    "show_signature": False,
+}

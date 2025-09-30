@@ -149,7 +149,7 @@ class ModelTokenizer(ABC):
         the concatenated and formatted messages.
 
         Args:
-            messages (list[Message]): The list of messages to tokenize.
+            messages (list[:class:`~forge.types.Message`]): The list of messages to tokenize.
             **kwargs (dict[str, Any]): kwargs.
 
         Returns:
