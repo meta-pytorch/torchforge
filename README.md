@@ -62,48 +62,6 @@ For your information, since the vLLM wheel is too large for GitHub, we uploaded 
 $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
 ```
 
-### Meta Internal Build (Alternative Route)
-
-1. Build uv package
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/pytorch-labs/forge
-cd forge
-uv sync --all-extras
-source .venv/bin/activate
-```
-
-2. Setup CUDA on local machine
-
-```bash
-# feature install if you don't have /user/local/cuda-12.8
-feature install --persist cuda_12_9
-
-# add env variables
-export CUDA_VERSION=12.9
-export NVCC=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_HOME=/usr/local/cuda-$CUDA_VERSION
-export PATH="$CUDA_HOME/bin:$PATH"
-export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
-export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-```
-
-3. Build vllm from source
-
-```bash
-git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
-cd vllm
-python use_existing_torch.py
-uv pip install -r requirements/build.txt
-uv pip install --no-build-isolation -e .
-```
-
-> [!WARNING]
-> If you add packages to the pyproject.toml, use `uv sync --inexact` so it doesn't remove Monarch and vLLM
-
 ## Quick Start
 
 To run SFT for Llama3 8B, run
