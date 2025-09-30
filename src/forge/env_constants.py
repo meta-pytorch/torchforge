@@ -12,3 +12,6 @@ DISABLE_PERF_METRICS = "DISABLE_PERF_METRICS"
 # Force all timing methods in forge.observability.perf_tracker.py to use
 # CPU timer if False or GPU timer if True. If unset, defaults to the assigned value to the function.
 METRIC_TIMER_USES_CUDA = "METRIC_TIMER_USES_CUDA"
+
+# Makes forge.observability.metrics.record_metric a no-op
+FORGE_DISABLE_METRICS = "FORGE_DISABLE_METRICS"

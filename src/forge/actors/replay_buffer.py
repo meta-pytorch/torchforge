@@ -67,7 +67,7 @@ class ReplayBuffer(ForgeActor):
         total_samples = self.dp_size * bsz
 
         # Evict old episodes
-        await self._evict(curr_policy_version)
+        self._evict(curr_policy_version)
 
         if total_samples > len(self.buffer):
             return None
