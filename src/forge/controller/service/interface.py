@@ -168,10 +168,15 @@ class ServiceInterfaceV2:
         # Inspect the actor_def directly to find endpoints
         for attr_name in dir(actor_def):
             attr_value = getattr(actor_def, attr_name)
-            if isinstance(attr_value, EndpointProperty):
-                # Create a ServiceEndpoint that will route through the Service Actor
-                endpoint = ServiceEndpointV2(self._service, attr_name)
-                setattr(self, attr_name, endpoint)
+
+            # ServiceEndpointProperty: created by @service_endpoint
+            # EndpointProperty: created by @endpoint
+            if isinstance(attr_value, (EndpointProperty, ServiceEndpointProperty)):
+                if isinstance(attr_value, ServiceEndpointProperty):
+                    # Register router with service-specific config
+                    self._service._set_router(attr_name, attr_value)
+
+                setattr(self, attr_name, ServiceEndpointV2(self._service, attr_name))
 
     # Session management methods - handled by ServiceInterface
     async def start_session(self) -> str:
