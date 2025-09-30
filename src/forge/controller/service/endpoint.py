@@ -97,7 +97,7 @@ class ServiceEndpointV2(Generic[P, R]):
         self.actor_mesh = actor_mesh
         self.endpoint_name = endpoint_name
 
-    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    async def route(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Chooses a replica to call based on context and load balancing strategy."""
         # Extract sess_id from kwargs if present
         sess_id = kwargs.pop("sess_id", None)
@@ -105,12 +105,42 @@ class ServiceEndpointV2(Generic[P, R]):
             sess_id, self.endpoint_name, *args, **kwargs
         )
 
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def fanout(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
         """Broadcasts a request to all healthy replicas and returns the results as a list."""
         result = await self.actor_mesh.call_all.call_one(
             self.endpoint_name, *args, **kwargs
         )
         return result
+
+    async def choose(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        raise NotImplementedError(
+            "You tried to use choose() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+        raise NotImplementedError(
+            "You tried to use call() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def call_one(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        raise NotImplementedError(
+            "You tried to use a call_one() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+        raise NotImplementedError(
+            "You tried to use broadcast() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
+
+    async def generate(self, *args: P.args, **kwargs: P.kwargs):
+        raise NotImplementedError(
+            "You tried to use generate() on a service, not an actor. "
+            "Services only support route() and fanout()."
+        )
 
 
 class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
