@@ -21,7 +21,7 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 PYTORCH_VERSION="2.9.0.dev20250905"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0-92025"
+RELEASE_TAG="v0.0.0-93025"
 GITHUB_REPO="meta-pytorch/forge"
 
 # Check conda environment
