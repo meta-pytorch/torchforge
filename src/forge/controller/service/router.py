@@ -11,7 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
-from .replica import Replica
+from forge.controller.service.replica import Replica, ServiceRequest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -179,11 +179,9 @@ class Batcher:
         This process repeats indefinitely until the task is cancelled.
         """
         while self._running:
-            batch_futs = []
 
             # Wait for first request
-            fut = await self._queue.get()
-            batch_futs.append(fut)
+            batch = [await self._queue.get()]
             start_time = time.monotonic()
 
             while True:
@@ -191,12 +189,12 @@ class Batcher:
                     timeout = max(
                         0, self.batch_timeout - (time.monotonic() - start_time)
                     )
-                    fut = await asyncio.wait_for(
+                    req = await asyncio.wait_for(
                         self._queue.get(), timeout
                     )  # wait for timeout or until self._queue.get() finishes
-                    batch_futs.append(fut)
+                    batch.append(req)
 
-                    if len(batch_futs) >= self.batch_size:
+                    if len(batch) >= self.batch_size:
                         break
                 except asyncio.TimeoutError:
                     break
@@ -207,18 +205,20 @@ class Batcher:
             # One routing decision for the whole batch
             replica = self.inner_router.get_replica(healthy_replicas, None, session_map)
 
-            # Fulfill all futures with the chosen replica
-            for fut in batch_futs:
-                fut.set_result(replica)
+            # Send whole batch to replica
+            try:
+                await replica.enqueue_batch(batch)
+            except Exception as e:
+                for req in batch:
+                    req.future.set_exception(e)
 
-    async def route(self) -> Replica:
+    async def enqueue(self, request: ServiceRequest) -> Any:
         """Enqueue request and wait until batch assigns a replica."""
-        fut = asyncio.Future()
         # Queue the request for batching - this is non-blocking
-        self._queue.put_nowait(fut)
+        self._queue.put_nowait(request)
 
         # Wait for the batch processor to resolve our future
-        return await fut
+        return await request.future
 
     async def stop(self):
         """Stop the batch loop gracefully."""

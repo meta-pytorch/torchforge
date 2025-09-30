@@ -36,7 +36,7 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
@@ -225,23 +225,7 @@ class Service:
             if ctx:
                 sess_id = ctx["session_id"]
 
-        healthy_replicas = [r for r in self._replicas if r.healthy]
         router = self.routers.get(function, self._default_router)
-
-        # Select replica:
-        if sess_id is not None:
-            # Case 1: sticky sessions
-            replica = self._session_router.get_replica(
-                healthy_replicas, sess_id, self._session_replica_map
-            )
-
-        elif isinstance(router, Batcher):
-            # Case 2: batching
-            replica = await router.route()
-
-        else:
-            # Case 3: stateless routing
-            replica = self._default_router.get_replica(healthy_replicas)
 
         # Create a ServiceRequest object to queue
         request = ServiceRequest(
@@ -252,8 +236,27 @@ class Service:
             future=asyncio.Future(),
         )
 
-        # Queue the request using replica's method
-        await replica.enqueue_request(request)
+        # Case: batching is enabled and no session ID (stateless calls only)
+        # Forward the request into the Batcher queue. The batcher will send
+        # the batched requests to the selected replica.
+        if sess_id is None and isinstance(router, Batcher):
+            await router.enqueue(request)
+
+        else:
+            healthy_replicas = [r for r in self._replicas if r.healthy]
+
+            # Select replica:
+            if sess_id is not None:
+                # Case 1: sticky sessions
+                replica = self._session_router.get_replica(
+                    healthy_replicas, sess_id, self._session_replica_map
+                )
+            else:
+                # Case 2: stateless routing
+                replica = self._default_router.get_replica(healthy_replicas)
+
+            # Queue the request using replica's method
+            await replica.enqueue_request(request)
 
         # Wait for the result
         try:
