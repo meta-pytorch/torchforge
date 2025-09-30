@@ -21,8 +21,9 @@ class RWLock:
         self._cond = asyncio.Condition()
         self._readers = 0
 
-        # Used to indicate that an exclusive lock is held or requested
+        # Used to indicate that an exclusive lock is held
         self._exclusive = False
+        # Number of waiters for an exclusive lock
         self._exclusive_waiters = 0
 
     async def acquire(self):
