@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 
 from forge.controller.service.replica import Replica, ServiceRequest
 
@@ -138,8 +138,10 @@ class Batcher:
             batch_timeout=0.01,
         )
 
-        # Enqueue a request and await the chosen replica
-        replica = await batcher.route()
+        request = ServiceRequest(...)
+
+        # Enqueue a request to be sent to a replica
+        await batcher.enqueue(request)
     """
 
     def __init__(
