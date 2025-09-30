@@ -11,8 +11,8 @@ import time
 
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.observability.metric_actors import setup_metric_logger
-from forge.observability.metrics import record_metric, ReductionType
+from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import trace, Tracer
 
 from monarch.actor import current_rank, endpoint
@@ -24,12 +24,11 @@ class TrainActor(ForgeActor):
     """Example training actor that records loss metrics."""
 
     @endpoint
-    @trace("trainer_perf", track_time=False, track_memory=True, time_with_gpu=False)
     async def train_step(self, step: int):
         rank = current_rank().rank
 
         # Phase 2: Use Tracer for detailed step timing
-        tracer = Tracer("trainer_perf/step", track_time=True, time_with_gpu=True)
+        tracer = Tracer("trainer_perf/step", track_memory=True, timer="gpu")
         tracer.start()
 
         # Simulate forward pass
@@ -41,10 +40,10 @@ class TrainActor(ForgeActor):
         value = rank * 1000 + 100 * step
 
         # Record training metrics
-        record_metric("trainer/avg_grpo_loss", value, ReductionType.MEAN)
-        record_metric("trainer/std_grpo_loss", value, ReductionType.STD)
-        record_metric("trainer/count_training_steps", 1, ReductionType.SUM)
-        record_metric("trainer/learning_rate", 0.001, ReductionType.MEAN)
+        record_metric("trainer/avg_grpo_loss", value, Reduce.MEAN)
+        record_metric("trainer/std_grpo_loss", value, Reduce.STD)
+        record_metric("trainer/count_training_steps", 1, Reduce.SUM)
+        record_metric("trainer/learning_rate", 0.001, Reduce.MEAN)
 
         print(f"🔧 Train rank {rank}: Step {step}, loss={value}")
 
@@ -59,20 +58,18 @@ class GeneratorActor(ForgeActor):
     async def generate_step(self, step: int, substep: int):
         rank = current_rank().rank
 
-        with trace(
-            "policy_perf", track_time=True, track_memory=False, time_with_gpu=True
-        ) as tracer:
+        with trace("policy_perf", track_memory=False, timer="gpu") as tracer:
 
             value = rank * 1000 + step * 100 + substep * 10
             tracer.step("time_to_value")
             # Record generation metrics following the plan
-            record_metric("policy/count_requests", 1, ReductionType.SUM)
+            record_metric("policy/count_requests", 1, Reduce.SUM)
             record_metric(
-                "policy/sum_tokens_requested", 50, ReductionType.SUM
+                "policy/sum_tokens_requested", 50, Reduce.SUM
             )  # Simulated max_tokens
-            record_metric("policy/sum_tokens_generated", value, ReductionType.SUM)
-            record_metric("policy/count_sequences_completed", 1, ReductionType.SUM)
-            record_metric("policy/avg_tokens_per_sample", value, ReductionType.MEAN)
+            record_metric("policy/sum_tokens_generated", value, Reduce.SUM)
+            record_metric("policy/count_sequences_completed", 1, Reduce.SUM)
+            record_metric("policy/avg_tokens_per_sample", value, Reduce.MEAN)
 
             print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
 
@@ -91,14 +88,14 @@ async def main():
         "wandb": {
             "project": "my_project",
             "group": group,
-            "reduce_across_ranks": True,
+            "reduce_across_ranks": False,
             # Only useful if NOT reduce_across_ranks.
             "share_run_id": False,  # Share run ID across ranks -- Not recommended.
         },
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
-    mlogger = await setup_metric_logger()
+    mlogger = await get_or_create_metric_logger()
 
     # Spawn services first (triggers registrations via provisioner hook)
     trainer = await TrainActor.options(**service_config).as_service()
@@ -116,6 +113,8 @@ async def main():
 
     # shutdown
     await mlogger.shutdown.call_one()
+
+    asyncio.sleep(3)
 
     await asyncio.gather(
         trainer.shutdown(),

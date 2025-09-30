@@ -198,3 +198,4 @@ assets/wheels/vllm*.whl
 
 # DCP artifacts
 model_state_dict/
+forge_dcp_tmp/

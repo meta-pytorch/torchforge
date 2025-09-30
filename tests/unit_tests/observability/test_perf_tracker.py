@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
-from forge.observability.metrics import ReductionType
+from forge.observability.metrics import Reduce
 
 from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Tracer
 
@@ -21,7 +21,7 @@ from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Trace
 @pytest.fixture
 def mock_record_metric_calls(monkeypatch):
     """Mock record_metric that tracks all calls."""
-    calls: List[Tuple[str, float, ReductionType]] = []
+    calls: List[Tuple[str, float, Reduce]] = []
 
     def mock_record_metric(name, val, red):
         calls.append((name, val, red))
@@ -63,14 +63,12 @@ class TracingModes:
     """Utility to execute the same workflow in different tracing modes."""
 
     @staticmethod
-    async def run_workflow(
-        mode: str, prefix: str, track_time=True, track_memory=False, time_with_gpu=False
-    ):
+    async def run_workflow(mode: str, prefix: str, track_memory=False, timer="cpu"):
         """Run the comprehensive test workflow: a=~0.05s, b=[0.05,0.1,0.15], total=~0.4s"""
 
         if mode == "direct":
             # Direct Tracer usage
-            tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+            tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
             tracer.start()
             await asyncio.sleep(0.05)
             tracer.step("a")
@@ -85,7 +83,7 @@ class TracingModes:
 
         elif mode == "decorator":
             # Decorator usage (no steps available)
-            @trace(prefix, track_time, track_memory, time_with_gpu)
+            @trace(prefix, track_memory=track_memory, timer=timer)
             async def decorated_workflow():
                 await asyncio.sleep(0.05)  # step "a" equivalent
                 for i in range(1, 4):  # step "b" iterations
@@ -97,7 +95,7 @@ class TracingModes:
 
         elif mode == "context":
             # Context manager usage with steps
-            with trace(prefix, track_time, track_memory, time_with_gpu) as tracer:
+            with trace(prefix, track_memory=track_memory, timer=timer) as tracer:
                 await asyncio.sleep(0.05)
                 tracer.step("a")
 
@@ -116,31 +114,27 @@ class TestTracingModes:
         """CUDA warmup to avoid ~0.4s first-call delay in tests."""
         if torch.cuda.is_available():
             with patch("forge.observability.perf_tracker.record_metric"):
-                warmup_tracer = Tracer("cuda_warmup", time_with_gpu=True)
+                warmup_tracer = Tracer("cuda_warmup", timer="gpu")
                 warmup_tracer.start()
                 warmup_tracer.step("init")
                 warmup_tracer.stop()
 
     @pytest.mark.parametrize("mode", ["direct", "decorator", "context"])
-    @pytest.mark.parametrize("time_with_gpu", [False, True])
+    @pytest.mark.parametrize("timer", ["cpu", "gpu"])
     def test_comprehensive_workflow(
-        self, mode, time_with_gpu, mock_record_metric_calls, monkeypatch
+        self, mode, timer, mock_record_metric_calls, monkeypatch
     ):
         """Test comprehensive workflow: timing + concurrency across all modes."""
-        if time_with_gpu and not torch.cuda.is_available():
+        if timer == "gpu" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        monkeypatch.setenv(METRIC_TIMER_USES_CUDA, str(time_with_gpu))
+        monkeypatch.setenv(METRIC_TIMER_USES_CUDA, str(timer == "gpu"))
 
         async def run_concurrent_tasks():
             start_time = time.perf_counter()
             results = await asyncio.gather(
-                TracingModes.run_workflow(
-                    mode, f"task1_{mode}", time_with_gpu=time_with_gpu
-                ),
-                TracingModes.run_workflow(
-                    mode, f"task2_{mode}", time_with_gpu=time_with_gpu
-                ),
+                TracingModes.run_workflow(mode, f"task1_{mode}", timer=timer),
+                TracingModes.run_workflow(mode, f"task2_{mode}", timer=timer),
             )
             total_time = time.perf_counter() - start_time
             return results, total_time
@@ -156,9 +150,9 @@ class TestTracingModes:
 
         # Verify backend selection
         if mode == "direct":
-            tracer = Tracer("backend_test", time_with_gpu=time_with_gpu)
+            tracer = Tracer("backend_test", timer=timer)
             tracer.start()
-            if time_with_gpu and torch.cuda.is_available():
+            if timer == "gpu" and torch.cuda.is_available():
                 assert isinstance(tracer._timer, _TimerCUDA), "Expected CUDA timer"
             else:
                 assert isinstance(tracer._timer, _TimerCPU), "Expected CPU timer"
@@ -267,6 +261,20 @@ class TestErrorConditionsAndCompatibility:
         with pytest.raises(ValueError):
             action(tracer)
 
+    def test_timer_parameter_validation(self):
+        """Test that invalid timer parameter values raise ValueError."""
+        with pytest.raises(ValueError, match='timer must be "cpu" or "gpu"'):
+            Tracer("test", timer="invalid")
+
+        with pytest.raises(ValueError, match='timer must be "cpu" or "gpu"'):
+            trace("test", timer="invalid")
+
+        # Valid values should work
+        tracer_cpu = Tracer("test", timer="cpu")
+        tracer_cuda = Tracer("test", timer="gpu")
+        assert tracer_cpu is not None
+        assert tracer_cuda is not None
+
     def test_tracer_and_timer_reuse(self, mock_record_metric_calls):
         """Test both tracer and timer backends can be reused."""
         # Test Tracer reuse
@@ -321,7 +329,7 @@ class TestErrorConditionsAndCompatibility:
     def test_exception_handling_context_manager(self, mock_record_metric_calls):
         """Test context manager properly cleans up on exception."""
         with pytest.raises(ValueError, match="test exception"):
-            with trace("ctx_exception", track_time=True) as tracer:
+            with trace("ctx_exception") as tracer:
                 time.sleep(0.01)
                 tracer.step("before_error")
                 raise ValueError("test exception")
@@ -358,7 +366,7 @@ class TestEnvironmentConfiguration:
     def test_metric_timer_uses_cuda_override(
         self, env_value, expected_backend, monkeypatch
     ):
-        """Test METRIC_TIMER_USES_CUDA env var overrides time_with_gpu parameter."""
+        """Test METRIC_TIMER_USES_CUDA env var overrides timer parameter."""
         if env_value == "true" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
@@ -367,8 +375,8 @@ class TestEnvironmentConfiguration:
         ):
             monkeypatch.setenv(METRIC_TIMER_USES_CUDA, env_value)
 
-            # Test with time_with_gpu=False (should be overridden by env)
-            tracer = Tracer("env_test", time_with_gpu=False)
+            # Test with timer="cpu" (should be overridden by env)
+            tracer = Tracer("env_test", timer="cpu")
             tracer.start()
 
             assert isinstance(tracer._timer, expected_backend)

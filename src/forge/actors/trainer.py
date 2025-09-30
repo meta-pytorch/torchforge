@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import shutil
+
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -44,6 +45,8 @@ from forge.actors._torchstore_utils import (
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -236,15 +239,19 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    def train_step(
+    async def train_step(
         self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
     ) -> float:
+
+        # Log timesteps
+        t = Tracer("trainer_perf/step", timer="gpu", track_memory=True)
+        t.start()
+
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
         batch_to_device(local_targets, self.engine.device)
-
         # compute policy logprobs
         # TODO implement gradient accumulation
         # with GradientAccumulation(
@@ -254,18 +261,41 @@ class RLTrainer(ForgeActor):
         # ) as grad_acc:
         loss = self.forward_backward(local_inputs, local_targets)
         torch.distributed.all_reduce(loss)
+        t.step("forward_backward")
+
+        # Get learning rate from scheduler
+        current_lr = (
+            self.engine.lr_schedulers.get_last_lr()[0]
+            if hasattr(self.engine.lr_schedulers, "get_last_lr")
+            else 0.001
+        )
+        record_metric("trainer/learning_rate", current_lr, Reduce.MIN)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
+        t.step("optimizer_step")
+
+        # Record training metrics
+        # TODO: delete item() to avoid cpu-gpu sync
+        loss = loss.detach().cpu().item()
+        record_metric("trainer/count_training_steps", 1, Reduce.SUM)
+        record_metric("trainer/avg_grpo_loss", loss, Reduce.MEAN)
+
+        # TODO: Extract actual KL divergence and policy entropy from the loss computation
+        # These are placeholder values until the loss function exposes these metrics
+        # record_metric("trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
+        # record_metric("trainer/step/std_kl_divergence", 0.0, Reduce.STD)
+        # record_metric("trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
 
         self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
         )
-
-        return loss.item()
+        t.step("save_checkpoint")
+        t.stop()
+        return loss
 
     @endpoint
     async def push_weights_DEPRECATED(  # noqa: N802
@@ -280,7 +310,6 @@ class RLTrainer(ForgeActor):
         self, policy_version: int, vllm_tp_DEPRECATED: int
     ) -> None:  # noqa: N802
         # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
-        start_time = time.perf_counter()
         # TODO:
         # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
         #    May need to replicate the same in this code path.
@@ -290,18 +319,20 @@ class RLTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
+
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+
         # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
         vllm_ready_hf_sd = _qwen3_hf_to_vllm(
             sd=hf_state_dict,
             num_layers=self.engine.model_args.n_layers,
             vllm_tp=vllm_tp_DEPRECATED,
         )
-        conversion_time = time.perf_counter()
+
         key = f"{self.state_dict_key}{DELIM}{policy_version}"
         if self.use_dcp:
             # TODO - DCP should probably be being saved to NFS explicitly?
@@ -323,31 +354,33 @@ class RLTrainer(ForgeActor):
                 )
         else:
             await ts.put_state_dict(vllm_ready_hf_sd, key)
-        end_time = time.perf_counter()
-        logger.info(
-            f"Completed weights push to {key} in {end_time - start_time:.2f} seconds "
-            f"(hg to vllm conversion: {conversion_time - start_time:.2f}s, tranport time: {end_time - conversion_time:.2f})"
-        )
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
+        t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
+        t.start()
         logger.info(f"Pushing weights for policy version {policy_version}")
         if not self.use_vllm_builtin_load:
-            return await self._push_weights_DEPRECATED(
+            result = await self._push_weights_DEPRECATED(
                 policy_version, self.vllm_tp_DEPRECATED
             )
+            t.step("push_weights_DEPRECATED")
+            return result
+
         start_time = time.perf_counter()
         if "model" not in self.engine.checkpointer.states:
             raise RuntimeError("Model state not found in checkpointer state")
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
+        t.step("flatten_state_dict")
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
+        t.step("to_hf")
         if self.use_dcp:
             key = get_dcp_whole_state_dict_key(policy_version)
             dcp_id = f"{self.dcp_path}/{key}"
@@ -361,10 +394,13 @@ class RLTrainer(ForgeActor):
                 param_names=hf_state_dict.keys(),
             )
             await ts.put(key, dcp_handle)
+            t.step("dcp_save")
         else:
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
                 await ts.put(key, param)
+            t.step("ts_save")
+        t.stop()
         end_time = time.perf_counter()
         logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 

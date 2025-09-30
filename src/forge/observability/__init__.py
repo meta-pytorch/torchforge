@@ -4,7 +4,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .metric_actors import GlobalLoggingActor, LocalFetcherActor, setup_metric_logger
+from .metric_actors import (
+    get_or_create_metric_logger,
+    GlobalLoggingActor,
+    LocalFetcherActor,
+)
 from .metrics import (
     ConsoleBackend,
     # Utility functions
@@ -19,8 +23,8 @@ from .metrics import (
     MetricCollector,
     MinAccumulator,
     record_metric,
+    Reduce,
     reduce_metrics_states,
-    ReductionType,
     StdAccumulator,
     SumAccumulator,
     WandbBackend,
@@ -33,12 +37,12 @@ __all__ = [
     "reduce_metrics_states",
     "get_actor_name_with_rank",
     "get_logger_backend_class",
-    "setup_metric_logger",
+    "get_or_create_metric_logger",
     # Performance tracking
     "Tracer",
     "trace",
     # Enums
-    "ReductionType",
+    "Reduce",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",

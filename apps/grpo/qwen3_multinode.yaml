@@ -9,6 +9,15 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 
+# Observability configuration
+metric_logging:
+  wandb:
+    project: "grpo-training"
+    group: "grpo_exp_${oc.env:USER}"
+    reduce_across_ranks: True
+  console:
+    reduce_across_ranks: True
+
 # Dataset configuration
 dataset:
   path: "openai/gsm8k"

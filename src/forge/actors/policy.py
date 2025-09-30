@@ -55,6 +55,8 @@ from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -190,6 +192,8 @@ class Policy(PolicyInterface):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
+        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
+        # do logging within PolicyWorker
         workers = await worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
@@ -292,6 +296,11 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
+        t = Tracer("policy_perf/generate", timer="gpu")
+        t.start()
+
+        record_metric("policy/generate/count_requests", 1, Reduce.SUM)
+
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -307,6 +316,7 @@ class Policy(PolicyInterface):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
+        t.step("prompt_truncation")
 
         # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
@@ -320,6 +330,7 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
+        t.step("process_inputs")
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -349,7 +360,32 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        return await request_fut
+        completions = await request_fut
+        t.step("generate")
+
+        record_metric(
+            "policy/generate/count_sequences_completed",
+            len(completions),
+            Reduce.SUM,
+        )
+
+        for completion in completions:
+            num_generated_tokens = len(completion.token_ids)
+            record_metric(
+                "policy/generate/sum_tokens_generated",
+                num_generated_tokens,
+                Reduce.SUM,
+            )
+
+            record_metric(
+                "policy/generate/avg_tokens_generated",
+                num_generated_tokens,
+                Reduce.MEAN,
+            )
+
+        t.stop()
+
+        return completions
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -367,10 +403,13 @@ class Policy(PolicyInterface):
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
+
             scheduler_output = self.scheduler.schedule()
+
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
+
             # the results of `execute_model` is gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
@@ -394,8 +433,22 @@ class Policy(PolicyInterface):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
+            # Record pending requests metrics
+            record_metric(
+                "policy_perf/update_weights/avg_pending_requests",
+                len(curr_requests),
+                Reduce.MEAN,
+            )
+            record_metric(
+                "policy_perf/update_weights/max_pending_requests",
+                len(curr_requests),
+                Reduce.MAX,
+            )
             logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
+
+        # Record weight update metrics
+        record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
 
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
         if self.use_vllm_builtin_load:

@@ -5,17 +5,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+
+import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from monarch.actor import context, current_rank
 
-
 logger = logging.getLogger(__name__)
 
 
-class ReductionType(Enum):
+class Reduce(Enum):
     MEAN = "mean"
     SUM = "sum"
     MAX = "max"
@@ -25,11 +26,11 @@ class ReductionType(Enum):
     @property
     def accumulator_class(self):
         mapping = {
-            ReductionType.MEAN: MeanAccumulator,
-            ReductionType.SUM: SumAccumulator,
-            ReductionType.MAX: MaxAccumulator,
-            ReductionType.MIN: MinAccumulator,
-            ReductionType.STD: StdAccumulator,
+            Reduce.MEAN: MeanAccumulator,
+            Reduce.SUM: SumAccumulator,
+            Reduce.MAX: MaxAccumulator,
+            Reduce.MIN: MinAccumulator,
+            Reduce.STD: StdAccumulator,
         }
         return mapping[self]
 
@@ -83,9 +84,7 @@ def get_actor_name_with_rank() -> str:
     return rank_name
 
 
-def record_metric(
-    key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
-) -> None:
+def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
     """
     Records a metric value for later reduction and logging.
 
@@ -99,7 +98,13 @@ def record_metric(
 
     Records are flushed when `forge.observability.metric_actors.GlobalLoggingActor.flush()`
     is called, typically triggered by the training loop at regular intervals.
+
+    Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
     """
+    # Skip metrics collection if disabled for tests
+    if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
+        return
+
     collector = MetricCollector()
     collector.push(key, value, reduction)
 
@@ -119,8 +124,8 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
 
     Example:
         states = [
-            {"loss": {"count": 5, "sum": 14, "reduction_type": ReductionType.MEAN}},
-            {"loss": {"count": 10, "sum": 16, "reduction_type": ReductionType.MEAN}},
+            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
+            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
         ]
         reduce_metrics_states(states)
         >>> {"loss": 2.0}
@@ -149,7 +154,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
                     f"Mismatched reduction types for key '{key}': {first_reduction_type} vs {state['reduction_type']}"
                 )
 
-        metric_accumulator = ReductionType(first_reduction_type).accumulator_class
+        metric_accumulator = Reduce(first_reduction_type).accumulator_class
         reduced_value = metric_accumulator.get_reduced_value_from_states(metric_states)
         reduced_metrics[key] = reduced_value
 
@@ -164,7 +169,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
 class MetricAccumulator(ABC):
     """Every metric maps to a MetricAccumulator, which accumulates values and optionally reduces them."""
 
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         self.reduction_type = reduction
 
     @abstractmethod
@@ -195,7 +200,7 @@ class MetricAccumulator(ABC):
 
 
 class MeanAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.sum = 0.0
         self.count = 0
@@ -227,7 +232,7 @@ class MeanAccumulator(MetricAccumulator):
 
 
 class SumAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.total = 0.0
 
@@ -250,7 +255,7 @@ class SumAccumulator(MetricAccumulator):
 
 
 class MaxAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.max_val = float("-inf")
 
@@ -273,7 +278,7 @@ class MaxAccumulator(MetricAccumulator):
 
 
 class MinAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.min_val = float("inf")
 
@@ -296,7 +301,7 @@ class MinAccumulator(MetricAccumulator):
 
 
 class StdAccumulator(MetricAccumulator):
-    def __init__(self, reduction: ReductionType):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.sum = 0.0
         self.sum_sq = 0.0
@@ -421,9 +426,7 @@ class MetricCollector:
 
         self._is_initialized = True
 
-    def push(
-        self, key: str, value: Any, reduction: ReductionType = ReductionType.MEAN
-    ) -> None:
+    def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
         if not self._is_initialized:
             raise ValueError("Collector not initialized—call init first")
 
@@ -467,7 +470,7 @@ class MetricCollector:
         if self.logger_backends:
             metrics = {}
             for key, state in states.items():
-                acc_class = ReductionType(state["reduction_type"]).accumulator_class
+                acc_class = Reduce(state["reduction_type"]).accumulator_class
                 metrics[key] = acc_class.get_reduced_value_from_states([state])
 
             # Log to local logger_backends
@@ -550,7 +553,7 @@ class ConsoleBackend(LoggerBackend):
 
     async def log(self, metrics: Dict[str, Any], step: int) -> None:
         logger.info(f"=== [{self.prefix}] - METRICS STEP {step} ===")
-        for key, value in metrics.items():
+        for key, value in sorted(metrics.items()):
             logger.info(f"  {key}: {value}")
         logger.info("==============================\n")
 
