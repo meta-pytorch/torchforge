@@ -121,7 +121,7 @@ async def test_service_endpoint_router_and_configurations():
             router1, RoundRobinRouter
         ), f"Expected RoundRobinRouter, got {type(router1)}"
 
-        prop1 = getattr(Counter, "rr_batch_incr_bsize1")
+        prop1 = Counter.rr_batch_incr_bsize1
         assert prop1.batch_size == 1
         assert prop1.batch_timeout == 0.01
 
