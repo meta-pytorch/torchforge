@@ -147,6 +147,10 @@ class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
     """
     Extension of EndpointProperty that carries service-specific
     routing and batching configuration.
+
+    Inherits from EndpointProperty so the method is still registered as
+    a valid actor endpoint, while also attaching service-specific options
+    (router, batch_size, batch_timeout).
     """
 
     def __init__(
