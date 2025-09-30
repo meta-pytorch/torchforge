@@ -244,7 +244,7 @@ class RLTrainer(ForgeActor):
     ) -> float:
 
         # Log timesteps
-        t = Tracer("trainer_perf/step", timer="gpu", track_memory=True)
+        t = Tracer("rl_trainer_perf/step", timer="gpu", track_memory=True)
         t.start()
 
         self.engine.gc_handler.run(self.step)
@@ -269,7 +269,7 @@ class RLTrainer(ForgeActor):
             if hasattr(self.engine.lr_schedulers, "get_last_lr")
             else 0.001
         )
-        record_metric("trainer/learning_rate", current_lr, Reduce.MIN)
+        record_metric("rl_trainer/learning_rate", current_lr, Reduce.MIN)
 
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
@@ -279,14 +279,14 @@ class RLTrainer(ForgeActor):
         # Record training metrics
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().cpu().item()
-        record_metric("trainer/count_training_steps", 1, Reduce.SUM)
-        record_metric("trainer/avg_grpo_loss", loss, Reduce.MEAN)
+        record_metric("rl_trainer/count_training_steps", 1, Reduce.SUM)
+        record_metric("rl_trainer/avg_grpo_loss", loss, Reduce.MEAN)
 
         # TODO: Extract actual KL divergence and policy entropy from the loss computation
         # These are placeholder values until the loss function exposes these metrics
-        # record_metric("trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
-        # record_metric("trainer/step/std_kl_divergence", 0.0, Reduce.STD)
-        # record_metric("trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
+        # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
+        # record_metric("rl_trainer/step/std_kl_divergence", 0.0, Reduce.STD)
+        # record_metric("rl_trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
 
         self.step += 1
         self.engine.checkpointer.save(
