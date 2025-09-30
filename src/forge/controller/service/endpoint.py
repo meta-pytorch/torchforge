@@ -8,7 +8,7 @@
 Service endpoint management for the Forge framework.
 """
 
-from typing import Any, Generic, List, TypeVar
+from typing import Any, Callable, Generic, List, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
@@ -159,7 +159,7 @@ class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
         propagator: Propagator,
         explicit_response_port: bool,
         *,
-        router: Router = RoundRobinRouter(),
+        router: Callable[[], Router] = RoundRobinRouter,
         batch_size: int = 1,
         batch_timeout: float = 0.01,
     ) -> None:
@@ -171,7 +171,7 @@ class ServiceEndpointProperty(EndpointProperty, Generic[P, R]):
 
 def service_endpoint(
     *,
-    router: Router = RoundRobinRouter(),
+    router: Callable[[], Router] = RoundRobinRouter,
     batch_size: int = 1,
     batch_timeout: float = 0.01,
     propagate=None,

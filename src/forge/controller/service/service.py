@@ -36,7 +36,7 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 from monarch.actor import Actor, endpoint
 
@@ -162,19 +162,24 @@ class Service:
 
         # If router already exists, raise an exception
         if endpoint_name in self.routers:
-            raise ValueError(f"Router already exists for endpoint: {endpoint_name}")
+            raise AssertionError(f"Router already exists for endpoint: {endpoint_name}")
 
         # If config is missing or incomplete, use default router
         if prop is None or not isinstance(prop, ServiceEndpointProperty):
             return
 
         # Resolve base router
-        if not isinstance(prop.router, Router):
-            raise ValueError(f"Unknown router type: {prop.router}")
+        if not callable(prop.router):
+            raise ValueError(f"Router must be callable, got: {prop.router}")
         else:
-            base_router = prop.router
+            base_router = prop.router()  # Call the router constructor
             batch_size = prop.batch_size
             batch_timeout = prop.batch_timeout
+
+        if not isinstance(base_router, Router):
+            raise ValueError(
+                f"Router must be a Router instance, got: {type(base_router)}"
+            )
 
         # Wrap in Batcher if batching requested
         if batch_size > 1:

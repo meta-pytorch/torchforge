@@ -57,17 +57,17 @@ class Counter(ForgeActor):
         """Increment the counter."""
         self.v += 1
 
-    @service_endpoint(router=RoundRobinRouter(), batch_size=3, batch_timeout=1)
+    @service_endpoint(router=RoundRobinRouter, batch_size=3, batch_timeout=1)
     async def rr_batch_incr_bsize3(self):
         """Increment the round-robin counter with batching (batch size = 3)."""
         self.v += 1
 
-    @service_endpoint(router=RoundRobinRouter(), batch_size=5, batch_timeout=0.05)
+    @service_endpoint(router=RoundRobinRouter, batch_size=5, batch_timeout=0.05)
     async def rr_batch_incr_bsize5(self):
         """Increment the round-robin counter with batching (batch size = 5)."""
         self.v += 1
 
-    @service_endpoint(router=RoundRobinRouter())
+    @service_endpoint(router=RoundRobinRouter)
     async def rr_batch_incr_bsize1(self):
         """Increment the round-robin counter with default batch_size=1."""
         self.v += 1
@@ -139,6 +139,36 @@ async def test_service_endpoint_router_and_configurations():
 
     finally:
         await service.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_service_endpoint_with_invalid_router_noncallable():
+    """@service_endpoint with non-callable router should raise ValueError."""
+
+    class BadActor(ForgeActor):
+        @service_endpoint(router="roundrobin")  # string, not callable
+        async def bad_endpoint(self):
+            return 42
+
+    with pytest.raises(ValueError, match="Router must be callable"):
+        # Triggers ServiceInterface._set_router during construction
+        await BadActor.options(num_replicas=1).as_service()
+
+
+@pytest.mark.asyncio
+async def test_service_endpoint_with_invalid_router_wrong_return_type():
+    """@service_endpoint with callable that doesn't return Router should raise ValueError."""
+
+    class NotARouter:
+        """Dummy class that is not a Router."""
+
+    class BadActor(ForgeActor):
+        @service_endpoint(router=NotARouter)  # returns NotARouter
+        async def bad_endpoint(self):
+            return 123
+
+    with pytest.raises(ValueError, match="Router must be a Router instance"):
+        await BadActor.options(num_replicas=1).as_service()
 
 
 # Router Tests
