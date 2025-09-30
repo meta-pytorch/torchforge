@@ -59,10 +59,32 @@ from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
-from forge.util.lock import Lock
+from forge.util.lock import RWLock
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+class RequestMonitor:
+    """
+    Wrapper around RWLock to track status of request processing.
+    TODO?: Look into baking in metrics to monitor
+    """
+
+    def __init__(self):
+        self._lock = RWLock()
+
+    async def begin_processing(self):
+        await self._lock.acquire()
+
+    async def finish_processing(self):
+        await self._lock.release()
+
+    async def pause_processing(self):
+        await self._lock.acquire_write_lock()
+
+    async def resume_processing(self):
+        await self._lock.release_write_lock()
 
 
 @dataclass
@@ -245,7 +267,7 @@ class Policy(PolicyInterface):
         self.request_id = 0
         self.policy_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.requests_lock = Lock()
+        self.requests_monitor = RequestMonitor()
 
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
@@ -336,8 +358,8 @@ class Policy(PolicyInterface):
         )
         t.step("process_inputs")
 
-        # Acquire lock to check that requests can be queued
-        await self.requests_lock.acquire()
+        # Check/wait until requests can be queued
+        await self.requests_monitor.begin_processing()
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -392,8 +414,7 @@ class Policy(PolicyInterface):
 
         t.stop()
 
-        # Release lock so other requests can be queued
-        await self.requests_lock.release()
+        await self.requests_monitor.finish_processing()
 
         return completions
 
@@ -440,10 +461,6 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def update_weights(self, policy_version: int):
-        # Prevent new requests from being queued while letting in-flight requests queue
-        await self.requests_lock.acquire_exclusive_lock()
-
-        # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
             # Record pending requests metrics
@@ -458,7 +475,10 @@ class Policy(PolicyInterface):
                 Reduce.MAX,
             )
             logger.debug(f"Waiting for {len(curr_requests)} pending requests")
-            await asyncio.gather(*curr_requests)
+
+        # TODO: If generating long sequences, this might be long and will block policy weight updates
+        # Prevent new requests from being queued. Let in-flight requests finish
+        await self.requests_monitor.pause_processing()
 
         # Record weight update metrics
         record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
@@ -470,8 +490,10 @@ class Policy(PolicyInterface):
             await self.policy_worker.update_DEPRECATED.call(version=policy_version)
         self.policy_version = policy_version
 
-        # Release lock so new requests can be queued
-        await self.requests_lock.release_exclusive_lock()
+        # After updating the weights, we need to reset the KV cache
+        self.scheduler.kv_cache_manager.reset_prefix_cache()
+
+        await self.requests_monitor.resume_processing()
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint

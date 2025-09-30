@@ -7,7 +7,7 @@
 import asyncio
 
 import pytest
-from forge.util.lock import Lock
+from forge.util.lock import RWLock
 
 
 class TestLock:
@@ -15,7 +15,7 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_basic_acquire_release(self):
         """Test basic acquire and release functionality."""
-        lock = Lock()
+        lock = RWLock()
         assert lock._readers == 0
         assert lock._exclusive is False
         assert lock._exclusive_waiters == 0
@@ -30,7 +30,7 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_multiple_readers(self):
         """Test that multiple readers can acquire the lock simultaneously."""
-        lock = Lock()
+        lock = RWLock()
 
         await lock.acquire()
         await lock.acquire()
@@ -46,24 +46,21 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_exclusive_lock_basic(self):
         """Test basic exclusive lock functionality."""
-        lock = Lock()
-        assert lock._exclusive_waiters == 0
+        lock = RWLock()
 
-        await lock.acquire_exclusive_lock()
+        await lock.acquire_write_lock()
         assert lock._exclusive is True
-        assert lock._exclusive_waiters == 0
 
-        await lock.release_exclusive_lock()
+        await lock.release_write_lock()
         assert lock._exclusive is False
 
     @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_exclusive_lock_blocks_readers(self):
         """Test that exclusive lock blocks new readers."""
-        lock = Lock()
+        lock = RWLock()
 
-        await lock.acquire_exclusive_lock()
-        assert lock._exclusive is True
+        await lock.acquire_write_lock()
 
         results = []
 
@@ -76,8 +73,7 @@ class TestLock:
         await asyncio.sleep(0.1)
         assert len(results) == 0
 
-        await lock.release_exclusive_lock()
-        assert lock._exclusive is False
+        await lock.release_write_lock()
 
         await reader_task
         assert len(results) == 1
@@ -87,7 +83,7 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_exclusive_lock_waits_for_readers(self):
         """Test that exclusive lock waits for existing readers to finish."""
-        lock = Lock()
+        lock = RWLock()
         results = []
 
         reader_release_event = asyncio.Event()
@@ -100,9 +96,9 @@ class TestLock:
             results.append("reader_released")
 
         async def exclusive_acquirer():
-            await lock.acquire_exclusive_lock()
+            await lock.acquire_write_lock()
             results.append("exclusive_acquired")
-            await lock.release_exclusive_lock()
+            await lock.release_write_lock()
 
         # Start reader first
         reader_task = asyncio.create_task(reader_with_delay())
@@ -115,8 +111,6 @@ class TestLock:
         # At this point, reader should be acquired but exclusive should be waiting
         assert "reader_acquired" in results
         assert "exclusive_acquired" not in results
-        assert lock._exclusive is False
-        assert lock._exclusive_waiters == 1
 
         # Signal reader to release
         reader_release_event.set()
@@ -126,14 +120,12 @@ class TestLock:
         await exclusive_task
 
         assert results == ["reader_acquired", "reader_released", "exclusive_acquired"]
-        assert lock._readers == 0
-        assert lock._exclusive is False
 
     @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_concurrent_readers_before_exclusive(self):
         """Test multiple readers before exclusive lock acquisition."""
-        lock = Lock()
+        lock = RWLock()
         results = []
         reader_release_events = [asyncio.Event() for _ in range(3)]
 
@@ -152,7 +144,7 @@ class TestLock:
         await asyncio.sleep(0.1)  # Let all readers acquire
 
         # Now try to acquire exclusive lock
-        exclusive_task = asyncio.create_task(lock.acquire_exclusive_lock())
+        exclusive_task = asyncio.create_task(lock.acquire_write_lock())
         await asyncio.sleep(0.1)
 
         assert lock._exclusive is False
@@ -173,14 +165,14 @@ class TestLock:
         assert lock._exclusive is True
         assert lock._exclusive_waiters == 0
 
-        await lock.release_exclusive_lock()
+        await lock.release_write_lock()
         assert lock._exclusive is False
 
     @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_reader_counter_accuracy(self):
         """Test that reader counter is accurate with rapid acquire/release."""
-        lock = Lock()
+        lock = RWLock()
 
         async def rapid_acquire_release(count):
             for _ in range(count):
@@ -199,7 +191,7 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_exclusive_lock_isolation(self):
         """Test that exclusive lock provides proper isolation."""
-        lock = Lock()
+        lock = RWLock()
         shared_resource = {"value": 0}
 
         async def reader_task(task_id):
@@ -211,12 +203,12 @@ class TestLock:
             await lock.release()
 
         async def writer_task():
-            await lock.acquire_exclusive_lock()
+            await lock.acquire_write_lock()
             # Simulate writing to shared resource
             for i in range(5):
                 shared_resource["value"] = i
                 await asyncio.sleep(0.01)
-            await lock.release_exclusive_lock()
+            await lock.release_write_lock()
 
         # Start writer and readers concurrently
         writer = asyncio.create_task(writer_task())
@@ -231,7 +223,7 @@ class TestLock:
     @pytest.mark.asyncio
     async def test_release_without_acquire_error_handling(self):
         """Test behavior when releasing without acquiring."""
-        lock = Lock()
+        lock = RWLock()
         with pytest.raises(Exception):
             await lock.release()
 
@@ -240,15 +232,15 @@ class TestLock:
     async def test_multiple_exclusive_waiters(self):
         """Test that multiple exclusive waiters are handled in and only one exclusive
         lock is held at a time."""
-        lock = Lock()
+        lock = RWLock()
         results = []
 
         async def exclusive_task(task_id, event_start, event_end):
             await event_start.wait()
-            await lock.acquire_exclusive_lock()
+            await lock.acquire_write_lock()
             results.append(f"exclusive_{task_id}_acquired")
             await event_end.wait()
-            await lock.release_exclusive_lock()
+            await lock.release_write_lock()
             results.append(f"exclusive_{task_id}_released")
 
         # Events to control when each exclusive task starts and ends

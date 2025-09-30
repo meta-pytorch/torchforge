@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class Lock:
+# TODO: Add the ability to use as context manager
+class RWLock:
+    """
+    Basic read-write lock with write lock priority.
+    """
+
     def __init__(self):
         self._cond = asyncio.Condition()
         self._readers = 0
@@ -34,7 +39,7 @@ class Lock:
             if self._readers == 0:
                 self._cond.notify_all()
 
-    async def acquire_exclusive_lock(self):
+    async def acquire_write_lock(self):
         async with self._cond:
             self._exclusive_waiters += 1
             while self._exclusive or self._readers > 0:
@@ -42,7 +47,7 @@ class Lock:
             self._exclusive_waiters -= 1
             self._exclusive = True
 
-    async def release_exclusive_lock(self):
+    async def release_write_lock(self):
         async with self._cond:
             self._exclusive = False
             self._cond.notify_all()

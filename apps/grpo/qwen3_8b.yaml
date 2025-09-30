@@ -127,6 +127,10 @@ services:
     procs: 1
     num_replicas: 1
     with_gpus: false
+  trainer:
+    procs: 2
+    num_replicas: 1
+    with_gpus: true
 
 actors:
   dataset:
