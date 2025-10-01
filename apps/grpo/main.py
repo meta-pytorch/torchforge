@@ -32,7 +32,7 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.util.ops import selective_log_softmax
+from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -135,16 +135,6 @@ def collate(batches: list[list[Episode]]):
         inputs.append(input)
         targets.append(target)
     return inputs, targets
-
-
-def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0
-) -> torch.Tensor:
-    context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1].to(input_ids.device)
-    scaled_logits = logits / temperature
-    logprobs = selective_log_softmax(scaled_logits, input_ids)
-    return logprobs
 
 
 def simple_grpo_loss(
@@ -316,6 +306,7 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
+    compute_logprobs_in_reference_model = cfg.compute_logprobs_in_reference_model
 
     # initialize before spawning services
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
@@ -407,13 +398,18 @@ async def main(cfg: DictConfig):
             t.step("reward_evaluation")
 
             # Calculate reference logprobs
-            ref_logits = await ref_model.forward.route(input_ids)
-            t.step("reference_model_forward")
+            if compute_logprobs_in_reference_model:
+                ref_logprobs =  await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=True)
+                t.step("reference_model_forward_return_logprobs")
+            else:
+                ref_logits = await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=False)
+                t.step("reference_model_forward_return_logits")
+                ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
+                del ref_logits
 
-            ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
-            del ref_logits, ref_logprobs, input_ids
+            del ref_logprobs, input_ids
             t.step("compute_logprobs")
 
             # Calculate advantages and add to replay buffer
