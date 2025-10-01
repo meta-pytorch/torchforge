@@ -9,7 +9,8 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 scheduler: mast
-job_name: forge-qwen3-1_7b
+job_name: forge-qwen3-1_7b-1190
+checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/20
 
 # Main loop configuration
 rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
@@ -74,7 +75,7 @@ trainer:
     expert_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
-    enable: false
+    enable: true
     initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
     initial_load_in_hf: true
     last_save_in_hf: true
@@ -83,6 +84,7 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  dcp_path: ${checkpoint_folder}
 
 # Replay buffer configuration
 replay_buffer:
