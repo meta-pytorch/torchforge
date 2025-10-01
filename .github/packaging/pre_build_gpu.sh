@@ -5,7 +5,6 @@ set -euxo pipefail
 # This script builds vLLM, Monarch and torchstore and places
 # their wheels into dist/.
 
-VLLM_BRANCH="v0.10.0"
 MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
 TORCHTITAN_COMMIT="82f0287b966f1735819a377a9a09e7a303c55faa"
 TORCHSTORE_COMMIT="main"
@@ -112,8 +111,7 @@ append_date() {
 }
 
 
-build_vllm
 build_monarch
 # build_torchstore
-build_torchtitan
+# build_torchtitan
 append_date
