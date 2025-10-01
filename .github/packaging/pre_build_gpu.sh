@@ -9,8 +9,6 @@ MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
 TORCHTITAN_COMMIT="82f0287b966f1735819a377a9a09e7a303c55faa"
 TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
-VLLM_BRANCH="v0.10.0"
-BUILD_DIR="$HOME/forge-build"
 
 # Push other files to the dist folder
 WHL_DIR="${GITHUB_WORKSPACE}/wheels/dist"
@@ -112,8 +110,8 @@ append_date() {
     fi
 }
 
-build_vllm
+
 build_monarch
-build_torchstore
-build_torchtitan
+# build_torchstore
+# build_torchtitan
 append_date
