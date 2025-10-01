@@ -59,32 +59,9 @@ from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
-from forge.util.lock import RWLock
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-class RequestMonitor:
-    """
-    Wrapper around RWLock to track status of request processing.
-    TODO?: Look into baking in metrics to monitor
-    """
-
-    def __init__(self):
-        self._lock = RWLock()
-
-    async def begin_processing(self):
-        await self._lock.acquire()
-
-    async def finish_processing(self):
-        await self._lock.release()
-
-    async def pause_processing(self):
-        await self._lock.acquire_write_lock()
-
-    async def resume_processing(self):
-        await self._lock.release_write_lock()
 
 
 @dataclass
@@ -267,7 +244,14 @@ class Policy(PolicyInterface):
         self.request_id = 0
         self.policy_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
-        self.requests_monitor = RequestMonitor()
+
+        # TODO: Investigate whether this can be combined with `policy.running`
+        # Whether this policy is accepting requests.
+        self.accepting_requests = True
+        # Guard for accepting_requests
+        self.request_lock = asyncio.Condition()
+        # Guard for updating requests
+        self.update_lock = asyncio.Condition()
 
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
@@ -358,8 +342,9 @@ class Policy(PolicyInterface):
         )
         t.step("process_inputs")
 
-        # Check/wait until requests can be queued
-        await self.requests_monitor.begin_processing()
+        # Grab the lock to check if we are accepting requests
+        async with self.request_lock:
+            await self.request_lock.wait_for(lambda: self.accepting_requests)
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -414,8 +399,6 @@ class Policy(PolicyInterface):
 
         t.stop()
 
-        await self.requests_monitor.finish_processing()
-
         return completions
 
     # Abstracted to match vllm
@@ -459,41 +442,56 @@ class Policy(PolicyInterface):
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(completions)
 
+            # Grab the lock to notify potential update requests
+            async with self.request_lock:
+                if len(self.requests) == 0:
+                    self.request_lock.notify_all()
+
     @endpoint
     async def update_weights(self, policy_version: int):
-        curr_requests = [fut for _, fut in self.requests.values()]
-        if curr_requests:
-            # Record pending requests metrics
-            record_metric(
-                "policy_perf/update_weights/avg_pending_requests",
-                len(curr_requests),
-                Reduce.MEAN,
-            )
-            record_metric(
-                "policy_perf/update_weights/max_pending_requests",
-                len(curr_requests),
-                Reduce.MAX,
-            )
-            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+        # Grab the lock to be the only one updating weights
+        async with self.update_lock:
+            # Grab the lock to stop accepting requests and wait on pending requests
+            async with self.request_lock:
+                self.accepting_requests = False
 
-        # TODO: If generating long sequences, this might be long and will block policy weight updates
-        # Prevent new requests from being queued. Let in-flight requests finish
-        await self.requests_monitor.pause_processing()
+                curr_requests = [fut for _, fut in self.requests.values()]
+                if curr_requests:
+                    # Record pending requests metrics
+                    record_metric(
+                        "policy_perf/update_weights/avg_pending_requests",
+                        len(curr_requests),
+                        Reduce.MEAN,
+                    )
+                    record_metric(
+                        "policy_perf/update_weights/max_pending_requests",
+                        len(curr_requests),
+                        Reduce.MAX,
+                    )
+                    logger.debug(f"Waiting for {len(curr_requests)} pending requests")
 
-        # Record weight update metrics
-        record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
+                # TODO: If generating long sequences, this might be long and will block
+                # policy weight updates
+                await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
-        logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        if self.use_vllm_builtin_load:
-            await self.policy_worker.update.call(version=policy_version)
-        else:
-            await self.policy_worker.update_DEPRECATED.call(version=policy_version)
-        self.policy_version = policy_version
+            # Record weight update metrics
+            record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
 
-        # After updating the weights, we need to reset the KV cache
-        self.scheduler.kv_cache_manager.reset_prefix_cache()
+            logger.debug(f"Starting weight update on {self.__class__.__name__}")
+            if self.use_vllm_builtin_load:
+                await self.policy_worker.update.call(version=policy_version)
+            else:
+                await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+            self.policy_version = policy_version
 
-        await self.requests_monitor.resume_processing()
+            # After updating the weights, we need to reset the KV cache
+            self.scheduler.kv_cache_manager.reset_prefix_cache()
+
+        # Grab the lock to notify resume accepting requests and wake up pending requests
+        async with self.request_lock:
+            self.accepting_requests = True
+            self.request_lock.notify_all()
+
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
