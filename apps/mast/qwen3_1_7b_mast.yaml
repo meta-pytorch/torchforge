@@ -9,8 +9,8 @@ max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 scheduler: mast
-job_name: forge-qwen3-1_7b-1190
-checkpoint_folder: /mnt/wsfuse/rithesh/forge_runs/${job_name}/20
+job_name: forge-qwen3-1_7b
+checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
 rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
@@ -39,6 +39,9 @@ policy:
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
+    # TODO: Had to disable this becasue vLLm wouldn't like
+    # needs to revisited.
+    disable_custom_all_reduce: true
   sampling_config:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -84,6 +87,10 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  comm:
+    # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP
+    # from oilfs if the traienr is not in the same region as in oilfs
+    init_timeout_seconds: 1200
   dcp_path: ${checkpoint_folder}
 
 # Replay buffer configuration
