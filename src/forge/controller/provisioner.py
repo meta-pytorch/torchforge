@@ -252,29 +252,6 @@ class Provisioner(BaseProvisioner):
                     os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
-                    os.environ["VLLM_TORCH_COMPILE_LEVEL"] = "0"
-                    os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
-                    os.environ["NVTE_TORCH_COMPILE"] = "0"
-                    os.environ["NVTE_BIAS_GELU_NVFUSION"] = "0"
-                    os.environ["NVTE_CUDA_INCLUDE_DIR"] = "/usr/local/cuda/include"
-                    os.environ["NVTE_DISABLE_NVRTC"] = "1"
-                    os.environ["NVTE_FUSED_ATTN"] = "1"
-                    os.environ["NVTE_FUSED_ATTN_USE_FAv2_BWD"] = "1"
-                    os.environ["NCCL_SET_THREAD_NAME"] = "1'"
-                    os.environ[
-                        "NCCL_DEBUG_SUBSYS"
-                    ] = "INIT,COLL,P2P,SHM,NET,GRAPH,TUNING,ENV,ALLOC"
-                    os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "3"
-                    os.environ["NCCL_NET_OVERHEAD"] = "2750"
-                    os.environ["NCCL_IB_SPLIT_DATA_ON_QPS"] = "0"
-                    os.environ["NCCL_IB_QPS_PER_CONNECTION"] = "16"
-                    os.environ["NCCL_CTRAN_ENABLE"] = "0"
-                    os.environ["TORCH_SHOW_CPP_STACKTRACES"] = "1"
-                    os.environ["PYTORCH_JIT"] = "0"
-                    os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
-                    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-                    os.environ["GLOG_minloglevel"] = "1"
-
                 gpu_ids = gpu_manager.get_gpus(num_procs)
                 procs = host_mesh.spawn_procs(
                     per_host={"gpus": num_procs},
