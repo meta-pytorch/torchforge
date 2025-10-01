@@ -26,6 +26,7 @@ class ForgeActor(Actor):
     hosts: int | None = None
     with_gpus: bool = False
     num_replicas: int = 1
+    mesh_name: str | None = None
     _extra_config: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
