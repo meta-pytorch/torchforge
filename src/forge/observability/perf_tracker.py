@@ -106,7 +106,7 @@ class Tracer:
 
         self.prefix = prefix
         self.track_memory = track_memory
-        self.time_with_gpu = timer == "gpu"
+        self.time_with_gpu = False  # timer == "gpu"
         self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
         self._active = False
 
