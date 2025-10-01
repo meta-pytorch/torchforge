@@ -35,7 +35,7 @@ jobs:
               "container_image": "pytorch/manylinux2_28-builder:cuda12.9",
               "package_type": "manywheel",
               "build_name": "manywheel-py3_10-cuda12_9",
-              "validation_runner": "linux.g4.xlarge.nvidia.gpu",
+              "validation_runner": "linux.4xlarge.nvidia.gpu",
               "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129",
               "channel": "nightly",
               "upload_to_base_bucket": "no",
