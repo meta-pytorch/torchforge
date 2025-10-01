@@ -27,12 +27,13 @@ try:
 except ImportError as e:
     print(f"Warning: Monarch imports failed: {e}")
     print("Monarch functionality will be limited")
-from forge.controller.provisioner import BaseProvisioner, GpuManager, JOB_NAME_KEY
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.config import Config, Workspace
 from omegaconf import DictConfig
+
+from forge.controller.provisioner import BaseProvisioner, GpuManager, JOB_NAME_KEY
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -278,7 +279,9 @@ class MastProvisioner(BaseProvisioner):
             scheduler="mast_conda",
             scheduler_args={
                 # NOTE: TODO: support passing these args from CLI
-                "hpcIdentity": "genai_llm_pretraining_data",
+                "hpcIdentity": "hyper_monarch",
+                # "hpcIdentity": "genai_llm_pretraining_data",
+                # "hpcIdentity": "pytorch_distributed",
                 "hpcJobOncall": "monarch",
                 "hpcClusterUuid": "MastProdCluster",
                 "rmAttribution": "pytorch4all_clients_approved",
