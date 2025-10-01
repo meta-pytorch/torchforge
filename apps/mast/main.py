@@ -25,17 +25,15 @@ async def main(cfg: DictConfig):
         raise ValueError("Schuduler must be MAST.")
 
     if cfg.get(JOB_NAME_KEY, None) is not None:
-        # prepend user name and append guid to the job to avoid name collision
-        cfg[JOB_NAME_KEY] = (
-            f"{getpass.getuser()}-{cfg[JOB_NAME_KEY]}-{uuid.uuid4().hex[:6]}"
-        )
+        # prepend user name to the job to avoid name collision
+        cfg[JOB_NAME_KEY] = f"{getpass.getuser()}-{cfg[JOB_NAME_KEY]}"
         print(f"Overriding mast job name to {cfg[JOB_NAME_KEY]}")
 
     if cfg.get(DEFAULT_CHECKPOINT_FOLDER_KEY, DEFAULT_CHECKPOINT_FOLDER) is not None:
-        # append job_name to CP folder path to avoid path collision
+        # append job_name and guid to CP folder path to avoid path collision
         if cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] == DEFAULT_CHECKPOINT_FOLDER:
             cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] = (
-                f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}"
+                f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}-{uuid.uuid4().hex[:6]}"
             )
         print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
