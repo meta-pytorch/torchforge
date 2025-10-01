@@ -17,6 +17,8 @@ from typing import Optional
 import torchx.specs as specs
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 
+from forge.observability.metric_actors import get_or_create_metric_logger
+
 try:
     from monarch._src.actor.actor_mesh import current_rank
     from monarch._src.actor.meta.allocator import MastAllocator, MastAllocatorConfig
@@ -249,11 +251,18 @@ class MastProvisioner(BaseProvisioner):
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
+        _ = await get_or_create_metric_logger(procs)
+
         return procs
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
         async with self._lock:
+            # Deregister local logger from global logger
+            if hasattr(proc_mesh, "_local_fetcher"):
+                global_logger = await get_or_create_metric_logger(proc_mesh)
+                await global_logger.deregister_fetcher.call_one(proc_mesh)
+
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)
@@ -315,8 +324,15 @@ class MastProvisioner(BaseProvisioner):
             **{
                 "HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS": "600",
                 "HYPERACTOR_CODE_MAX_FRAME_LENGTH": "1073741824",
+                "TORCHINDUCTOR_COMPILE_THREADS": "1",
+                "TORCH_COMPILE_DISABLE": "1",
+                "TORCHDYNAMO_VERBOSE": "1",
+                "VLLM_TORCH_COMPILE_LEVEL": "0",
+                "VLLM_USE_TRITON_FLASH_ATTN": "0",
             },
         }
+
+        print("DEFAULT ENVS: ", default_envs)
 
         packages = Packages()
         meshes = []
