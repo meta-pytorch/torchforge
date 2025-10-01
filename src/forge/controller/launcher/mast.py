@@ -232,7 +232,7 @@ class MastProvisioner(BaseProvisioner):
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
                 await procs.initialized
-                setup = await procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
+                setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
                 hostname, port = await setup.get_info.choose()
                 await setup.mount.call(mount_dst="/mnt/wsfuse")
                 procs._hostname = hostname

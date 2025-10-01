@@ -139,7 +139,6 @@ FBSOURCE_PATH="/data/users/$USER/fbsource"
 CONDA_SCRIPT_PATH="$FBSOURCE_PATH/genai/xlformers/dev/xl_conda.sh"
 FORGE_BASE_DIR="/data/users/$USER"
 FORGE_REPO_DIR="$FORGE_BASE_DIR/forge"
-MONARCH_DIR="$HOME/monarch_no_torch_latest"
 
 # Workspace URL for mounting
 WORKSPACE_URL="ws://ws.ai.pci0ai/genai_fair_llm"
@@ -163,10 +162,10 @@ if [ ! -f "$CONDA_SCRIPT_PATH" ]; then
 fi
 
 log_info "Sourcing conda script: $CONDA_SCRIPT_PATH"
-source "$CONDA_SCRIPT_PATH" activate forge:8448524
+source "$CONDA_SCRIPT_PATH" activate forge:e146614
 
 if [ $? -ne 0 ]; then
-    log_error "Failed to activate conda environment forge-8448524"
+    log_error "Failed to activate conda environment forge-e146614"
     exit 1
 fi
 
@@ -233,44 +232,6 @@ if [ $? -ne 0 ]; then
 fi
 log_info "Forge package installed successfully"
 
-# Step 6: Navigate to monarch directory
-log_info "Step 6: Setting up monarch directory..."
-if [ ! -d "$MONARCH_DIR" ]; then
-    log_info "Creating monarch directory: $MONARCH_DIR"
-    mkdir -p "$MONARCH_DIR"
-fi
-
-cd "$MONARCH_DIR"
-log_info "Changed to directory: $(pwd)"
-
-# Step 7: Fetch monarch package
-log_info "Step 7: Fetching monarch package..."
-# TODO: Remove hardcodedm version
-fbpkg fetch monarch_no_torch:23
-if [ $? -ne 0 ]; then
-    log_error "Failed to fetch monarch_no_torch:23"
-    log_error "Please ensure fbpkg is properly configured"
-    exit 1
-fi
-log_info "Monarch package fetched successfully"
-
-# Step 8: Install monarch wheel
-log_info "Step 8: Installing monarch wheel..."
-WHEEL_FILE="monarch-0.0.0-py3.10-none-any.whl"
-if [ ! -f "$WHEEL_FILE" ]; then
-    log_error "Wheel file not found: $WHEEL_FILE"
-    log_error "Available files in directory:"
-    ls -la *.whl 2>/dev/null || log_error "No wheel files found"
-    exit 1
-fi
-
-pip install --force-reinstall "$WHEEL_FILE"
-if [ $? -ne 0 ]; then
-    log_error "Failed to install monarch wheel"
-    exit 1
-fi
-log_info "Monarch wheel installed successfully"
-
 log_info "Environment activation completed"
 
 # Final verification
@@ -301,9 +262,9 @@ pip list | grep -E "(forge|monarch)" || log_warn "No forge/monarch packages foun
 log_info "Environment setup complete! You can now run your scripts."
 log_info "Mounted workspace available at: /mnt/wsfuse"
 
-# Step 9: Ask user to deactivate and activate conda env conda environment
+# Step 6: Ask user to deactivate and activate conda env conda environment
 echo ""
 log_info "Installation completed successfully!"
 echo ""
 log_info "Re-activate the conda environment to make the changes take effect:"
-log_info "conda deactivate && conda activate forge-8448524"
+log_info "conda deactivate && conda activate forge-e146614"
