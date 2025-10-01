@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -243,6 +244,15 @@ class Policy(PolicyInterface):
         self.request_id = 0
         self.policy_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+
+        # TODO: Investigate whether this can be combined with `policy.running`
+        # Whether this policy is accepting requests.
+        self.accepting_requests = True
+        # Guard for accepting_requests
+        self.request_lock = asyncio.Condition()
+        # Guard for updating requests
+        self.update_lock = asyncio.Condition()
+
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
         # Setup sampling params
@@ -332,33 +342,39 @@ class Policy(PolicyInterface):
         )
         t.step("process_inputs")
 
-        # Explicitly keeping the redundant logic to make it easier to pick up
-        # vllm changes
-        # TODO: Clean up before release
-        if (num_samples := self.sampling_params.n) == 1:
-            self.output_processor.add_request(request, prompt_str, None, 0)
-            request, _ = self.preprocess_add_request(request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (None, request_fut)
+        # Wait until we're accepting requests (releases lock while waiting)
+        # If accepting_requests is True, continue immediately (holding the lock)
+        # If False, release lock, wait for notification, re-acquire and recheck
+        async with self.request_lock:
+            await self.request_lock.wait_for(lambda: self.accepting_requests)
 
-            self.scheduler.add_request(request)
-        else:
-            parent_req = ParentRequest(request_id, self.sampling_params)
-            for idx in range(num_samples):
-                # Note: `get_child_info` mutates ParentRequest to track the
-                # generated child request
-                child_request_id, params = parent_req.get_child_info(idx)
-                child_request = request if idx == num_samples - 1 else copy(request)
-                child_request.request_id = child_request_id
-                child_request.sampling_params = params
-                self.output_processor.add_request(
-                    child_request, prompt_str, parent_req, idx
-                )
-                child_request, _ = self.preprocess_add_request(child_request)
+            # Explicitly keeping the redundant logic to make it easier to pick up
+            # vllm changes
+            # TODO: Clean up before release
+            if (num_samples := self.sampling_params.n) == 1:
+                self.output_processor.add_request(request, prompt_str, None, 0)
+                request, _ = self.preprocess_add_request(request)
+                request_fut = asyncio.Future()
+                self.requests[request_id] = (None, request_fut)
 
-                self.scheduler.add_request(child_request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (parent_req, request_fut)
+                self.scheduler.add_request(request)
+            else:
+                parent_req = ParentRequest(request_id, self.sampling_params)
+                for idx in range(num_samples):
+                    # Note: `get_child_info` mutates ParentRequest to track the
+                    # generated child request
+                    child_request_id, params = parent_req.get_child_info(idx)
+                    child_request = request if idx == num_samples - 1 else copy(request)
+                    child_request.request_id = child_request_id
+                    child_request.sampling_params = params
+                    self.output_processor.add_request(
+                        child_request, prompt_str, parent_req, idx
+                    )
+                    child_request, _ = self.preprocess_add_request(child_request)
+
+                    self.scheduler.add_request(child_request)
+                request_fut = asyncio.Future()
+                self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
         t.step("generate")
@@ -428,34 +444,57 @@ class Policy(PolicyInterface):
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(completions)
 
+            # Notify waiters if queue is drained
+            async with self.request_lock:
+                if len(self.requests) == 0:
+                    self.request_lock.notify_all()
+
     @endpoint
     async def update_weights(self, policy_version: int):
-        # TODO: If generating long sequences, this might be long and will block policy weight updates
-        curr_requests = [fut for _, fut in self.requests.values()]
-        if curr_requests:
-            # Record pending requests metrics
-            record_metric(
-                "policy_perf/update_weights/avg_pending_requests",
-                len(curr_requests),
-                Reduce.MEAN,
-            )
-            record_metric(
-                "policy_perf/update_weights/max_pending_requests",
-                len(curr_requests),
-                Reduce.MAX,
-            )
-            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
-            await asyncio.gather(*curr_requests)
+        # Serialize updates (only one update at a time)
+        async with self.update_lock:
+            # Grab the lock to stop accepting requests and wait on pending requests
+            async with self.request_lock:
+                self.accepting_requests = False
 
-        # Record weight update metrics
-        record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
+                curr_requests = [fut for _, fut in self.requests.values()]
+                if curr_requests:
+                    # Record pending requests metrics
+                    record_metric(
+                        "policy_perf/update_weights/avg_pending_requests",
+                        len(curr_requests),
+                        Reduce.MEAN,
+                    )
+                    record_metric(
+                        "policy_perf/update_weights/max_pending_requests",
+                        len(curr_requests),
+                        Reduce.MAX,
+                    )
+                    logger.debug(f"Waiting for {len(curr_requests)} pending requests")
 
-        logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        if self.use_vllm_builtin_load:
-            await self.policy_worker.update.call(version=policy_version)
-        else:
-            await self.policy_worker.update_DEPRECATED.call(version=policy_version)
-        self.policy_version = policy_version
+                # Wait until all pending requests have been processed
+                # TODO: If generating long sequences, this might be long and will block
+                # policy weight updates
+                await self.request_lock.wait_for(lambda: len(self.requests) == 0)
+
+            # Record weight update metrics
+            record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
+
+            logger.debug(f"Starting weight update on {self.__class__.__name__}")
+            if self.use_vllm_builtin_load:
+                await self.policy_worker.update.call(version=policy_version)
+            else:
+                await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+            self.policy_version = policy_version
+
+            # After updating the weights, we need to reset the KV cache
+            self.scheduler.kv_cache_manager.reset_prefix_cache()
+
+        # Resume accepting requests and wake up any waiting generate() calls
+        async with self.request_lock:
+            self.accepting_requests = True
+            self.request_lock.notify_all()
+
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
