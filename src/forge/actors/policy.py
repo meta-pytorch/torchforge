@@ -342,37 +342,39 @@ class Policy(PolicyInterface):
         )
         t.step("process_inputs")
 
-        # Grab the lock to check if we are accepting requests
+        # Wait until we're accepting requests (releases lock while waiting)
+        # If accepting_requests is True, continue immediately (holding the lock)
+        # If False, release lock, wait for notification, re-acquire and recheck
         async with self.request_lock:
             await self.request_lock.wait_for(lambda: self.accepting_requests)
 
-        # Explicitly keeping the redundant logic to make it easier to pick up
-        # vllm changes
-        # TODO: Clean up before release
-        if (num_samples := self.sampling_params.n) == 1:
-            self.output_processor.add_request(request, prompt_str, None, 0)
-            request, _ = self.preprocess_add_request(request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (None, request_fut)
+            # Explicitly keeping the redundant logic to make it easier to pick up
+            # vllm changes
+            # TODO: Clean up before release
+            if (num_samples := self.sampling_params.n) == 1:
+                self.output_processor.add_request(request, prompt_str, None, 0)
+                request, _ = self.preprocess_add_request(request)
+                request_fut = asyncio.Future()
+                self.requests[request_id] = (None, request_fut)
 
-            self.scheduler.add_request(request)
-        else:
-            parent_req = ParentRequest(request_id, self.sampling_params)
-            for idx in range(num_samples):
-                # Note: `get_child_info` mutates ParentRequest to track the
-                # generated child request
-                child_request_id, params = parent_req.get_child_info(idx)
-                child_request = request if idx == num_samples - 1 else copy(request)
-                child_request.request_id = child_request_id
-                child_request.sampling_params = params
-                self.output_processor.add_request(
-                    child_request, prompt_str, parent_req, idx
-                )
-                child_request, _ = self.preprocess_add_request(child_request)
+                self.scheduler.add_request(request)
+            else:
+                parent_req = ParentRequest(request_id, self.sampling_params)
+                for idx in range(num_samples):
+                    # Note: `get_child_info` mutates ParentRequest to track the
+                    # generated child request
+                    child_request_id, params = parent_req.get_child_info(idx)
+                    child_request = request if idx == num_samples - 1 else copy(request)
+                    child_request.request_id = child_request_id
+                    child_request.sampling_params = params
+                    self.output_processor.add_request(
+                        child_request, prompt_str, parent_req, idx
+                    )
+                    child_request, _ = self.preprocess_add_request(child_request)
 
-                self.scheduler.add_request(child_request)
-            request_fut = asyncio.Future()
-            self.requests[request_id] = (parent_req, request_fut)
+                    self.scheduler.add_request(child_request)
+                request_fut = asyncio.Future()
+                self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
         t.step("generate")
@@ -442,14 +444,14 @@ class Policy(PolicyInterface):
                     _, fut = self.requests.pop(request_output.request_id)
                     fut.set_result(completions)
 
-            # Grab the lock to notify potential update requests
+            # Notify waiters if queue is drained
             async with self.request_lock:
                 if len(self.requests) == 0:
                     self.request_lock.notify_all()
 
     @endpoint
     async def update_weights(self, policy_version: int):
-        # Grab the lock to be the only one updating weights
+        # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
             async with self.request_lock:
@@ -470,6 +472,7 @@ class Policy(PolicyInterface):
                     )
                     logger.debug(f"Waiting for {len(curr_requests)} pending requests")
 
+                # Wait until all pending requests have been processed
                 # TODO: If generating long sequences, this might be long and will block
                 # policy weight updates
                 await self.request_lock.wait_for(lambda: len(self.requests) == 0)
@@ -487,7 +490,7 @@ class Policy(PolicyInterface):
             # After updating the weights, we need to reset the KV cache
             self.scheduler.kv_cache_manager.reset_prefix_cache()
 
-        # Grab the lock to notify resume accepting requests and wake up pending requests
+        # Resume accepting requests and wake up any waiting generate() calls
         async with self.request_lock:
             self.accepting_requests = True
             self.request_lock.notify_all()
