@@ -52,15 +52,14 @@ async def get_or_create_metric_logger(
         # Main process setup
         mlogger = await get_or_create_metric_logger()
 
-        # Initialize services...
-        policy = await Policy.as_service(...)
-
-        # Initialize logging backends after all local fetchers are registered
-        # so each rank can have its own.
+        # Initialize logging backends
         await mlogger.init_backends({
             "console": {"reduce_across_ranks": True},
             "wandb": {"project": "my_project", "reduce_across_ranks": False}
         })
+
+        # Initialize services...
+        policy = await Policy.as_service(...)
 
         # Training loop
         for step in range(max_steps):
@@ -98,7 +97,7 @@ async def get_or_create_metric_logger(
 
     # Setup local_fetcher_actor if needed
     if not proc_has_local_fetcher:
-        local_fetcher_actor = await proc.spawn(
+        local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger
         )
         await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)

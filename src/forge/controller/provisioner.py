@@ -199,7 +199,7 @@ class Provisioner:
                     per_host={"gpus": num_procs},
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
-                setup = await procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
+                setup = procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
                 # Pick a random host/port, we'll feed this in afterwards
                 # Once we have true HostMesh support, we can do this on proc 0 of each host
                 # then spin up the proc meshes with the environment afterwards.

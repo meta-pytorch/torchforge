@@ -195,7 +195,7 @@ class Policy(PolicyInterface):
         vllm_config = engine_config.create_vllm_config()
         # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
         # do logging within PolicyWorker
-        workers = await worker_procs.spawn(
+        workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
@@ -204,7 +204,7 @@ class Policy(PolicyInterface):
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-        policy = await policy_proc.spawn(
+        policy = policy_proc.spawn(
             actor_name,
             cls,
             engine_config=engine_config,

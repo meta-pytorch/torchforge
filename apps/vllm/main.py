@@ -18,6 +18,7 @@ from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
 from forge.data_models.completion import Completion
+from forge.observability.metric_actors import get_or_create_metric_logger
 from omegaconf import DictConfig
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
@@ -25,6 +26,9 @@ os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
 
 async def run(cfg: DictConfig):
+    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    mlogger = await get_or_create_metric_logger()
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:
         gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)

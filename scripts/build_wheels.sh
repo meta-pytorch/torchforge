@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 #!/bin/bash
 set -euo pipefail
 
@@ -11,9 +17,9 @@ NC='\033[0m'
 # Configuration
 PYTORCH_VERSION="2.9.0.dev20250905"
 VLLM_BRANCH="v0.10.0"
-MONARCH_COMMIT="ce078ddbbac6b6f3682afd763d8d96dad8092a91"
-TORCHTITAN_COMMIT="a3104201ba3a0fa19e9c3cc5ba748b0398551410"
-TORCHSTORE_COMMIT="16a3518607c489781cef0416988827017a87022b"
+MONARCH_COMMIT="9c41b5c16edadeab7cfb8521ba7efe68a1e2bc87"
+TORCHTITAN_COMMIT="9f3fe08635356b829e6bf41883760679a8207697"
+TORCHSTORE_COMMIT="0052f6d8b686b9cff0cf4ce203a836c4b5d5ac94"
 BUILD_DIR="$HOME/forge-build"
 WHEEL_DIR="$(pwd)/assets/wheels"
 
