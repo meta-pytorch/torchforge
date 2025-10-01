@@ -88,15 +88,24 @@ class TestComputeLogprobs:
     def test_edge_cases(self):
         """Test edge cases."""
         # Test with very large values (numerical stability)
-        logits = torch.tensor([[[100.0, 200.0], [150.0, 250.0]]])
+        logits = torch.tensor([[[1000.0, 2000.0], [1500.0, 2500.0]]])
         input_ids = torch.tensor([[0]])
         result = compute_logprobs(logits, input_ids)
         # Should not be NaN or inf
         assert torch.isfinite(result).all()
 
         # Test with very small values
-        logits = torch.tensor([[[-100.0, -200.0], [-150.0, -250.0]]])
+        logits = torch.tensor([[[-1000.0, -2000.0], [-1500.0, -2500.0]]])
         input_ids = torch.tensor([[1]])
         result = compute_logprobs(logits, input_ids)
         # Should not be NaN or inf
         assert torch.isfinite(result).all()
+
+    def test_compute_logprobs_empty_response(self):
+        """Test logprobs computation with empty response."""
+        batch_size, seq_len, vocab_size = 1, 5, 1000
+        logits = torch.randn(batch_size, seq_len, vocab_size)
+        input_ids = torch.tensor([[]])
+
+        result = compute_logprobs(logits, input_ids)
+        assert result.shape == (batch_size, 0)
