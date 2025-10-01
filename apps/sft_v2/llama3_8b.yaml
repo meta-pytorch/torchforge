@@ -18,8 +18,8 @@ model:
 
 processes:
   scheduler: local # local | mast (not supported yet)
-  num_hosts: 1
-  num_procs: 8
+  hosts: 1
+  procs: 8
   with_gpus: true
 
 optimizer:

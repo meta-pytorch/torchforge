@@ -289,13 +289,13 @@ async def run(cfg: DictConfig) -> None:
     )
 
     logging.info("Created recipe, running setup.")
-    await recipe.setup.call()
+    await recipe.setup.fanout()
 
     logging.info("Recipe has been setup. Training now.")
-    await recipe.train.call()
+    await recipe.train.fanout()
 
     logging.info("Done training. Clean up")
-    await recipe.cleanup.call()
+    await recipe.cleanup.fanout()
     await recipe.mesh.stop()
     logging.info("All done!")
 

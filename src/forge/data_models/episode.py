@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import torch
+
 from forge.data_models.scored_completion import ScoredCompletion
 
 

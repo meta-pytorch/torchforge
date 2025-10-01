@@ -80,6 +80,8 @@ ipython_config.py
 *.pt
 *.pth
 *.ckpt
+*.distcp
+.metadata
 
 # mypy
 .mypy_cache/
@@ -196,3 +198,4 @@ assets/wheels/vllm*.whl
 
 # DCP artifacts
 model_state_dict/
+forge_dcp_tmp/
