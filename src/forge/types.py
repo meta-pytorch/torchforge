@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, TypedDict, Union
 
 
@@ -87,6 +88,12 @@ class State:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+class Scheduler(Enum):
+    MAST = "mast"
+    SLURM = "slurm"
+    LOCAL = "local"
+
+
 @dataclass
 class ProcessConfig:
     """A proc_mesh config for the torchx scheduler."""
@@ -94,6 +101,7 @@ class ProcessConfig:
     procs: int = 1
     with_gpus: bool = False
     hosts: int | None = None
+    mesh_name: str | None = None
 
 
 @dataclass
@@ -118,6 +126,7 @@ class ServiceConfig:
     health_poll_rate: float = 0.2
     replica_max_concurrent_requests: int = 10
     return_first_rank_result: bool = True
+    mesh_name: str | None = None
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.
@@ -127,6 +136,7 @@ class ServiceConfig:
             procs=self.procs,
             with_gpus=self.with_gpus,
             hosts=self.hosts,
+            mesh_name=self.mesh_name,
         )
 
 
