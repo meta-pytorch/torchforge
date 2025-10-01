@@ -17,10 +17,7 @@ from typing import Optional
 
 import monarch
 
-from forge.observability.metric_actors import (
-    get_or_create_metric_logger,
-    setup_metric_logger,
-)
+from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.types import ProcessConfig, Scheduler
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
