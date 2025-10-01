@@ -1,0 +1,67 @@
+# Toy app Training Configuration
+
+# Global configuration
+group_size: 16
+batch_size: 64
+max_req_tokens: 64
+max_res_tokens: 64
+model: "Qwen/Qwen2.5-0.5B-Instruct"
+
+# Dataset configuration
+dataset:
+  model: ${model}
+
+# Policy configuration
+policy:
+  engine_config:
+    model: ${model}
+    tensor_parallel_size: 2
+    pipeline_parallel_size: 1
+    enforce_eager: false
+  sampling_config:
+    n: ${group_size}
+    max_tokens: ${max_res_tokens}
+    temperature: 1.0
+    top_p: 1.0
+  use_vllm_builtin_load: true
+
+# Trainer configuration
+trainer:
+  model_name: ${model}
+  learning_rate: 1e-5
+  use_vllm_builtin_load: true
+
+# Reference model configuration
+ref_model:
+  model_name: ${model}
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${batch_size}
+  max_policy_age: 1 # Async by 1
+  dp_size: 1
+
+services:
+  policy:
+    procs: 1
+    num_replicas: 1
+    with_gpus: true
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+  ref_model:
+    procs: 1
+    num_replicas: 1
+    with_gpus: true
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+  trainer:
+    procs: 1
+    with_gpus: true
+  replay_buffer:
+    procs: 1
+    with_gpus: false

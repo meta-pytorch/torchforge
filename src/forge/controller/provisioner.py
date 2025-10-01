@@ -21,6 +21,8 @@ from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
+from forge.observability.metric_actors import get_or_create_metric_logger
+
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -197,7 +199,7 @@ class Provisioner:
                     per_host={"gpus": num_procs},
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
-                setup = await procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
+                setup = procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
                 # Pick a random host/port, we'll feed this in afterwards
                 # Once we have true HostMesh support, we can do this on proc 0 of each host
                 # then spin up the proc meshes with the environment afterwards.
@@ -215,11 +217,19 @@ class Provisioner:
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
+        # Spawn local logging actor on each process and register with global logger
+        _ = await get_or_create_metric_logger(procs)
+
         return procs
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
         async with self._lock:
+            # Deregister local logger from global logger
+            if hasattr(proc_mesh, "_local_fetcher"):
+                global_logger = await get_or_create_metric_logger(proc_mesh)
+                await global_logger.deregister_fetcher.call_one(proc_mesh)
+
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)

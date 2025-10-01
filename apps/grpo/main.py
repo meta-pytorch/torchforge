@@ -7,6 +7,8 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -15,6 +17,10 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
+from forge.actors._torchstore_utils import (
+    get_dcp_whole_state_dict_key,
+    get_param_prefix,
+)
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
@@ -23,7 +29,9 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.util.metric_logging import get_metric_logger
+from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -165,9 +173,47 @@ class RewardActor(ForgeActor):
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
             total_rewards += reward
-        return total_rewards / len(self.reward_functions)
+
+            # Get a name for the reward function (works for classes, functions, lambdas)
+            reward_fn_name = getattr(
+                reward_fn, "__name__", reward_fn.__class__.__name__
+            )
+            # per function reward
+            record_metric(
+                f"reward/evaluate_response/sum_{reward_fn_name}_reward",
+                reward,
+                Reduce.SUM,
+            )
+            record_metric(
+                f"reward/evaluate_response/avg_{reward_fn_name}_reward",
+                reward,
+                Reduce.MEAN,
+            )
+            record_metric(
+                f"reward/evaluate_response/std_{reward_fn_name}_reward",
+                reward,
+                Reduce.STD,
+            )
+
+            # avg total reward
+            record_metric(
+                "reward/evaluate_response/avg_total_reward",
+                reward,
+                Reduce.MEAN,
+            )
+
+            # count fn calls
+            record_metric(
+                f"reward/evaluate_response/count_{reward_fn_name}_calls",
+                1,
+                Reduce.SUM,
+            )
+
+        avg_reward = total_rewards / len(self.reward_functions)
+        return avg_reward
 
 
+@dataclass
 class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
@@ -224,7 +270,17 @@ class DatasetActor(ForgeActor):
     @endpoint
     async def sample(self) -> dict[str, str] | None:
         try:
-            return next(self._iterator)
+            sample = next(self._iterator)
+
+            # Record dataset metrics
+            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
+            record_metric(
+                "dataset/sample/avg_sample_len",
+                len(sample["request"]),
+                Reduce.MEAN,
+            )
+
+            return sample
         except StopIteration:
             return None
 
@@ -233,18 +289,33 @@ class DatasetActor(ForgeActor):
         return self._tokenizer.pad_token_id
 
 
+async def drop_weights(version: int):
+    print(f"Dropping weights @ version {version}")
+    start_time = time.perf_counter()
+    prefix = get_param_prefix(version)
+    matching_keys = await ts.keys(prefix)
+    # TODO: once we have something like `get_meta()` in torchstore, we can just
+    # query the type of the object instead of relying on keys.
+    dcp_key = get_dcp_whole_state_dict_key(version)
+    if dcp_key in matching_keys:
+        dcp_handle = await ts.get(dcp_key)
+        dcp_handle.drop()
+    for key in matching_keys:
+        await ts.delete(key)
+    elapsed = time.perf_counter() - start_time
+    print(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
+
+
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
-    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
-    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
-    mlogger = get_metric_logger(
-        "wandb",
-        freq=1,
-        project="grpo-training",
-    )
+
+    # initialize before spawning services
+    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    mlogger = await get_or_create_metric_logger()
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
@@ -257,33 +328,44 @@ async def main(cfg: DictConfig):
         ref_model,
         reward_actor,
     ) = await asyncio.gather(
-        DatasetActor.options(**cfg.services.dataset).as_service(**cfg.dataset),
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.services.trainer).as_service(
+        RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
-        ReplayBuffer.options(**cfg.services.replay_buffer).as_service(
+        ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.services.compute_advantages).as_service(),
+        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+
     print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
-        pad_id = await dataloader.pad_token.route()
+        pad_id = await dataloader.pad_token.call_one()
         while True:
-            sample = await dataloader.sample.route()
+            t = Tracer("main_perf/continuous_rollouts")
+            t.start()
+            sample = await dataloader.sample.call_one()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
+
+            t.step("data_loading")
+
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
+            # TODO: this shall be part of the responses metadata instead of a separate call
+            version = await policy.get_version.route()
+
+            t.step("policy_generation")
+
             assert (
                 len(responses) > 0
             ), "Sanity check: Responses should NEVER return empty"
@@ -302,7 +384,7 @@ async def main(cfg: DictConfig):
             )
 
             input_ids = torch.ones(
-                (group_size, max_req_tokens + max_req_tokens),
+                (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
                 device="cuda",
             )
@@ -317,66 +399,103 @@ async def main(cfg: DictConfig):
                     prompt=prompt, response=response.text, target=target
                 )
 
+            t.step("reward_evaluation")
+
             # Calculate reference logprobs
             ref_logits = await ref_model.forward.route(input_ids)
+            t.step("reference_model_forward")
+
             ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logits, ref_logprobs, input_ids
+            t.step("compute_logprobs")
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.route(group)
+            advantages = await compute_advantages.compute.call_one(group)
             for episode, advantage in zip(group.episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.route(episode)
+                await replay_buffer.add.call_one(episode)
 
             # Log metrics
-            avg_response_len = (
-                sum(len(e.response_tokens) for e in group.episodes) / group_size
-            )
-            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
-            buffer_size = await replay_buffer._numel.route()
-            mlogger.log("buffer_size/rollout", buffer_size, rollout_count)
-            avg_reward = sum(e.reward for e in group.episodes) / group_size
-            mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
-
             rollout_count += 1
+            record_metric(
+                "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
+            )
+            t.stop()
 
     async def continuous_training():
         training_step = 0
+        restart_tracer = True  # Flag to control when to restart tracer
+
         while True:
-            batch = await replay_buffer.sample.route(curr_policy_version=training_step)
+            # Restart tracer when needed (initial start or after completing a training step)
+            # Otherwise, we cannot measure time waiting for buffer
+            if restart_tracer:
+                t = Tracer("main_perf/continuous_training")
+                t.start()
+                restart_tracer = False
+
+            batch = await replay_buffer.sample.call_one(
+                curr_policy_version=training_step
+            )
             if batch is None:
                 await asyncio.sleep(0.1)
             else:
-                inputs, targets = batch
-                loss = await trainer.train_step.route(inputs, targets)
-                training_step += 1
-                mlogger.log("loss/training_step", loss, training_step)
-                await trainer.push_weights.fanout(
-                    training_step, vllm_tp_DEPRECATED=policy_tp_size
-                )
-                await policy.update_weights.fanout(training_step)
+                t.step("waiting_for_buffer")
 
-    print("Starting GRPO training loops...")
-    # TODO: Start multiple rollouts once all serivces support it
-    rollout_task = asyncio.create_task(continuous_rollouts())
+                inputs, targets = batch
+                await trainer.train_step.call(inputs, targets)
+                training_step += 1
+                t.step("train_step")
+
+                await trainer.push_weights.call(training_step)
+                t.step("push_weights")
+
+                await policy.update_weights.fanout(training_step)
+                t.step("update_weights")
+
+                # if training_step >= 2:
+                #     await drop_weights(training_step - 1)
+                #     t.step("drop_weights")
+
+                t.stop()
+                restart_tracer = True
+
+                # Flush metrics every training step to WandB
+                await mlogger.flush.call_one(training_step)
+
+    num_rollout_threads = cfg.get("rollout_threads", 1)
+    num_training_threads = cfg.get("training_threads", 1)
+    print(
+        f"Starting GRPO with {num_rollout_threads} rollout threads, {num_training_threads} training threads"
+    )
+    rollout_tasks = [
+        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+    ]
     training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(rollout_task, training_task)
+        await asyncio.gather(*rollout_tasks, training_task)
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        rollout_task.cancel()
+        for rollout_task in rollout_tasks:
+            rollout_task.cancel()
         training_task.cancel()
     finally:
         print("Shutting down...")
+
+        # give mlogger time to shutdown backends, otherwise they can stay running.
+        # TODO (felipemello) find more elegant solution
+        await mlogger.shutdown.call_one()
+        await asyncio.sleep(2)
+
         await asyncio.gather(
-            dataloader.shutdown(),
+            DatasetActor.shutdown(dataloader),
             policy.shutdown(),
-            trainer.shutdown(),
-            replay_buffer.shutdown(),
-            compute_advantages.shutdown(),
+            RLTrainer.shutdown(trainer),
+            ReplayBuffer.shutdown(replay_buffer),
+            ComputeAdvantages.shutdown(compute_advantages),
             ref_model.shutdown(),
             reward_actor.shutdown(),
         )

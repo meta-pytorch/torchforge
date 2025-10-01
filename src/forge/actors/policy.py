@@ -42,13 +42,21 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
 
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-
 from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
@@ -126,7 +134,9 @@ class EngineConfig(EngineArgs):
 class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
+    use_vllm_builtin_load: bool = True
     available_devices: str | None = None
+    use_dcp: bool = True
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
@@ -144,6 +154,7 @@ class Policy(PolicyInterface):
             self.engine_config = EngineConfig.from_dict(self.engine_config)
         if isinstance(self.sampling_config, Mapping):
             self.sampling_config = SamplingConfig.from_dict(self.sampling_config)
+        # No conversion needed for boolean flag
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -152,6 +163,7 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
+        use_dcp: bool = True,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
@@ -180,8 +192,10 @@ class Policy(PolicyInterface):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
-        workers = await worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
+        # do logging within PolicyWorker
+        workers = worker_procs.spawn(
+            "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
         if isinstance(sampling_config, Mapping):
@@ -189,13 +203,14 @@ class Policy(PolicyInterface):
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-        policy = await policy_proc.spawn(
+        policy = policy_proc.spawn(
             actor_name,
             cls,
             engine_config=engine_config,
             sampling_config=sampling_config,
             available_devices=available_devices,
             policy_worker=workers,
+            **kwargs,
         )
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
@@ -281,6 +296,11 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
+        t = Tracer("policy_perf/generate", timer="gpu")
+        t.start()
+
+        record_metric("policy/generate/count_requests", 1, Reduce.SUM)
+
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
 
@@ -296,6 +316,7 @@ class Policy(PolicyInterface):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
+        t.step("prompt_truncation")
 
         # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
@@ -309,6 +330,7 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
+        t.step("process_inputs")
 
         # Explicitly keeping the redundant logic to make it easier to pick up
         # vllm changes
@@ -338,7 +360,32 @@ class Policy(PolicyInterface):
             request_fut = asyncio.Future()
             self.requests[request_id] = (parent_req, request_fut)
 
-        return await request_fut
+        completions = await request_fut
+        t.step("generate")
+
+        record_metric(
+            "policy/generate/count_sequences_completed",
+            len(completions),
+            Reduce.SUM,
+        )
+
+        for completion in completions:
+            num_generated_tokens = len(completion.token_ids)
+            record_metric(
+                "policy/generate/sum_tokens_generated",
+                num_generated_tokens,
+                Reduce.SUM,
+            )
+
+            record_metric(
+                "policy/generate/avg_tokens_generated",
+                num_generated_tokens,
+                Reduce.MEAN,
+            )
+
+        t.stop()
+
+        return completions
 
     # Abstracted to match vllm
     # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
@@ -356,10 +403,13 @@ class Policy(PolicyInterface):
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
+
             scheduler_output = self.scheduler.schedule()
+
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
+
             # the results of `execute_model` is gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
@@ -383,11 +433,40 @@ class Policy(PolicyInterface):
         # TODO: If generating long sequences, this might be long and will block policy weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
+            # Record pending requests metrics
+            record_metric(
+                "policy_perf/update_weights/avg_pending_requests",
+                len(curr_requests),
+                Reduce.MEAN,
+            )
+            record_metric(
+                "policy_perf/update_weights/max_pending_requests",
+                len(curr_requests),
+                Reduce.MAX,
+            )
             logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
+        # Record weight update metrics
+        record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
+
         logger.debug(f"Starting weight update on {self.__class__.__name__}")
-        await self.policy_worker.update.call(version=policy_version)
+        if self.use_vllm_builtin_load:
+            await self.policy_worker.update.call(version=policy_version)
+        else:
+            await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+        self.policy_version = policy_version
+        logger.info(f"Weight update completed (now v{self.policy_version})")
+
+    @endpoint
+    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
+        # TODO: If generating long sequences, this might be long and will block policy weight updates
+        curr_requests = [fut for _, fut in self.requests.values()]
+        if curr_requests:
+            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            await asyncio.gather(*curr_requests)
+
+        await self.policy_worker.update_DEPRECATED.call(version=policy_version)
         self.policy_version = policy_version
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
@@ -454,6 +533,8 @@ class Policy(PolicyInterface):
 class PolicyWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
+    # TODO: remove this later since no plumbing exists to change this value.
+    # Also, whether to use dcp or not can be inferred from torchstore get() call.
     use_dcp: bool = True
 
     # used for tesing purposes only
@@ -509,8 +590,9 @@ class PolicyWorker(ForgeActor):
             )
 
     @endpoint
-    async def update(self, version: int):
-        """Update model weights by reading state dict from torchstore"""
+    async def update_DEPRECATED(self, version: int):  # noqa: N802
+        """Update model weights by reading state dict from torchstore.
+        Deprecated. This uses manual sharding logic which is buggy."""
         key = f"{self.state_dict_key}{DELIM}{version}"
         model = self.worker.model_runner.model
         current_state_dict = model.state_dict()
@@ -519,6 +601,47 @@ class PolicyWorker(ForgeActor):
         logger.info(
             f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
         )
+
+    @endpoint
+    async def update(self, version: int):
+        """Update model weights by reading state dict from torchstore"""
+        logger.info(
+            f"[PolicyWorker::update] start updating weights to version {version}"
+        )
+        model = self.worker.model_runner.model
+        prefix = get_param_prefix(version)
+        logger.debug(f"{prefix=}")
+        matching_keys = await ts.keys(prefix)
+        logger.debug(f"{matching_keys=}")
+        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        loaded_weights = set()
+        start = time.perf_counter()
+        # Entire state dict is stored in a single DCP handle
+        if dcp_whole_state_dict_key in matching_keys:
+            logger.info(
+                f"Loading {dcp_whole_state_dict_key} from DCP with handle {dcp_whole_state_dict_key}"
+            )
+            dcp_handle = await ts.get(dcp_whole_state_dict_key)
+            hf_param_names = dcp_handle.param_names
+            for name in hf_param_names:
+                param = load_tensor_from_dcp(dcp_handle, name)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
+        else:  # Load each parameter from torchstore directly without DCP
+            hf_param_names = [extract_param_name(key) for key in matching_keys]
+            # We can't pass a generator since vllm load_weights is not async.
+            # Instead, we just call load_weights with one parameter at a time.
+            for name in hf_param_names:
+                param_key = get_param_key(version, name)
+                param = await ts.get(param_key)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
+        logger.info(
+            f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters, took {time.perf_counter() - start} seconds"
+        )
+        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
     async def setup_kv_cache(self):
