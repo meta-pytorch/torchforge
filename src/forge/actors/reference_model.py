@@ -91,8 +91,20 @@ class ReferenceModel(ForgeActor):
         self.model.eval()
 
     @endpoint
-    async def forward(self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool) -> torch.Tensor:
+    async def forward(
+        self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool
+    ) -> torch.Tensor:
+        """
+        Args:
+            return_logprobs (bool): whether to return og probabilities instead of raw logits.
 
+            This flag significantly impacts the amount of data transferred to the caller:
+            - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
+              This includes the full vocabulary distribution for each token position.
+
+            - When True: Returns log probabilities with shape [group_size, req_length].
+              This only includes probabilities for the request tokens, significantly reducing memory usage and transfer overhead.
+        """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
         record_metric(
