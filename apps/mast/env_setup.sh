@@ -70,7 +70,7 @@ mount_workspace() {
     unset LD_LIBRARY_PATH
 
     # Mount the workspace
-    if oilfs "$workspace_url" "$mount_dir"; then
+    if sudo oilfs "$workspace_url" "$mount_dir"; then
         log_info "Successfully mounted $workspace_url to $mount_dir"
     else
         log_error "Failed to mount $workspace_url to $mount_dir"
