@@ -106,7 +106,7 @@ class Tracer:
 
         self.prefix = prefix
         self.track_memory = track_memory
-        self.time_with_gpu = False  # timer == "gpu"
+        self.time_with_gpu = timer == "gpu"
         self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
         self._active = False
 
@@ -297,7 +297,7 @@ class _TimerCUDA(_TimerProtocol):
         index = len(self._futures)
         self._futures.append((name, future, index))
 
-        if len(self._futures) >= 20:  # clean up every 20 to avoid memory leak
+        if len(self._futures) >= 5:  # clean up every 5
             self._collect_completed_futures()
 
         self._chain_start = end_event
