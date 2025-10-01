@@ -32,9 +32,9 @@ async def main(cfg: DictConfig):
     if cfg.get(DEFAULT_CHECKPOINT_FOLDER_KEY, DEFAULT_CHECKPOINT_FOLDER) is not None:
         # append job_name and guid to CP folder path to avoid path collision
         if cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] == DEFAULT_CHECKPOINT_FOLDER:
-            cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] = (
-                f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}-{uuid.uuid4().hex[:6]}"
-            )
+            cfg[
+                DEFAULT_CHECKPOINT_FOLDER_KEY
+            ] = f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}-{uuid.uuid4().hex[:6]}"
         print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
     # init mast provisioner
