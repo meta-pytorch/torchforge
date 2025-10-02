@@ -33,7 +33,7 @@ body:
   attributes:
     label: Versions
     description: |
-      Please share the relevant package versions/commit hash of [pytorch](https://github.com/pytorch/pytorch), [torchtitan](https://github.com/pytorch/torchtitan), [monarch](https://github.com/meta-pytorch/monarch/commits/main), and [vllm](https://github.com/vllm-project/vllm) 
+      Please share the relevant package versions/commit hash of [pytorch](https://github.com/pytorch/pytorch), [torchtitan](https://github.com/pytorch/torchtitan), [monarch](https://github.com/meta-pytorch/monarch), and [vllm](https://github.com/vllm-project/vllm) 
 - type: markdown
   attributes:
     value: >

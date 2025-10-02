@@ -4,7 +4,7 @@ description: Report an issue or make a request related to documentation
 body:
 - type: textarea
   attributes:
-    label: 📚 The doc issue
+    label: 📚 The doc issue or request
     description: >
       A clear and concise description of what content is missing or an issue. Please include the URL to the page or pages with the problem if it exists.
   validations:
