@@ -654,7 +654,8 @@ class PolicyWorker(ForgeActor):
         logger.debug(f"{matching_keys=}")
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         loaded_weights = set()
-        start = time.perf_counter()
+        t = Tracer("policy_worker_perf/update", timer="gpu")
+        t.start()
         # Entire state dict is stored in a single DCP handle
         if dcp_whole_state_dict_key in matching_keys:
             logger.info(
@@ -677,9 +678,7 @@ class PolicyWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
-        logger.info(
-            f"[PolicyWorker::update] Updated {len(loaded_weights)} parameters, took {time.perf_counter() - start} seconds"
-        )
+        t.stop()
         logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
