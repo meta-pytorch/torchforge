@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from forge.actors._torchstore_utils import get_param_key
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
@@ -482,7 +482,7 @@ async def main(cfg: DictConfig):
         ref_model,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
         RewardActor.options(**cfg.services.reward_actor).as_service(),

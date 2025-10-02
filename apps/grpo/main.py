@@ -21,7 +21,7 @@ from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
     get_param_prefix,
 )
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
@@ -329,7 +329,7 @@ async def main(cfg: DictConfig):
         reward_actor,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),

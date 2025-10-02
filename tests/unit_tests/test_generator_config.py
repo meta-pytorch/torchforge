@@ -14,50 +14,52 @@ import yaml
 def _import_error():
     """Check if there are import errors that would cause CI failures."""
     try:
-        import forge.actors.policy  # noqa: F401
+        import forge.actors.generator  # noqa: F401
 
         return False
     except ImportError:
         return True
 
 
-class TestPolicyConfig(unittest.TestCase):
-    """Test suite for Policy configuration handling after PolicyConfig removal."""
+class TestGeneratorConfig(unittest.TestCase):
+    """Test suite for Generator configuration handling after PolicyConfig removal."""
 
     @pytest.mark.skipif(
         _import_error(),
         reason="Import error, likely due to missing dependencies on CI.",
     )
-    def test_policy_default_initialization(self):
-        """Policy initializes with default values."""
-        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+    def test_generator_default_initialization(self):
+        """Generator initializes with default values."""
+        from forge.actors.generator import EngineConfig, Generator, SamplingConfig
 
-        policy = Policy()
+        generator = Generator()
 
         # Default factories
-        self.assertIsInstance(policy.engine_config, EngineConfig)
-        self.assertIsInstance(policy.sampling_config, SamplingConfig)
-        self.assertIsNone(policy.available_devices)
+        self.assertIsInstance(generator.engine_config, EngineConfig)
+        self.assertIsInstance(generator.sampling_config, SamplingConfig)
+        self.assertIsNone(generator.available_devices)
 
         # Worker defaults
-        self.assertEqual(policy.engine_config.model, "meta-llama/Llama-3.1-8B-Instruct")
-        self.assertEqual(policy.engine_config.tensor_parallel_size, 1)
-        self.assertEqual(policy.engine_config.pipeline_parallel_size, 1)
-        self.assertFalse(policy.engine_config.enforce_eager)
-        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+        self.assertEqual(
+            generator.engine_config.model, "meta-llama/Llama-3.1-8B-Instruct"
+        )
+        self.assertEqual(generator.engine_config.tensor_parallel_size, 1)
+        self.assertEqual(generator.engine_config.pipeline_parallel_size, 1)
+        self.assertFalse(generator.engine_config.enforce_eager)
+        self.assertTrue(generator.engine_config._is_v1_supported_oracle())
 
         # Sampling defaults
-        self.assertEqual(policy.sampling_config.n, 1)
-        self.assertFalse(policy.sampling_config.guided_decoding)
-        self.assertEqual(policy.sampling_config.max_tokens, 512)
+        self.assertEqual(generator.sampling_config.n, 1)
+        self.assertFalse(generator.sampling_config.guided_decoding)
+        self.assertEqual(generator.sampling_config.max_tokens, 512)
 
     @pytest.mark.skipif(
         _import_error(),
         reason="Import error, likely due to missing dependencies on CI.",
     )
-    def test_policy_with_dict_configs(self):
-        """Policy accepts dicts for engine_config and sampling_config, including nested dicts."""
-        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+    def test_generator_with_dict_configs(self):
+        """Generator accepts dicts for engine_config and sampling_config, including nested dicts."""
+        from forge.actors.generator import EngineConfig, Generator, SamplingConfig
 
         # Test with nested dict structure
         engine_dict = {
@@ -78,26 +80,26 @@ class TestPolicyConfig(unittest.TestCase):
             "max_tokens": 2468,
         }
 
-        policy = Policy(
+        generator = Generator(
             engine_config=engine_dict,
             sampling_config=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
 
-        self.assertIsInstance(policy.engine_config, EngineConfig)
-        self.assertIsInstance(policy.sampling_config, SamplingConfig)
+        self.assertIsInstance(generator.engine_config, EngineConfig)
+        self.assertIsInstance(generator.sampling_config, SamplingConfig)
 
         # Test basic fields
-        self.assertEqual(policy.engine_config.model, "test-model-6789")
-        self.assertEqual(policy.engine_config.tensor_parallel_size, 7777)
-        self.assertEqual(policy.engine_config.pipeline_parallel_size, 8888)
-        self.assertTrue(policy.engine_config.enforce_eager)
-        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+        self.assertEqual(generator.engine_config.model, "test-model-6789")
+        self.assertEqual(generator.engine_config.tensor_parallel_size, 7777)
+        self.assertEqual(generator.engine_config.pipeline_parallel_size, 8888)
+        self.assertTrue(generator.engine_config.enforce_eager)
+        self.assertTrue(generator.engine_config._is_v1_supported_oracle())
 
-        self.assertEqual(policy.sampling_config.n, 1357)
+        self.assertEqual(generator.sampling_config.n, 1357)
         # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-        self.assertIsNotNone(policy.sampling_config.guided_decoding)
-        self.assertEqual(policy.sampling_config.max_tokens, 2468)
+        self.assertIsNotNone(generator.sampling_config.guided_decoding)
+        self.assertEqual(generator.sampling_config.max_tokens, 2468)
 
         # Test that engine_dict accepts and preserves nested dict structure
         # The original engine_dict should remain unchanged and accessible
@@ -113,9 +115,9 @@ class TestPolicyConfig(unittest.TestCase):
         _import_error(),
         reason="Import error, likely due to missing dependencies on CI.",
     )
-    def test_policy_yaml_config_loading(self):
-        """Policy can be constructed from a YAML config file."""
-        from forge.actors.policy import Policy
+    def test_generator_yaml_config_loading(self):
+        """Generator can be constructed from a YAML config file."""
+        from forge.actors.generator import Generator
 
         yaml_content = """
         engine_config:
@@ -139,20 +141,20 @@ class TestPolicyConfig(unittest.TestCase):
             with open(f.name, "r") as yaml_file:
                 config = yaml.safe_load(yaml_file)
 
-            policy = Policy(**config)
+            generator = Generator(**config)
 
-            self.assertEqual(policy.engine_config.model, "yaml-test-model-9876")
-            self.assertEqual(policy.engine_config.tensor_parallel_size, 1234)
-            self.assertEqual(policy.engine_config.pipeline_parallel_size, 5678)
-            self.assertTrue(policy.engine_config.enforce_eager)
-            self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+            self.assertEqual(generator.engine_config.model, "yaml-test-model-9876")
+            self.assertEqual(generator.engine_config.tensor_parallel_size, 1234)
+            self.assertEqual(generator.engine_config.pipeline_parallel_size, 5678)
+            self.assertTrue(generator.engine_config.enforce_eager)
+            self.assertTrue(generator.engine_config._is_v1_supported_oracle())
 
-            self.assertEqual(policy.sampling_config.n, 2468)
+            self.assertEqual(generator.sampling_config.n, 2468)
             # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-            self.assertIsNotNone(policy.sampling_config.guided_decoding)
-            self.assertEqual(policy.sampling_config.max_tokens, 1357)
+            self.assertIsNotNone(generator.sampling_config.guided_decoding)
+            self.assertEqual(generator.sampling_config.max_tokens, 1357)
 
-            self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
+            self.assertEqual(generator.available_devices, "yaml-test-device-xyz")
 
     @pytest.mark.skipif(
         _import_error(),
@@ -160,7 +162,7 @@ class TestPolicyConfig(unittest.TestCase):
     )
     def test_engineconfig_ignores_invalid_keys(self):
         """EngineConfig.from_dict ignores unexpected keys."""
-        from forge.actors.policy import EngineConfig
+        from forge.actors.generator import EngineConfig
 
         engine_config = {
             "model": "custom-model",

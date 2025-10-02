@@ -4,14 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-__all__ = ["Policy", "PolicyRouter", "RLTrainer", "ReplayBuffer", "TitanRefModel"]
+__all__ = ["Generator", "PolicyRouter", "RLTrainer", "ReplayBuffer", "TitanRefModel"]
 
 
 def __getattr__(name):
-    if name == "Policy":
-        from .policy import Policy
+    if name == "Generator":
+        from .policy import Generator
 
-        return Policy
+        return Generator
     elif name == "PolicyRouter":
         from .policy import PolicyRouter
 

@@ -55,7 +55,7 @@ from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
+from forge.interfaces import Policy as GeneratorInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
@@ -132,7 +132,7 @@ class EngineConfig(EngineArgs):
 
 
 @dataclass
-class Policy(PolicyInterface):
+class Generator(GeneratorInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     use_vllm_builtin_load: bool = True
@@ -142,13 +142,13 @@ class Policy(PolicyInterface):
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
-    policy_worker: "PolicyWorker" = None
-    policy_version: int | None = None
+    generator_worker: "GeneratorWorker" = None
+    generator_version: int | None = None
 
     def __post_init__(self):
         super().__init__()
         self._run_task: asyncio.Task | None = None
-        self._policy_proc: ProcMesh | None = None
+        self._generator_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.running = False
         if isinstance(self.engine_config, Mapping):
@@ -159,14 +159,14 @@ class Policy(PolicyInterface):
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
-        cls: type["Policy"],
+        cls: type["Generator"],
         *,
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
         use_dcp: bool = True,
         **kwargs,
-    ) -> "Policy":
+    ) -> "Generator":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
         process_config: ProcessConfig = ProcessConfig(
@@ -182,21 +182,21 @@ class Policy(PolicyInterface):
         # level leads to issues.
         # Once we can create multiple proc meshes on a host mesh, we can ensure
         # host colocation
-        policy_proc_config = copy(process_config)
-        policy_proc_config.procs = 1
-        policy_proc_config.hosts = None
-        policy_proc_config.with_gpus = False
+        generator_proc_config = copy(process_config)
+        generator_proc_config.procs = 1
+        generator_proc_config.hosts = None
+        generator_proc_config.with_gpus = False
 
-        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+        generator_proc = await get_proc_mesh(process_config=generator_proc_config)
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
         # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
-        # do logging within PolicyWorker
+        # do logging within GeneratorWorker
         workers = worker_procs.spawn(
-            "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
+            "vllm_worker", GeneratorWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
         if isinstance(sampling_config, Mapping):
@@ -204,49 +204,49 @@ class Policy(PolicyInterface):
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-        policy = policy_proc.spawn(
+        generator = generator_proc.spawn(
             actor_name,
             cls,
             engine_config=engine_config,
             sampling_config=sampling_config,
             available_devices=available_devices,
-            policy_worker=workers,
+            generator_worker=workers,
             **kwargs,
         )
-        policy._policy_proc = policy_proc
-        policy._worker_procs = worker_procs
-        await policy.setup.call()
-        return policy
+        generator._generator_proc = generator_proc
+        generator._worker_procs = worker_procs
+        await generator.setup.call()
+        return generator
 
     @classmethod
     async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
-        cls: type["Policy"], actor: "Policy"
+        cls: type["Generator"], actor: "Generator"
     ):
         assert (
-            actor._policy_proc is not None
-        ), "Tried to shutdown a policy that was not initialized correctly"
+            actor._generator_proc is not None
+        ), "Tried to shutdown a generator that was not initialized correctly"
         assert (
             actor._worker_procs is not None
-        ), "Tried to shutdown a policy that was not initialized correctly"
+        ), "Tried to shutdown a generator that was not initialized correctly"
 
         # TODO - may want to expand stop to gracefully respond to
         # ongoing requests.
         await actor.stop.call()
         await stop_proc_mesh(actor._worker_procs)
-        await stop_proc_mesh(actor._policy_proc)
+        await stop_proc_mesh(actor._generator_proc)
 
     @endpoint
     async def setup(self):
-        # Set up policy_worker
-        assert self.policy_worker is not None, "Policy worker should not be None"
-        await self.policy_worker.setup.call()
+        # Set up generator_worker
+        assert self.generator_worker is not None, "Policy worker should not be None"
+        await self.generator_worker.setup.call()
 
         self.request_id = 0
-        self.policy_version = 0
+        self.generator_version = 0
         self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
 
-        # TODO: Investigate whether this can be combined with `policy.running`
-        # Whether this policy is accepting requests.
+        # TODO: Investigate whether this can be combined with `generator.running`
+        # Whether this generator is accepting requests.
         self.accepting_requests = True
         # Guard for accepting_requests
         self.request_lock = asyncio.Condition()
@@ -275,7 +275,7 @@ class Policy(PolicyInterface):
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
+        kv_cache_configs = await self.generator_worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
         self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_config.cache_config.num_cpu_blocks = 0
@@ -306,10 +306,10 @@ class Policy(PolicyInterface):
         Returns:
             RequestOutput: vLLM class with the generated response.
         """
-        t = Tracer("policy_perf/generate", timer="gpu")
+        t = Tracer("generator_perf/generate", timer="gpu")
         t.start()
 
-        record_metric("policy/generate/count_requests", 1, Reduce.SUM)
+        record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)  # implement from a counter
@@ -380,7 +380,7 @@ class Policy(PolicyInterface):
         t.step("generate")
 
         record_metric(
-            "policy/generate/count_sequences_completed",
+            "generator/generate/count_sequences_completed",
             len(completions),
             Reduce.SUM,
         )
@@ -388,13 +388,13 @@ class Policy(PolicyInterface):
         for completion in completions:
             num_generated_tokens = len(completion.token_ids)
             record_metric(
-                "policy/generate/sum_tokens_generated",
+                "generator/generate/sum_tokens_generated",
                 num_generated_tokens,
                 Reduce.SUM,
             )
 
             record_metric(
-                "policy/generate/avg_tokens_generated",
+                "generator/generate/avg_tokens_generated",
                 num_generated_tokens,
                 Reduce.MEAN,
             )
@@ -422,7 +422,7 @@ class Policy(PolicyInterface):
 
             scheduler_output = self.scheduler.schedule()
 
-            worker_outputs = await self.policy_worker.execute_model.call(
+            worker_outputs = await self.generator_worker.execute_model.call(
                 scheduler_output
             )
 
@@ -450,7 +450,7 @@ class Policy(PolicyInterface):
                     self.request_lock.notify_all()
 
     @endpoint
-    async def update_weights(self, policy_version: int):
+    async def update_weights(self, version: int):
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -461,12 +461,12 @@ class Policy(PolicyInterface):
                 if curr_requests:
                     # Record pending requests metrics
                     record_metric(
-                        "policy_perf/update_weights/avg_pending_requests",
+                        "generator_perf/update_weights/avg_pending_requests",
                         len(curr_requests),
                         Reduce.MEAN,
                     )
                     record_metric(
-                        "policy_perf/update_weights/max_pending_requests",
+                        "generator_perf/update_weights/max_pending_requests",
                         len(curr_requests),
                         Reduce.MAX,
                     )
@@ -474,18 +474,20 @@ class Policy(PolicyInterface):
 
                 # Wait until all pending requests have been processed
                 # TODO: If generating long sequences, this might be long and will block
-                # policy weight updates
+                # generator weight updates
                 await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
             # Record weight update metrics
-            record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
+            record_metric(
+                "generator/update_weights/count_weight_updates", 1, Reduce.SUM
+            )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
             if self.use_vllm_builtin_load:
-                await self.policy_worker.update.call(version=policy_version)
+                await self.generator_worker.update.call(version=version)
             else:
-                await self.policy_worker.update_DEPRECATED.call(version=policy_version)
-            self.policy_version = policy_version
+                await self.generator_worker.update_DEPRECATED.call(version=version)
+            self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
             self.scheduler.kv_cache_manager.reset_prefix_cache()
@@ -495,24 +497,24 @@ class Policy(PolicyInterface):
             self.accepting_requests = True
             self.request_lock.notify_all()
 
-        logger.info(f"Weight update completed (now v{self.policy_version})")
+        logger.info(f"Weight update completed (now v{self.generator_version})")
 
     @endpoint
-    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
-        # TODO: If generating long sequences, this might be long and will block policy weight updates
+    async def update_weights_DEPRECATED(self, version: int):  # noqa: N802
+        # TODO: If generating long sequences, this might be long and will block generator weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
             logger.debug(f"Waiting for {len(curr_requests)} pending requests")
             await asyncio.gather(*curr_requests)
 
-        await self.policy_worker.update_DEPRECATED.call(version=policy_version)
-        self.policy_version = policy_version
-        logger.info(f"Weight update completed (now v{self.policy_version})")
+        await self.generator_worker.update_DEPRECATED.call(version=version)
+        self.generator_version = version
+        logger.info(f"Weight update completed (now v{self.generator_version})")
 
     @endpoint
     async def get_version(self) -> int:
-        """Get the current policy version."""
-        return self.policy_version
+        """Get the current generator version."""
+        return self.generator_version
 
     @endpoint
     async def stop(self):
@@ -522,13 +524,13 @@ class Policy(PolicyInterface):
     async def _test_save_model_params(self):
         """Save model parameters before weight update, used for tesing purposes only."""
         logger.info("[Policy] save model parameters for testing.")
-        await self.policy_worker._test_save_model_params.call()
+        await self.generator_worker._test_save_model_params.call()
 
     @endpoint
     async def _test_validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[Policy] start validating model parameters.")
-        return await self.policy_worker._test_validate_model_params.call(validate_fn)
+        return await self.generator_worker._test_validate_model_params.call(validate_fn)
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a RequestOutput to a list of Completion objects."""
@@ -546,7 +548,7 @@ class Policy(PolicyInterface):
                     prompt_ids=torch.tensor(prompt_token_ids),
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
-                    generator_version=self.policy_version,
+                    generator_version=self.generator_version,
                 )
             )
 
@@ -569,7 +571,7 @@ class Policy(PolicyInterface):
 
 
 @dataclass
-class PolicyWorker(ForgeActor):
+class GeneratorWorker(ForgeActor):
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
     # TODO: remove this later since no plumbing exists to change this value.
@@ -645,7 +647,7 @@ class PolicyWorker(ForgeActor):
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         logger.info(
-            f"[PolicyWorker::update] start updating weights to version {version}"
+            f"[GeneratorWorker::update] start updating weights to version {version}"
         )
         model = self.worker.model_runner.model
         prefix = get_param_prefix(version)
@@ -654,7 +656,7 @@ class PolicyWorker(ForgeActor):
         logger.debug(f"{matching_keys=}")
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         loaded_weights = set()
-        t = Tracer("policy_worker_perf/update", timer="gpu")
+        t = Tracer("generator_worker_perf/update", timer="gpu")
         t.start()
         # Entire state dict is stored in a single DCP handle
         if dcp_whole_state_dict_key in matching_keys:
@@ -679,7 +681,7 @@ class PolicyWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         t.stop()
-        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
+        logger.debug(f"[GeneratorWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
     async def setup_kv_cache(self):
@@ -714,18 +716,18 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def _test_save_model_params(self):
         """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info("[PolicyWorker] save model parameters for testing.")
+        logger.info("[GeneratorWorker] save model parameters for testing.")
         for name, param in self.worker.model_runner.model.named_parameters():
             self._test_prev_params[name] = param.detach().cpu()
         logger.info(
-            "[PolicyWorker] finished saving model parameters, len = %d",
+            "[GeneratorWorker] finished saving model parameters, len = %d",
             len(self._test_prev_params),
         )
 
     @endpoint
     async def _test_validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
-        logger.info("[PolicyWorker] start validating model parameters.")
+        logger.info("[GeneratorWorker] start validating model parameters.")
         return validate_fn(
             self._test_prev_params, self.worker.model_runner.model, logger
         )

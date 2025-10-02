@@ -13,7 +13,7 @@ import asyncio
 
 import os
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
@@ -35,7 +35,7 @@ async def run(cfg: DictConfig):
         prompt = "What is 3+5?" if gd else "Tell me a joke"
 
     print("Spawning service...")
-    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+    policy = await Generator.options(**cfg.services.policy).as_service(**cfg.policy)
 
     import time
 
