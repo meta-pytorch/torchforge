@@ -12,42 +12,21 @@ import logging
 import os
 import socket
 import uuid
-from abc import ABC, abstractmethod
 from typing import Optional
 
-import monarch
-from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import HostMesh, ProcMesh, this_host
 from monarch.tools import commands
-from monarch.tools.components import hyperactor
-from monarch.tools.config import Config
-
 from omegaconf import DictConfig
+
+from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.observability.metric_actors import get_or_create_metric_logger
 
-from forge.types import ProcessConfig, Scheduler
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-JOB_NAME_KEY = "job_name"
-SCHEDULER_KEY = "scheduler"
-
-
-def _get_port() -> str:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("localhost", 0))
-        addr = s.getsockname()
-        port = addr[1]
-        return str(port)
-
-
-class _SetupActor(Actor):
-    @endpoint
-    def get_info(self) -> [str, str]:
-        return socket.gethostname(), _get_port()
 
 
 class GpuManager:
@@ -83,57 +62,10 @@ class GpuManager:
             self.available_gpus.add(int(gpu_id))
 
 
-class BaseProvisioner(ABC):
-    """Abstract base class for resource provisioners."""
-
-    @abstractmethod
-    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
-        """Creates a remote server and a HostMesh on it.
-        Args:
-            name: Name identifier for the host mesh
-            num_hosts: Number of hosts to create
-        Returns:
-            HostMesh: The created host mesh
-        """
-        pass
-
-    @abstractmethod
-    async def get_proc_mesh(
-        self,
-        num_procs: int,
-        with_gpus: bool = False,
-        num_hosts: Optional[int] = None,
-        mesh_name: Optional[str] = None,
-    ) -> ProcMesh:
-        """Gets a proc mesh.
-        Args:
-            num_procs: Number of processes needed
-            with_gpus: Whether GPU support is required
-            num_hosts: Number of hosts (None implies local allocation)
-            mesh_name: Name identifier for the proc mesh
-        Returns:
-            ProcMesh: The allocated process mesh
-        """
-        pass
-
-    @abstractmethod
-    async def stop_proc_mesh(self, proc_mesh: ProcMesh) -> None:
-        """Stops a proc mesh.
-        Args:
-            proc_mesh: The process mesh to stop
-        """
-        pass
-
-    @abstractmethod
-    async def shutdown(self) -> None:
-        """Tears down all remaining remote allocations."""
-        pass
-
-
-class Provisioner(BaseProvisioner):
+class Provisioner:
     """A global resource provisioner."""
 
-    def __init__(self):
+    def __init__(self, cfg: DictConfig | None = None):
         self._server_names = []
         self._proc_server_map = {}
         self._lock = asyncio.Lock()
@@ -162,39 +94,25 @@ class Provisioner(BaseProvisioner):
         self._host_gpu_map = {
             self._this_host_id: GpuManager(available_local_devices),
         }
+        self.launcher: BaseLauncher = get_launcher(cfg)
+
+    async def initialize(self):
+        """Call this after creating the instance"""
+        await self.launcher.initialize()
 
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
         logger.debug(f"Creating remote server for alloc {name}")
-        appdef = hyperactor.host_mesh(
-            image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
+        alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
+            name, num_hosts
         )
-        for role in appdef.roles:
-            # Note - this is hardcoded to SLURM
-            # We got this with sinfo
-            role.resource.memMB = 2062607
-            role.resource.cpu = 128
-            role.resource.gpu = 8
-
-        # TODO - multi scheduler support
-        server_config = Config(
-            scheduler="slurm",
-            appdef=appdef,
-            workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
-        )
-        server_info = await commands.get_or_create(
-            "forge_job",
-            server_config,
-            force_restart=False,
-        )
-        alloc = RemoteAllocator(
-            world_id=name,
-            initializer=TorchXRemoteAllocInitializer(server_info.server_handle),
-        )
-        server_name = f"slurm:///{server_info.name}"
         return (
-            HostMesh(Shape(["hosts"], NDSlice.new_row_major([num_hosts])), alloc),
+            HostMesh(
+                Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            ),
             server_name,
         )
 
@@ -215,7 +133,7 @@ class Provisioner(BaseProvisioner):
             if num_hosts is not None and num_hosts > 0:
                 created_hosts = len(self._server_names)
                 host_mesh, server_name = await self.create_host_mesh(
-                    name=f"alloc-{created_hosts}",
+                    name=mesh_name,
                     num_hosts=num_hosts,
                 )
                 host_id = uuid.uuid1()
@@ -257,11 +175,10 @@ class Provisioner(BaseProvisioner):
                     per_host={"gpus": num_procs},
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
-                setup = procs.spawn(f"setup-{uuid.uuid1()}", _SetupActor)
                 # Pick a random host/port, we'll feed this in afterwards
                 # Once we have true HostMesh support, we can do this on proc 0 of each host
                 # then spin up the proc meshes with the environment afterwards.
-                hostname, port = await setup.get_info.choose()
+                hostname, port = await self.launcher.remote_setup(procs)
                 procs._hostname = hostname
                 procs._port = port
                 procs._gpu_ids = gpu_ids
@@ -303,34 +220,25 @@ class Provisioner(BaseProvisioner):
                 commands.kill(server_name)
 
 
-_provisioner: BaseProvisioner | None = None
+_provisioner: Provisioner | None = None
 
 
 async def init_provisioner(cfg: DictConfig | None = None):
     global _provisioner
     if not _provisioner:
-        scheduler = Scheduler.LOCAL
-        if cfg is not None:
-            scheduler = cfg.get(SCHEDULER_KEY, Scheduler.LOCAL.value)
-        if scheduler == Scheduler.MAST.value:
-            from forge.controller.launcher.mast import MastProvisioner
-
-            _provisioner = MastProvisioner(cfg=cfg)
-            await _provisioner.initialize()
-        else:
-            _provisioner = Provisioner()
+        _provisioner = Provisioner(cfg)
+        await _provisioner.initialize()
     return _provisioner
 
 
-async def _get_provisioner():
+def _get_provisioner():
     if not _provisioner:
-        await init_provisioner()
+        raise RuntimeError("Provisioner not initialized")
     return _provisioner
 
 
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
-    provisioner = await _get_provisioner()
-    return await provisioner.get_proc_mesh(
+    return await _get_provisioner().get_proc_mesh(
         num_procs=config.procs,
         with_gpus=config.with_gpus,
         num_hosts=config.hosts,
@@ -339,11 +247,9 @@ async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
-    provisioner = await _get_provisioner()
-    return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
+    return await _get_provisioner().stop_proc_mesh(proc_mesh=proc_mesh)
 
 
 async def shutdown():
     logger.info("Shutting down provisioner..")
-    provisioner = await _get_provisioner()
-    return await provisioner.shutdown()
+    await _get_provisioner().shutdown()

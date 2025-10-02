@@ -88,7 +88,7 @@ class State:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class Scheduler(Enum):
+class Launcher(Enum):
     MAST = "mast"
     SLURM = "slurm"
     LOCAL = "local"

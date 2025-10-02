@@ -10,9 +10,10 @@ import uuid
 
 from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
-from forge.controller.provisioner import init_provisioner, JOB_NAME_KEY, SCHEDULER_KEY
+from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
+from forge.controller.provisioner import init_provisioner
 
-from forge.types import Scheduler
+from forge.types import Launcher
 from omegaconf import DictConfig
 
 DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"
@@ -21,8 +22,8 @@ DEFAULT_CHECKPOINT_FOLDER = "/mnt/wsfuse/teamforge/forge_runs/"
 
 async def main(cfg: DictConfig):
     """Main module for launching mast jobs for GRPO training."""
-    if cfg.get(SCHEDULER_KEY, Scheduler.MAST.value) != Scheduler.MAST.value:
-        raise ValueError("Schuduler must be MAST.")
+    if cfg.get(LAUNCHER_KEY, Launcher.MAST.value) != Launcher.MAST.value:
+        raise ValueError("Launcher must be MAST.")
 
     if cfg.get(JOB_NAME_KEY, None) is not None:
         # prepend user name to the job to avoid name collision

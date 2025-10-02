@@ -8,7 +8,7 @@ max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
-scheduler: mast
+launcher: mast
 job_name: forge-qwen3-1_7b
 checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
