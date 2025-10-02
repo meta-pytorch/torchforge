@@ -9,7 +9,7 @@ Forge was built with one core principle in mind: researchers should write algori
 Key features:
 - Usability for rapid research (isolating the RL loop from infrastructure)
 - Hackability for power users (all parts of the RL loop can be easily modified without interacting with infrastructure)
-- Scalability (ability so shift between async and syncronous training and across thousands of GPUs)
+- Scalability (ability to shift between async and synchronous training and across thousands of GPUs)
 
 > ⚠️ **Early Development Warning** Forge is currently in an experimental
 > stage. You should expect bugs, incomplete features, and APIs that may change
@@ -43,7 +43,7 @@ Optional: By default, the packages installation uses conda. If user wants to ins
 After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
 
 ```
-python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml
+python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
 If you need to re-build the wheels for whatever reason, you can do so with:
