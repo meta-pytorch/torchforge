@@ -93,6 +93,7 @@ def cleanup_old_weight_versions(
 
 @dataclass
 class RLTrainer(ForgeActor):
+    job: Job = field(default_factory=Job)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
     lr_scheduler: LRScheduler = field(default_factory=LRScheduler)
@@ -102,15 +103,17 @@ class RLTrainer(ForgeActor):
     activation_checkpoint: ActivationCheckpoint = field(
         default_factory=ActivationCheckpoint
     )
-    use_vllm_builtin_load: bool = True
     compile: Compile = field(default_factory=Compile)
-    float8: Float8Linear = field(default_factory=Float8Linear)
+    quantize: Quantize = field(default_factory=Quantize)
     comm: Comm = field(default_factory=Comm)
+    memory_estimation: MemoryEstimation = field(default_factory=MemoryEstimation)
+    # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
     dcp_path: str = "forge_dcp_tmp"
     vllm_tp_DEPRECATED: int = 1  # noqa: N815
+    use_vllm_builtin_load: bool = True
 
     def __post_init__(self):
         """Initializes config types and env variables.
