@@ -1,0 +1,118 @@
+import asyncio
+import logging
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+from forge.controller import ForgeActor
+from monarch.actor import endpoint
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+class SandboxedCoder(ForgeActor):
+    def __init__(
+        self,
+        docker_image: str = "docker://python:3.10",
+        sqsh_image_path: str = "python-image.sqsh",
+        container_name: str = "sandbox",
+    ):
+        """
+        :param docker_image: Docker image to import (e.g., docker://python:3.10).
+        :param sqsh_image_path: Path where the .sqsh image will be stored.
+        :param container_name: Name of the enroot container instance.
+        """
+        self.docker_image = docker_image
+        self.sqsh_image_path = sqsh_image_path
+        self.container_name = container_name
+        self._initialized = False
+
+    @endpoint
+    async def setup(self):
+        logging.debug("Setting up sandboxed actor")
+        await self._ensure_image()
+        self._reset()
+
+    @endpoint
+    async def reset(self):
+        self._reset()
+
+    async def _ensure_image(self):
+        """Ensure the enroot image exists, import it if necessary."""
+        if not os.path.exists(self.sqsh_image_path):
+            logging.debug(
+                f"Image {self.sqsh_image_path} not found, importing from {self.docker_image}"
+            )
+            result = subprocess.run(
+                ["enroot", "import", "-o", self.sqsh_image_path, self.docker_image],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to import image: {result.stderr}")
+            logging.debug(
+                f"Successfully imported {self.docker_image} to {self.sqsh_image_path}"
+            )
+        else:
+            logging.info(f"Using existing image: {self.sqsh_image_path}")
+
+    def _reset(self):
+        """(Re)create a clean container instance from the base image."""
+        # Remove any old container
+        logging.debug(f"Removing container {self.container_name}")
+        subprocess.run(
+            ["enroot", "remove", "-f", self.container_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        # Create new container from image
+        result = subprocess.run(
+            ["enroot", "create", "--name", self.container_name, self.sqsh_image_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        logging.debug(f"Container creation result: {result}")
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to reset container: {result.stderr}")
+        self._initialized = True
+        logging.debug("Successfully initialized container")
+
+    @endpoint
+    async def execute(self, code: str) -> str:
+        """
+        Execute Python code inside the container.
+        :param code: Python source code string to execute.
+        :return: Captured stdout.
+        """
+        logging.debug(f"Executing {code}")
+        if not self._initialized:
+            raise RuntimeError("Container not initialized. Call reset() first.")
+
+        # Write code to a temporary file that we can mount
+        with tempfile.TemporaryDirectory() as tmpdir:
+            code_path = Path(tmpdir) / "script.py"
+            code_path.write_text(code)
+
+            # Run the code inside the container, mounting tmpdir
+            cmd = [
+                "enroot",
+                "start",
+                "--mount",
+                f"{tmpdir}:/work",
+                self.container_name,
+                "python3",
+                "/work/script.py",
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Execution failed:\n{result.stderr}")
+            return result.stdout

@@ -12,10 +12,14 @@ policy:
 services:
   policy:
     procs: 4
-    hosts: 1
     num_replicas: 1
     with_gpus: true
+  coder:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
 
-
+num_calls: 1
 # Optional, otherwise argparse fallback kicks in
-prompt: "Tell me a joke"
+prompt: "Write a Python function that calculates the factorial of a number and test it with factorial(5). Please wrap your code in ```python``` code blocks."
+with_coder: true
