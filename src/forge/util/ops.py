@@ -66,8 +66,9 @@ def compute_logprobs(
             The temperature value for scaling logits before computing log probabilities.
 
     """
-    context_length = logits.shape[1] - input_ids.shape[1]
-    logits = logits[:, context_length - 1 : -1].to(input_ids.device)
+    # Ignore the last token from logits because it predicts the next token (-1)
+    # And align logits with the input tokens length.
+    logits = logits[:, -input_ids.size(1) - 1 : -1, :].to(input_ids.device)
     scaled_logits = logits / temperature
     logprobs = selective_log_softmax(scaled_logits, input_ids)
     return logprobs
