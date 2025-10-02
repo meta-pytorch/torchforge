@@ -29,29 +29,8 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "${BLUE}[$1/$2]${NC} $3"; }
 
-# Track current step for recovery
-CURRENT_STEP=0
+# Total steps for progress tracking
 TOTAL_STEPS=8
-
-# Function to handle step failures
-handle_failure() {
-    local step_name="$1"
-    local step_num="$2"
-    local exit_code="$3"
-    local retry_cmd="$4"
-
-    log_error "Step $step_num failed: $step_name"
-    log_error "Exit code: $exit_code"
-    log_error "Working directory: $(pwd)"
-    echo ""
-    log_info "To retry this step manually:"
-    echo "  $retry_cmd"
-    echo ""
-    log_info "Or to resume from step $step_num:"
-    echo "  $0 --resume-from=$step_num"
-    echo ""
-    exit $exit_code
-}
 
 # Validation functions
 check_conda_env() {
@@ -150,19 +129,33 @@ EOF
 }
 
 # Parse command line arguments
-RESUME_FROM=1
+WHEEL_TYPE=""
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --resume-from=*)
-            RESUME_FROM="${1#*=}"
+        --wheel=*)
+            WHEEL_TYPE="${1#*=}"
             shift
             ;;
         *)
             log_error "Unknown argument: $1"
+            log_info "Available arguments:"
+            log_info "  --wheel=TYPE     Build specific wheel (vllm|monarch|torchtitan|torchstore|all)"
             exit 1
             ;;
     esac
 done
+
+# Validate wheel type if specified
+if [ -n "$WHEEL_TYPE" ] && [ "$WHEEL_TYPE" != "vllm" ] && [ "$WHEEL_TYPE" != "monarch" ] && [ "$WHEEL_TYPE" != "torchtitan" ] && [ "$WHEEL_TYPE" != "torchstore" ] && [ "$WHEEL_TYPE" != "all" ]; then
+    log_error "Invalid wheel type: $WHEEL_TYPE"
+    log_info "Available wheel types: vllm, monarch, torchtitan, torchstore, all"
+    exit 1
+fi
+
+# Set default to build all if not specified
+if [ -z "$WHEEL_TYPE" ]; then
+    WHEEL_TYPE="all"
+fi
 
 # Step execution wrapper
 run_step() {
@@ -170,16 +163,13 @@ run_step() {
     local step_name="$2"
     local step_function="$3"
 
-    if [ "$step_num" -lt "$RESUME_FROM" ]; then
-        log_info "Skipping step $step_num: $step_name (resuming from step $RESUME_FROM)"
-        return 0
-    fi
-
-    CURRENT_STEP=$step_num
     log_step "$step_num" "$TOTAL_STEPS" "$step_name"
 
     if ! $step_function; then
-        handle_failure "$step_name" "$step_num" "$?" "Run step $step_num manually"
+        log_error "Step $step_num failed: $step_name"
+        log_error "Exit code: $?"
+        log_error "Working directory: $(pwd)"
+        exit $?
     fi
 }
 
@@ -253,7 +243,22 @@ step6_torchtitan() {
 
     git clone https://github.com/pytorch/torchtitan.git
     cd "$BUILD_DIR/torchtitan"
-    git checkout $TORCHTITAN_COMMIT
+
+    # Use custom commit if specified via environment variable, otherwise use default
+    local commit_to_use="${CUSTOM_TORCHTITAN_COMMIT:-$TORCHTITAN_COMMIT}"
+
+    # Handle "latest" keyword to get the latest commit from main
+    if [ "$commit_to_use" = "latest" ]; then
+        log_info "Fetching latest commit from main branch..."
+        git checkout main
+        git pull origin main
+        commit_to_use=$(git rev-parse HEAD)
+        log_info "Latest commit SHA: $commit_to_use"
+    else
+        git checkout $commit_to_use
+    fi
+
+    log_info "Building torchtitan from commit: $commit_to_use"
 
     pip wheel --no-deps . -w "$WHEEL_DIR"
 }
@@ -298,28 +303,38 @@ main() {
     echo "==================="
     echo ""
 
-    if [ "$RESUME_FROM" -gt 1 ]; then
-        log_info "Resuming from step $RESUME_FROM..."
-        # Source CUDA env if resuming
-        if [ -f ~/.forge_cuda_env ]; then
-            source ~/.forge_cuda_env
-        fi
-        # Source Rust env if resuming
-        if [ -f ~/.cargo/env ]; then
-            source ~/.cargo/env
-        fi
-    else
-        validate_environment
-        setup_build_dir
-    fi
+    log_info "Building wheel type: $WHEEL_TYPE"
 
+    validate_environment
+    setup_build_dir
+
+    # Common steps for all wheel types
     run_step 1 "Installing PyTorch nightly" step1_pytorch
     run_step 2 "Installing CUDA packages and setting environment" step2_cuda_packages
-    run_step 3 "Building vLLM wheel" step3_vllm
-    run_step 4 "Setting up Rust toolchain and additional packages" step4_rust_setup
-    run_step 5 "Building Monarch wheel" step5_monarch
-    run_step 6 "Building torchtitan wheel" step6_torchtitan
-    run_step 7 "Building torchstore wheel" step7_torchstore
+
+    # Conditional wheel building based on WHEEL_TYPE
+    case "$WHEEL_TYPE" in
+        "vllm")
+            run_step 3 "Building vLLM wheel" step3_vllm
+            ;;
+        "monarch")
+            run_step 4 "Setting up Rust toolchain and additional packages" step4_rust_setup
+            run_step 5 "Building Monarch wheel" step5_monarch
+            ;;
+        "torchtitan")
+            run_step 6 "Building torchtitan wheel" step6_torchtitan
+            ;;
+        "torchstore")
+            run_step 7 "Building torchstore wheel" step7_torchstore
+            ;;
+        "all")
+            run_step 3 "Building vLLM wheel" step3_vllm
+            run_step 4 "Setting up Rust toolchain and additional packages" step4_rust_setup
+            run_step 5 "Building Monarch wheel" step5_monarch
+            run_step 6 "Building torchtitan wheel" step6_torchtitan
+            run_step 7 "Building torchstore wheel" step7_torchstore
+            ;;
+    esac
 
     verify_installation
 
@@ -339,15 +354,6 @@ main() {
     log_info "You can remove them with: rm -rf $BUILD_DIR"
 }
 
-# Set trap for cleanup on failure
-cleanup() {
-    if [ $? -ne 0 ] && [ $CURRENT_STEP -gt 0 ]; then
-        echo ""
-        log_error "Setup failed at step $CURRENT_STEP"
-        log_info "You can resume with: $0 --resume-from=$CURRENT_STEP"
-    fi
-}
-trap cleanup EXIT
 
 # Run main function
 main "$@"

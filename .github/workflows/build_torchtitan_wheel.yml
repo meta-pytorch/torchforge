@@ -1,0 +1,185 @@
+name: Build TorchTitan Wheel
+
+on:
+  workflow_dispatch:
+    inputs:
+      torchtitan_commit:
+        description: 'TorchTitan commit SHA, branch/tag, or "latest" for main HEAD'
+        required: true
+        default: 'latest'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup conda environment
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          miniconda-version: "latest"
+          activate-environment: forge-build
+          python-version: "3.10"
+
+      - name: Install system dependencies
+        shell: bash -l {0}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl build-essential
+
+          # Install CUDA toolkit (Ubuntu/Debian compatible version)
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get -y install cuda-toolkit-12-9
+
+      - name: Set up build environment
+        shell: bash -l {0}
+        run: |
+          echo "CUSTOM_TORCHTITAN_COMMIT=${{ github.event.inputs.torchtitan_commit }}" >> $GITHUB_ENV
+
+          # Create a simplified CUDA setup for GitHub Actions
+          export CUDA_VERSION=12.9
+          export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
+          export PATH="${CUDA_HOME}/bin:$PATH"
+          export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}"
+          echo "CUDA_VERSION=${CUDA_VERSION}" >> $GITHUB_ENV
+          echo "CUDA_HOME=${CUDA_HOME}" >> $GITHUB_ENV
+          echo "PATH=${CUDA_HOME}/bin:${PATH}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+
+      - name: Build wheel
+        shell: bash -l {0}
+        run: |
+          # Modify the build script to work in GitHub Actions environment
+          # Remove sudo requirements and adapt for Ubuntu
+          sed -i 's/sudo dnf install -y/sudo apt-get install -y/g' scripts/build_wheels.sh
+          sed -i 's/cuda-toolkit-12-9 cuda-compat-12-9/cuda-toolkit-12-9/g' scripts/build_wheels.sh
+          sed -i '/check_sudo/d' scripts/build_wheels.sh
+          sed -i '/sudo -n true/d' scripts/build_wheels.sh
+
+          # Run the build script
+          chmod +x scripts/build_wheels.sh
+          ./scripts/build_wheels.sh --wheel=torchtitan
+
+      - name: Get commit info from TorchTitan
+        id: commit_info
+        shell: bash -l {0}
+        run: |
+          cd ~/forge-build/torchtitan
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          COMMIT_DATE=$(git log -1 --pretty=format:"%ci")
+          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
+          echo "commit_date=${COMMIT_DATE}" >> $GITHUB_OUTPUT
+
+      - name: Update torchtitan commit in build script
+        shell: bash -l {0}
+        run: |
+          # Update the commit in the build script
+          sed -i "s/TORCHTITAN_COMMIT=\".*\"/TORCHTITAN_COMMIT=\"${{ steps.commit_info.outputs.commit_sha }}\"/" scripts/build_wheels.sh
+
+      - name: Create pull request branch
+        shell: bash -l {0}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create a new branch
+          BRANCH_NAME="update-torchtitan-wheel-${{ steps.commit_info.outputs.commit_sha }}"
+          git checkout -b "$BRANCH_NAME"
+
+          # Add the built wheels to the repository
+          git add assets/wheels/
+          git add scripts/build_wheels.sh
+
+          # Commit changes
+          git commit -m "Update torchtitan wheel to commit ${{ steps.commit_info.outputs.commit_sha }}
+
+          Built from pytorch/torchtitan commit:
+          - SHA: ${{ steps.commit_info.outputs.commit_sha }}
+          - Message: ${{ steps.commit_info.outputs.commit_msg }}
+          - Date: ${{ steps.commit_info.outputs.commit_date }}
+
+          Wheel type: torchtitan
+
+          This wheel was built using the GitHub Actions workflow."
+
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+
+      - name: Push branch and create PR
+        shell: bash -l {0}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Push the branch
+          git push origin "$BRANCH_NAME"
+
+          # Create pull request using GitHub CLI
+          gh pr create \
+            --title "Update torchtitan wheel to ${{ steps.commit_info.outputs.commit_sha }}" \
+            --body "## TorchTitan Wheel Update
+
+          This PR updates the torchtitan wheel to a new commit from the [pytorch/torchtitan](https://github.com/pytorch/torchtitan) repository.
+
+          ### Build Details
+          - **Commit SHA**: \`${{ steps.commit_info.outputs.commit_sha }}\`
+          - **Commit Message**: ${{ steps.commit_info.outputs.commit_msg }}
+          - **Commit Date**: ${{ steps.commit_info.outputs.commit_date }}
+          - **Wheel Type**: torchtitan
+          - **Requested Commit**: \`${{ github.event.inputs.torchtitan_commit }}\`
+
+          ### Changes
+          - Updated wheel in \`assets/wheels/\`
+          - Updated \`TORCHTITAN_COMMIT\` in \`scripts/build_wheels.sh\`
+
+          ### Installation
+          After merging, users can install the updated wheel with:
+          \`\`\`bash
+          pip install assets/wheels/torchtitan-*.whl
+          \`\`\`
+
+          This wheel was automatically built and tested using GitHub Actions." \
+            --head "$BRANCH_NAME" \
+            --base "main"
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: torchtitan-wheel-${{ steps.commit_info.outputs.commit_sha }}
+          path: assets/wheels/
+          retention-days: 30
+
+      - name: Build summary
+        shell: bash -l {0}
+        run: |
+          echo "## 🎉 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Successfully built torchtitan wheel from TorchTitan commit:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ steps.commit_info.outputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Message**: ${{ steps.commit_info.outputs.commit_msg }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date**: ${{ steps.commit_info.outputs.commit_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Wheel Type**: torchtitan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the created pull request" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test the updated wheel" >> $GITHUB_STEP_SUMMARY
+          echo "3. Merge the PR to update the repository" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Wheels" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -la assets/wheels/ >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
