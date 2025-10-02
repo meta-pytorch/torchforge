@@ -189,11 +189,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Push the branch
+          # Push the branch to the fork (origin)
           git push origin "$BRANCH_NAME"
 
-          # Create pull request using GitHub CLI
+          # Get the fork owner from the repository context
+          FORK_OWNER="${{ github.repository_owner }}"
+          ORIGINAL_REPO="meta-pytorch/forge"
+
+          # Create pull request from fork to original repository
           gh pr create \
+            --repo "$ORIGINAL_REPO" \
             --title "Update torchtitan wheel to ${{ steps.build_and_commit.outputs.commit_sha }}" \
             --body "## TorchTitan Wheel Update
 
@@ -205,6 +210,7 @@ jobs:
           - **Commit Date**: ${{ steps.build_and_commit.outputs.commit_date }}
           - **Wheel Type**: torchtitan
           - **Requested Commit**: \`${{ github.event.inputs.torchtitan_commit }}\`
+          - **Built by**: @${{ github.actor }} from fork \`${{ github.repository }}\`
 
           ### Changes
           - Updated wheel in \`assets/wheels/\`
@@ -216,8 +222,8 @@ jobs:
           pip install assets/wheels/torchtitan-*.whl
           \`\`\`
 
-          This wheel was automatically built and tested using GitHub Actions." \
-            --head "$BRANCH_NAME" \
+          This wheel was automatically built and tested using GitHub Actions on fork \`${{ github.repository }}\`." \
+            --head "$FORK_OWNER:$BRANCH_NAME" \
             --base "main"
 
       - name: Upload wheel artifacts
