@@ -1,7 +1,6 @@
 name: Build TorchTitan Wheel
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       torchtitan_commit:
@@ -65,9 +64,20 @@ jobs:
         run: |
           # Modify the build script to work in GitHub Actions environment
           # Remove sudo requirements and adapt for Ubuntu
-          sed -i 's/sudo dnf install -y/sudo apt-get install -y/g' scripts/build_wheels.sh
-          sed -i 's/cuda-toolkit-12-9 cuda-compat-12-9/cuda-toolkit-12-9/g' scripts/build_wheels.sh
+
+          # Remove the sudo check function entirely
+          sed -i '/^check_sudo()/,/^}/d' scripts/build_wheels.sh
+
+          # Remove calls to check_sudo
           sed -i '/check_sudo/d' scripts/build_wheels.sh
+
+          # Replace dnf with apt-get for Ubuntu
+          sed -i 's/sudo dnf install -y/sudo apt-get install -y/g' scripts/build_wheels.sh
+
+          # Simplify CUDA package installation for Ubuntu
+          sed -i 's/cuda-toolkit-12-9 cuda-compat-12-9/cuda-toolkit-12-9/g' scripts/build_wheels.sh
+
+          # Remove any remaining sudo -n checks
           sed -i '/sudo -n true/d' scripts/build_wheels.sh
 
           # Run the build script
