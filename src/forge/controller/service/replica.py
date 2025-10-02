@@ -221,6 +221,11 @@ class Replica:
         # Accept requests in all other states - let the processing loop handle the rest
         await self.request_queue.put(request)
 
+    async def enqueue_batch(self, requests: list[ServiceRequest]):
+        """Enqueues a batch of requests for processing by this replica."""
+        for req in requests:
+            await self.enqueue_request(req)
+
     async def _process_single_request(self, request: ServiceRequest) -> bool:
         """Processes a single request and returns success status.
 
