@@ -6,7 +6,6 @@ group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-ref_model_return_logprobs: true
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 

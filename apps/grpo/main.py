@@ -311,7 +311,6 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
-    ref_model_return_logprobs = cfg.ref_model_return_logprobs
 
     # initialize before spawning services
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
@@ -402,15 +401,8 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            # Calculate reference logprobs
-            if ref_model_return_logprobs:
-                ref_logprobs =  await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=True)
-                t.step("reference_model_forward_return_logprobs")
-            else:
-                ref_logits = await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=False)
-                t.step("reference_model_forward_return_logits")
-                ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
-                del ref_logits
+            ref_logprobs =  await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=True)
+            t.step("reference_model_calculate_logprobs")
 
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
