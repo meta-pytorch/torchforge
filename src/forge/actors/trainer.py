@@ -27,11 +27,13 @@ from torchtitan.config.job_config import (
     Checkpoint,
     Comm,
     Compile,
-    Float8Linear,
+    Job,
     LRScheduler,
+    MemoryEstimation,
     Model,
     Optimizer,
     Parallelism,
+    Quantize,
     Training,
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
