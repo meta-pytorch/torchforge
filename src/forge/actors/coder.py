@@ -1,29 +1,56 @@
-import asyncio
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import logging
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 
-from forge.controller import ForgeActor
 from monarch.actor import endpoint
+
+from forge.controller import ForgeActor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 class SandboxedCoder(ForgeActor):
+    """A sandboxed code execution environment using enroot containers.
+
+    SandboxedCoder provides a secure, isolated environment for executing Python code
+    using NVIDIA's enroot containerization technology. It automatically manages the
+    entire container lifecycle including image import, container creation, and cleanup.
+
+    The actor follows a three-stage workflow:
+    1. Image Management: Automatically imports Docker images to enroot .sqsh format
+    2. Container Lifecycle: Creates fresh container instances for isolated execution
+    3. Code Execution: Safely runs Python code with proper error handling and output capture
+
+    Dependencies:
+    - enroot: NVIDIA's container runtime (must be installed on host)
+    - Docker images: Accessible via docker:// URLs or local paths
+    - Python 3.x: For the container environment
+
+    Args:
+        docker_image: Docker image URL to import (e.g., "docker://python:3.10").
+                        Can be any Docker Hub image or custom registry URL.
+        sqsh_image_path: Local filesystem path where the enroot .sqsh image will be stored.
+                        If the file doesn't exist, it will be created via enroot import.
+        container_name: Unique name for the enroot container instance. Used for
+                        container lifecycle management (create/remove operations).
+
+    """
+
     def __init__(
         self,
         docker_image: str = "docker://python:3.10",
         sqsh_image_path: str = "python-image.sqsh",
         container_name: str = "sandbox",
     ):
-        """
-        :param docker_image: Docker image to import (e.g., docker://python:3.10).
-        :param sqsh_image_path: Path where the .sqsh image will be stored.
-        :param container_name: Name of the enroot container instance.
-        """
         self.docker_image = docker_image
         self.sqsh_image_path = sqsh_image_path
         self.container_name = container_name
