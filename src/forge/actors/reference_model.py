@@ -96,14 +96,17 @@ class ReferenceModel(ForgeActor):
     ) -> torch.Tensor:
         """
         Args:
+            input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
+            max_req_tokens (int): maximum request length.
             return_logprobs (bool): whether to return og probabilities instead of raw logits.
 
-            This flag significantly impacts the amount of data transferred to the caller:
+            return_logprobs flag significantly impacts the amount of data transferred to the caller:
             - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
               This includes the full vocabulary distribution for each token position.
 
             - When True: Returns log probabilities with shape [group_size, req_length].
-              This only includes probabilities for the request tokens, significantly reducing memory usage and transfer overhead.
+              This only includes probabilities for the request tokens, significantly reducing memory
+              usage and transfer overhead.
         """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
