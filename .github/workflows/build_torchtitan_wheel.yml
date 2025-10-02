@@ -60,7 +60,8 @@ jobs:
           echo "PATH=${CUDA_HOME}/bin:${PATH}" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
 
-      - name: Build wheel
+      - name: Build wheel and extract commit info
+        id: build_and_commit
         shell: bash -l {0}
         run: |
           # Modify the build script to work in GitHub Actions environment
@@ -86,25 +87,35 @@ jobs:
 
           # Run the build script
           chmod +x scripts/build_wheels.sh
-          ./scripts/build_wheels.sh --wheel=torchtitan
 
-      - name: Get commit info from TorchTitan
-        id: commit_info
-        shell: bash -l {0}
-        run: |
-          cd ~/forge-build/torchtitan
-          COMMIT_SHA=$(git rev-parse HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
-          COMMIT_DATE=$(git log -1 --pretty=format:"%ci")
-          echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-          echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
-          echo "commit_date=${COMMIT_DATE}" >> $GITHUB_OUTPUT
+          echo "Starting wheel build..."
+          if ./scripts/build_wheels.sh --wheel=torchtitan; then
+            echo "Build successful, extracting commit info..."
+
+            # Extract commit info from the built torchtitan
+            cd ~/forge-build/torchtitan
+            COMMIT_SHA=$(git rev-parse HEAD)
+            COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+            COMMIT_DATE=$(git log -1 --pretty=format:"%ci")
+
+            echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+            echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
+            echo "commit_date=${COMMIT_DATE}" >> $GITHUB_OUTPUT
+
+            echo "Build completed successfully!"
+            echo "Commit SHA: $COMMIT_SHA"
+            echo "Commit Message: $COMMIT_MSG"
+            echo "Commit Date: $COMMIT_DATE"
+          else
+            echo "Build failed!"
+            exit 1
+          fi
 
       - name: Update torchtitan commit in build script
         shell: bash -l {0}
         run: |
           # Update the commit in the build script
-          sed -i "s/TORCHTITAN_COMMIT=\".*\"/TORCHTITAN_COMMIT=\"${{ steps.commit_info.outputs.commit_sha }}\"/" scripts/build_wheels.sh
+          sed -i "s/TORCHTITAN_COMMIT=\".*\"/TORCHTITAN_COMMIT=\"${{ steps.build_and_commit.outputs.commit_sha }}\"/" scripts/build_wheels.sh
 
       - name: Create pull request branch
         shell: bash -l {0}
@@ -113,7 +124,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           # Create a new branch
-          BRANCH_NAME="update-torchtitan-wheel-${{ steps.commit_info.outputs.commit_sha }}"
+          BRANCH_NAME="update-torchtitan-wheel-${{ steps.build_and_commit.outputs.commit_sha }}"
           git checkout -b "$BRANCH_NAME"
 
           # Add the built wheels to the repository
@@ -121,12 +132,12 @@ jobs:
           git add scripts/build_wheels.sh
 
           # Commit changes
-          git commit -m "Update torchtitan wheel to commit ${{ steps.commit_info.outputs.commit_sha }}
+          git commit -m "Update torchtitan wheel to commit ${{ steps.build_and_commit.outputs.commit_sha }}
 
           Built from pytorch/torchtitan commit:
-          - SHA: ${{ steps.commit_info.outputs.commit_sha }}
-          - Message: ${{ steps.commit_info.outputs.commit_msg }}
-          - Date: ${{ steps.commit_info.outputs.commit_date }}
+          - SHA: ${{ steps.build_and_commit.outputs.commit_sha }}
+          - Message: ${{ steps.build_and_commit.outputs.commit_msg }}
+          - Date: ${{ steps.build_and_commit.outputs.commit_date }}
 
           Wheel type: torchtitan
 
@@ -144,15 +155,15 @@ jobs:
 
           # Create pull request using GitHub CLI
           gh pr create \
-            --title "Update torchtitan wheel to ${{ steps.commit_info.outputs.commit_sha }}" \
+            --title "Update torchtitan wheel to ${{ steps.build_and_commit.outputs.commit_sha }}" \
             --body "## TorchTitan Wheel Update
 
           This PR updates the torchtitan wheel to a new commit from the [pytorch/torchtitan](https://github.com/pytorch/torchtitan) repository.
 
           ### Build Details
-          - **Commit SHA**: \`${{ steps.commit_info.outputs.commit_sha }}\`
-          - **Commit Message**: ${{ steps.commit_info.outputs.commit_msg }}
-          - **Commit Date**: ${{ steps.commit_info.outputs.commit_date }}
+          - **Commit SHA**: \`${{ steps.build_and_commit.outputs.commit_sha }}\`
+          - **Commit Message**: ${{ steps.build_and_commit.outputs.commit_msg }}
+          - **Commit Date**: ${{ steps.build_and_commit.outputs.commit_date }}
           - **Wheel Type**: torchtitan
           - **Requested Commit**: \`${{ github.event.inputs.torchtitan_commit }}\`
 
@@ -173,7 +184,7 @@ jobs:
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: torchtitan-wheel-${{ steps.commit_info.outputs.commit_sha }}
+          name: torchtitan-wheel-${{ steps.build_and_commit.outputs.commit_sha }}
           path: assets/wheels/
           retention-days: 30
 
@@ -184,9 +195,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Successfully built torchtitan wheel from TorchTitan commit:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: \`${{ steps.commit_info.outputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Message**: ${{ steps.commit_info.outputs.commit_msg }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Date**: ${{ steps.commit_info.outputs.commit_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ steps.build_and_commit.outputs.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Message**: ${{ steps.build_and_commit.outputs.commit_msg }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date**: ${{ steps.build_and_commit.outputs.commit_date }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Wheel Type**: torchtitan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
