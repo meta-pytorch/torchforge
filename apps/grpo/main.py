@@ -8,7 +8,6 @@
 
 import asyncio
 
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -17,10 +16,7 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
-from forge.actors._torchstore_utils import (
-    get_dcp_whole_state_dict_key,
-    get_param_prefix,
-)
+
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
@@ -33,6 +29,7 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.util.ops import compute_logprobs
+from forge.util.weight_sync import drop_weights
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -289,23 +286,6 @@ class DatasetActor(ForgeActor):
         return self._tokenizer.pad_token_id
 
 
-async def drop_weights(version: int):
-    print(f"Dropping weights @ version {version}")
-    start_time = time.perf_counter()
-    prefix = get_param_prefix(version)
-    matching_keys = await ts.keys(prefix)
-    # TODO: once we have something like `get_meta()` in torchstore, we can just
-    # query the type of the object instead of relying on keys.
-    dcp_key = get_dcp_whole_state_dict_key(version)
-    if dcp_key in matching_keys:
-        dcp_handle = await ts.get(dcp_key)
-        dcp_handle.drop()
-    for key in matching_keys:
-        await ts.delete(key)
-    elapsed = time.perf_counter() - start_time
-    print(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
-
-
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
     group_size = cfg.group_size
@@ -455,9 +435,9 @@ async def main(cfg: DictConfig):
                 await policy.update_weights.fanout(training_step)
                 t.step("update_weights")
 
-                # if training_step >= 2:
-                #     await drop_weights(training_step - 1)
-                #     t.step("drop_weights")
+                if training_step >= 2:
+                    await drop_weights(training_step - 1)
+                    t.step("drop_weights")
 
                 t.stop()
                 restart_tracer = True
