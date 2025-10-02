@@ -1,6 +1,7 @@
 name: Build TorchTitan Wheel
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       torchtitan_commit:
