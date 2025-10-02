@@ -401,7 +401,9 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            ref_logprobs =  await ref_model.forward.route(input_ids, max_req_tokens, return_logprobs=True)
+            ref_logprobs = await ref_model.forward.route(
+                input_ids, max_req_tokens, return_logprobs=True
+            )
             t.step("reference_model_calculate_logprobs")
 
             for i, episode in enumerate(group.episodes):
