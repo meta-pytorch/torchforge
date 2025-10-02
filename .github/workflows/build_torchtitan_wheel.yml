@@ -72,6 +72,9 @@ jobs:
           # Remove calls to check_sudo
           sed -i '/check_sudo/d' scripts/build_wheels.sh
 
+          # Reduce disk space requirement for GitHub Actions (8GB available, need only ~3GB for torchtitan)
+          sed -i 's/local required_gb=10/local required_gb=3/' scripts/build_wheels.sh
+
           # Replace dnf with apt-get for Ubuntu
           sed -i 's/sudo dnf install -y/sudo apt-get install -y/g' scripts/build_wheels.sh
 
