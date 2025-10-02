@@ -33,24 +33,43 @@ jobs:
           activate-environment: forge-build
           python-version: "3.10"
 
-      - name: Install system dependencies
+      - name: Free up disk space
         shell: bash -l {0}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git curl build-essential
+          echo "=== Initial disk usage ==="
+          df -h
 
-          # Install CUDA toolkit (Ubuntu/Debian compatible version)
-          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-          sudo dpkg -i cuda-keyring_1.1-1_all.deb
-          sudo apt-get update
-          sudo apt-get -y install cuda-toolkit-12-9
+          echo "=== Aggressive disk cleanup ==="
+          # Remove large unnecessary packages and caches
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+
+          # Remove large development tools we don't need
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache
+
+          # Clear package caches
+          sudo apt-get autoclean
+          sudo journalctl --vacuum-time=1d
+
+          # Remove unnecessary language packs and docs
+          sudo rm -rf /usr/share/doc
+          sudo rm -rf /usr/share/man
+          sudo rm -rf /usr/share/locale
+
+          echo "=== After cleanup disk usage ==="
+          df -h
 
       - name: Set up build environment
         shell: bash -l {0}
         run: |
           echo "CUSTOM_TORCHTITAN_COMMIT=${{ github.event.inputs.torchtitan_commit }}" >> $GITHUB_ENV
 
-          # Create a simplified CUDA setup for GitHub Actions
+          # Set up CUDA environment for PyTorch GPU build
           export CUDA_VERSION=12.9
           export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
           export PATH="${CUDA_HOME}/bin:$PATH"
@@ -60,12 +79,22 @@ jobs:
           echo "PATH=${CUDA_HOME}/bin:${PATH}" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
 
+          # Install CUDA toolkit
+          sudo apt-get update
+          sudo apt-get install -y git curl build-essential
+
+          # Install CUDA 12.9 (matching original requirements)
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get -y install cuda-toolkit-12-9
+
       - name: Build wheel and extract commit info
         id: build_and_commit
         shell: bash -l {0}
         run: |
           # Modify the build script to work in GitHub Actions environment
-          # Remove sudo requirements and adapt for Ubuntu
+          echo "Modifying build script for GitHub Actions..."
 
           # Remove the sudo check function entirely
           sed -i '/^check_sudo()/,/^}/d' scripts/build_wheels.sh
@@ -73,41 +102,51 @@ jobs:
           # Remove calls to check_sudo
           sed -i '/check_sudo/d' scripts/build_wheels.sh
 
-          # Reduce disk space requirement for GitHub Actions (8GB available, need only ~3GB for torchtitan)
-          sed -i 's/local required_gb=10/local required_gb=3/' scripts/build_wheels.sh
+          # Reduce disk space requirement for GitHub Actions
+          sed -i 's/local required_gb=10/local required_gb=4/' scripts/build_wheels.sh
+
+          # Keep the original PyTorch nightly with CUDA 12.9
+          # The build script already has the correct PyTorch version, don't modify it
 
           # Replace dnf with apt-get for Ubuntu
           sed -i 's/sudo dnf install -y/sudo apt-get install -y/g' scripts/build_wheels.sh
 
-          # Simplify CUDA package installation for Ubuntu
-          sed -i 's/cuda-toolkit-12-9 cuda-compat-12-9/cuda-toolkit-12-9/g' scripts/build_wheels.sh
+          # Keep CUDA 12.9 packages (matching our CUDA toolkit installation)
+          # Don't modify the cuda-toolkit version since we're installing 12.9
 
           # Remove any remaining sudo -n checks
           sed -i '/sudo -n true/d' scripts/build_wheels.sh
 
-          # Run the build script
+          # Make script executable
           chmod +x scripts/build_wheels.sh
 
           echo "Starting wheel build..."
+          set -e  # Exit on any error
+
           if ./scripts/build_wheels.sh --wheel=torchtitan; then
             echo "Build successful, extracting commit info..."
 
             # Extract commit info from the built torchtitan
-            cd ~/forge-build/torchtitan
-            COMMIT_SHA=$(git rev-parse HEAD)
-            COMMIT_MSG=$(git log -1 --pretty=format:"%s")
-            COMMIT_DATE=$(git log -1 --pretty=format:"%ci")
+            if [ -d ~/forge-build/torchtitan ]; then
+              cd ~/forge-build/torchtitan
+              COMMIT_SHA=$(git rev-parse HEAD)
+              COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+              COMMIT_DATE=$(git log -1 --pretty=format:"%ci")
 
-            echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
-            echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
-            echo "commit_date=${COMMIT_DATE}" >> $GITHUB_OUTPUT
+              echo "commit_sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+              echo "commit_msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
+              echo "commit_date=${COMMIT_DATE}" >> $GITHUB_OUTPUT
 
-            echo "Build completed successfully!"
-            echo "Commit SHA: $COMMIT_SHA"
-            echo "Commit Message: $COMMIT_MSG"
-            echo "Commit Date: $COMMIT_DATE"
+              echo "Build completed successfully!"
+              echo "Commit SHA: $COMMIT_SHA"
+              echo "Commit Message: $COMMIT_MSG"
+              echo "Commit Date: $COMMIT_DATE"
+            else
+              echo "Error: torchtitan directory not found after build"
+              exit 1
+            fi
           else
-            echo "Build failed!"
+            echo "Build failed with exit code $?"
             exit 1
           fi
 
