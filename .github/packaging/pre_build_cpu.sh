@@ -30,5 +30,15 @@ build_vllm() {
     pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
+build_debug() {
+    cd "$BUILD_DIR"
 
-build_vllm
+    git clone https://github.com/meta-pytorch/torchtune.git
+    cd "$BUILD_DIR/torchtune"
+
+    pip install -r requirements/build.txt
+    pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
+}
+
+build_debug
+# build_vllm
