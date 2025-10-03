@@ -276,11 +276,9 @@ class TestErrorConditionsAndCompatibility:
         with pytest.raises(ValueError, match='timer must be "cpu" or "gpu"'):
             trace("test", timer="invalid")
 
-        # Valid values should work
-        tracer_cpu = Tracer("test", timer="cpu")
-        tracer_cuda = Tracer("test", timer="gpu")
-        assert tracer_cpu is not None
-        assert tracer_cuda is not None
+        # Valid values should work without errors
+        Tracer("test", timer="cpu")
+        Tracer("test", timer="gpu")
 
     def test_tracer_and_timer_reuse(self, mock_record_metric_calls):
         """Test both tracer and timer backends can be reused."""

@@ -22,6 +22,7 @@ from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
 
 from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.utils import detect_actor_name_from_call_stack
 
 from forge.types import ProcessConfig
 
@@ -217,8 +218,9 @@ class Provisioner:
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
-        # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # Detect actor name and spawn local logging actor on each process
+        actor_name = detect_actor_name_from_call_stack()
+        _ = await get_or_create_metric_logger(procs, actor_name=actor_name)
 
         return procs
 
