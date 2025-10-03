@@ -96,38 +96,6 @@ mount_workspace() {
     return 0
 }
 
-# Function to safely deactivate conda
-safe_conda_deactivate() {
-    if command -v conda >/dev/null 2>&1; then
-        if conda info --envs >/dev/null 2>&1; then
-            conda deactivate 2>/dev/null || log_warn "Could not deactivate conda (might not be in an environment)"
-        else
-            log_warn "Conda not properly initialized, skipping deactivate"
-        fi
-    else
-        log_warn "Conda command not found, skipping deactivate"
-    fi
-}
-
-# Function to safely activate conda environment
-safe_conda_activate() {
-    local env_name="$1"
-
-    if command -v conda >/dev/null 2>&1; then
-        if conda info --envs >/dev/null 2>&1; then
-            conda activate "$env_name"
-        else
-            log_warn "Conda not properly initialized"
-            log_info "Attempting to use xl_conda.sh activation instead..."
-            source "$CONDA_SCRIPT_PATH" activate "$env_name"
-        fi
-    else
-        log_warn "Conda command not found"
-        log_info "Attempting to use xl_conda.sh activation instead..."
-        source "$CONDA_SCRIPT_PATH" activate "$env_name"
-    fi
-}
-
 # Check if required environment variables are set
 if [ -z "$USER" ]; then
     log_error "USER environment variable is not set"
