@@ -1,7 +1,6 @@
 name: Build nightly wheels and publish to PyTorch Index
 
 on:
-  pull_request:
   push:
     branches:
       - nightly
@@ -13,7 +12,6 @@ permissions:
 
 jobs:
   build:
-    # if: github.repository_owner == 'pytorch'
     name: forge-cu129-nightly
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@28a1b658404f17c8eabde5f7fe25ae3ac826fae6
     strategy:
