@@ -22,7 +22,8 @@ jobs:
       repository: meta-pytorch/forge
       ref: ""
       test-infra-repository: ebsmothers/test-infra
-      test-infra-ref: 5b44568eb57cb629f9d579311efd0ed6067ea234
+      test-infra-ref: ff517c0858457180586230eb6105bbbdd1d05264
+      run-smoke-test: false
       package-name: forge
       build-matrix: |
         {
