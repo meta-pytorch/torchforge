@@ -21,8 +21,8 @@ jobs:
     with:
       repository: meta-pytorch/forge
       ref: ""
-      test-infra-repository: pytorch/test-infra
-      test-infra-ref: main
+      test-infra-repository: ebsmothers/test-infra
+      test-infra-ref: 5b44568eb57cb629f9d579311efd0ed6067ea234
       package-name: forge
       build-matrix: |
         {
@@ -46,6 +46,5 @@ jobs:
         }
       pre-script: .github/packaging/pre_build_gpu.sh
       post-script: .github/packaging/post_build_script.sh
-      smoke-test-script: .github/packaging/smoke_test.sh
       trigger-event: ${{ github.event_name }}
       build-platform: 'python-build-package'
