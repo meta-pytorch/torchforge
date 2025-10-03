@@ -9,11 +9,11 @@ Now let's peel back the layers. Forge services are built on top of **Monarch**, 
 ```mermaid
 graph TD
     subgraph YourCode["1. Your RL Code"]
-        Call["await policy_service.generate.choose('What is 2+2?')"]
+        Call["await policy_service.generate.route('What is 2+2?')"]
     end
 
     subgraph ForgeServices["2. Forge Service Layer"]
-        ServiceInterface["ServiceInterface<br/>• Routes .choose() to replica<br/>• Handles load balancing<br/>• Manages health checks"]
+        ServiceInterface["ServiceInterface<br/>• Routes .route() to replica<br/>• Handles load balancing<br/>• Manages health checks"]
         ServiceActor["ServiceActor<br/>• Manages replica lifecycle<br/>• Monitors health<br/>• Coordinates failures"]
     end
 
@@ -167,7 +167,7 @@ await counters.increment.call()
 value = await counters.get_value.call_one()
 print(f"One counter: {value}")
 
-# choose() - random single actor
+# choose() - random single actor (actors only, not services)
 value = await counters.get_value.choose()
 print(f"Random counter: {value}")
 
@@ -273,8 +273,8 @@ Now the key insight: **Forge services are ServiceActors that manage ActorMeshes 
 
 ```mermaid
 graph TD
-    subgraph ServiceCreation["spawn_service() Process"]
-        Call["await spawn_service(ServiceConfig(num_replicas=4), PolicyActor, model='Qwen')"]
+    subgraph ServiceCreation["Service Creation Process"]
+        Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
 
         ServiceActor["ServiceActor<br/>• Manages 4 replicas<br/>• Handles health checks<br/>• Routes service calls"]
 
@@ -323,9 +323,9 @@ graph TD
 ```mermaid
 graph TD
     subgraph CallFlow["Complete Call Flow"]
-        UserCall["await policy_service.generate.choose('What is 2+2?')"]
+        UserCall["await policy_service.generate.route('What is 2+2?')"]
 
-        ServiceInterface["ServiceInterface<br/>• Receives .choose() call<br/>• Routes to ServiceActor"]
+        ServiceInterface["ServiceInterface<br/>• Receives .route() call<br/>• Routes to ServiceActor"]
 
         ServiceActor["ServiceActor<br/>• Selects healthy replica<br/>• Load balancing logic<br/>• Failure handling"]
 
