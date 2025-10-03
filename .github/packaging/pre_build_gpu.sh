@@ -1,13 +1,10 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Builds vLLM, Monarch and torchstore
-# This script builds vLLM, Monarch and torchstore and places
-# their wheels into dist/.
+# Builds Monarch
+# This script builds Monarch and places its wheel into dist/.
 
 MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
-TORCHTITAN_COMMIT="82f0287b966f1735819a377a9a09e7a303c55faa"
-TORCHSTORE_COMMIT="main"
 BUILD_DIR="$HOME/forge-build"
 
 # Push other files to the dist folder
@@ -17,23 +14,6 @@ mkdir -p $BUILD_DIR
 mkdir -p $WHL_DIR
 echo "build dir is $BUILD_DIR"
 echo "wheel dir is $WHL_DIR"
-
-build_vllm() {
-    cd "$BUILD_DIR"
-
-    git clone https://github.com/vllm-project/vllm.git --branch $VLLM_BRANCH
-    cd "$BUILD_DIR/vllm"
-
-    python use_existing_torch.py
-    pip install -r requirements/build.txt
-    export VERBOSE=1
-    export CMAKE_VERBOSE_MAKEFILE=1
-    export FORCE_CMAKE=1
-    # export MAX_JOBS=2 # don't resource starve the host
-    # export CMAKE_BUILD_PARALLEL_LEVEL=2
-    # export MAKEFLAGS=-j2
-    pip wheel -v --no-build-isolation --no-deps . -w "$WHL_DIR"
-}
 
 build_monarch() {
     # Get Rust build related pieces
@@ -70,30 +50,6 @@ build_monarch() {
     pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
 }
 
-build_torchtitan() {
-    cd "$BUILD_DIR"
-    git clone https://github.com/pytorch/torchtitan.git
-    cd "$BUILD_DIR/torchtitan"
-    git checkout $TORCHTITAN_COMMIT
-
-    pip wheel --no-deps . -w "$WHL_DIR"
-}
-
-build_torchstore() {
-    cd "$BUILD_DIR"
-    if [ -d "torchstore" ]; then
-        log_warn "torchstore directory exists, removing..."
-        rm -rf torchstore
-    fi
-
-    git clone https://github.com/meta-pytorch/torchstore.git
-    cd "$BUILD_DIR/torchstore"
-    git checkout $TORCHSTORE_COMMIT
-
-    pip wheel --no-deps . -w "$WHL_DIR"
-}
-
-
 append_date() {
     cd ${GITHUB_WORKSPACE}/${REPOSITORY}
     # Appends the current date and time to the Forge wheel
@@ -112,6 +68,4 @@ append_date() {
 
 
 build_monarch
-# build_torchstore
-# build_torchtitan
 append_date

@@ -24,6 +24,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: 28a1b658404f17c8eabde5f7fe25ae3ac826fae6
       run-smoke-test: false
+      wheel-upload-path: preview/forge
       package-name: forge
       build-matrix: |
         {
