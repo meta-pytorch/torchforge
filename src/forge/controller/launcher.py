@@ -15,8 +15,6 @@ import monarch
 
 import torchx.specs as specs
 
-from forge.types import Launcher
-
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
@@ -24,7 +22,8 @@ from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
-from omegaconf import DictConfig
+
+from forge.types import Launcher, LauncherConfig
 
 try:
     from monarch._src.actor.actor_mesh import current_rank
@@ -125,7 +124,7 @@ class BaseLauncher:
 
 
 class Slurmlauncher(BaseLauncher):
-    def __init__(self, cfg: DictConfig | None = None):
+    def __init__(self, cfg: LauncherConfig | None = None):
         self.cfg = cfg
 
     async def initialize(self) -> None:
@@ -166,11 +165,9 @@ class Slurmlauncher(BaseLauncher):
 
 
 class Mastlauncher(BaseLauncher):
-    def __init__(self, cfg: DictConfig | None = None):
+    def __init__(self, cfg: LauncherConfig | None = None):
         assert cfg is not None
         self.cfg = cfg
-        job_name = cfg.get(JOB_NAME_KEY, None)
-        self.job_name = job_name or self.create_job_name()
         self.default_monarch_port = 26600
         self.scheduler_name = "mast_conda"
 
@@ -184,6 +181,7 @@ class Mastlauncher(BaseLauncher):
         self.editable_workspace_paths = [
             f"{self.work_dir}/{workspace}" for workspace in self.edittable_workspaces
         ]
+        self.job_name = self.cfg.job_name or self.create_job_name()
 
     async def initialize(self) -> None:
         await self.launch_mast_job()
@@ -268,10 +266,10 @@ class Mastlauncher(BaseLauncher):
         packages = Packages()
         meshes = []
         # Process both services and actors configurations
-        for mesh_name, config in self.cfg["services"].items():
-            num_replicas = config["num_replicas"]
-            with_gpus = bool(config["with_gpus"])
-            num_hosts = int(config.get("hosts", 0))
+        for mesh_name, service in self.cfg.services.items():
+            num_replicas = service.num_replicas
+            with_gpus = bool(service.with_gpus)
+            num_hosts = int(service.hosts or 0)
             # Create list of mesh names with indices and num_hosts
             if with_gpus and num_hosts > 0:
                 mesh_list = [
@@ -280,10 +278,10 @@ class Mastlauncher(BaseLauncher):
                 ]
                 meshes.extend(mesh_list)
 
-        for mesh_name, config in self.cfg["actors"].items():
+        for mesh_name, actor in self.cfg.actors.items():
             num_replicas = 1
-            with_gpus = bool(config["with_gpus"])
-            num_hosts = int(config.get("hosts", 0))
+            with_gpus = bool(actor.with_gpus)
+            num_hosts = int(actor.hosts or 0)
             # single actors with GPUs
             if with_gpus:
                 meshes.append(f"{mesh_name}:{num_replicas}:{self.sku}")
@@ -304,18 +302,18 @@ class Mastlauncher(BaseLauncher):
         return appdef
 
     def create_job_name(self):
-        return f"{USER}-forge-{uuid.uuid4().hex[:6]}"
+        return f"{self.user}-forge-{uuid.uuid4().hex[:6]}"
 
     def create_server_handle(self) -> str:
         return f"{self.scheduler_name}:///{self.job_name}"
 
 
-def get_launcher(cfg: DictConfig | None = None) -> BaseLauncher:
-    if cfg is not None:
-        launcher = cfg.get(LAUNCHER_KEY, Launcher.LOCAL.value)
-    else:
-        launcher = Launcher.LOCAL.value
-    if launcher == Launcher.MAST.value:
+def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
+    if not cfg:
+        return None
+    if cfg.launcher == Launcher.MAST:
         return Mastlauncher(cfg)
+    elif cfg.launcher == Launcher.SLURM:
+        return Slurmlauncher(cfg)
     else:
-        return Slurmlauncher()
+        raise ValueError(f"Unsupported config provided, got {cfg}")

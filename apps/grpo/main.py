@@ -26,12 +26,20 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
-
+from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
+
+from forge.types import (
+    Launcher,
+    LauncherConfig,
+    ProcessConfig,
+    ProvisionerConfig,
+    ServiceConfig,
+)
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -313,7 +321,16 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # init provisioner
-    await init_provisioner(cfg)
+    await init_provisioner(
+        ProvisionerConfig(
+            launcher_config=LauncherConfig(
+                launcher=Launcher(cfg.get(LAUNCHER_KEY, Launcher.SLURM.value)),
+                job_name=cfg.get(JOB_NAME_KEY, None),
+                services={k: ServiceConfig(**v) for k, v in cfg.services.items()},
+                actors={k: ProcessConfig(**v) for k, v in cfg.actors.items()},
+            )
+        )
+    )
 
     # initialize before spawning services
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})

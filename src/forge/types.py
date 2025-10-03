@@ -91,7 +91,6 @@ class State:
 class Launcher(Enum):
     MAST = "mast"
     SLURM = "slurm"
-    LOCAL = "local"
 
 
 @dataclass
@@ -141,3 +140,20 @@ class ServiceConfig:
 
 
 Scalar = Union[int, float]
+
+
+@dataclass
+class LauncherConfig:
+    """A launcher config for the scheduler."""
+
+    launcher: Launcher
+    job_name: str
+    services: dict[str, ServiceConfig]
+    actors: dict[str, ProcessConfig]
+
+
+@dataclass
+class ProvisionerConfig:
+    """A config for the forge provisioner."""
+
+    launcher_config: LauncherConfig

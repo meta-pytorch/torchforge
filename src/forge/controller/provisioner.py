@@ -14,16 +14,15 @@ import socket
 import uuid
 from typing import Optional
 
+from monarch._src.actor.shape import NDSlice, Shape
+from monarch.actor import HostMesh, ProcMesh, this_host
+from monarch.tools import commands
+
 from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.observability.metric_actors import get_or_create_metric_logger
 
-from forge.types import ProcessConfig
-
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import HostMesh, ProcMesh, this_host
-from monarch.tools import commands
-from omegaconf import DictConfig
+from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -65,7 +64,7 @@ class GpuManager:
 class Provisioner:
     """A global resource provisioner."""
 
-    def __init__(self, cfg: DictConfig | None = None):
+    def __init__(self, cfg: ProvisionerConfig | None = None):
         self._server_names = []
         self._proc_server_map = {}
         self._lock = asyncio.Lock()
@@ -94,11 +93,16 @@ class Provisioner:
         self._host_gpu_map = {
             self._this_host_id: GpuManager(available_local_devices),
         }
-        self.launcher: BaseLauncher = get_launcher(cfg)
+        self.launcher: BaseLauncher | None = get_launcher(
+            cfg.launcher_config if cfg is not None else None
+        )
+        if not self.launcher:
+            logger.warning("Launcher not provided, remote allocations will not work.")
 
     async def initialize(self):
         """Call this after creating the instance"""
-        await self.launcher.initialize()
+        if self.launcher is not None:
+            await self.launcher.initialize()
 
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
@@ -223,7 +227,7 @@ class Provisioner:
 _provisioner: Provisioner | None = None
 
 
-async def init_provisioner(cfg: DictConfig | None = None):
+async def init_provisioner(cfg: ProvisionerConfig | None = None):
     global _provisioner
     if not _provisioner:
         _provisioner = Provisioner(cfg)

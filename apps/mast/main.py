@@ -13,7 +13,13 @@ from forge.cli.config import parse
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner
 
-from forge.types import Launcher
+from forge.types import (
+    Launcher,
+    LauncherConfig,
+    ProcessConfig,
+    ProvisionerConfig,
+    ServiceConfig,
+)
 from omegaconf import DictConfig
 
 DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"
@@ -39,7 +45,16 @@ async def main(cfg: DictConfig):
         print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
     # init mast provisioner
-    await init_provisioner(cfg)
+    await init_provisioner(
+        ProvisionerConfig(
+            launcher_config=LauncherConfig(
+                launcher=Launcher(cfg.get(LAUNCHER_KEY, Launcher.MAST.value)),
+                job_name=cfg.get(JOB_NAME_KEY, None),
+                services={k: ServiceConfig(**v) for k, v in cfg.services.items()},
+                actors={k: ProcessConfig(**v) for k, v in cfg.actors.items()},
+            )
+        )
+    )
     await grpo_main(cfg)
 
 
