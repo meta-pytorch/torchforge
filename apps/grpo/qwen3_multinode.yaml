@@ -1,6 +1,7 @@
 # GRPO Training Configuration
 # Currently a fork of the main yaml, this just shows
 # placement of trainer and inference servers on separate hosts.
+# >>> python -m apps.grpo.main --config apps/grpo/qwen3_multinode.yaml
 
 # Global configuration
 group_size: 8

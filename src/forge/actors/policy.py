@@ -18,7 +18,6 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
-
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -173,6 +172,7 @@ class Policy(PolicyInterface):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 

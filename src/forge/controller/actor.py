@@ -26,6 +26,7 @@ class ForgeActor(Actor):
     hosts: int | None = None
     with_gpus: bool = False
     num_replicas: int = 1
+    mesh_name: str | None = None
     _extra_config: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
@@ -58,6 +59,7 @@ class ForgeActor(Actor):
         hosts: int | None = None,
         with_gpus: bool = False,
         num_replicas: int = 1,
+        mesh_name: str | None = None,
         **kwargs,
     ) -> Type[T]:
         """
@@ -91,6 +93,7 @@ class ForgeActor(Actor):
             "hosts": hosts,
             "with_gpus": with_gpus,
             "num_replicas": num_replicas,
+            "mesh_name": mesh_name,
             "_extra_config": kwargs,
         }
 
@@ -116,6 +119,7 @@ class ForgeActor(Actor):
             "hosts": cls.hosts,
             "with_gpus": cls.with_gpus,
             "num_replicas": cls.num_replicas,
+            "mesh_name": cls.mesh_name,
             **cls._extra_config,  # all extra fields
         }
         cfg = ServiceConfig(**cfg_kwargs)
@@ -181,6 +185,7 @@ class ForgeActor(Actor):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
 
         proc_mesh = await get_proc_mesh(process_config=cfg)
