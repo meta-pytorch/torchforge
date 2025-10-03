@@ -1,0 +1,107 @@
+# Grouped Relative Policy Optimization (GRPO)
+# >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
+
+# Global configuration
+group_size: 2
+batch_size: 4
+max_req_tokens: 512
+max_res_tokens: 512
+model: "Qwen/Qwen3-30B-A3B"
+off_by_n: 1 # Off by one by default
+
+# Dataset configuration
+dataset:
+  path: "openai/gsm8k"
+  revision: "main"
+  data_split: "train"
+  streaming: true
+  model: ${model}
+
+# Policy configuration
+policy:
+  engine_config:
+    model: ${model}
+    tensor_parallel_size: 8
+    pipeline_parallel_size: 1
+    enable_expert_parallel: true
+    enforce_eager: false
+  sampling_config:
+    n: ${group_size}
+    max_tokens: ${max_res_tokens}
+    temperature: 1.0
+    top_p: 1.0
+
+# Trainer configuration
+trainer:
+  model:
+    name: qwen3
+    # TODO: check titan trainer
+    flavor: 30B-A3B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: ${batch_size}
+    seq_len: 2048
+    max_norm: 1.0
+    steps: 1000000
+    dtype: bfloat16
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: -1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 8
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 500
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${batch_size}
+  max_policy_age: ${off_by_n}
+  # TODO: check if we need to change this
+  dp_size: 8
+
+# All resource allocations
+services:
+  dataset:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+  policy:
+    procs: ${policy.engine_config.tensor_parallel_size}
+    num_replicas: 1
+    with_gpus: true
+  trainer:
+    procs: 8
+    hosts: 1
+    num_replicas: 1
+    with_gpus: true
+  replay_buffer:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+  compute_advantages:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    with_gpus: false

@@ -194,6 +194,10 @@ class Provisioner:
                     os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
+                    os.environ["VLLM_LOG_LEVEL"] = "DEBUG"
+                    os.environ["NCCL_DEBUG"] = "INFO"
+                    os.environ["NCCL_DEBUG_SUBSYS"] = "INIT"
+
                 gpu_ids = gpu_manager.get_gpus(num_procs)
                 procs = host_mesh.spawn_procs(
                     per_host={"gpus": num_procs},

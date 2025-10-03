@@ -41,6 +41,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.rsyncignore
 
 # Django stuff
 *.log
