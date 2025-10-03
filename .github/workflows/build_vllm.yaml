@@ -1,6 +1,7 @@
 name: Build pinned vLLM against PyTorch nightly and upload
 
 on:
+  pull_request:
   push:
     branches:
       - nightly
@@ -13,14 +14,14 @@ permissions:
 jobs:
   build:
     name: forge-cu129-nightly
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@28a1b658404f17c8eabde5f7fe25ae3ac826fae6
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@f3246c0ac9467b0af6da391eab7c47fe2a772125
     strategy:
       fail-fast: false
     with:
       repository: meta-pytorch/forge
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: 28a1b658404f17c8eabde5f7fe25ae3ac826fae6
+      test-infra-ref: f3246c0ac9467b0af6da391eab7c47fe2a772125
       run-smoke-test: false
       wheel-upload-path: whl/preview/forge
       package-name: forge
