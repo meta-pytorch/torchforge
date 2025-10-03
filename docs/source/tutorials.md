@@ -6,5 +6,4 @@
 ```{toctree}
 :maxdepth: 1
 
-tutorials/template_tutorial
 ```
