@@ -198,7 +198,7 @@ graph TD
             P3["Process 3<br/>GPU 3"]
         end
 
-        subgraph ActorMesh["ActorMesh[PolicyActor]"]
+        subgraph ActorMesh["ActorMesh PolicyActor"]
             A0["PolicyActor<br/>Instance #0<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
             A1["PolicyActor<br/>Instance #1<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
             A2["PolicyActor<br/>Instance #2<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
