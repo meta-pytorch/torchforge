@@ -50,8 +50,8 @@ class SessionContext:
 
         >>> async with service.session() as session:
         ...     # All calls within this block use the same replica
-        ...     result1 = await service.my_endpoint(arg1)
-        ...     result2 = await service.another_endpoint(result1)
+        ...     result1 = await service.my_endpoint.route(arg1)
+        ...     result2 = await service.another_endpoint.fanout(result1)
 
     """
 

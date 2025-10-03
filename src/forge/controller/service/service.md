@@ -1,3 +1,7 @@
+TODO
+1. introduce actor and service, their diff
+2. service or actor? link xs
+
 # Service - Distributed Actor Service Controller
 
 A robust service orchestration system for managing distributed actor-based workloads with fault tolerance and intelligent load balancing.
@@ -14,11 +18,12 @@ The Service class provides a unified interface for deploying and managing multip
 - **Session Preservation**: Maintains session state during replica failures
 - **Graceful Degradation**: Continues operation with reduced capacity
 
-### **Load Balancing**
-- **Round-Robin**: Default load distribution across healthy replicas
-- **Least-Loaded**: Session assignment to replicas with lowest load
-- **Session Affinity**: Sticky sessions for stateful workloads
-- **Custom Routing**: Extensible routing logic for specialized use cases
+### **Routing & Load Balancing**
+- **Session Affinity**: Sticky sessions for stateful workloads.
+- **Per-Endpoint Routing**: Each endpoint can declare its own router (e.g., round-robin, least-loaded, custom).
+- **Batch Routing**: Endpoints may aggregate multiple requests into batches before routing (via `Batcher`), improving throughput.
+- **Default Routing**: If no router is specified, endpoints use round-robin.
+- **Extensible Routers**: Support for pluggable router classes, e.g. `RoundRobinRouter`, `LeastLoadedRouter`, or user-defined routers.
 
 ### **Comprehensive Metrics**
 - **Request Metrics**: Throughput, latency, success/failure rates
@@ -29,84 +34,254 @@ The Service class provides a unified interface for deploying and managing multip
 ### **Session Management**
 - **Context-Aware Sessions**: Automatic session context propagation
 - **Session Lifecycle**: Managed session creation and cleanup
-- **Routing Hints**: Custom session routing based on workload characteristics
-
+- **Batching and Sessions**: Batch routing is applied only for stateless calls; sticky sessions are always preserved
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Client API    │───▶│  Service Layer   │───▶│  Replica Pool   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │                         │
-                              ▼                         ▼
+                               │                        │
+                               │                        │
+                               ▼                        ▼
                        ┌──────────────┐         ┌─────────────┐
-                       │ Autoscaler   │         │ Actor Mesh  │
+                       │ Routers /    │         │ Actor Mesh  │
+                       │ Batchers per │         └─────────────┘
+                       │   Endpoint   │                 │
+                       └──────────────┘                 │
+                              │                         ▼
+                              ▼                 ┌─────────────┐
+                       ┌──────────────┐         │   Health    │
+                       │ Autoscaler   │         │  Monitor    │
                        └──────────────┘         └─────────────┘
-                              │                         │
-                              ▼                         ▼
-                       ┌──────────────┐         ┌─────────────┐
-                       │   Metrics    │         │   Health    │
-                       │  Collector   │         │  Monitor    │
-                       └──────────────┘         └─────────────┘
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │   Metrics    │
+                       │  Collector   │
+                       └──────────────┘
 ```
+
+## Actor vs Service
+
+### Actor
+
+* The raw execution unit provided by **Monarch**.
+* Lightweight, single-instance, no routing.
+* In **Forge**, we almost always use `ForgeActor`, a thin extension of `monarch.Actor` that adds configuration knobs:
+
+```python
+class ForgeActor(Actor):
+    procs: int = 1
+    hosts: int | None = None
+    with_gpus: bool = False
+    num_replicas: int = 1
+    _extra_config: dict[str, Any] = {}
+```
+
+Actors are ideal for singleton components like trainers, replay buffers, or datasets — if they fail, the entire job should stop.
+
+### Service
+
+* A **Forge abstraction built on top of actors**.
+* Provides **scaling, load balancing, and fault tolerance** automatically.
+* Manages multiple replicas of an actor, handling lifecycle, health checks, and request routing.
+
+```python
+class Service:
+    """
+    Orchestrates a pool of actor replicas with routing, health monitoring,
+    and fault tolerance.
+    """
+```
+
+Services are best for components that might need to scale or tolerate transient failures, such as policies, environments, or reward actors.
+
 
 ## Usage
 
-### Basic Service Setup
+### Defining an Actor
 
 ```python
-from forge.controller.service import Service, ServiceConfig
+from forge.controller import ForgeActor
+from monarch.actor import endpoint
+from forge.controller.service import service_endpoint
 
-# Configure service parameters
-config = ServiceConfig(
-    gpus_per_replica=1,
-    min_replicas=2,
-    max_replicas=10,
-    default_replicas=3,
-    replica_max_concurrent_requests=10,
-)
+class MyForgeActor(ForgeActor):
+    def __init__(self, ...):
+        ...
 
-# Create service with your actor definition
-service = Service(config, MyActorClass, *actor_args, **actor_kwargs)
-await service.__initialize__()
+    @endpoint
+    async def foo(self, x):
+        return x + 1
+
+    @service_endpoint(router=RoundRobinRouter(), batch_size=8, batch_timeout=0.01)
+    async def bar(self, x):
+        return heavy_model(x)
+```
+
+* `@endpoint`: plain actor endpoint with no batching, use default router (round robin).
+* `@service_endpoint`: enables customized routing and batching when spawned as a Service.
+
+
+### Spawning as a Service
+
+TODO: some text explain here first
+
+
+```python
+# With explicit options
+service = await MyForgeActor.options(num_replicas=2, procs=2).as_service()
+# Graceful shutdown
+await service.shutdown()
+
+# Default (1 replica, 1 process)
+service = await MyForgeActor.as_service()
+# Graceful shutdown
+await service.shutdown()
+```
+
+**`options` for services:**
+
+| Config key                        | Type       | Default  | Description              |
+| --------------------------------- | ---------- | -------- | ------------------------ |
+| `procs`                           | int        | required | Number of processes to launch for each replica of the service.    |
+| `num_replicas`                    | int        | required |Number of replicas to launch for the service.       |
+| `with_gpus`                       | bool       | False    | Whether to allocate GPUs for the service processes.            |
+| `hosts`                           | int | None | None     | Number of hosts to allocate for each replica.        |
+| `health_poll_rate`                | float      | 0.2      | Frequency (in seconds) to poll for health status.   |
+| `replica_max_concurrent_requests` | int        | 10       |  Maximum number of concurrent requests per replica. |
+| `return_first_rank_result`        | bool       | True     | Whether to auto-unwrap ValueMesh to the first rank's result.    |
+
+### Spawning as a single Actor
+
+TODO: some text explain here first
+```python
+# With explicit options
+actor = await MyForgeActor.options(procs=1, hosts=1).as_actor()
+# Graceful shutdown
+await MyForgeActor.shutdown(actor)
+
+# Default (1 proc)
+actor = await MyForgeActor.as_actor()
+# Graceful shutdown
+await MyForgeActor.shutdown(actor)
+```
+
+**`options` for actors:**
+
+| Config key  | Type       | Default | Description         |
+| ----------- | ---------- | ------- | ------------------- |
+| `procs`     | int        | required       | Number of processes to launch for each replica of the service.    |
+| `with_gpus` | bool       | False   | Whether to allocate GPUs for the service processes.            |
+| `hosts`     | int | None     | Number of hosts to allocate for the actor.        |
+
+
+
+
+
+### Calling Endpoints
+
+When you access `service.some_endpoint` or `actor.some_endpoint`, you don’t get a plain function — you get an **endpoint object** with a specific API depending on whether you spawned as a **Service** or as an **Actor**.
+
+#### Service Endpoints (`.as_service()`)
+
+Service endpoints are defined with `@endpoint` or `@service_endpoint` and exposed as `ServiceEndpoint` objects.
+
+They support only two methods:
+
+* **`.route(*args, **kwargs)`** → send the request to a single replica, selected by the configured router (round-robin, least-loaded, custom, etc.).
+* **`.fanout(*args, **kwargs)`** → broadcast the request to all healthy replicas and return a list of results.
+
+Other Monarch actor APIs (`call`, `call_one`, `choose`, etc.) are not supported on services.
+
+**Example:**
+
+```python
+# Route to one replica (load-balanced)
+result = await service.predict.route(x)
+
+# Broadcast to all replicas
+results = await service.predict.fanout(x)
+```
+
+#### Actor Endpoints (`.as_actor()`)
+
+When you spawn a raw actor via `.as_actor()`, its functions are [**Monarch `ActorEndpoint` objects**](https://github.com/meta-pytorch/monarch/blob/0a842ad3c4abfb3983eb7ba55ec327c42553ff44/python/monarch/_src/actor/actor_mesh.py#L279).
+
+Highlights of supported APIs:
+- **`.choose(...)`**: load-balanced call to one actor (may pick any if >1 exists).
+- **`.call_one(...)`**: load-balanced call to one actor. Only valid if exactly one actor exists, otherwise raises error.
+- **`.call(...)`** – call all actors, returns a `ValueMesh` of results
+- ...
+
+
+**Example:**
+
+```python
+# Route to one replica
+result = await service.predict.call_one(x)
+
+# Broadcast to all replicas
+results = await service.predict.call(x)
 ```
 
 ### Session-Based Calls
-
 ```python
 # Context manager for session lifecycle
 async with service.session() as session:
-    result1 = await service.my_endpoint(arg1, arg2)
-    result2 = await service.another_endpoint(arg3)
+    result1 = await service.my_endpoint.route(arg1, arg2)
+    result2 = await service.another_endpoint.fanout(arg3)
     # Session automatically terminated on exit
 
 # Manual session management
 session_id = await service.start_session()
-result = await service.my_endpoint(session_id, arg1, arg2)
+result = await service.my_endpoint.route(arg1, arg2, sess_id=session_id)
 await service.terminate_session(session_id)
 ```
 
 ### Stateless Calls
 
 ```python
-# Direct calls without sessions (uses round-robin load balancing)
-result = await service.my_endpoint(arg1, arg2)
+# Direct calls without sessions (uses the default router unless overridden)
+result = await service.my_endpoint.route(arg1, arg2)
 ```
 
+
+### Batch Routing
+```python
+class MyActor(ForgeActor):
+    @service_endpoint(router=RoundRobinRouter(), batch_size=8, batch_timeout=0.01)
+    async def predict(self, x):
+        return model(x)
+
+service = await MyActor.options(num_replicas=4).as_service()
+
+# 16 requests → grouped into 2 batches of 8, routed round-robin across replicas
+await asyncio.gather(*(service.predict.route(data) for data in inputs))
+```
+**Note:**
+- Setting `batch_size=1` or not passing `batch_size` disables batching. Each request will be routed immediately using the underlying router.
+- Supported routers: `RoundRobinRouter()`, `LeastLoadedRouter()`, or customized routers.
 ### Custom Routing
 
-```python
-# Override _custom_replica_routing for specialized routing logic
-class CustomService(Service):
-    async def _custom_replica_routing(self, sess_id: str | None, **kwargs) -> Optional[Replica]:
-        # Custom routing based on request characteristics
-        if kwargs.get('priority') == 'high':
-            return self._get_least_loaded_replica()
-        return None  # Fall back to default routing
+To implement custom routing logic, define your own `Router` by subclassing and overriding
+the `get_replica` method. Then pass an instance to `@service_endpoint`.
 
-# Use with routing hints
-async with service.session(priority='high') as session:
-    result = await service.my_endpoint(arg1, arg2)
+```python
+class MyCustomRouter(Router):
+    """Example custom router: always picks the first replica."""
+
+    def get_replica(self, healthy_replicas, sess_id=None, session_map=None):
+        if not healthy_replicas:
+            raise RuntimeError("No healthy replicas available")
+        return healthy_replicas[0]
+
+
+class MyActor(ForgeActor):
+    @service_endpoint(router=MyCustomRouter())
+    async def predict(self, x):
+        return model(x)
 ```
 
 ### Monitoring and Metrics
@@ -117,6 +292,7 @@ metrics = service.get_metrics()
 print(f"Total request rate: {metrics.get_total_request_rate()}")
 print(f"Average queue depth: {metrics.get_avg_queue_depth()}")
 print(f"Capacity utilization: {metrics.get_avg_capacity_utilization(service._replicas)}")
+print(f"Average sessions per replica: {metrics.get_sessions_per_replica()}")
 
 # Get summary for monitoring dashboards
 summary = service.get_metrics_summary()
@@ -128,144 +304,42 @@ for replica_idx, replica_metrics in summary['replicas'].items():
     print(f"Replica {replica_idx}: {replica_metrics['request_rate']:.1f} req/s")
 ```
 
-### Graceful Shutdown
+**Service-level metrics:** sessions, healthy replicas, request rate, queue depth, capacity.
+**Replica-level metrics:** request counts, latency, active requests, queue depth, session assignments.
 
-```python
-# Stop the service and all replicas
-await service.stop()
-```
 
-## Configuration
+TODO: double check correctness with code
+#### Service-Level Metrics (`summary['service']`)
+- **`total_sessions`**: Number of active sessions
+- **`healthy_replicas`**: Number of operational replicas
+- **`total_replicas`**: Total number of replicas
+- **`total_request_rate`**: Requests per second across all replicas
+- **`avg_queue_depth`**: Average pending requests per replica
+- **`avg_capacity_utilization`**: Average resource usage across replicas
+- **`sessions_per_replica`**: Distribution of sessions across replicas
 
-### ServiceConfig
+#### Replica-Level Metrics (`summary['replicas'][replica.idx]`)
+- **`total_requests`**: Total, successful, and failed requests
+- **`successful_requests`**: Number of successful requests
+- **`failed_requests`**: Number of failed requests
+- **`request_rate`**: Requests per second (sliding window)
+- **`avg_latency`**: Response time (sliding window)
+- **`active_requests`**: Currently processing requests
+- **`queue_depth`**: Pending requests in queue
+- **`assigned_sessions`**: Number of sessions assigned to replica
+- **`capacity_utilization`**: Current load vs maximum capacity
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `gpus_per_replica` | int | Number of GPUs allocated per replica |
-| `min_replicas` | int | Minimum number of replicas to maintain |
-| `max_replicas` | int | Maximum number of replicas allowed |
-| `default_replicas` | int | Initial number of replicas to start |
-| `replica_max_concurrent_requests` | int | Maximum concurrent requests per replica |
-| `health_poll_rate` | float | Health check frequency in seconds |
-| `return_first_rank_result` | bool | Auto-unwrap ValueMesh to first rank's result |
-| `autoscaling` | AutoscalingConfig | Autoscaling configuration |
 
-### AutoscalingConfig
-
-#### Scale Up Triggers
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `scale_up_queue_depth_threshold` | 5.0 | Average queue depth to trigger scale up |
-| `scale_up_capacity_threshold` | 0.8 | Capacity utilization to trigger scale up |
-| `scale_up_request_rate_threshold` | 10.0 | Requests/sec to trigger scale up |
-
-#### Scale Down Triggers
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `scale_down_capacity_threshold` | 0.3 | Capacity utilization to trigger scale down |
-| `scale_down_queue_depth_threshold` | 1.0 | Average queue depth to trigger scale down |
-| `scale_down_idle_time_threshold` | 300.0 | Seconds of low utilization before scale down |
-
-#### Timing Controls
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `min_time_between_scale_events` | 60.0 | Minimum seconds between scaling events |
-| `scale_up_cooldown` | 30.0 | Cooldown after scale up |
-| `scale_down_cooldown` | 120.0 | Cooldown after scale down |
-
-#### Scaling Behavior
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `scale_up_step_size` | 1 | How many replicas to add at once |
-| `scale_down_step_size` | 1 | How many replicas to remove at once |
-
-#### Safety Limits
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_queue_depth_emergency` | 20.0 | Emergency scale up threshold |
-| `min_healthy_replicas_ratio` | 0.5 | Minimum ratio of healthy replicas |
-
-## Metrics
-
-### Service-Level Metrics
-- **Total Sessions**: Number of active sessions
-- **Healthy Replicas**: Number of operational replicas
-- **Total Request Rate**: Requests per second across all replicas
-- **Average Queue Depth**: Average pending requests per replica
-- **Average Capacity Utilization**: Average resource usage across replicas
-- **Sessions Per Replica**: Distribution of sessions across replicas
-
-### Replica-Level Metrics
-- **Request Counts**: Total, successful, and failed requests
-- **Request Rate**: Requests per second (sliding window)
-- **Average Latency**: Response time (sliding window)
-- **Active Requests**: Currently processing requests
-- **Queue Depth**: Pending requests in queue
-- **Assigned Sessions**: Number of sessions assigned to replica
-- **Capacity Utilization**: Current load vs maximum capacity
-
-## Use Cases
-
-### ML Model Serving
-```python
-# High-throughput model inference with automatic scaling
-config = ServiceConfig(
-    gpus_per_replica=1,
-    min_replicas=2,
-    max_replicas=20,
-    default_replicas=4,
-    replica_max_concurrent_requests=8,
-    autoscaling=AutoscalingConfig(
-        scale_up_capacity_threshold=0.7,
-        scale_up_queue_depth_threshold=3.0
-    )
-)
-service = Service(config, ModelInferenceActor, model_path="/path/to/model")
-```
-
-### Batch Processing
-```python
-# Parallel job execution with fault tolerance
-config = ServiceConfig(
-    gpus_per_replica=2,
-    min_replicas=1,
-    max_replicas=10,
-    default_replicas=3,
-    replica_max_concurrent_requests=5,
-    autoscaling=AutoscalingConfig(
-        scale_up_queue_depth_threshold=10.0,
-        scale_down_idle_time_threshold=600.0
-    )
-)
-service = Service(config, BatchProcessorActor, batch_size=100)
-```
-
-### Real-time Analytics
-```python
-# Stream processing with session affinity
-config = ServiceConfig(
-    gpus_per_replica=1,
-    min_replicas=3,
-    max_replicas=15,
-    default_replicas=5,
-    replica_max_concurrent_requests=20,
-    autoscaling=AutoscalingConfig(
-        scale_up_request_rate_threshold=50.0,
-        scale_up_capacity_threshold=0.6
-    )
-)
-service = Service(config, StreamProcessorActor, window_size=1000)
-```
 
 ## Performance Characteristics
 
 - **Low Latency**: Sub-millisecond request routing overhead
 - **High Throughput**: Concurrent request processing across replicas
 - **Elastic Scaling**: Responsive to traffic patterns with configurable thresholds
+- **Batching**: Amortizes routing decisions across multiple requests, improving throughput under high load
 - **Resource Efficient**: Intelligent replica management and load balancing
 - **Fault Resilient**: Automatic recovery from replica failures
 - **Session Aware**: Maintains state consistency for stateful workloads
-
 ## Best Practices
 
 ### Configuration
