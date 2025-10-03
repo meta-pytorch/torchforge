@@ -1,5 +1,6 @@
 # Grouped Relative Policy Optimization (GRPO)
 # >>> python -m apps.grpo.main --config apps/grpo/qwen32b.yaml
+# NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 
 # Global configuration
 group_size: 2
@@ -47,7 +48,7 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 32B 
+    flavor: 32B
     hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
