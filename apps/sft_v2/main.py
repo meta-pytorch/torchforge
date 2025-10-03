@@ -280,16 +280,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 async def run(cfg: DictConfig) -> None:
     logging.info("Spawing recipe...")
     process_cfg = cfg.pop("processes")
-    recipe = await ForgeSFTRecipe.options(**process_cfg).as_service(cfg)
+    recipe = await ForgeSFTRecipe.options(**process_cfg).as_actor(cfg)
 
     logging.info("Created recipe, running setup.")
-    await recipe.setup.fanout()
+    await recipe.setup.call()
 
     logging.info("Recipe has been setup. Training now.")
-    await recipe.train.fanout()
+    await recipe.train.call()
 
     logging.info("Done training. Clean up")
-    await recipe.cleanup.fanout()
+    await recipe.cleanup.call()
     await recipe.mesh.stop()
     logging.info("All done!")
 
