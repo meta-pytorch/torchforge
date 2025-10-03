@@ -10,7 +10,7 @@ on:
 jobs:
   build-docs:
     name: Build Documentation
-    runs-on: linux.large
+    runs-on: linux.g5.4xlarge.nvidia.gpu
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -62,7 +62,7 @@ jobs:
           path: docs/build/html/
 
   doc-preview:
-    runs-on: [ubuntu-latest]
+    runs-on: linux.large
     needs: build-docs
     if: ${{ github.event_name == 'pull_request' }}
     steps:
