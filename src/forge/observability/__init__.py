@@ -11,20 +11,20 @@ from .metric_actors import (
 )
 from .metrics import (
     ConsoleBackend,
-    # Utility functions
     get_actor_name_with_rank,
     get_logger_backend_class,
-    # Backend classes
     LoggerBackend,
+    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
-    # Accumulator classes
+    Metric,
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
     record_metric,
     Reduce,
     reduce_metrics_states,
+    Role,
     StdAccumulator,
     SumAccumulator,
     WandbBackend,
@@ -41,8 +41,12 @@ __all__ = [
     # Performance tracking
     "Tracer",
     "trace",
+    # Data classes
+    "Metric",
+    "Role",
     # Enums
     "Reduce",
+    "LoggingMode",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",

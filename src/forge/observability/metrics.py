@@ -9,7 +9,6 @@ import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -95,7 +94,7 @@ class Metric:
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
-    """Thin wrapper to send metrics to per-rank local MetricColletors.
+    """Thin wrapper to send metrics to per-rank local MetricCollectors.
 
     Relies on a per-rank MetricCollector singleton for ease of use, i.e.
     call `record_metric` anywhere in the code without moving the
