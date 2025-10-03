@@ -22,11 +22,13 @@ from .metrics import (
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
+    RandomRatioFilter,
     record_metric,
     Reduce,
     reduce_metrics_states,
     StdAccumulator,
     SumAccumulator,
+    TopBottomKFilter,
     WandbBackend,
 )
 from .perf_tracker import trace, Tracer
@@ -63,4 +65,7 @@ __all__ = [
     "MaxAccumulator",
     "MinAccumulator",
     "StdAccumulator",
+    "TopBottomKFilter",
+    "RewardThresholdFilter",
+    "RandomRatioFilter",
 ]
