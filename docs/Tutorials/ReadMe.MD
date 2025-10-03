@@ -11,8 +11,8 @@ Welcome to the Tutorials section! This section is inspired by the A-Z PyTorch tu
 This section currently is structured in 3 detailed parts:
 
 1. [RL Fundamentals and Understanding Forge Terminology](./1_RL_and_Forge_Fundamentals.MD): This gives a quick refresher of Reinforcement Learning and teaches you Forge Fundamentals
-2. []()
-3. []()
+2. [Forge Internals](./2_Forge_Internals.MD): Goes a layer deeper and explains the internals of Forge
+3. [Monarch 101](./3_Monarch_101.MD): It's a 101 to Monarch and how Forge Talks to Monarch
 
 Each part builds upon the next and the entire section can be consumed in roughly an hour-Grab a Chai and Enjoy! 
 
