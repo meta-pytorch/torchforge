@@ -15,14 +15,14 @@ jobs:
   build:
     # if: github.repository_owner == 'pytorch'
     name: forge-cu129-nightly
-    uses: ebsmothers/test-infra/.github/workflows/build_wheels_linux.yml@main
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
     with:
       repository: meta-pytorch/forge
       ref: ""
-      test-infra-repository: ebsmothers/test-infra
-      test-infra-ref: ff517c0858457180586230eb6105bbbdd1d05264
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: ec36a78be63f4f7f836fbec087746d853150ffc0
       run-smoke-test: false
       package-name: forge
       build-matrix: |
