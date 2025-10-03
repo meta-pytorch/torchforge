@@ -13,6 +13,7 @@ dataset:
 
 # Policy configuration
 policy:
+  use_dcp: false
   engine_config:
     model: ${model}
     tensor_parallel_size: 1
@@ -23,6 +24,7 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+
 
 # Trainer configuration
 trainer:
@@ -40,22 +42,10 @@ replay_buffer:
   dp_size: 1
 
 services:
-  dataset:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   policy:
     procs: 1
     num_replicas: 1
     with_gpus: true
-  trainer:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
-  replay_buffer:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   reward_actor:
     procs: 1
     num_replicas: 1
@@ -64,3 +54,14 @@ services:
     procs: 1
     num_replicas: 1
     with_gpus: true
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+  trainer:
+    procs: 1
+    with_gpus: true
+  replay_buffer:
+    procs: 1
+    with_gpus: false

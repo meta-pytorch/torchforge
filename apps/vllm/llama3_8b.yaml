@@ -1,3 +1,5 @@
+# >>> python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
+
 policy:
   engine_config:
     model: "meta-llama/Llama-3.1-8B-Instruct"

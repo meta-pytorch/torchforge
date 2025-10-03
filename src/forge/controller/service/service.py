@@ -75,7 +75,6 @@ class Service:
         _replicas: List of managed replica instances
         _active_sessions: Currently active sessions
         _metrics: Aggregated service and replica metrics
-        _endpoints: Dynamically registered actor endpoints
     """
 
     def __init__(
@@ -612,7 +611,6 @@ class ServiceActor(Actor):
         _replicas: List of managed replica instances
         _active_sessions: Currently active sessions
         _metrics: Aggregated service and replica metrics
-        _endpoints: Dynamically registered actor endpoints
     """
 
     def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):

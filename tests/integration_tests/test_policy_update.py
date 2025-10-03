@@ -4,317 +4,240 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import logging
-from dataclasses import asdict
-from typing import Callable
+from tempfile import TemporaryDirectory
 
 import pytest
-import pytest_asyncio
 
 import torch
 import torchstore as ts
-from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+from forge.actors.policy import Policy
 
 from forge.actors.trainer import RLTrainer
-from forge.controller.service import ServiceConfig
-from forge.data.sharding import VLLMSharding
-from transformers import AutoModelForCausalLM
+from forge.cli.config import resolve_hf_hub_paths
+
+from forge.controller.service.service import uuid
+from monarch.actor import endpoint
+
+from omegaconf import DictConfig, OmegaConf
 
 requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="CUDA not available",
 )
-from forge.actors.trainer import _qwen3_hf_to_vllm
+
 from huggingface_hub import snapshot_download
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+"""
+Run tests:
 
-# Run tests: pytest tests/integration_tests/test_policy_update.py::TestWeightSync::<test_name>
+pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
+    --config tests/integration_tests/artifacts/qwen3_1_7b_tp.yaml --use_dcp=false
 
-
-def convert_state_dict(saved_sd):
-    """
-    Convert transformers state dict to vLLM format.
-
-    Key conversions:
-    1. Copy over directly mapped keys (down_proj, input_layernorm, etc.)
-    2. Fuse QKV projections: combine q_proj, k_proj, v_proj into qkv_proj
-    3. Fuse MLP projections: combine gate_proj and up_proj into gate_up_proj
-    """
-    load_sd = {}
-    num_layers = 32  # For Llama-8B-3.1
-
-    # Copy over directly mapped keys
-    for k in saved_sd:
-        if any(
-            x in k
-            for x in [
-                "down_proj",
-                "input_layernorm",
-                "post_attention_layernorm",
-                "o_proj",
-                "norm.weight",
-                "embed_tokens.weight",
-                "lm_head.weight",
-            ]
-        ):
-            load_sd[k] = saved_sd[k]
-
-    # Fuse QKV and gate_up_proj
-    for i in range(num_layers):
-        prefix = f"model.layers.{i}."
-
-        # QKV fusion
-        q = saved_sd[prefix + "self_attn.q_proj.weight"]
-        k = saved_sd[prefix + "self_attn.k_proj.weight"]
-        v = saved_sd[prefix + "self_attn.v_proj.weight"]
-        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
-
-        # MLP gate_up_proj fusion
-        gate = saved_sd[prefix + "mlp.gate_proj.weight"]
-        up = saved_sd[prefix + "mlp.up_proj.weight"]
-        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-
-    return load_sd
+pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
+        --config apps/grpo/qwen3_8b.yaml
+"""
 
 
-def calculate_expected_shard(
-    full_tensor: torch.Tensor,
-    param_name: str,
-    tensor_parallel_size: int,
-    rank: int,
-) -> torch.Tensor:
-    """
-    Calculate the expected shard of a full tensor for comparison with loaded tensor.
-    This is mainly used for validation in tests.
+class MockRLTrainer(RLTrainer):
+    @endpoint
+    async def zero_out_model_states(self):
+        """This simply sets all model weights to zero."""
+        for model_part in self.engine.model_parts:
+            sd = model_part.state_dict()
+            for k in sd.keys():
+                if not torch.is_floating_point(sd[k]):
+                    logger.info(
+                        f"[MockRLTrainer] zero_out_model_states(): skipping non-float param {k}"
+                    )
+                    continue
+                sd[k] *= 0.0
 
-    Args:
-        full_tensor: The full tensor to shard
-        param_name: Name of the parameter (used to determine sharding strategy)
-        expected_shape: Expected shape of the sharded tensor
-        tensor_parallel_size: Number of tensor parallel ranks
-        rank: Current rank
 
-    Returns:
-        torch.Tensor: The expected sharded tensor for this rank
-    """
-
-    sharding = VLLMSharding(tensor_parallel_size, rank)
-    shard_dim, is_sharded = sharding._get_tensor_parallel_sharding_strategy(param_name)
-
-    if not is_sharded:
-        return full_tensor
-
-    sharded_tensor = sharding._calculate_tensor_shard(
-        full_tensor, shard_dim, tensor_parallel_size, rank
+# exceptions sometimes are not propogated in monarch, do it manually
+def validate_fn(prev_params, curr_model, logger) -> Exception | None:
+    """Validate that current parameters are the same as prev_params."""
+    verified = set()
+    skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() =  {curr_model.named_parameters()}"
     )
-    return sharded_tensor
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
+            assert name in prev_params, f"Param {name} not found in prev_params"
+            assert torch.allclose(
+                prev_params[name], param.cpu(), atol=1e-3, rtol=1e-2
+            ), (
+                f"current param {name} does not match expected value; "
+                f"previous param ({prev_params[name].size()})= {prev_params[name]}; "
+                f"expected = {prev_params[name]} vs got = {param.cpu().size()} {param.cpu()}"
+            )
+            verified.add(name)
+        except Exception as e:
+            # logger.error(f"Validation failed with exception: {e}")
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
 
 
-def validate_loaded_tensors_equals_original(
-    loaded_state_dict: dict[str, torch.Tensor],
-    original_state_dict: dict[str, torch.Tensor],
-    tensor_parallel_size: int,
-    rank: int,
-):
-    """
-    Shared validation function to verify that every tensor loaded by the policy
-    equals the original tensor.
-
-    For tensor parallel cases, instead of gathering sharded tensors, we shard
-    the original tensor and compare it with the loaded shard.
-    """
-    for param_name, loaded_tensor in loaded_state_dict.items():
-        if param_name in original_state_dict:
-            original_tensor = original_state_dict[param_name]
-
-            if tensor_parallel_size > 1:
-                original_shard = calculate_expected_shard(
-                    original_tensor,
-                    param_name,
-                    tensor_parallel_size,
-                    rank,
-                )
-                tensor_to_compare = original_shard.cpu().float()
-            else:
-                tensor_to_compare = original_tensor.cpu().float()
-
-            # Training trainer emitted and loaded tensors are of type bfloat16,
-            # where as a HF model loaded(expected) tensor has type float16.
-            if not torch.allclose(
-                loaded_tensor.float(),
-                tensor_to_compare,
-                rtol=1e-2,
-                atol=1e-3,
-            ):
-                logger.warning(
-                    f"Loaded tensor {param_name} does not equal original.\n"
-                    f"dtype = {loaded_tensor.dtype} vs {original_tensor.dtype}\n"
-                    f"shape= {loaded_tensor.shape} vs {original_tensor.shape}\n,"
-                    f"values = {loaded_tensor} vs {original_tensor}"
-                )
-                raise ValueError(
-                    f"Loaded tensor {param_name} does not equal original "
-                    f"(shapes: loaded={loaded_tensor.shape}, expected={tensor_to_compare.shape})"
-                )
-            else:
-                print(f"Loaded tensor {param_name} correctly validated")
-
-    print(
-        f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original"
+# exceptions sometimes are not propogated in monarch, do it manually
+def validate_fn_all_zeros(prev_params, curr_model, logger) -> Exception | None:
+    """Validate all parameters are set to zero. prev_params is actually not used."""
+    _ = prev_params
+    verified = set()
+    skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() =  {curr_model.named_parameters()}"
     )
-
-
-def get_configs(
-    worker_size: int, tp_size: int, model_name: str
-) -> tuple[dict, ServiceConfig]:
-    engine_config = EngineConfig(
-        model=model_name,
-        tensor_parallel_size=tp_size,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-    )
-    sampling_config = SamplingConfig(
-        n=3,
-        guided_decoding=True,
-    )
-    policy_config = {
-        "engine_config": engine_config,
-        "sampling_config": sampling_config,
-    }
-    service_config = ServiceConfig(procs=worker_size, num_replicas=1, with_gpus=True)
-    return policy_config, service_config
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
+            param = param.cpu()
+            assert torch.allclose(
+                torch.zeros_like(param), param, atol=1e-4, rtol=1e-3
+            ), "param {name} is not zero."
+            verified.add(name)
+        except Exception as e:
+            # logger.error(f"Validation failed with exception: {e}")
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
 
 
 class TestWeightSync:
-    """Tests for weight sync between trainer and policy. Currently hardcoded to Qwen3-1.7B."""
+    """Tests for weight sync between trainer and policy."""
 
-    model = "Qwen/Qwen3-1.7B"
-    to_vllm_fn: Callable = _qwen3_hf_to_vllm
-    num_layers = 28
+    def _load_config(self, config_path: str) -> DictConfig:
+        cfg = None
+        try:
+            cfg = OmegaConf.load(config_path)
+        except Exception as e:
+            pytest.fail(f"Failed to load config file {config_path}: {e}")
 
-    @pytest_asyncio.fixture
-    def trainer_cfg(self):
-        cached_dir = snapshot_download(repo_id=self.model)
-        return {
-            "model": {
-                "name": "qwen3",
-                "flavor": "1.7B",
-            },
-            "checkpoint": {
-                "enable": True,
-                "folder": "/tmp/saved_checkpoints",
-                "initial_load_path": cached_dir,
-                "initial_load_in_hf": True,
-            },
-        }
+        assert isinstance(cfg, DictConfig)
 
-    @pytest_asyncio.fixture
-    def trainer_cfg_tp(self):
-        # NB: TP size is set to  2.
-        cached_dir = snapshot_download(repo_id=self.model)
-        return {
-            "model": {
-                "name": "qwen3",
-                "flavor": "1.7B",
-            },
-            "parallelism": {"tensor_parallel_degree": 2},
-            "checkpoint": {
-                "enable": True,
-                "folder": "/tmp/saved_checkpoints",
-                "initial_load_path": cached_dir,
-                "initial_load_in_hf": True,
-            },
-        }
-
-    @pytest_asyncio.fixture
-    def expected_sd(self):
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-        )
-        original_state_dict = model.state_dict()
-        # Hack to access through class without passing in self param
-        return self.__class__.to_vllm_fn(original_state_dict, self.num_layers)
+        cfg = resolve_hf_hub_paths(cfg)
+        return cfg
 
     @pytest.mark.asyncio
     @requires_cuda
-    async def test_policy_update_single(self, expected_sd, trainer_cfg):
+    async def test_sanity_check(self, request):
         """
-        1. Loads weights from HF model into in-memory state-dict (source of truth)
-        2. Initializes RLTrainer, make the weights available in torchstore.
-        3. Initializes Policy, and calls update_weights() to load weights from torchstore.
-        4. Validate the policy weights against source of truth.
-        """
-        worker_size = 1
-        # 1. Initialize TS
-        await ts.initialize()
-        # 2. Trainer push
-        rl_trainer = await RLTrainer.options(
-            procs=worker_size, with_gpus=True, num_replicas=1
-        ).as_service(**trainer_cfg)
+        Sanity check for weight sync sharding between RLTrainer and Policy for a given model config.
 
-        await rl_trainer.push_weights.choose(policy_version=0)
-        # 3. Policy pull weights
-        policy_config, service_config = get_configs(
-            worker_size=worker_size, tp_size=worker_size, model_name=self.model
-        )
-        policy = await Policy.options(**asdict(service_config)).as_service(
-            **policy_config
-        )
-        await policy.update_weights.call()
-        # 4. Validate weights
-        loaded_state_dict = await policy._get_model_params.choose()
-        validate_loaded_tensors_equals_original(
-            loaded_state_dict, expected_sd, tensor_parallel_size=1, rank=0
-        )
+        The check performs the following steps:
+        - Initialize trainer and push weights v0 (original huggingface ckpt)
+        - Step the trainer, setting all weights to zero and push weights v1
+        - Load weights v0 and check the policy has all zero weights
+        - Load weights v1 and check the policy has all the weights back
 
-    @pytest.mark.asyncio
-    @requires_cuda
-    async def test_policy_update_tp(self, expected_sd, trainer_cfg_tp):
         """
-        1. Init RLTrainer over multiple workers with TP parallelism strategy.
-        2. Push weights in to torchstore.
-        3. Initializes Policy over multiple workers, and calls update_weights() to load weights from torchstore.
-        4. Validate the policy weights against manually loaded origina HF weights.
-        """
-        # test configs/paralleism
-        trainer_worker_size = 2
-        policy_worker_size = 2
-        tp_size = 2
-
-        if torch.cuda.device_count() < 2:
+        # Test setup
+        config_path = request.config.getoption("--config", default=None)
+        if not config_path:
             pytest.skip(
-                f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
+                "No config file provided. Use --config <path> to specify a YAML config file"
             )
-        # 1. Initialize TS
+
+        use_dcp_override = request.config.getoption("--use_dcp")
+        cfg = self._load_config(config_path=config_path)
+
+        trainer_proc_size = cfg.actors.trainer.procs
+        policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
+
+        if policy_tp_size != cfg.services.policy.procs:
+            pytest.fail(
+                f"Expect policy proc = {cfg.services.policy.procs} to be equal to tensor parallel size = {policy_tp_size}"
+            )
+
+        model_card = cfg.model
+
+        logger.info(f"Running sanity check with config: {config_path}")
+        logger.info(f"Model name: {model_card}")
+        logger.info(f"Trainer proc size: {trainer_proc_size}")
+        logger.info(f"Policy tensor parallel size: {policy_tp_size}")
+
+        logger.info("Downloading model checkpoint from HuggingFace Hub")
+        cached_dir = snapshot_download(repo_id=model_card)
+        logger.info("Finished downloading model checkpoint from HuggingFace Hub")
+
         await ts.initialize()
-        # 2. Trainer push
-        rl_trainer = await RLTrainer.options(
-            procs=trainer_worker_size, with_gpus=True, num_replicas=1
-        ).as_service(**trainer_cfg_tp)
+        services_policy_cfg = cfg.services.policy
+        services_policy_cfg.num_replicas = 1
 
-        await rl_trainer.push_weights.call(policy_version=0)
-        # 3. Policy pull weights
-        policy_config, service_config = get_configs(
-            worker_size=policy_worker_size, tp_size=tp_size, model_name=self.model
-        )
-        policy = await Policy.options(**asdict(service_config)).as_service(
-            **policy_config
-        )
-        await policy.update_weights.call()
+        trainer_cfg = cfg.trainer
+        trainer_cfg.checkpoint = {
+            "enable": True,
+            "folder": "/tmp/saved_checkpoints",
+            "initial_load_path": cached_dir,
+            "initial_load_in_hf": True,
+        }
+        if use_dcp_override is not None:
+            trainer_cfg["use_dcp"] = use_dcp_override
+            logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
 
-        # validate loaded shard of each worker againt manually calculated shard (expected shard).
+        with TemporaryDirectory(dir="/dev/shm/") as tmpdir:
+            trainer_cfg["dcp_path"] = tmpdir
+            policy, rl_trainer = await asyncio.gather(
+                *[
+                    Policy.options(**services_policy_cfg).as_service(**cfg.policy),
+                    MockRLTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
+                ]
+            )
 
-        # 4. Validate weight shards. We compare vLLM loades shard content with
-        #    Directly loaded HF shard content.
-        sharded_state_dicts = await policy._get_model_params.call()
-        validate_loaded_tensors_equals_original(
-            sharded_state_dicts[0][0], expected_sd, tensor_parallel_size=tp_size, rank=0
-        )
-        validate_loaded_tensors_equals_original(
-            sharded_state_dicts[0][1], expected_sd, tensor_parallel_size=tp_size, rank=1
-        )
+            # Main logic begins here
+            v0 = uuid.uuid4().int
+            v1 = v0 + 1
+
+            await rl_trainer.push_weights.call(policy_version=v0)
+            # Setting everything to zero
+            await rl_trainer.zero_out_model_states.call()
+            await rl_trainer.push_weights.call(policy_version=v1)
+            await policy._test_save_model_params.fanout()
+
+            # Sanity check that before update all the tests pass
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            await policy.update_weights.fanout(policy_version=v1)
+            all_errs = await policy._test_validate_model_params.fanout(
+                validate_fn_all_zeros
+            )
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            # Reloading v0, getting back original weights
+            await policy.update_weights.fanout(policy_version=v0)
+            all_errs = await policy._test_validate_model_params.fanout(validate_fn)
+            for errs in all_errs:
+                for _, e in errs.items():
+                    assert not e, f"Validation failed with exception: {e}"
+
+            logger.info("✅ Weight sharding sanity check passed!")
+            await ts.shutdown()

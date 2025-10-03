@@ -1,6 +1,7 @@
 # GRPO Training Configuration
 # Currently a fork of the main yaml, this just shows
 # placement of trainer and inference servers on separate hosts.
+# >>> python -m apps.grpo.main --config apps/grpo/qwen3_multinode.yaml
 
 # Global configuration
 group_size: 8
@@ -8,6 +9,15 @@ batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
+
+# Observability configuration
+metric_logging:
+  wandb:
+    project: "grpo-training"
+    group: "grpo_exp_${oc.env:USER}"
+    reduce_across_ranks: True
+  console:
+    reduce_across_ranks: True
 
 # Dataset configuration
 dataset:
@@ -46,28 +56,11 @@ ref_model:
   model_name: ${model}
 
 services:
-  dataset:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   policy:
     procs: 1
     hosts: 1
     num_replicas: 1
     with_gpus: true
-  trainer:
-    procs: 1
-    hosts: 1
-    num_replicas: 1
-    with_gpus: true
-  replay_buffer:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
-  compute_advantages:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
   ref_model:
     procs: 1
     num_replicas: 1
@@ -75,4 +68,19 @@ services:
   reward_actor:
     procs: 1
     num_replicas: 1
+    with_gpus: false
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+  compute_advantages:
+    procs: 1
+    with_gpus: false
+  trainer:
+    procs: 1
+    hosts: 1
+    with_gpus: true
+  replay_buffer:
+    procs: 1
     with_gpus: false
