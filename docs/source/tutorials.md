@@ -6,5 +6,4 @@
 ```{toctree}
 :maxdepth: 1
 
-tutorials/rl_fundamentals_forge_tutorial.html
 ```
