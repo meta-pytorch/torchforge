@@ -114,33 +114,36 @@ Let's look at the example from above again, but this time we would use the names
 # Conceptual Example
 
 async def conceptual_forge_rl_step(services, step):
-    # 1. Get a math problem - CONCEPTUAL API
-    sample = await services['dataloader'].get_sample()
-    question, target = sample["question"], sample["answer"]
+    # 1. Get a math problem - Using actual DatasetActor API
+    sample = await services['dataloader'].sample.call_one()
+    question, target = sample["request"], sample["target"]
     
-    # 2. Student generates answer - CONCEPTUAL API
-    # Actual method names vary by implementation
-    responses = await services['policy'].generate(prompt=question)
+    # 2. Student generates answer - Using actual Policy API
+    responses = await services['policy'].generate.route(prompt=question)
     answer = responses[0].text  
     
-    # 3. Teacher grades it - CONCEPTUAL API  
-    # Actual reward evaluation varies by implementation
-    score = await services['reward_actor'].evaluate(
+    # 3. Teacher grades it - Using actual RewardActor API
+    score = await services['reward_actor'].evaluate_response.route(
         prompt=question, response=answer, target=target
     )
     
-    # 4. Compare to baseline - CONCEPTUAL API
-    ref_logprobs = await services['ref_model'].compute_baseline(responses[0].token_ids)
+    # 4. Compare to baseline - Using actual ReferenceModel API
+    # Note: ReferenceModel.forward requires input_ids, max_req_tokens, return_logprobs
+    ref_logprobs = await services['ref_model'].forward.route(
+        input_ids, max_req_tokens, return_logprobs=True
+    )
     
-    # 5. Store experience - CONCEPTUAL Episode structure
-    # Real Episode structure in src/forge/data_models/episode.py
-    episode = create_episode(responses[0], score, ref_logprobs, step)
-    await services['replay_buffer'].store(episode)
+    # 5. Store experience - Using actual Episode structure from apps/grpo/main.py
+    episode = create_episode_from_response(responses[0], score, ref_logprobs, step)
+    await services['replay_buffer'].add.call_one(episode)
     
-    # 6. Improve student - CONCEPTUAL API
-    batch = await services['replay_buffer'].get_batch(policy_version=step)
+    # 6. Improve student - Using actual training pattern
+    batch = await services['replay_buffer'].sample.call_one(
+        curr_policy_version=step
+    )
     if batch is not None:
-        loss = await services['trainer'].update_policy(batch)
+        inputs, targets = batch
+        loss = await services['trainer'].train_step.call(inputs, targets)
         return loss
 ```
 
@@ -234,34 +237,38 @@ Let's see how core RL concepts map to Forge services:
 async def real_rl_training_step(services, step):
     """Single RL step using verified Forge APIs"""
     
-    # 1. Environment interaction
-    sample = await services['dataloader'].__next__.call_one()
-    prompt, target = sample["question"], sample["answer"]
+    # 1. Environment interaction - Using actual DatasetActor API
+    sample = await services['dataloader'].sample.call_one()
+    prompt, target = sample["request"], sample["target"]
     
-    responses = await services['policy'].generate.route(prompt=prompt)
+    responses = await services['policy'].generate.route(prompt)
     
-    # 2. Reward computation
+    # 2. Reward computation - Using actual RewardActor API
     score = await services['reward_actor'].evaluate_response.route(
         prompt=prompt, response=responses[0].text, target=target
     )
     
-    # 3. Get reference logprobs
-    ref_logprobs = await services['ref_model'].forward.route(responses[0].token_ids)
+    # 3. Get reference logprobs - Using actual ReferenceModel API
+    # Note: ReferenceModel requires full input_ids tensor, not just tokens
+    input_ids = torch.cat([responses[0].prompt_ids, responses[0].token_ids])
+    ref_logprobs = await services['ref_model'].forward.route(
+        input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True
+    )
     
-    # 4. Experience storage - Episode creation pattern
-    # Note: Actual Episode structure requires token tensors, not text
+    # 4. Experience storage - Using actual Episode pattern from GRPO
     episode = create_episode_from_response(responses[0], score, ref_logprobs, step)
     await services['replay_buffer'].add.call_one(episode)
     
-    # 5. Learning - trainer endpoint
+    # 5. Learning - Using actual trainer pattern
     batch = await services['replay_buffer'].sample.call_one(
         curr_policy_version=step
     )
     if batch is not None:
-        loss = await services['trainer'].train_step.call_one(batch)
+        inputs, targets = batch  # GRPO returns (inputs, targets) tuple
+        loss = await services['trainer'].train_step.call(inputs, targets)
         
-        # 6. Policy synchronization - weight update pattern
-        await services['trainer'].push_weights.call_one(step + 1)
+        # 6. Policy synchronization - Using actual weight update pattern
+        await services['trainer'].push_weights.call(step + 1)
         await services['policy'].update_weights.fanout(step + 1)
         
         return loss
@@ -287,12 +294,14 @@ Forge handles behind the scenes:
 ### Independent Scaling
 ```python
 
-from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
+from forge.actors.policy import Policy
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.controller.service import shutdown_service
-from apps.grpo.main import Trainer, RewardActor, ComputeAdvantages, RefModel, DatasetActor
+from forge.actors.reference_model import ReferenceModel
+from forge.actors.trainer import RLTrainer
+from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages
 from forge.data.rewards import MathReward, ThinkingReward
 import asyncio
+import torch
 
 model = "Qwen/Qwen3-1.7B"
 group_size = 1
@@ -306,67 +315,60 @@ group_size = 1
     ref_model,
     reward_actor,
 ) = await asyncio.gather(
-        # Dataset service
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            DatasetActor,
+        # Dataset actor (CPU)
+        DatasetActor.options(procs=1).as_actor(
             path="openai/gsm8k",
-            config_name="main",
-            split="train",
+            revision="main",
+            data_split="train",
             streaming=True,
+            model=model,
         ),
         # Policy service with GPU
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-            Policy,
-            config=PolicyConfig(
-                worker_params=WorkerConfig(model=model),
-                sampling_params=SamplingOverrides(
-                    num_samples=group_size, max_tokens=16
-                ),
-            ),
+        Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
+            engine_config={
+                "model": model,
+                "tensor_parallel_size": 1,
+                "pipeline_parallel_size": 1,
+                "enforce_eager": False
+            },
+            sampling_config={
+                "n": group_size,
+                "max_tokens": 16,
+                "temperature": 1.0,
+                "top_p": 1.0
+            }
         ),
-        # Trainer service with GPU
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, with_gpus=True, num_replicas=1),
-            Trainer,
-            learning_rate=1e-5,
-            beta=0.1,
-            model_name=model,
+        # Trainer actor with GPU
+        RLTrainer.options(procs=1, with_gpus=True).as_actor(
+            # Trainer config would come from YAML in real usage
+            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+            optimizer={"name": "AdamW", "lr": 1e-5},
+            training={"local_batch_size": 2, "seq_len": 2048}
         ),
         # Replay buffer (CPU)
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            ReplayBuffer,
+        ReplayBuffer.options(procs=1).as_actor(
             batch_size=2,
             max_policy_age=1,
+            dp_size=1
         ),
         # Advantage computation (CPU)
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            ComputeAdvantages,
-            gamma=0.99,
-            lambda_=0.95,
-        ),
+        ComputeAdvantages.options(procs=1).as_actor(),
         # Reference model with GPU
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1, with_gpus=True),
-            RefModel,
-            model_name=model,
+        ReferenceModel.options(procs=1, with_gpus=True).as_actor(
+            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+            training={"dtype": "bfloat16"}
         ),
         # Reward actor (CPU)
-        spawn_service(
-            ServiceConfig(procs_per_replica=1, num_replicas=1),
-            RewardActor,
-            reward_functions=[MathReward(), ThinkingReward()],
+        RewardActor.options(procs=1, num_replicas=1).as_service(
+            reward_functions=[MathReward(), ThinkingReward()]
         )
     )
 ```
 
-Production scaling - multiply num_replicas:
+Production scaling - multiply num_replicas for services or spawn multiple actors:
 - Policy: num_replicas=8 for high inference demand
 - RewardActor: num_replicas=16 for parallel evaluation
-- Trainer: num_replicas=4 for distributed training
+- Trainer: Multiple actors for distributed training (RLTrainer handles this internally)
 
 
 ### Fault Tolerance
