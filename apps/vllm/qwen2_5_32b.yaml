@@ -1,6 +1,6 @@
 policy:
   engine_config:
-    model: "Qwen/Qwen2.5-32B"
+    model: "Qwen/Qwen2.5-32B-Instruct"
     tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: true
@@ -21,5 +21,6 @@ services:
 
 num_calls: 1
 # Optional, otherwise argparse fallback kicks in
-prompt: "Write a Python function that calculates the factorial of a number and test it with factorial(5). Please wrap your code in ```python``` code blocks."
+prompt: "Given a list of 2 strings, return how many times the latter appears as a substring. Test it with substring('atatanakunakatta', 'ta')"
+# prompt: "Write a function that calculates the factorial of a number. Test it with factorial(5)."
 with_coder: true

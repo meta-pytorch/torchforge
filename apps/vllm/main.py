@@ -58,7 +58,8 @@ async def run(cfg: DictConfig):
     # Use different prompts based on whether we're using coder
     if cfg.with_coder:
         if (prompt := cfg.get("prompt")) is None:
-            prompt = "Write a Python function that calculates the factorial of a number and test it with factorial(5). Include the test call and print the result. Please wrap your code in ```python``` code blocks."
+            prompt = "Write a Python function that calculates the factorial of a number and test it with factorial(5). \
+            Include the test call and print the result. Please wrap your code in ```python``` code blocks."
     else:
         if (prompt := cfg.get("prompt")) is None:
             gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
@@ -66,6 +67,37 @@ async def run(cfg: DictConfig):
 
     print("Spawning services...")
     policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+
+    def _wrap_prompt(prompt: str) -> str:
+        system_prompt = """
+        You are an expert programmer. Return a Python function that satisfies the request.
+        - Include the test call provided and print the result.
+        - Wrap your code in ```python``` code blocks.
+        - After the code block, output the test call result prefixed with [DONE] <output>, where <output> is the actual result.
+        - Do not explain your reasoning or provide any commentary —just provide the code and the test call result.
+
+        Example Response:
+        ```python
+        def function(a):
+            return a
+        print(function(42))
+        ```
+
+        [DONE] 42
+        """
+        as_chat = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        from vllm.transformers_utils.tokenizer import get_tokenizer
+
+        tokenizer = get_tokenizer(cfg.policy.engine_config.model)
+
+        formatted_request = tokenizer.apply_chat_template(
+            as_chat, tokenize=False, add_generation_prompt=True
+        )
+        return formatted_request
 
     coder = None
     with_coder = cfg.get("with_coder", False)
@@ -81,8 +113,9 @@ async def run(cfg: DictConfig):
     print("Requesting generation...")
     n = cfg.num_calls
     start = time.time()
+    wrapped_prompt = _wrap_prompt(prompt)
     response_outputs: list[Completion] = await asyncio.gather(
-        *[policy.generate.route(prompt=prompt) for _ in range(n)]
+        *[policy.generate.route(prompt=wrapped_prompt) for _ in range(n)]
     )
     end = time.time()
 
@@ -100,7 +133,7 @@ async def run(cfg: DictConfig):
 
         # If we have a coder, try to execute the generated code
         if coder and with_coder:
-            print(f"Parsing and executing generated code...")
+            print("Parsing and executing generated code...")
             try:
                 # Extract Python code from tags
                 python_code = extract_python_code(response.text)
