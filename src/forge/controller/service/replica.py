@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -159,10 +159,9 @@ class Replica:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
 
-            self.actor = await self.actor_def.launch(
-                *self.actor_args,
-                **self.actor_kwargs,
-            )
+            self.actor = await self.actor_def.options(
+                **asdict(self.proc_config)
+            ).as_actor(*self.actor_args, **self.actor_kwargs)
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()
@@ -220,6 +219,11 @@ class Replica:
 
         # Accept requests in all other states - let the processing loop handle the rest
         await self.request_queue.put(request)
+
+    async def enqueue_batch(self, requests: list[ServiceRequest]):
+        """Enqueues a batch of requests for processing by this replica."""
+        for req in requests:
+            await self.enqueue_request(req)
 
     async def _process_single_request(self, request: ServiceRequest) -> bool:
         """Processes a single request and returns success status.
