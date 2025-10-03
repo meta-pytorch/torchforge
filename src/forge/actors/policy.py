@@ -176,7 +176,12 @@ class Policy(PolicyInterface):
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
-        # TODO enable policy_proc on for colocation, not working right now.
+        # TODO - issues/144 we will want to ensure colocation with workers
+        # We're currently locating the Policy on the local host proc mesh
+        # vLLM initialization without setting env variables at proc_mesh creation
+        # level leads to issues.
+        # Once we can create multiple proc meshes on a host mesh, we can ensure
+        # host colocation
         policy_proc_config = copy(process_config)
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
