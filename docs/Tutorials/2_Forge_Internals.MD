@@ -58,7 +58,7 @@ Policy.options(
     num_replicas=4,    # Number of replicas  
     with_gpus=True     # Allocate GPUs
     # Other available options:
-    # hosts=None
+    # hosts=None   #  the number of remote hosts used per replica
 )
 ```
 
