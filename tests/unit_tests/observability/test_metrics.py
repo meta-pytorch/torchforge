@@ -231,7 +231,7 @@ class TestMetricCollector:
         collector = MetricCollector()
         metric = Metric("test", 1.0, Reduce.MEAN)
 
-        with pytest.raises(ValueError, match="Collector not initialized"):
+        with pytest.raises(ValueError, match="MetricCollector was not initialized"):
             collector.push(metric)
 
     def test_invalid_metric_type_raises_error(self, mock_rank):
@@ -241,7 +241,7 @@ class TestMetricCollector:
         collector.per_rank_no_reduce_backends = []
         collector.per_rank_reduce_backends = []
 
-        with pytest.raises(TypeError, match="Expected Metric object"):
+        with pytest.raises(TypeError, match="Expected .* object, got"):
             # Type ignore because we're intentionally testing invalid input
             collector.push("invalid_metric")  # type: ignore
 
@@ -268,7 +268,7 @@ class TestMetricCollector:
         assert len(reduce_backend.logged_metrics) == 0
 
         # Test flush
-        result = await collector.flush(train_step=1, return_state=True)
+        result = await collector.flush(step=1, return_state=True)
 
         # Should have returned state
         assert "loss" in result
@@ -287,7 +287,7 @@ class TestMetricCollector:
     async def test_flush_uninitialized_returns_empty(self, mock_rank):
         """Test MetricCollector.flush() returns empty dict when uninitialized."""
         collector = MetricCollector()
-        result = await collector.flush(train_step=1, return_state=True)
+        result = await collector.flush(step=1, return_state=True)
         assert result == {}
 
     @pytest.mark.asyncio
@@ -298,7 +298,7 @@ class TestMetricCollector:
         collector.per_rank_no_reduce_backends = []
         collector.per_rank_reduce_backends = []
 
-        result = await collector.flush(train_step=1, return_state=True)
+        result = await collector.flush(step=1, return_state=True)
         assert result == {}
 
 
@@ -391,10 +391,10 @@ class TestBackends:
 
         # Test log_immediate
         metric = Metric("test", 1.0, Reduce.MEAN)
-        backend.log_immediate(metric, train_step=1)  # Should not raise
+        backend.log_immediate(metric, step=1)  # Should not raise
 
         # Test log
-        await backend.log([metric], train_step=1)  # Should not raise
+        await backend.log([metric], step=1)  # Should not raise
 
         await backend.finish()  # Should not raise
 

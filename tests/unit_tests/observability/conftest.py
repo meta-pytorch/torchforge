@@ -23,10 +23,11 @@ class MockBackend(LoggerBackend):
         self.finish_called = False
         self.metadata = {}
 
-    async def init(self, role="local", primary_logger_metadata=None):
+    async def init(self, role="local", primary_logger_metadata=None, actor_name=None):
         self.init_called = True
         self.role = role
         self.primary_logger_metadata = primary_logger_metadata or {}
+        self.actor_name = actor_name
 
     def log_immediate(self, metric, step, *args, **kwargs):
         self.immediate_metrics.append((metric, step))

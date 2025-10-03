@@ -8,6 +8,8 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
+from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
+
 from forge.observability.metrics import (
     get_logger_backend_class,
     LoggerBackend,
@@ -15,11 +17,8 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
-from forge.observability.metrics import Role
 
 from forge.observability.utils import detect_actor_name_from_call_stack
-
-from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +131,13 @@ class LocalFetcherActor(Actor):
 
     @endpoint
     async def flush(
-        self, train_step: int, return_state: bool = False
+        self, step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
         This should only ever be called by the global logger.
 
         Args:
-            train_step (int): train step used by backends to align all metrics on the same x-axis
+            step (int): step used by backends to align all metrics on the same x-axis
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
@@ -146,7 +145,7 @@ class LocalFetcherActor(Actor):
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         collector = MetricCollector()
-        result = await collector.flush(train_step, return_state=return_state)
+        result = await collector.flush(step, return_state=return_state)
         return result
 
     @endpoint
@@ -154,18 +153,18 @@ class LocalFetcherActor(Actor):
         self,
         metadata_per_primary_backend: Dict[str, Dict[str, Any]],
         config: Dict[str, Any],
-        train_step: int = 0,
+        step: int = 0,
     ):
         """Init local (per-rank) logger backends and MetricCollector.
 
         Args:
             metadata_per_primary_backend: Metadata from primary backends for shared state.
             config: Backend configurations with logging modes and settings.
-            train_step: Initial training step for metrics.
+            step: Initial step for metrics.
         """
         collector = MetricCollector()
         await collector.init_backends(
-            metadata_per_primary_backend, config, train_step, actor_name=self.actor_name
+            metadata_per_primary_backend, config, step, actor_name=self.actor_name
         )
 
     @endpoint
@@ -176,7 +175,7 @@ class LocalFetcherActor(Actor):
 
 
 class GlobalLoggingActor(Actor):
-    """Coordinates metric logging across all ranks for every training step.
+    """Coordinates metric logging across all ranks for every step.
 
     Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
     for per-rank and/or global reduction logging modes.
@@ -256,7 +255,7 @@ class GlobalLoggingActor(Actor):
             mode = backend_config["logging_mode"]
 
             backend = get_logger_backend_class(backend_name)(backend_config)
-            await backend.init(role=Role.GLOBAL)
+            await backend.init(role="global")
 
             # Extract metadata for per-rank shared modes
             if mode != LoggingMode.GLOBAL_REDUCE:
@@ -302,13 +301,13 @@ class GlobalLoggingActor(Actor):
         del self.fetchers[name]
 
     @endpoint
-    async def flush(self, train_step: int):
+    async def flush(self, step: int):
         """
         Triggers parallel flush/reset on all registered fetchers. Per-rank MetricCollectors
         log to local backends and return states if needed for cross-rank reduction.
 
         Args:
-            train_step (int): Training step for logging.
+            step (int): step for logging.
         """
         if not self.fetchers:
             return
@@ -327,14 +326,12 @@ class GlobalLoggingActor(Actor):
             for backend_config in config.values()
         )
 
-        logger.debug(
-            f"Global flush for train_step {train_step}: {len(self.fetchers)} fetchers"
-        )
+        logger.debug(f"Global flush for step {step}: {len(self.fetchers)} fetchers")
 
         # Broadcast flush to all fetchers
         results = await asyncio.gather(
             *[
-                f.flush.call(train_step, return_state=requires_reduce)
+                f.flush.call(step, return_state=requires_reduce)
                 for f in self.fetchers.values()
             ],
             return_exceptions=True,
@@ -362,7 +359,7 @@ class GlobalLoggingActor(Actor):
             all_local_states = extract_values_from_valuemesh(results)
 
             if not all_local_states:
-                logger.warning(f"No states to reduce for train_step {train_step}")
+                logger.warning(f"No states to reduce for step {step}")
                 return
 
             # Reduce metrics from states
@@ -370,7 +367,7 @@ class GlobalLoggingActor(Actor):
 
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
-                await backend.log(reduced_metrics, train_step)
+                await backend.log(reduced_metrics, step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:

@@ -38,12 +38,12 @@ class TestBasicOperations:
     async def test_local_fetcher_flush(self, local_fetcher):
         """Test LocalFetcherActor flush operations."""
         result_with_state = await local_fetcher.flush.call_one(
-            train_step=1, return_state=True
+            step=1, return_state=True
         )
         assert result_with_state == {}
 
         result_without_state = await local_fetcher.flush.call_one(
-            train_step=1, return_state=False
+            step=1, return_state=False
         )
         assert result_without_state == {}
 
@@ -57,7 +57,7 @@ class TestBasicOperations:
         assert has_fetcher is False
 
         # Global logger flush (should not raise error)
-        await global_logger.flush.call_one(train_step=1)
+        await global_logger.flush.call_one(step=1)
 
     @pytest.mark.asyncio
     async def test_backend_init(self, local_fetcher):
@@ -65,7 +65,7 @@ class TestBasicOperations:
         metadata = {"wandb": {"shared_run_id": "test123"}}
         config = {"console": {"logging_mode": "per_rank_reduce"}}
 
-        await local_fetcher.init_backends.call_one(metadata, config, train_step=5)
+        await local_fetcher.init_backends.call_one(metadata, config, step=5)
         await local_fetcher.shutdown.call_one()
 
 
@@ -118,14 +118,16 @@ class TestBackendConfiguration:
     @pytest.mark.asyncio
     async def test_invalid_backend_configs(self, global_logger):
         """Test invalid backend configurations raise errors."""
-        invalid_configs = [
-            {"console": {}},  # missing logging_mode
-            {"console": {"logging_mode": "invalid_mode"}},  # invalid mode
-        ]
+        from monarch.actor import ActorError
 
-        for invalid_config in invalid_configs:
-            with pytest.raises(Exception):
-                await global_logger.init_backends.call_one(invalid_config)
+        # Missing logging_mode should work (has fallback to global_reduce)
+        await global_logger.init_backends.call_one({"console": {}})
+
+        # Invalid logging_mode should raise error (wrapped in ActorError since it's in an actor call)
+        with pytest.raises(ActorError):
+            await global_logger.init_backends.call_one(
+                {"console": {"logging_mode": "invalid_mode"}}
+            )
 
 
 class TestErrorHandling:
@@ -174,12 +176,17 @@ class TestSynchronousLogic:
         assert result["logging_mode"] == LoggingMode.PER_RANK_REDUCE
         assert result["project"] == "test_project"
 
-        # Test 2: Missing logging_mode error
-        with pytest.raises(ValueError, match="missing required 'logging_mode'"):
-            actor._validate_backend_config("test_backend", {"project": "test_project"})
+        # Test 2: Missing logging_mode (should work with default)
+        result2 = actor._validate_backend_config(
+            "test_backend", {"project": "test_project"}
+        )
+        assert (
+            result2["logging_mode"] == LoggingMode.GLOBAL_REDUCE
+        )  # Should default to global_reduce
+        assert result2["project"] == "test_project"
 
-        # Test 3: Invalid logging_mode error
-        with pytest.raises(ValueError, match="invalid logging_mode"):
+        # Test 3: Invalid logging_mode error (enum will raise ValueError)
+        with pytest.raises(ValueError, match="is not a valid LoggingMode"):
             actor._validate_backend_config(
                 "test_backend", {"logging_mode": "invalid_mode"}
             )
