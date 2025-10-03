@@ -1,6 +1,6 @@
 # Part 3: The Forge-Monarch Connection
 
-This is part 3 of our series, in the previous sections: we learned [RL Concepts and how they map to Forge](./1_RL_and_Forge_Fundamentals.MD), [Forge Internals](./2_Forge_Internals.MD).
+This is part 3 of our series, in the previous sections: we learned Part 1: [RL Concepts and how they map to Forge](./1_RL_and_Forge_Fundamentals.MD), Part 2: [Forge Internals](./2_Forge_Internals.MD).
 
 Now let's peel back the layers. Forge services are built on top of **Monarch**, PyTorch's distributed actor framework. Understanding this connection is crucial for optimization and debugging.
 
