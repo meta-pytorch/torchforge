@@ -50,8 +50,7 @@ from forge.actors._torchstore_utils import (
     load_tensor_from_dcp,
 )
 
-from forge.controller import ForgeActor
-from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh, host_mesh_from_proc
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt

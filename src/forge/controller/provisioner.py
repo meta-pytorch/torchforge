@@ -15,7 +15,7 @@ import uuid
 from typing import Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, HostMesh, ProcMesh, this_host, endpoint
+from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
@@ -38,6 +38,7 @@ def _get_port() -> str:
 
 class _SetupActor(Actor):
     """An actor responsible for getting remote host information."""
+
     @endpoint
     def get_info(self) -> [str, str]:
         return socket.gethostname(), _get_port()
@@ -158,13 +159,16 @@ class Provisioner:
         num_hosts: int | None = None,
         mesh_name: Optional[str] = None,
         host_mesh: HostMesh | None = None,
-        env_vars: dict[str, str] = {},
+        env_vars: dict[str, str] | None = None,
     ):
         """Gets a proc mesh.
 
         num_hosts = None implies that you want a local allocation, this may change.
 
         """
+        if env_vars is None:
+            env_vars = {}
+
         async with self._lock:
             server_name = None
             if num_hosts is not None and num_hosts > 0:
@@ -181,15 +185,18 @@ class Provisioner:
                     self._host_gpu_map[host_id] = gpu_manager
                     host_mesh._host_id = host_id
                 else:
-                    print(f"Re-using existing host mesh: {host_mesh}")
                     host_id = host_mesh._host_id
                     gpu_manager = self._host_gpu_map[host_id]
-                    print(f"Its host id is {host_id} btw")
             else:
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
                 host_mesh._host_id = self._this_host_id
 
+            def bootstrap(env: dict[str, str]):
+                import os
+
+                for k, v in env.items():
+                    os.environ[k] = v
 
             if with_gpus:
                 addr, port = await get_remote_info(host_mesh)
@@ -202,23 +209,16 @@ class Provisioner:
                 env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
-                def bootstrap(env: dict[str, str]):
-                    import os
-                    for k, v in env.items():
-                        os.environ[k] = v
+            procs = host_mesh.spawn_procs(
+                per_host={"gpus": num_procs},
+                bootstrap=functools.partial(bootstrap, env=env_vars),
+            )
+            await self.launcher.remote_setup(procs)
 
-                procs = host_mesh.spawn_procs(
-                    per_host={"gpus": num_procs},
-                    bootstrap=functools.partial(
-                        bootstrap, env=env_vars),
-                )
-
+            # Tag the proc mesh with additional metadata for our own cleanup later
+            if with_gpus:
                 # Applies any launcher specific remote setup.
-                await self.launcher.remote_setup(procs)
                 procs._gpu_ids = gpu_ids
-            else:
-                procs = host_mesh.spawn_procs(per_host={"gpus": num_procs})
-
             procs._host = host_mesh
 
             # If we created a server, track so we can tear it down later.
@@ -234,7 +234,9 @@ class Provisioner:
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
         if proc_mesh not in self._proc_host_map:
-            raise ValueError("The proc mesh was not allocated with an associated hostmesh.")
+            raise ValueError(
+                "The proc mesh was not allocated with an associated hostmesh."
+            )
         return self._proc_host_map[proc_mesh]
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
@@ -281,8 +283,9 @@ async def _get_provisioner():
 async def get_proc_mesh(
     process_config: ProcessConfig,
     host_mesh: HostMesh | None = None,
-    env_vars: dict[str, str] = {},
-    ) -> ProcMesh:
+    env_vars: dict[str, str] | None = None,
+) -> ProcMesh:
+    """Returns a proc mesh from the provisioner."""
     provisioner = await _get_provisioner()
     return await provisioner.get_proc_mesh(
         num_procs=process_config.procs,
@@ -303,6 +306,7 @@ async def host_mesh_from_proc(proc_mesh: ProcMesh):
     """
     provisioner = await _get_provisioner()
     return await provisioner.host_mesh_from_proc(proc_mesh)
+
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
     provisioner = await _get_provisioner()
