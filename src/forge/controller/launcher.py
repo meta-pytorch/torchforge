@@ -15,6 +15,8 @@ import monarch
 
 import torchx.specs as specs
 
+from forge.types import Launcher
+
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
@@ -23,8 +25,6 @@ from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
 from omegaconf import DictConfig
-
-from forge.types import Launcher
 
 try:
     from monarch._src.actor.actor_mesh import current_rank
@@ -311,7 +311,10 @@ class Mastlauncher(BaseLauncher):
 
 
 def get_launcher(cfg: DictConfig | None = None) -> BaseLauncher:
-    launcher = cfg.get(LAUNCHER_KEY, Launcher.LOCAL.value)
+    if cfg is not None:
+        launcher = cfg.get(LAUNCHER_KEY, Launcher.LOCAL.value)
+    else:
+        launcher = Launcher.LOCAL.value
     if launcher == Launcher.MAST.value:
         return Mastlauncher(cfg)
     else:

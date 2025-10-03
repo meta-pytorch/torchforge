@@ -14,16 +14,16 @@ import socket
 import uuid
 from typing import Optional
 
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import HostMesh, ProcMesh, this_host
-from monarch.tools import commands
-from omegaconf import DictConfig
-
 from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.types import ProcessConfig
+
+from monarch._src.actor.shape import NDSlice, Shape
+from monarch.actor import HostMesh, ProcMesh, this_host
+from monarch.tools import commands
+from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -231,14 +231,15 @@ async def init_provisioner(cfg: DictConfig | None = None):
     return _provisioner
 
 
-def _get_provisioner():
+async def _get_provisioner():
     if not _provisioner:
-        raise RuntimeError("Provisioner not initialized")
+        await init_provisioner()
     return _provisioner
 
 
 async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
-    return await _get_provisioner().get_proc_mesh(
+    provisioner = await _get_provisioner()
+    return await provisioner.get_proc_mesh(
         num_procs=config.procs,
         with_gpus=config.with_gpus,
         num_hosts=config.hosts,
@@ -247,9 +248,11 @@ async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
-    return await _get_provisioner().stop_proc_mesh(proc_mesh=proc_mesh)
+    provisioner = await _get_provisioner()
+    return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
 async def shutdown():
     logger.info("Shutting down provisioner..")
-    await _get_provisioner().shutdown()
+    provisioner = await _get_provisioner()
+    return await provisioner.shutdown()
