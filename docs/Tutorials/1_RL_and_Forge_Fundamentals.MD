@@ -275,14 +275,14 @@ async def real_rl_training_step(services, step):
 ```python
 responses = await policy.generate.route(prompt=question)
 answer = responses[0].text  # responses is list[Completion]
-
-# Forge handles behind the scenes:
-# - Routing to least loaded replica
-# - GPU memory management  
-# - Batch optimization
-# - Failure recovery
-# - Auto-scaling based on demand
 ```
+
+Forge handles behind the scenes:
+- Routing to least loaded replica
+- GPU memory management  
+- Batch optimization
+- Failure recovery
+- Auto-scaling based on demand
 
 ### Independent Scaling
 ```python
@@ -361,12 +361,13 @@ group_size = 1
             reward_functions=[MathReward(), ThinkingReward()],
         )
     )
-
-# Production scaling - multiply num_replicas:
-# Policy: num_replicas=8 for high inference demand
-# RewardActor: num_replicas=16 for parallel evaluation
-# Trainer: num_replicas=4 for distributed training
 ```
+
+Production scaling - multiply num_replicas:
+- Policy: num_replicas=8 for high inference demand
+- RewardActor: num_replicas=16 for parallel evaluation
+- Trainer: num_replicas=4 for distributed training
+
 
 ### Fault Tolerance
 ```python
@@ -381,9 +382,12 @@ answer = responses[0].text
 score = await reward_actor.evaluate_response.route(
     prompt=question, response=answer, target=target
 ) 
-# -> Retries on different replica automatically
-# -> Graceful degradation if all replicas fail
-# -> System continues (may need application-level handling)
 ```
 
-This is fundamentally different from monolithic RL implementations where any component failure stops everything.
+- Retries on different replica automatically
+- Graceful degradation if all replicas fail
+- System continues (may need application-level handling)
+
+This is fundamentally different from monolithic RL implementations where any component failure stops everything!
+
+In the next Section, we will go a layer deeper and learn how ForgeServices work. Continue to [Part 2 here](./2_Forge_Internals.MD)
