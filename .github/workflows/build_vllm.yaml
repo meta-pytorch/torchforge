@@ -15,7 +15,7 @@ jobs:
   build:
     # if: github.repository_owner == 'pytorch'
     name: forge-cu129-nightly
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    uses: ebsmothers/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
     with:
