@@ -174,15 +174,14 @@ class Policy(PolicyInterface):
             with_gpus=cls.with_gpus,
             mesh_name=cls.mesh_name,
         )
+        worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # TODO enable policy_proc on for colocation, not working right now.
         policy_proc_config = copy(process_config)
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
-        # TODO enable policy_proc on for colocation, not working right now.
-        # host_mesh = await host_mesh_from_proc(policy_proc)
-        # worker_procs = await get_proc_mesh(process_config=process_config, host_mesh=host_mesh)
-        worker_procs = await get_proc_mesh(process_config=process_config)
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
