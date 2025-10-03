@@ -155,13 +155,13 @@ These communication patterns (\"adverbs\") determine how your service calls are 
 ```python
 responses = await policy.generate.route(prompt=question)
 answer = responses[0].text  # Extract text from Completion object
-
-# Behind the scenes:
-# 1. Health check eliminates failed replicas
-# 2. Load balancer picks least loaded healthy replica  
-# 3. Request routes to that specific replica
-# 4. Automatic retry on different replica if failure
 ```
+
+Behind the scenes:
+1. Health check eliminates failed replicas
+2. Load balancer picks least loaded healthy replica  
+3. Request routes to that specific replica
+4. Automatic retry on different replica if failure
 
 **Performance characteristics**:
 - **Latency**: Lowest (single network hop)
@@ -196,7 +196,7 @@ await policy.update_weights.fanout(new_policy_version)
 **When to use**: You want to process results as they arrive, not wait for all.
 
 ```python
-# 📝 CONCEPTUAL - Streaming requires custom implementation in your training loop
+# CONCEPTUAL - Streaming requires custom implementation in your training loop
 # The basic ReplayBuffer doesn't have built-in streaming methods
 # Pattern from apps/grpo/main.py continuous training:
 
@@ -223,7 +223,7 @@ while training:
 **When to use**: Side effects that don't need responses (notifications, cache updates).
 
 ```python
-# 📝 CONCEPTUAL - Fire-and-forget requires custom @endpoint implementations
+# CONCEPTUAL - Fire-and-forget requires custom @endpoint implementations
 # The basic services don't have broadcast methods built-in
 # You would implement custom endpoints in your ForgeActor:
 
@@ -485,36 +485,19 @@ trainer = await RLTrainer.options(
 )
 ```
 
-### Natural Backpressure Through Service APIs
-
-```python
-# backpressure pattern - The replay buffer naturally provides backpressure
-batch = await replay_buffer.sample.call_one(curr_policy_version=step)
-if batch is None:
-    # Not enough data yet - natural rate limiting
-    print("Buffer not ready, collecting more experiences...")
-    continue
-else:
-    # Proceed with training
-    loss = await trainer.train_step.call_one(batch)
-    print(f"Training loss: {loss}")
-```
-
-These patterns address the core technical challenges in distributed RL. The key insight: **Forge services handle coordination complexity automatically, letting you focus on RL algorithm logic**.
-
 ## Service Implementation Example
 
 Let's see how a reward service is actually implemented:
 
 ```python
-# ✅ COMPLETE WORKING EXAMPLE - Exact RewardActor from apps/grpo/main.py
+# Exact RewardActor from apps/grpo/main.py
 
 from forge.controller import ForgeActor
 from monarch.actor import endpoint
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.controller.service import ServiceConfig, spawn_service
 
-# EXACT class definition from apps/grpo/main.py lines 68-83  
+# class definition from apps/grpo/main.py
 class RewardActor(ForgeActor):
     def __init__(self, reward_functions: list):
         self.reward_functions = reward_functions
@@ -573,7 +556,7 @@ from forge.data.rewards import MathReward, ThinkingReward
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 
-# EXACT service creation from apps/grpo/main.py lines 322-344
+# Service creation from apps/grpo/main.py lines 322-344
 print("Initializing all services...")
 (
     dataloader,
@@ -601,7 +584,6 @@ print("Initializing all services...")
 
 print("All services initialized successfully!")
 
-# EXACT usage patterns from apps/grpo/main.py continuous training loop
 async def production_training_loop():
     """Real training loop pattern from apps/grpo/main.py"""
     step = 0
@@ -639,7 +621,6 @@ async def production_training_loop():
             print(f"Step {step}, Loss: {loss:.4f}")
             step += 1
 
-# EXACT cleanup pattern from apps/grpo/main.py lines 493-504  
 print("Shutting down services...")
 await asyncio.gather(
     DatasetActor.shutdown(dataloader),
@@ -661,3 +642,5 @@ print("All services shut down successfully!")
 5. **Coordination**: Services coordinate through shared state (replay buffer, weight versions)
 
 This is the power of the service abstraction - complex distributed coordination looks like simple async Python code.
+
+In the next part we will learn about [Monarch internals](./3_Monarch_101.MD)
