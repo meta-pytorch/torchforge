@@ -133,7 +133,6 @@ actors:
     procs: 1
     with_gpus: false
   trainer:
-    hosts: 1
     procs: 2
     with_gpus: true
   replay_buffer:
