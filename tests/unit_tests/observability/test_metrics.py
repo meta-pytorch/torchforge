@@ -268,7 +268,7 @@ class TestMetricCollector:
         assert len(reduce_backend.logged_metrics) == 0
 
         # Test flush
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(train_step=1, return_state=True)
 
         # Should have returned state
         assert "loss" in result
@@ -287,7 +287,7 @@ class TestMetricCollector:
     async def test_flush_uninitialized_returns_empty(self, mock_rank):
         """Test MetricCollector.flush() returns empty dict when uninitialized."""
         collector = MetricCollector()
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(train_step=1, return_state=True)
         assert result == {}
 
     @pytest.mark.asyncio
@@ -298,7 +298,7 @@ class TestMetricCollector:
         collector.per_rank_no_reduce_backends = []
         collector.per_rank_reduce_backends = []
 
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(train_step=1, return_state=True)
         assert result == {}
 
 
@@ -308,13 +308,16 @@ class TestReduceOperations:
     def test_empty_states(self):
         """Test reduce_metrics_states with empty input."""
         result = reduce_metrics_states([])
-        assert result == {}
+        assert result == []
 
     def test_single_state(self):
         """Test reduce_metrics_states with single state."""
         states = [{"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}}]
         result = reduce_metrics_states(states)
-        assert result == {"loss": 5.0}
+        assert len(result) == 1
+        assert result[0].key == "loss"
+        assert result[0].value == 5.0
+        assert result[0].reduction == Reduce.MEAN
 
     def test_multiple_states(self):
         """Test reduce_metrics_states with multiple states."""
@@ -324,8 +327,18 @@ class TestReduceOperations:
             {"accuracy": {"reduction_type": "sum", "total": 15.0}},
         ]
         result = reduce_metrics_states(states)
-        assert result["loss"] == 30.0 / 5.0  # 6.0
-        assert result["accuracy"] == 15.0
+
+        # Convert to dict for easier testing
+        result_dict = {metric.key: metric.value for metric in result}
+        assert result_dict["loss"] == 30.0 / 5.0  # 6.0
+        assert result_dict["accuracy"] == 15.0
+
+        # Also check reduction types
+        for metric in result:
+            if metric.key == "loss":
+                assert metric.reduction == Reduce.MEAN
+            elif metric.key == "accuracy":
+                assert metric.reduction == Reduce.SUM
 
     def test_mismatched_reduction_types_raises_error(self):
         """Test reduce_metrics_states raises error for mismatched reduction types."""
@@ -348,9 +361,11 @@ class TestReduceOperations:
         ]
         result = reduce_metrics_states(states)
 
-        assert result["loss"] == 30.0 / 5.0  # 6.0
-        assert result["accuracy"] == 5.0
-        assert result["throughput"] == 100.0
+        # Convert to dict for easier testing
+        result_dict = {metric.key: metric.value for metric in result}
+        assert result_dict["loss"] == 30.0 / 5.0  # 6.0
+        assert result_dict["accuracy"] == 5.0
+        assert result_dict["throughput"] == 100.0
 
 
 class TestBackends:
@@ -373,14 +388,13 @@ class TestBackends:
         backend = ConsoleBackend({})
 
         await backend.init(role="local")
-        assert backend.prefix == "TestActor_abcd_r0"
 
         # Test log_immediate
         metric = Metric("test", 1.0, Reduce.MEAN)
-        backend.log_immediate(metric, step=1)  # Should not raise
+        backend.log_immediate(metric, train_step=1)  # Should not raise
 
         # Test log
-        await backend.log([metric], step=1)  # Should not raise
+        await backend.log([metric], train_step=1)  # Should not raise
 
         await backend.finish()  # Should not raise
 

@@ -38,12 +38,12 @@ class TestBasicOperations:
     async def test_local_fetcher_flush(self, local_fetcher):
         """Test LocalFetcherActor flush operations."""
         result_with_state = await local_fetcher.flush.call_one(
-            step=1, return_state=True
+            train_step=1, return_state=True
         )
         assert result_with_state == {}
 
         result_without_state = await local_fetcher.flush.call_one(
-            step=1, return_state=False
+            train_step=1, return_state=False
         )
         assert result_without_state == {}
 
@@ -57,7 +57,7 @@ class TestBasicOperations:
         assert has_fetcher is False
 
         # Global logger flush (should not raise error)
-        await global_logger.flush.call_one(step=1)
+        await global_logger.flush.call_one(train_step=1)
 
     @pytest.mark.asyncio
     async def test_backend_init(self, local_fetcher):

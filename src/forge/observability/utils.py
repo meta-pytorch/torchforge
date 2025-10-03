@@ -30,7 +30,7 @@ def detect_actor_name_from_call_stack() -> str:
                 break
 
             frame_count += 1
-            if frame_count > 100:  # Prevent infinite loops
+            if frame_count > 20:  # Prevent infinite loops
                 break
 
             # Check for 'self' (instance method calls)

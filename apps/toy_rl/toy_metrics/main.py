@@ -83,16 +83,13 @@ async def main():
     group = f"grpo_exp_{int(time.time())}"
 
     # Config format: {backend_name: backend_config_dict}
-    # New LoggingMode options: GLOBAL_REDUCE, PER_RANK_REDUCE, PER_RANK_NO_REDUCE
     config = {
-        "console": {
-            "logging_mode": "per_rank_reduce"  # Deferred logging with global reduction
-        },
+        "console": {"logging_mode": "per_rank_reduce"},
         "wandb": {
             "project": "immediate_logging_test",
             "group": group,
-            "logging_mode": "per_rank_no_reduce",  # Immediate logging
-            "per_rank_share_run": False,  # Shared run across ranks
+            "logging_mode": "per_rank_no_reduce",
+            "per_rank_share_run": False,
         },
     }
 
@@ -103,15 +100,16 @@ async def main():
     trainer = await TrainActor.options(**service_config).as_service()
     generator = await GeneratorActor.options(**service_config).as_service()
 
+    # Initialize after spawning services
     await mlogger.init_backends.call_one(config)
 
-    for i in range(5):
+    for i in range(3):
         print(f"\n=== Global Step {i} ===")
         record_metric("main/global_step", 1, Reduce.MEAN)
         await trainer.train_step.fanout(i)
-        for sub in range(5):
+        for sub in range(3):
             await generator.generate_step.fanout(i, sub)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
         await mlogger.flush.call_one(i)
 
     # shutdown
