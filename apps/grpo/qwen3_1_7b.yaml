@@ -115,6 +115,7 @@ ref_model:
 # All resource allocations
 services:
   policy:
+    hosts: 1
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true

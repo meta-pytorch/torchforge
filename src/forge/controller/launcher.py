@@ -11,6 +11,7 @@ import subprocess
 import uuid
 from typing import Any
 
+import tempfile
 import monarch
 
 import torchx.specs as specs
@@ -32,28 +33,14 @@ try:
     from torchx.specs import AppState
     from torchx.specs.fb.component_helpers import Packages
 except ImportError as e:
-    print(f"Warning: Monarch meta/fb inetrnal imports failed: {e}")
-    print("Monarch functionality will be limited")
+    # This means there is an erorr with MAST
+    pass
 
 JOB_NAME_KEY = "job_name"
 LAUNCHER_KEY = "launcher"
 
 
-def _get_port() -> str:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("localhost", 0))
-        addr = s.getsockname()
-        port = addr[1]
-        return str(port)
-
-
-class SetupActor(Actor):
-    @endpoint
-    def get_info(self) -> [str, str]:
-        return socket.gethostname(), _get_port()
-
-
-class MastSetupActor(SetupActor):
+class MastSetupActor(Actor):
     @endpoint
     def mount(self, mount_dst: str):
         point = current_rank()
@@ -138,11 +125,12 @@ class Slurmlauncher(BaseLauncher):
             role.resource.cpu = 128
             role.resource.gpu = 8
 
-        # TODO - multi scheduler support
+        # Note - we cannot add in an empty workspace, so we create a fake temporary one
+        temp_workspace = tempfile.mkdtemp(prefix="forge_workspace_")
         server_config = Config(
             scheduler="slurm",
             appdef=appdef,
-            workspace=monarch.tools.config.workspace.Workspace(dirs=[""]),
+            workspace=monarch.tools.config.workspace.Workspace(dirs=[temp_workspace]),
         )
         server_info = await commands.get_or_create(
             "forge_job",
@@ -157,8 +145,7 @@ class Slurmlauncher(BaseLauncher):
         return alloc, None, server_name  # (Allocator, AllocConstraints, SeverName)
 
     async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
-        setup = procs.spawn(f"setup-{uuid.uuid1()}", SetupActor)
-        return await setup.get_info.choose()
+        return
 
 
 class Mastlauncher(BaseLauncher):
