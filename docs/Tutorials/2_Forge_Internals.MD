@@ -8,6 +8,8 @@ Now that you see the power of the service abstraction, let's understand what's a
 
 When you call `await policy_service.generate(question)`, here's what actually happens:
 
+(Don't worry, we will understand Services right in the next section!)
+
 ```mermaid
 graph TD
     Call["Your Code:<br/>await policy_service.generate"]
@@ -58,17 +60,19 @@ Policy.options(
     # Other available options:
     # hosts=None
 )
-
-# This is the ACTUAL way services are configured in Forge
 ```
 
 ### 2. Real Service Creation
 
 Services are created using the `spawn_service` function:
 
-```python
-# This is what ACTUALLY works - copied directly from the notebook
+The spawn_service() function automatically handles:
+- Spawning actor replicas across processes/GPUs
+- Load balancing with .choose() method
+- Health monitoring and failure recovery  
+- Message routing and serialization
 
+```python
 from forge.controller.service import ServiceConfig, spawn_service
 from forge.actors.policy import Policy, PolicyConfig, SamplingOverrides, WorkerConfig
 
@@ -89,12 +93,6 @@ prompt = "What is 3 + 5?"
 responses = await policy.generate.choose(prompt=prompt)
 print(f"Response: {responses[0].text}")
 
-# The spawn_service() function automatically handles:
-# - Spawning actor replicas across processes/GPUs
-# - Load balancing with .choose() method
-# - Health monitoring and failure recovery  
-# - Message routing and serialization
-
 # Cleanup when done
 await shutdown_service(policy)
 ```
@@ -103,22 +101,22 @@ await shutdown_service(policy)
 
 Forge services are implemented as ServiceActors that manage collections of your ForgeActor replicas:
 
-```python
-# Forge internals - What happens behind the scenes:
-# 1. .as_service() creates a ServiceInterface
-# 2. ServiceInterface manages N replicas of your ForgeActor class
-# 3. ServiceInterface handles routing between replicas
-# 4. You get methods like .route(), .fanout(), etc.
+Forge internals - What happens behind the scenes:
+1. `.as_service()` creates a `ServiceInterface`
+2. `ServiceInterface` manages N replicas of your `ForgeActor` class
+3. `ServiceInterface` handles routing between replicas
+4. You get methods like `.route()`, `.fanout()`, etc.
 
+```python
 # Your code sees this:
 responses = await policy.generate.route(prompt=prompt)
-
-# But behind the scenes:
-# - ServiceInterface selects healthy replica
-# - Routes message to that replica's Policy.generate() endpoint
-# - Handles failures and retries automatically
-# - Returns list[Completion] from the selected replica
 ```
+
+But behind the scenes:
+- `ServiceInterface` selects healthy replica
+- Routes message to that replica's `Policy.generate()` endpoint
+- Handles failures and retries automatically
+- Returns list[Completion] from the selected replica
 
 ### 3. Different Service Types and Their Characteristics
 
