@@ -85,7 +85,6 @@ graph LR
     end
     
     subgraph Services["Forge Services (Real Classes)"]
-    
         S1["DatasetActor"]
         S2["Policy"]
         S3["RewardActor"]
@@ -108,6 +107,8 @@ graph LR
 ```
 
 ### RL Step with Forge Services
+
+Let's look at the example from above again, but this time we would use the names from Forge:
 
 ```python
 # Conceptual Example
@@ -144,6 +145,8 @@ async def conceptual_forge_rl_step(services, step):
 ```
 
 **Key difference**: Same RL logic, but each component is now a distributed, fault-tolerant, auto-scaling service.
+
+Did you realise-we are not worrying about any Infra code here! Forge Automagically handles the details behind the scenes and you can focus on writing your RL Algorthms!
 
 
 ## Why This Matters: Traditional ML Infrastructure Fails
