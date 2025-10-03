@@ -124,9 +124,6 @@ class BaseLauncher:
 
 
 class Slurmlauncher(BaseLauncher):
-    def __init__(self, cfg: LauncherConfig | None = None):
-        self.cfg = cfg
-
     async def initialize(self) -> None:
         pass
 
@@ -309,11 +306,9 @@ class Mastlauncher(BaseLauncher):
 
 
 def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
-    if not cfg:
-        return None
-    if cfg.launcher == Launcher.MAST:
+    if not cfg or cfg.launcher == Launcher.SLURM:
+        return Slurmlauncher()
+    elif cfg.launcher == Launcher.MAST:
         return Mastlauncher(cfg)
-    elif cfg.launcher == Launcher.SLURM:
-        return Slurmlauncher(cfg)
     else:
         raise ValueError(f"Unsupported config provided, got {cfg}")

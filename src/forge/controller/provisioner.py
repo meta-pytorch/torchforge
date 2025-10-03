@@ -107,6 +107,11 @@ class Provisioner:
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
+        if not self.launcher:
+            raise RuntimeError(
+                "You tried to create a remote allocation by specifying the number of hosts on an actor or service, "
+                "but no launcher was specified."
+            )
         logger.debug(f"Creating remote server for alloc {name}")
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
