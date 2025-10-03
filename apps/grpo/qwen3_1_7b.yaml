@@ -16,11 +16,12 @@ rollout_threads: 1   # Recommended to set equal to policy.num_replicas
 # Observability configuration
 metric_logging:
   wandb:
-    project: "grpo-training"
+    project: "test"
     group: "grpo_exp_${oc.env:USER}"
-    reduce_across_ranks: True
+    logging_mode: "per_rank_no_reduce"
+    "per_rank_share_run": True
   console:
-    reduce_across_ranks: True
+    logging_mode: "per_rank_no_reduce"
 
 # Dataset configuration
 dataset:

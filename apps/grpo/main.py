@@ -335,7 +335,6 @@ async def main(cfg: DictConfig):
     # initialize before spawning services
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
-    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
@@ -362,6 +361,8 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     print("All services initialized successfully!")
 
