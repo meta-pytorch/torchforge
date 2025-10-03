@@ -2,12 +2,24 @@
 
 General utility functions and helpers used throughout TorchForge.
 
+## Distributed Computing
+
+Utilities for distributed training and communication.
+
 ```{eval-rst}
-.. currentmodule:: forge.util
+.. automodule:: forge.util.distributed
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+## Logging
 
-   metric_logging.MetricLogger
+Logging configuration and utilities.
+
+```{eval-rst}
+.. automodule:: forge.util.logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
 ```

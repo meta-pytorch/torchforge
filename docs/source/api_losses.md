@@ -2,13 +2,10 @@
 
 Loss functions for reinforcement learning and supervised fine-tuning in TorchForge.
 
-```{eval-rst}
-.. currentmodule:: forge.losses
+## GRPO Loss
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+Generalized Reward Policy Optimization (GRPO) loss implementation for reinforcement learning.
 
-   grpo_loss.SimpleGRPOLoss
-   reinforce_loss.ReinforceLoss
-```
+## Reinforce Loss
+
+Reinforce algorithm loss implementation for policy gradient methods.

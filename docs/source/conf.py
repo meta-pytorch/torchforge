@@ -43,7 +43,7 @@ def get_version_path():
 version_path = get_version_path()
 
 project = "torchforge"
-copyright = "2025, PyTorch Contributors"
+copyright = ""
 author = "PyTorch Contributors"
 release = "0.1"
 

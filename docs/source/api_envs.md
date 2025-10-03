@@ -2,15 +2,7 @@
 
 Training and inference environments for TorchForge models.
 
-```{eval-rst}
-.. currentmodule:: forge.envs
 
-.. autosummary::
-   :toctree: generated/
-   :nosignatures:
+## Chat Environment
 
-   chat.ChatAction
-   chat.ChatState
-   chat.ChatObservation
-   chat.ChatEnvironment
-```
+Chat-based environment for conversational AI training and inference.

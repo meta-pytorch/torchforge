@@ -48,13 +48,12 @@ class ChatObservation(Observation):
 
     The environment owns the tokenizer and generates the tokens from the messages.
 
-    Example::
-
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "How tall is the Eiffel Tower?"},
-        ]
-        tokens = tensor([1, 2, 3, 4, 5, ...])  # tokenized entire conversation
+    Example:
+    messages = [
+     {"role": "system", "content": "You are a helpful assistant"},
+     {"role": "user", "content": "How tall is the Eiffel Tower?"},
+    ]
+    tokens = tensor([1, 2, 3, 4, 5, ...])  # tokenized entire conversation
     """
 
     messages: list[Message] = field(default_factory=list)
