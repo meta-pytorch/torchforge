@@ -10,3 +10,4 @@ ls -l "${WHL_DIR}"
 ls ${FORGE_WHEEL}
 echo "Copying files from $WHL_DIR to $DIST"
 mkdir -p $DIST && cp -r $WHL_DIR $DIST
+ls -l "${DIST}"
