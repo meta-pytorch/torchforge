@@ -6,12 +6,12 @@
 
 import getpass
 import os
-import socket
 import subprocess
+
+import tempfile
 import uuid
 from typing import Any
 
-import tempfile
 import monarch
 
 import torchx.specs as specs
