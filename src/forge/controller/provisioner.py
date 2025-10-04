@@ -36,20 +36,20 @@ def _get_port() -> str:
         return str(port)
 
 
-class _SetupActor(Actor):
+class _RemoteInfoFetcher(Actor):
     """An actor responsible for getting remote host information."""
 
     @endpoint
-    def get_info(self) -> [str, str]:
+    def get_info(self) -> tuple[str, str]:
         return socket.gethostname(), _get_port()
 
 
 async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     """Returns the host name and port of the host mesh."""
     throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
-    setup_actor = throwaway_procs.spawn("_setup_actor", _SetupActor)
-    setup_actor = setup_actor.slice(procs=0)
-    host, port = await setup_actor.get_info.call_one()
+    fetcher = throwaway_procs.spawn("_fetcher", _RemoteInfoFetcher)
+    fetcher = fetcher.slice(procs=0)
+    host, port = await fetcher.get_info.call_one()
     await throwaway_procs.stop()
     return host, port
 
