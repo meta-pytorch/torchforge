@@ -15,9 +15,9 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import pytz
-from monarch.actor import current_rank
 
 from forge.observability.utils import get_actor_name_with_rank
+from monarch.actor import current_rank
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,38 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
     metric = Metric(key=key, value=value, reduction=reduction)
     collector = MetricCollector()
     collector.push(metric)
+
+
+def record_episode_sample(key: str, episode):
+    """
+    Record a structured sample-level log for a single episode.
+
+    Args:
+        key (str): logging prefix (e.g. "rollout/sample").
+        episode (Episode): episode object with filled attributes.
+        reward_breakdown (dict[str, float]): per-function rewards, e.g. {"MathReward": 0.8, "FormatReward": 1.0}.
+    """
+    sample = {
+        "episode_id": episode.episode_id,
+        "policy_version": episode.policy_version,
+        "prompt": episode.request,
+        "response": episode.response,
+        "target": episode.target,
+        **(
+            episode.reward_breakdown or {}
+        ),  # per-fn breakdown including the average reward
+        "advantage": episode.advantage,
+        "ref_logprobs": (
+            episode.ref_logprobs.mean().item()
+            if episode.ref_logprobs is not None
+            else None
+        ),
+        "request_len": episode.request_len,
+        "response_len": episode.response_len,
+        "pad_id": episode.pad_id,
+    }
+
+    record_metric(key, sample, Reduce.SAMPLE)
 
 
 def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metric]:
@@ -483,7 +515,9 @@ class SampleAccumulator(MetricAccumulator):
     Optionally uses a SampleFilter to decide what to keep at append/flush time.
     """
 
-    def __init__(self, reduction: Reduce, filter: SampleFilter | None = None):
+    def __init__(
+        self, reduction: Reduce, filter: SampleFilter | None = TopBottomKFilter()
+    ):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
         self.filter = filter
@@ -842,6 +876,20 @@ class ConsoleBackend(LoggerBackend):
         """Stream metric to console immediately."""
         logger.info(f"{metric.key}: {metric.value}")
 
+    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+        """Pretty-print sample-level logs to console."""
+        if not samples:
+            return
+        import pprint
+
+        logger.info(f"=== [{self.prefix}] - SAMPLE LOGS STEP {step} ===")
+        for key, rows in samples.items():
+            logger.info(f"[{key}] ({len(rows)} samples)")
+            for sample in rows:
+                pretty = pprint.pformat(sample, indent=4, width=120, compact=True)
+                logger.info(pretty)
+        logger.info("==============================================\n")
+
     async def finish(self) -> None:
         pass
 
@@ -983,6 +1031,28 @@ class WandbBackend(LoggerBackend):
             "_timestamp": metric.timestamp,
         }
         self.run.log(log_data)
+
+    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+        """Log sample-level data to WandB Tables."""
+        import wandb
+
+        if not self.run or not samples:
+            return
+
+        for key, rows in samples.items():
+            if not rows:
+                continue
+
+            # Create a WandB Table dynamically based on keys of first sample
+            columns = list(rows[0].keys())
+            table = wandb.Table(columns=columns)
+            for sample in rows:
+                table.add_data(*[sample.get(c) for c in columns])
+
+            self.run.log({f"{key}_table": table, "global_step": step})
+            logger.info(
+                f"WandbBackend: Logged {len(rows)} samples for {key} at step {step}"
+            )
 
     def get_metadata_for_secondary_ranks(self) -> Dict[str, Any]:
         if self.run and self.per_rank_share_run:
