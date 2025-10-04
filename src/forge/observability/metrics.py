@@ -65,6 +65,7 @@ class Reduce(Enum):
     MAX = "max"
     MIN = "min"
     STD = "std"
+    SAMPLE = "sample"
 
     @property
     def accumulator_class(self):
@@ -74,6 +75,7 @@ class Reduce(Enum):
             Reduce.MAX: MaxAccumulator,
             Reduce.MIN: MinAccumulator,
             Reduce.STD: StdAccumulator,
+            Reduce.SAMPLE: SampleAccumulator,
         }
         return mapping[self]
 
@@ -206,6 +208,10 @@ class SampleFilter(ABC):
         """
         return samples
 
+    def reset(self) -> None:
+        """Clears for next accumulation cycle."""
+        pass
+
 
 class RandomRatioFilter:
     """Randomly keep a fraction of samples."""
@@ -277,6 +283,10 @@ class TopBottomKFilter(SampleFilter):
         tops = [s for _, s in self._top_heap]
         bottoms = [s for _, s in self._bottom_heap]
         return bottoms + tops
+
+    def reset(self):
+        self._top_heap = []
+        self._bottom_heap = []
 
 
 ################
@@ -465,6 +475,56 @@ class StdAccumulator(MetricAccumulator):
         self.sum = 0.0
         self.sum_sq = 0.0
         self.count = 0
+
+
+class SampleAccumulator(MetricAccumulator):
+    """Accumulator for sample-level metrics (e.g., prompt/response/reward dicts).
+
+    Optionally uses a SampleFilter to decide what to keep at append/flush time.
+    """
+
+    def __init__(self, reduction: Reduce, filter: SampleFilter | None = None):
+        super().__init__(reduction)
+        self.samples: List[Dict[str, Any]] = []
+        self.filter = filter
+
+    def append(self, value: dict) -> None:
+        assert isinstance(value, dict)
+
+        # If filter is provided, only keep the sample if filter_append returns True
+        if self.filter:
+            if self.filter.filter_append(value):
+                self.samples.append(value)
+        else:
+            self.samples.append(value)
+
+    def get_value(self) -> list[dict]:
+        """Return locally collected (and optionally filtered) samples."""
+        if self.filter:
+            # Apply flush-time filter (e.g. heap selection, threshold trimming)
+            return self.filter.filter_flush(self.samples)
+        return self.samples
+
+    def get_state(self) -> Dict[str, Any]:
+        """Serialize accumulator state for cross-rank reduction."""
+        return {
+            "reduction_type": self.reduction_type.value,
+            "samples": self.get_value(),
+        }
+
+    @classmethod
+    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> list[dict]:
+        """Merge sample states across ranks."""
+        merged = []
+        for s in states:
+            merged.extend(s.get("samples", []))
+        return merged
+
+    def reset(self) -> None:
+        """Clear local samples and reset filter state."""
+        self.samples.clear()
+        if self.filter:
+            self.filter.reset()
 
 
 #############

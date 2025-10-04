@@ -17,7 +17,9 @@ from typing import Dict
 
 from forge.observability.metrics import (
     RandomRatioFilter,
+    Reduce,
     RewardThresholdFilter,
+    SampleAccumulator,
     TopBottomKFilter,
 )
 
@@ -53,14 +55,30 @@ def test_reward_threshold_filter_gt():
     assert f.filter_append(make_sample(0.2)) is False
 
 
-def test_top_bottom_k_filter_simple():
-    f = TopBottomKFilter(top_k=2, bottom_k=2, key="reward")
+def test_sample_accumulator_with_topbottom_filter():
+    """Ensure SampleAccumulator integrates with TopBottomKFilter correctly."""
+    f = TopBottomKFilter(top_k=2, bottom_k=1, key="reward")
+    acc = SampleAccumulator(Reduce.SAMPLE, filter=f)
+
     rewards = [0.1, 0.9, 0.5, 0.7, 0.3]
     for r in rewards:
-        f.filter_append(make_sample(r))
+        acc.append(make_sample(r))
 
-    samples = f.filter_flush([])
-    values = sorted(s["reward"] for s in samples)
+    result = acc.get_value()
+    result_rewards = sorted(s["reward"] for s in result)
 
-    # Expect bottom-2 (0.1, 0.3) and top-2 (0.7, 0.9)
-    assert values == [0.1, 0.3, 0.7, 0.9]
+    # Expect bottom-1 (0.1) and top-2 (0.7, 0.9)
+    assert result_rewards == [0.1, 0.7, 0.9]
+
+
+def test_sample_accumulator_no_filter_returns_all():
+    """Ensure SampleAccumulator without a filter returns all samples."""
+    acc = SampleAccumulator(Reduce.SAMPLE, filter=None)
+
+    samples = [make_sample(r) for r in [0.2, 0.4, 0.6]]
+    for s in samples:
+        acc.append(s)
+
+    result = acc.get_value()
+    assert len(result) == len(samples)
+    assert [s["reward"] for s in result] == [0.2, 0.4, 0.6]

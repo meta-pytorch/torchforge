@@ -22,10 +22,10 @@ from .metrics import (
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
-    RandomRatioFilter,
     record_metric,
     Reduce,
     reduce_metrics_states,
+    SampleAccumulator,
     StdAccumulator,
     SumAccumulator,
     TopBottomKFilter,
@@ -65,7 +65,7 @@ __all__ = [
     "MaxAccumulator",
     "MinAccumulator",
     "StdAccumulator",
+    "SampleAccumulator",
+    # Filter classes
     "TopBottomKFilter",
-    "RewardThresholdFilter",
-    "RandomRatioFilter",
 ]
