@@ -7,19 +7,15 @@ policy:
     pipeline_parallel_size: 1
     enforce_eager: true
   sampling_config:
-    n: 4
+    n: 2
     guided_decoding: false
     max_tokens: 512
 
 services:
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 1
+    num_replicas: 4
     with_gpus: true
-  judge:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
 
 
 # Optional, otherwise argparse fallback kicks in

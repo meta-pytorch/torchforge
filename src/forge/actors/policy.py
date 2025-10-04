@@ -296,11 +296,6 @@ class Policy(PolicyInterface):
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def _return_self(self):
-        """Returns the current policy object, for debugging purposes."""
-        return self
-
-    @endpoint
     async def generate(self, prompt: str, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
