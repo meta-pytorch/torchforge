@@ -15,7 +15,6 @@ from forge.cli.config import parse
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
-from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import (
     Launcher,
@@ -175,8 +174,7 @@ async def main(cfg: DictConfig):
     trainer = await RLTrainer.options(**cfg.actors.trainer).as_actor(
         **cfg.trainer, loss=simple_grpo_loss
     )
-    print("Trainer initialized successfully!")
-    print(f"Training configuration:")
+    print("Trainer initialized successfully with following configs!")
     print(f"  - Batch size: {batch_size}")
     print(f"  - Request length: {request_len}")
     print(f"  - Response length: {response_len}")
