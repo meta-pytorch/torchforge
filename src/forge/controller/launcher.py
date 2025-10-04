@@ -293,7 +293,9 @@ class Mastlauncher(BaseLauncher):
 
 
 def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
-    if not cfg or cfg.launcher == Launcher.SLURM:
+    if not cfg:
+        return None
+    if cfg.launcher == Launcher.SLURM:
         return Slurmlauncher()
     elif cfg.launcher == Launcher.MAST:
         return Mastlauncher(cfg)

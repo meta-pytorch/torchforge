@@ -15,7 +15,7 @@ from forge.types import Trajectory
 class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
-        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=True).as_actor(
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=False).as_actor(
             batch_size=2, max_policy_age=1
         )
         await replay_buffer.setup.call()

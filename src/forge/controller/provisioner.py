@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Remote resource allocation and provisioning."""
+"""Resource allocation and provisioning for both local and remote."""
 import asyncio
 import functools
 import logging
@@ -160,20 +160,40 @@ class Provisioner:
         mesh_name: Optional[str] = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
+        addr: str | None = None,
+        port: str | None = None,
     ):
         """Gets a proc mesh.
 
-        num_hosts = None implies that you want a local allocation, this may change.
+        Args:
+            num_procs: The number of processes to allocate.
+            with_gpus: Whether to include GPU allocations.
+                This only adds the CUDA_VISIBLE_DEVICES environment variable.
+            num_hosts: The number of hosts to allocate.
+                If this is set, a remote allocation is created.
+                If this is None, it uses the local host.
+                This behavior may change in the future.
+            host_mesh: The host mesh to allocate the process on.
+                If None, a new host mesh will be created.
+            port: The distributed port to use.
+                If None, a port will be detected.
+            addr: The distributed address to use.
+                If None, an address will be detected.
+
+        Returns:
+            A proc mesh.
 
         """
         if env_vars is None:
             env_vars = {}
 
+        is_remote = num_hosts is not None and num_hosts > 0
+
         async with self._lock:
             server_name = None
-            if num_hosts is not None and num_hosts > 0:
-                created_hosts = len(self._server_names)
+            if is_remote:
                 if mesh_name is None:
+                    created_hosts = len(self._server_names)
                     mesh_name = f"alloc_{created_hosts}"
                 if host_mesh is None:
                     host_mesh, server_name = await self.create_host_mesh(
@@ -188,18 +208,22 @@ class Provisioner:
                     host_id = host_mesh._host_id
                     gpu_manager = self._host_gpu_map[host_id]
             else:
+                # fallback to local
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
                 host_mesh._host_id = self._this_host_id
 
             def bootstrap(env: dict[str, str]):
+                # bootstrap is run on all processes. We use this
+                # to set environment variables like CUDA etc.
                 import os
 
                 for k, v in env.items():
                     os.environ[k] = v
 
             if with_gpus:
-                addr, port = await get_remote_info(host_mesh)
+                if not addr or not port:
+                    addr, port = await get_remote_info(host_mesh)
                 gpu_ids = gpu_manager.get_gpus(num_procs)
 
                 env_vars["MASTER_ADDR"] = addr
@@ -213,7 +237,9 @@ class Provisioner:
                 per_host={"gpus": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),
             )
-            await self.launcher.remote_setup(procs)
+
+            if is_remote:
+                await self.launcher.remote_setup(procs)
 
             # Tag the proc mesh with additional metadata for our own cleanup later
             if with_gpus:
@@ -284,8 +310,24 @@ async def get_proc_mesh(
     process_config: ProcessConfig,
     host_mesh: HostMesh | None = None,
     env_vars: dict[str, str] | None = None,
+    port: str | None = None,
+    addr: str | None = None,
 ) -> ProcMesh:
-    """Returns a proc mesh from the provisioner."""
+    """Returns a proc mesh from the provisioner.
+
+    Args:
+        process_config: The process config.
+        host_mesh: The host mesh to allocate the process on.
+            If None, a new host mesh will be created.
+        port: The distributed port to use.
+            If None, a port will be detected.
+        addr: The distributed address to use.
+            If None, an address will be detected.
+
+    Returns:
+        A proc mesh.
+
+    """
     provisioner = await _get_provisioner()
     return await provisioner.get_proc_mesh(
         num_procs=process_config.procs,
@@ -294,6 +336,8 @@ async def get_proc_mesh(
         mesh_name=process_config.mesh_name,
         host_mesh=host_mesh,
         env_vars=env_vars,
+        port=port,
+        addr=addr,
     )
 
 
