@@ -33,7 +33,7 @@ try:
     from torchx.specs import AppState
     from torchx.specs.fb.component_helpers import Packages
 except ImportError as e:
-    # This means there is an erorr with MAST
+    # This means there is an error with MAST
     pass
 
 JOB_NAME_KEY = "job_name"
