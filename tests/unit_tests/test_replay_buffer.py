@@ -110,7 +110,7 @@ class TestReplayBuffer:
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
         # Create replay buffer with dp_size=3
-        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=True).as_actor(
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=False).as_actor(
             batch_size=2, max_policy_age=1, dp_size=3
         )
         await replay_buffer.setup.call()
