@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-docs:
+    if: github.repository_owner == 'meta-pytorch'
     name: Build Documentation
     runs-on: ubuntu-latest
     timeout-minutes: 30
