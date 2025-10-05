@@ -15,9 +15,9 @@ from typing import Any, Dict, List, Optional
 
 import pytz
 
-from monarch.actor import current_rank
-
 from forge.observability.utils import get_actor_name_with_rank
+
+from monarch.actor import current_rank
 
 logger = logging.getLogger(__name__)
 

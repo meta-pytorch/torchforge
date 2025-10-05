@@ -27,8 +27,7 @@ os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
 async def run(cfg: DictConfig):
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
-    await mlogger.init_backends.call_one(metric_logging_cfg)
+    mlogger = await get_or_create_metric_logger(actor_name="Controller")
 
     if (prompt := cfg.get("prompt")) is None:
         gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
@@ -36,6 +35,9 @@ async def run(cfg: DictConfig):
 
     print("Spawning service...")
     policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+
+    # initialize after spawning services
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     import time
 

@@ -10,13 +10,15 @@ model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
 
 # Observability configuration
+# logging_mode: global_reduce, per_rank_reduce, per_rank_no_reduce
 metric_logging:
   wandb:
     project: "grpo-training"
     group: "grpo_exp_${oc.env:USER}"
-    reduce_across_ranks: True
+    logging_mode: "global_reduce"
+    per_rank_share_run: False
   console:
-    reduce_across_ranks: True
+    logging_mode: "global_reduce"
 
 # Dataset configuration
 dataset:
