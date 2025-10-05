@@ -15,7 +15,14 @@ import os
 
 from forge.actors.policy import Policy
 from forge.cli.config import parse
+from forge.controller.provisioner import shutdown
+from dataclasses import dataclass
+from datasets import load_dataset
 
+from forge.controller.actor import ForgeActor
+from monarch.actor import endpoint
+from vllm.transformers_utils.tokenizer import get_tokenizer
+from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner, shutdown
 
 from forge.data_models.completion import Completion
@@ -23,8 +30,59 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.types import LauncherConfig, ProvisionerConfig
 from omegaconf import DictConfig
 
+from forge.observability.perf_tracker import Tracer
+from forge.types import (
+    Launcher,
+    LauncherConfig,
+    ProcessConfig,
+    ProvisionerConfig,
+    ServiceConfig,
+)
+
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
 os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
+
+
+
+@dataclass
+class DatasetActor(ForgeActor):
+    """Actor wrapper for HuggingFace dataset to provide async interface."""
+
+    path: str = "openai/gsm8k"
+    revision: str = "main"
+    data_split: str = "train"
+    streaming: bool = True
+    model: str = "Qwen/Qwen3-1.7B"
+
+    @endpoint
+    def setup(self):
+        self._tokenizer = get_tokenizer(self.model)
+
+        def gsm8k_transform(sample):
+            system_prompt = """
+            Put all your scratchpad work between <think> and </think> tags.
+            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
+            """
+            request: str = sample["question"]
+            as_chat = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request},
+            ]
+            formatted_request = self._tokenizer.apply_chat_template(
+                as_chat,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            target: str = sample["answer"]
+            formatted_target = target.split("#### ")[1]
+            return {"request": formatted_request, "target": formatted_target}
+
+        ds = load_dataset(
+            self.path, self.revision, split=self.data_split, streaming=self.streaming
+        )
+        ds = ds.map(gsm8k_transform)
+        ds = ds.shuffle()
+        self._iterator = iter(ds)
 
 
 async def run(cfg: DictConfig):
@@ -36,36 +94,35 @@ async def run(cfg: DictConfig):
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
-    if (prompt := cfg.get("prompt")) is None:
-        gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
-        prompt = "What is 3+5?" if gd else "Tell me a joke"
-
     print("Spawning service...")
-    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
-
-    import time
-
-    print("Requesting generation...")
-    n = 100
-    start = time.time()
-    response_outputs: list[Completion] = await asyncio.gather(
-        *[policy.generate.route(prompt=prompt) for _ in range(n)]
-    )
-    end = time.time()
-
-    print(f"Generation of {n} requests completed in {end - start:.2f} seconds.")
-    print(
-        f"Generation with procs {cfg.services.policy.procs}, replicas {cfg.services.policy.num_replicas}"
+    (dataloader, policy) = await asyncio.gather(
+        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
+        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
     )
 
-    print(f"\nGeneration Results (last one of {n} requests):")
-    print("=" * 80)
-    for batch, response in enumerate(response_outputs[-1]):
-        print(f"Sample {batch + 1}:")
-        print(f"User: {prompt}")
-        print(f"Assistant: {response.text}")
-        print("-" * 80)
+    async def continuous_rollouts():
+        print("Starting continuous rollouts")
+        while True:
+            t = Tracer("main_perf/continuous_rollouts")
+            t.start()
+            sample = await dataloader.sample.call_one()
+            if sample is None:
+                print("Dataloader is empty, exiting continuous rollout")
+                return
 
+            t.step("data_loading")
+            prompt, target = sample["request"], sample["target"]
+            responses = await policy.generatlee.route(prompt)
+            version = await policy.get_version.route()
+
+            t.step("policy_generation")
+
+            print("request: ", prompt)
+            print("response: ", responses[0].text)
+
+
+    rollout_task = asyncio.create_task(continuous_rollouts())
+    await asyncio.gather(rollout_task)
     print("\nShutting down...")
     await policy.shutdown()
     await shutdown()
