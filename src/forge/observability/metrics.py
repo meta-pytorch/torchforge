@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import heapq
+import itertools
 import logging
 import os
 import random
@@ -156,37 +157,55 @@ def record_episode_sample(key: str, episode):
     record_metric(key, sample, Reduce.SAMPLE)
 
 
-def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metric]:
-    """Reduce metric accumulators states to a list of metrics.
+def reduce_metrics_states(
+    states: List[Dict[str, Dict[str, Any]]]
+) -> tuple[List[Metric], Dict[str, list[dict]]]:
+    """
+    Reduce metric accumulator states across ranks into two groups:
+    - scalar metrics (mean/sum/etc.)
+    - sample metrics (list[dict])
 
-    Can be used when reducing metrics across ranks or services, as merging
-    states is more precise than merging locally reduced metrics.
+    This function merges metric accumulator states from multiple ranks or processes
+    into final reduced values. It automatically distinguishes between scalar reductions
+    (e.g., MEAN, SUM) and structured SAMPLE-type reductions (e.g., per-example dicts).
 
     Args:
         states (List[Dict[str, Dict[str, Any]]]): List of state of one or more metrics,
             normally retrieved using `forge.observability.metrics.MetricAccumulator.get_state()`.
 
     Returns:
-        List[Metric]: List of reduced metrics
+        metrics: List[Metric], List of reduced metrics
+        samples: Dict[str, list[dict]], {metric_key: merged_list_of_samples}
 
     Example:
-        states = [
-            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
-            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
-        ]
-        reduce_metrics_states(states)
-        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
+        >>> states = [
+        ...     {
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN},
+        ...         "rollout/sample": {"reduction_type": "sample", "samples": [{"id": 1}]},
+        ...     },
+        ...     {
+        ...         "loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN},
+        ...         "rollout/sample": {"reduction_type": "sample", "samples": [{"id": 2}]},
+        ...     },
+        ... ]
+        >>> metrics, samples = reduce_metrics_states(states)
+        >>> metrics
+        Metric(key="loss", value=2.0, reduction=Reduce.MEAN)
+        >>> samples
+        {'rollout/sample': [{'id': 1}, {'id': 2}]}
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
     """
     if not states:
-        return []
+        return [], {}
 
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
-    reduced_metrics = []
+    samples: Dict[str, list[dict]] = {}
+    reduced_metrics: List[Metric] = []
+
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
         if not metric_states:
@@ -214,7 +233,11 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metri
         )
         reduced_metrics.append(metric)
 
-    return reduced_metrics
+        # Create sample list if this is a SAMPLE reduction
+        if first_reduction_type == Reduce.SAMPLE.value:
+            samples[key] = reduced_value
+
+    return reduced_metrics, samples
 
 
 #################
@@ -289,36 +312,39 @@ class TopBottomKFilter(SampleFilter):
         self.key = key
         self._top_heap = []  # min-heap for top-k
         self._bottom_heap = []  # max-heap for bottom-k (store -value)
+        self._counter = itertools.count()  # tie-breaker id generator
 
     def filter_append(self, sample: Dict) -> bool:
         val = sample.get(self.key, 0.0)
+        idx = next(self._counter)  # unique tiebreaker
 
         # If top_k or bottom_k <= 0, it means "disable" that side of filtering (i.e., keep none).
         # maintain top-k
         if self.top_k > 0:
             if len(self._top_heap) < self.top_k:
-                heapq.heappush(self._top_heap, (val, sample))
+                heapq.heappush(self._top_heap, (val, idx, sample))
             else:
-                heapq.heappushpop(self._top_heap, (val, sample))
+                heapq.heappushpop(self._top_heap, (val, idx, sample))
 
         # maintain bottom-k
         if self.bottom_k > 0:
             if len(self._bottom_heap) < self.bottom_k:
-                heapq.heappush(self._bottom_heap, (-val, sample))
+                heapq.heappush(self._bottom_heap, (-val, idx, sample))
             else:
-                heapq.heappushpop(self._bottom_heap, (-val, sample))
+                heapq.heappushpop(self._bottom_heap, (-val, idx, sample))
 
         # always return False here because we don't store in samples list
         return False
 
     def filter_flush(self, samples: List[Dict]) -> List[Dict]:
-        tops = [s for _, s in self._top_heap]
-        bottoms = [s for _, s in self._bottom_heap]
+        tops = [s for _, _, s in self._top_heap]
+        bottoms = [s for _, _, s in self._bottom_heap]
         return bottoms + tops
 
     def reset(self):
         self._top_heap = []
         self._bottom_heap = []
+        self._counter = itertools.count()
 
 
 ################
@@ -762,14 +788,21 @@ class MetricCollector:
 
         # Log to PER_RANK_REDUCE backends only (NO_REDUCE already logged in push)
         if self.per_rank_reduce_backends:
-            metrics_for_backends = reduce_metrics_states([states])
+            reduced_metrics, reduced_samples = reduce_metrics_states([states])
 
             # Log to PER_RANK_REDUCE backends
             for backend in self.per_rank_reduce_backends:
-                await backend.log_batch(metrics_for_backends, global_step)
+<<<<<<< HEAD
+                if reduced_metrics:
+                    await backend.log_batch(reduced_metrics, global_step)
+                if reduced_samples:
+                    await backend.log_samples(reduced_samples, global_step)
 
         # Update step (used by NO_REDUCE backends in push)
         self.global_step = global_step + 1
+=======
+
+>>>>>>> 371e062 (debug; blocked by wandb table upload bug)
 
         return states if return_state else {}
 
@@ -839,6 +872,9 @@ class LoggerBackend(ABC):
         """
         pass
 
+    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+        pass
+
     async def finish(self) -> None:
         pass
 
@@ -880,13 +916,13 @@ class ConsoleBackend(LoggerBackend):
         """Pretty-print sample-level logs to console."""
         if not samples:
             return
-        import pprint
+        import json
 
         logger.info(f"=== [{self.prefix}] - SAMPLE LOGS STEP {step} ===")
         for key, rows in samples.items():
             logger.info(f"[{key}] ({len(rows)} samples)")
             for sample in rows:
-                pretty = pprint.pformat(sample, indent=4, width=120, compact=True)
+                pretty = json.dumps(sample, indent=2, ensure_ascii=False)
                 logger.info(pretty)
         logger.info("==============================================\n")
 
@@ -1038,18 +1074,25 @@ class WandbBackend(LoggerBackend):
 
         if not self.run or not samples:
             return
-
         for key, rows in samples.items():
             if not rows:
                 continue
-
             # Create a WandB Table dynamically based on keys of first sample
             columns = list(rows[0].keys())
             table = wandb.Table(columns=columns)
             for sample in rows:
-                table.add_data(*[sample.get(c) for c in columns])
-
-            self.run.log({f"{key}_table": table, "global_step": step})
+                # table.add_data(*[sample.get(c) for c in columns])
+                values = [sample.get(c) for c in columns]
+                logger.info(f"Adding row to {key}_table: {values}")
+                table.add_data(*values)
+            self.run.log(
+                {
+                    f"{key}_step_{step}_table": table,
+                    "_sample_rows_logged": len(rows),
+                    "global_step": step,
+                },
+                commit=True,
+            )
             logger.info(
                 f"WandbBackend: Logged {len(rows)} samples for {key} at step {step}"
             )

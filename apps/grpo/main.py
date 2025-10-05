@@ -433,7 +433,6 @@ async def main(cfg: DictConfig):
                 await replay_buffer.add.call_one(episode)
                 record_episode_sample("rollout/sample", episode)
 
-            record_metric("sample/", {}, Reduce.SAMPLE)
             # Log metrics
             rollout_count += 1
             record_metric(

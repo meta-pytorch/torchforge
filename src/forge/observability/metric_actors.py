@@ -371,11 +371,14 @@ class GlobalLoggingActor(Actor):
                 return
 
             # Reduce metrics from states
-            reduced_metrics = reduce_metrics_states(all_local_states)
+            reduced_metrics, reduced_samples = reduce_metrics_states(all_local_states)
 
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
-                await backend.log_batch(reduced_metrics, global_step)
+                if reduced_metrics:
+                    await backend.log_batch(reduced_metrics, global_step)
+                if reduced_samples:
+                    await backend.log_samples(reduced_samples, global_step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:
