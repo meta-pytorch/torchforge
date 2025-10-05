@@ -86,7 +86,7 @@ async def main():
     config = {
         "console": {"logging_mode": "per_rank_reduce"},
         "wandb": {
-            "project": "immediate_logging_test",
+            "project": "toy_metrics",
             "group": group,
             "logging_mode": "per_rank_no_reduce",
             "per_rank_share_run": False,

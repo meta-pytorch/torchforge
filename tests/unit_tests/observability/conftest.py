@@ -29,7 +29,7 @@ class MockBackend(LoggerBackend):
         self.primary_logger_metadata = primary_logger_metadata or {}
         self.actor_name = actor_name
 
-    def log_immediate(self, metric, step, *args, **kwargs):
+    def log_immediately(self, metric, step, *args, **kwargs):
         self.immediate_metrics.append((metric, step))
 
     async def log(self, metrics, step, *args, **kwargs):

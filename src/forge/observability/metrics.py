@@ -505,7 +505,7 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: log immediately
         for backend in self.per_rank_no_reduce_backends:
-            backend.log_immediate(metric=metric, step=self.step)
+            backend.log_immediately(metric=metric, step=self.step)
 
     async def flush(
         self, step: int, return_state: bool = False
@@ -602,7 +602,7 @@ class LoggerBackend(ABC):
         """Log list of metrics to backend. Meant to log in bulk, e.g. on flush."""
         pass
 
-    def log_immediate(self, metric: Metric, step: int, *args, **kwargs) -> None:
+    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
         """Log single metric to backend. Meant to log metric as soon as collected.
         Backend implementation can decide to buffer/flush as needed."""
         pass
@@ -635,7 +635,7 @@ class ConsoleBackend(LoggerBackend):
             f"=== [METRICS STEP {step} ===\n{metrics_str}\n==============================\n"
         )
 
-    def log_immediate(self, metric: Metric, step: int, *args, **kwargs) -> None:
+    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
         """Log metric immediately to console with timestamp."""
         logger.info(f"{metric.key}: {metric.value}")
 
@@ -754,7 +754,7 @@ class WandbBackend(LoggerBackend):
         self.run.log(log_data)
         logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
 
-    def log_immediate(self, metric: Metric, step: int, *args, **kwargs) -> None:
+    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
         """Log metric immediately to WandB with both step and timestamp."""
         if not self.run:
             return
