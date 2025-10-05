@@ -184,6 +184,7 @@ class Service:
         # Wrap in Batcher if batching requested
         if batch_size > 1:
             router = Batcher(
+                endpoint_name,
                 base_router,
                 get_healthy_replicas=self._get_healthy_replicas,
                 get_session_map=self._get_session_map,
@@ -227,6 +228,13 @@ class Service:
 
         router = self.routers.get(function, self._default_router)
 
+        # Case 1: batching is enabled and no session ID (stateless calls only)
+        # Forward the request into the Batcher queue. The batcher will send
+        # the batched requests to the selected replica.
+        if sess_id is None and isinstance(router, Batcher):
+            return await router.route(function, args, kwargs)
+
+        # Case 2: route a single request to a replica
         # Create a ServiceRequest object to queue
         request = ServiceRequest(
             session_id=sess_id,
@@ -236,27 +244,20 @@ class Service:
             future=asyncio.Future(),
         )
 
-        # Case: batching is enabled and no session ID (stateless calls only)
-        # Forward the request into the Batcher queue. The batcher will send
-        # the batched requests to the selected replica.
-        if sess_id is None and isinstance(router, Batcher):
-            await router.enqueue(request)
+        healthy_replicas = [r for r in self._replicas if r.healthy]
 
+        # Select replica:
+        if sess_id is not None:
+            # Case 2.1: sticky sessions
+            replica = self._session_router.get_replica(
+                healthy_replicas, sess_id, self._session_replica_map
+            )
         else:
-            healthy_replicas = [r for r in self._replicas if r.healthy]
+            # Case 2.2: stateless routing
+            replica = self._default_router.get_replica(healthy_replicas)
 
-            # Select replica:
-            if sess_id is not None:
-                # Case 1: sticky sessions
-                replica = self._session_router.get_replica(
-                    healthy_replicas, sess_id, self._session_replica_map
-                )
-            else:
-                # Case 2: stateless routing
-                replica = self._default_router.get_replica(healthy_replicas)
-
-            # Queue the request using replica's method
-            await replica.enqueue_request(request)
+        # Queue the request using replica's method
+        await replica.enqueue_request(request)
 
         # Wait for the result
         try:

@@ -146,13 +146,14 @@ class Batcher:
 
     def __init__(
         self,
+        function: str,
         inner_router: Router,
         get_healthy_replicas: Callable[[], List["Replica"]],
         get_session_map: Callable[[], Dict[str, int]],
         batch_size: int = 16,
         batch_timeout: float = 0.01,
     ):
-
+        self.function = function
         self.inner_router = inner_router
         self.batch_size = batch_size
         self.batch_timeout = batch_timeout
@@ -164,21 +165,31 @@ class Batcher:
         self._running = True  # flag to control loop
         # Background task that processes batches continuously
         self._batch_task: asyncio.Task = asyncio.create_task(self._batch_loop())
+        # Maximum number of routing attempts per batch (1 initial + 1 retry if replica fails)
+        self._num_attempts = 2
 
-    async def _batch_loop(self):
+    async def _batch_loop(self) -> None:
         """Background task that continuously processes batches of routing requests.
 
         This is the core batching logic that runs in a separate asyncio task.
-        It collects requests from the queue and processes them in batches based
-        on size and time constraints.
+        Each iteration collects individual (function, args, kwargs, future) entries from
+        the internal queue and merges them into a single `ServiceRequest` that is then
+        dispatched to one replica.
 
         The loop follows these steps:
-        1. Wait for the first request to start a new batch
-        2. Collect additional requests until batch_size or batch_timeout is reached
+        1. Wait for the first queued call to start a new batch
+        2. Continue collecting until batch_size or batch_timeout is reached
         3. Make a single routing decision for the entire batch
         4. Fulfill all futures with the selected replica
 
         This process repeats indefinitely until the task is cancelled.
+
+        Returns:
+            None
+
+        Raises:
+            RuntimeError: If no healthy replicas are available
+            Exception: Any exception raised by the actor endpoint
         """
         while self._running:
 
@@ -191,10 +202,10 @@ class Batcher:
                     timeout = max(
                         0, self.batch_timeout - (time.monotonic() - start_time)
                     )
-                    req = await asyncio.wait_for(
+                    nxt = await asyncio.wait_for(
                         self._queue.get(), timeout
                     )  # wait for timeout or until self._queue.get() finishes
-                    batch.append(req)
+                    batch.append(nxt)
 
                     if len(batch) >= self.batch_size:
                         break
@@ -207,20 +218,59 @@ class Batcher:
             # One routing decision for the whole batch
             replica = self.inner_router.get_replica(healthy_replicas, None, session_map)
 
-            # Send whole batch to replica
-            try:
-                await replica.enqueue_batch(batch)
-            except Exception as e:
-                for req in batch:
-                    req.future.set_exception(e)
+            # Merge args for batched call
+            inputs = [b[1][0] for b in batch]
 
-    async def enqueue(self, request: ServiceRequest) -> Any:
-        """Enqueue request and wait until batch assigns a replica."""
-        # Queue the request for batching - this is non-blocking
-        self._queue.put_nowait(request)
+            # One request for the entire batch
+            batch_req = ServiceRequest(
+                session_id=None,
+                function=self.function,
+                args=(inputs,),
+                kwargs={},
+                future=asyncio.Future(),
+            )
 
+            for attempt in range(self._num_attempts):
+                try:
+                    # Send whole batch to replica
+                    await replica.enqueue_request(batch_req)
+                    results = await batch_req.future
+                    # Normalize result shape.
+                    # The actor endpoint is expected to return one result per input
+                    # If it instead returns a single scalar, replicate that scalar across
+                    # all callers so that every waiting future gets a value.
+                    if not isinstance(results, list) or len(results) != len(batch):
+                        results = [results] * len(batch)
+
+                    for (_, _, _, f), r in zip(batch, results):
+                        f.set_result(r)
+                    break
+
+                except Exception as e:
+                    if attempt < self._num_attempts - 1 and not replica.healthy:
+                        logger.debug(
+                            f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
+                        )
+                        healthy_replicas = self.get_healthy_replicas()
+                        session_map = self.get_session_map()
+                        if not healthy_replicas:
+                            raise RuntimeError("No healthy replicas available") from e
+                        replica = self.inner_router.get_replica(
+                            healthy_replicas, None, session_map
+                        )
+                        continue
+                    else:
+                        for _, _, _, f in batch:
+                            if not f.done():
+                                f.set_exception(e)
+
+    async def route(self, function: str, args: tuple, kwargs: dict) -> Any:
+        """Add (args, kwargs) pair to queue, return a Future resolved when batch completes."""
+        # Queue the request for batching
+        fut = asyncio.Future()
+        self._queue.put_nowait((function, args, kwargs, fut))
         # Wait for the batch processor to resolve our future
-        return await request.future
+        return await fut
 
     async def stop(self):
         """Stop the batch loop gracefully."""
