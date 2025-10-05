@@ -42,7 +42,7 @@ policy:
 
 # Trainer configuration
 trainer:
-  use_dcp: true
+  use_dcp: false
   use_vllm_builtin_load: true
   model:
     name: qwen3

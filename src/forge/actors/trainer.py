@@ -403,7 +403,8 @@ class RLTrainer(ForgeActor):
         else:
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
-                await ts.put(key, param)
+                # RDMA is still broken on GPU, so we need to copy to CPU
+                await ts.put(key, param.detach().cpu())
             t.step("ts_save")
         t.stop()
         end_time = time.perf_counter()
