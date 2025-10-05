@@ -22,6 +22,7 @@ from .metrics import (
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
+    record_episode_sample,
     record_metric,
     Reduce,
     reduce_metrics_states,
@@ -36,6 +37,7 @@ from .perf_tracker import trace, Tracer
 __all__ = [
     # Main API functions
     "record_metric",
+    "record_episode_sample",
     "reduce_metrics_states",
     "get_actor_name_with_rank",
     "get_logger_backend_class",
