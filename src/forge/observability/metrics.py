@@ -6,7 +6,6 @@
 
 import logging
 import os
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -545,21 +544,7 @@ class MetricCollector:
 
         # Log to PER_RANK_REDUCE backends only (NO_REDUCE already logged in push)
         if self.per_rank_reduce_backends:
-            # Create Metric objects for backend logging
-            metrics_for_backends = []
-
-            for key, state in states.items():
-                acc_class = Reduce(state["reduction_type"]).accumulator_class
-                reduced_value = acc_class.get_reduced_value_from_states([state])
-
-                # Create Metric object with reduced value
-                metric = Metric(
-                    key=key,
-                    value=reduced_value,
-                    reduction=Reduce(state["reduction_type"]),
-                    timestamp=time.time(),
-                )
-                metrics_for_backends.append(metric)
+            metrics_for_backends = reduce_metrics_states([states])
 
             # Log to PER_RANK_REDUCE backends
             for backend in self.per_rank_reduce_backends:
