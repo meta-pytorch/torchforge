@@ -389,12 +389,12 @@ class TestBackends:
 
         await backend.init(role="local")
 
-        # Test log_immediately
+        # Test log_stream
         metric = Metric("test", 1.0, Reduce.MEAN)
-        backend.log_immediately(metric, step=1)  # Should not raise
+        backend.log_stream(metric, step=1)  # Should not raise
 
         # Test log
-        await backend.log([metric], step=1)  # Should not raise
+        await backend.log_batch([metric], step=1)  # Should not raise
 
         await backend.finish()  # Should not raise
 

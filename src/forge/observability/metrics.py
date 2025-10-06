@@ -34,19 +34,24 @@ class Role:
 
 
 class LoggingMode(Enum):
-    """Metric logging mode.
+    """Metric logging behavior for distributed training scenarios.
 
-    A backend is categorized by its logging_mode configuration:
-    - GLOBAL_REDUCE: Backend is instantiated only in the controller (GlobalLoggingActor). Local ranks
-        accumulate metrics and send states for global reduction. Final reduced metrics are logged
-        only by the controller every step.
+    Each mode serves different observability needs:
 
-    - PER_RANK_REDUCE: Backend is instantiated per-rank. Each rank accumulates metrics locally
-        and logs aggregated values on flush(). No cross-rank reduction.
+    GLOBAL_REDUCE = "global_reduce"
+        Best for: Metrics that are best visualized as a single value per step.
+        Behavior: All ranks accumulate → controller reduces → single log entry
+        Example use: 8 ranks training, want 1 loss value per step averaged across all
 
-    - PER_RANK_NO_REDUCE: Backend is instantiated per-rank. Each rank logs raw metric values
-        immediately on each record_metric() call. Reduce type is **ignored**. Great alternative for
-        analyzing metrics per time stamp instead of per step.
+    PER_RANK_REDUCE = "per_rank_reduce"
+        Best for: Per-rank performance metrics, debugging individual rank behavior
+        Behavior: Each rank accumulates + logs its own reduced values
+        Example use: Monitor GPU utilization per rank, get 8 separate log entries per step
+
+    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
+        Best for: Real-time streaming, time-series debugging
+        Behavior: Raw values logged immediately on record_metric() calls
+        Example use: See what every rank is doing in real time.
     """
 
     GLOBAL_REDUCE = "global_reduce"
@@ -87,9 +92,8 @@ class Metric:
 
     def __post_init__(self):
         if self.timestamp is None:
-            # Always record in EST timezone
-            est = pytz.timezone("US/Eastern")
-            self.timestamp = datetime.now(est).timestamp()
+            # Always record in UTC timezone
+            self.timestamp = datetime.now(pytz.UTC).timestamp()
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
@@ -480,8 +484,20 @@ class MetricCollector:
         self._is_initialized = True
 
     def push(self, metric: Metric) -> None:
-        """Immediately log metrics to backends marked as "no_reduce" and adds metrics to accumulators for reduction
-        and later logging."""
+        """Process a metric according to configured logging modes.
+
+        Behavior depends on backend modes:
+        - PER_RANK_NO_REDUCE: Stream metric immediately to backends
+        - PER_RANK_REDUCE/GLOBAL_REDUCE: Accumulate for per step batch logging
+
+        Args:
+            metric: Metric dataclass
+
+        Example:
+            collector = MetricCollector()
+            metric = Metric("loss", 0.5, Reduce.MEAN)
+            collector.push(metric)  # Streams immediately if no_reduce, else accumulates
+        """
         if not self._is_initialized:
             raise ValueError(
                 "MetricCollector was not initialized. This happens when you try to use `record_metric` "
@@ -495,17 +511,17 @@ class MetricCollector:
         if not isinstance(metric, Metric):
             raise TypeError(f"Expected {Metric} object, got {metric}")
 
-        # Always accumulate for deferred logging and state return
+        # For PER_RANK_NO_REDUCE backends: stream immediately
+        for backend in self.per_rank_no_reduce_backends:
+            backend.log_stream(metric=metric, step=self.step)
+
+        # Always accumulate for reduction and state return
         key = metric.key
         if key not in self.accumulators:
             self.accumulators[key] = metric.reduction.accumulator_class(
                 metric.reduction
             )
         self.accumulators[key].append(metric.value)
-
-        # For PER_RANK_NO_REDUCE backends: log immediately
-        for backend in self.per_rank_no_reduce_backends:
-            backend.log_immediately(metric=metric, step=self.step)
 
     async def flush(
         self, step: int, return_state: bool = False
@@ -548,7 +564,7 @@ class MetricCollector:
 
             # Log to PER_RANK_REDUCE backends
             for backend in self.per_rank_reduce_backends:
-                await backend.log(metrics_for_backends, step)
+                await backend.log_batch(metrics_for_backends, step)
 
         return states if return_state else {}
 
@@ -598,13 +614,24 @@ class LoggerBackend(ABC):
             primary_logger_metadata = {}
         pass
 
-    async def log(self, metrics: List[Metric], step: int, *args, **kwargs) -> None:
-        """Log list of metrics to backend. Meant to log in bulk, e.g. on flush."""
+    async def log_batch(
+        self, metrics: List[Metric], step: int, *args, **kwargs
+    ) -> None:
+        """Log batch of accumulated metrics to backend"""
         pass
 
-    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
-        """Log single metric to backend. Meant to log metric as soon as collected.
-        Backend implementation can decide to buffer/flush as needed."""
+    def log_stream(self, metric: Metric, step: int, *args, **kwargs) -> None:
+        """Stream single metric to backend immediately.
+
+        NOTE: This method is called synchronously.
+        If your backend requires async I/O operations:
+        - Use asyncio.create_task() for fire-and-forget logging
+        - Consider internal buffering to avoid blocking the caller
+
+        Example for async backend:
+            def log_stream(self, metric, step):
+                asyncio.create_task(self._async_log(metric, step))
+        """
         pass
 
     async def finish(self) -> None:
@@ -629,14 +656,16 @@ class ConsoleBackend(LoggerBackend):
     ) -> None:
         pass
 
-    async def log(self, metrics: List[Metric], step: int, *args, **kwargs) -> None:
+    async def log_batch(
+        self, metrics: List[Metric], step: int, *args, **kwargs
+    ) -> None:
         metrics_str = "\n".join(f"  {metric.key}: {metric.value}" for metric in metrics)
         logger.info(
             f"=== [METRICS STEP {step} ===\n{metrics_str}\n==============================\n"
         )
 
-    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
-        """Log metric immediately to console with timestamp."""
+    def log_stream(self, metric: Metric, step: int, *args, **kwargs) -> None:
+        """Stream metric to console immediately."""
         logger.info(f"{metric.key}: {metric.value}")
 
     async def finish(self) -> None:
@@ -741,7 +770,9 @@ class WandbBackend(LoggerBackend):
             settings=settings,
         )
 
-    async def log(self, metrics: List[Metric], step: int, *args, **kwargs) -> None:
+    async def log_batch(
+        self, metrics: List[Metric], step: int, *args, **kwargs
+    ) -> None:
         if not self.run:
             logger.debug(f"WandbBackend: No run started, skipping log for {self.name}")
             return
@@ -754,8 +785,8 @@ class WandbBackend(LoggerBackend):
         self.run.log(log_data)
         logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
 
-    def log_immediately(self, metric: Metric, step: int, *args, **kwargs) -> None:
-        """Log metric immediately to WandB with both step and timestamp."""
+    def log_stream(self, metric: Metric, step: int, *args, **kwargs) -> None:
+        """Stream single metric to WandB with both step and timestamp."""
         if not self.run:
             return
 

@@ -29,10 +29,10 @@ class MockBackend(LoggerBackend):
         self.primary_logger_metadata = primary_logger_metadata or {}
         self.actor_name = actor_name
 
-    def log_immediately(self, metric, step, *args, **kwargs):
+    def log_stream(self, metric, step, *args, **kwargs):
         self.immediate_metrics.append((metric, step))
 
-    async def log(self, metrics, step, *args, **kwargs):
+    async def log_batch(self, metrics, step, *args, **kwargs):
         for metric in metrics:
             self.logged_metrics.append((metric, step))
 

@@ -367,7 +367,7 @@ class GlobalLoggingActor(Actor):
 
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
-                await backend.log(reduced_metrics, step)
+                await backend.log_batch(reduced_metrics, step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:
