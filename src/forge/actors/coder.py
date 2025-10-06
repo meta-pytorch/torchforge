@@ -35,7 +35,6 @@ class SandboxedPythonCoder(ForgeActor):
     Dependencies:
     - enroot: NVIDIA's container runtime (must be installed on host)
     - Docker images: Accessible via docker:// URLs or local paths
-    - Python 3.x: For the container environment
 
     Args:
         docker_image: Docker image URL to import (e.g., "docker://python:3.10").
