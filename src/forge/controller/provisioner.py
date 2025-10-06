@@ -266,6 +266,12 @@ class Provisioner:
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
+        if proc_mesh not in self._proc_host_map:
+            logger.warning(
+                f"proc mesh {proc_mesh} was requested to be stopped, but was either already stopped or "
+                "was never registered with the provisioner."
+            )
+            return
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):

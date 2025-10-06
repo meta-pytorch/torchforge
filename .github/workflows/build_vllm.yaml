@@ -13,15 +13,16 @@ permissions:
 jobs:
   build:
     name: forge-cu129-nightly
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@28a1b658404f17c8eabde5f7fe25ae3ac826fae6
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@d56fa2d461286d4b6a19e4ec66b397bf96925989
     strategy:
       fail-fast: false
     with:
       repository: meta-pytorch/forge
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: 28a1b658404f17c8eabde5f7fe25ae3ac826fae6
+      test-infra-ref: d56fa2d461286d4b6a19e4ec66b397bf96925989
       run-smoke-test: false
+      wheel-nightly-policy: gha_workflow_build_preview_wheels_policy
       wheel-upload-path: whl/preview/forge
       package-name: forge
       build-matrix: |
