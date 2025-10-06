@@ -26,12 +26,16 @@ from monarch.tools.config import Config, Workspace
 
 from forge.types import Launcher, LauncherConfig
 
+_MAST_AVAILABLE = False
+
 try:
     from monarch._src.actor.actor_mesh import current_rank
     from monarch._src.actor.meta.allocator import MastAllocator, MastAllocatorConfig
     from monarch.tools.components.meta import hyperactor as meta_hyperactor
     from torchx.specs import AppState
     from torchx.specs.fb.component_helpers import Packages
+
+    _MAST_AVAILABLE = True
 except ImportError as e:
     # This means there is an error with MAST
     pass
@@ -298,6 +302,10 @@ def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if cfg.launcher == Launcher.SLURM:
         return Slurmlauncher()
     elif cfg.launcher == Launcher.MAST:
+        if not _MAST_AVAILABLE:
+            raise ValueError(
+                "MAST imports did not succeed, cannot launch MAST jobs. Please verify your installation"
+            )
         return Mastlauncher(cfg)
     else:
         raise ValueError(f"Unsupported config provided, got {cfg}")

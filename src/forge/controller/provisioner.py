@@ -181,7 +181,7 @@ class Provisioner:
                 If None, an address will be detected.
 
         Returns:
-            A proc mesh.
+            A ProcMesh.
 
         """
         if env_vars is None:
