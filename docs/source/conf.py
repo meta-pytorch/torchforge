@@ -157,15 +157,6 @@ myst_enable_extensions = [
     "html_image",
 ]
 
-autodoc_default_options = {
-    "members": True,
-    "member-order": "bysource",
-    "special-members": "__init__",
-    "undoc-members": True,
-    "exclude-members": "__weakref__",
-}
-
-
 # -- Sphinx Gallery configuration -------------------------------------------
 sphinx_gallery_conf = {
     "examples_dirs": "tutorial_sources",  # Path to examples directory
@@ -179,3 +170,4 @@ sphinx_gallery_conf = {
     "write_computation_times": True,
     "show_signature": False,
 }
+
