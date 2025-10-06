@@ -346,9 +346,8 @@ class TestReduceOperations:
 
     def test_empty_states(self):
         """Test reduce_metrics_states with empty input."""
-        metrics, samples = reduce_metrics_states([])
+        metrics = reduce_metrics_states([])
         assert metrics == []
-        assert samples == {}
 
     def test_single_state(self):
         """Test reduce_metrics_states with single state."""
@@ -394,7 +393,7 @@ class TestReduceOperations:
         ]
         metrics = reduce_metrics_states(states)
 
-        assert len(metrics) == 2
+        assert len(metrics) == 3
 
         # Convert to dict for easier testing
         result_dict = {m.key: (m.value, m.reduction) for m in metrics}
