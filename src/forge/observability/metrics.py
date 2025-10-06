@@ -139,12 +139,12 @@ def record_episode_sample(key: str, episode):
         "policy_version": episode.policy_version,
         "prompt": episode.request,
         "response": episode.response,
-        "target": episode.target,
+        "target": str(episode.target),
         **(
             episode.reward_breakdown or {}
         ),  # per-fn breakdown including the average reward
         "advantage": episode.advantage,
-        "ref_logprobs": (
+        "ref_logprobs": float(
             episode.ref_logprobs.mean().item()
             if episode.ref_logprobs is not None
             else None
@@ -1074,25 +1074,23 @@ class WandbBackend(LoggerBackend):
 
         if not self.run or not samples:
             return
+
         for key, rows in samples.items():
             if not rows:
                 continue
-            # Create a WandB Table dynamically based on keys of first sample
-            columns = list(rows[0].keys())
+
+            # Use all keys to avoid dropped fields
+            columns = sorted({k for s in rows for k in s.keys()})
             table = wandb.Table(columns=columns)
-            for sample in rows:
-                # table.add_data(*[sample.get(c) for c in columns])
-                values = [sample.get(c) for c in columns]
-                logger.info(f"Adding row to {key}_table: {values}")
+
+            for s in rows:
+                values = [s.get(c) for c in columns]
                 table.add_data(*values)
-            self.run.log(
-                {
-                    f"{key}_step_{step}_table": table,
-                    "_sample_rows_logged": len(rows),
-                    "global_step": step,
-                },
-                commit=True,
-            )
+
+            # Unique table name avoids overwrite; commit forces sync
+            table_name = f"{key}_table_step{step}"
+            self.run.log({table_name: table, "_num_rows": len(rows)}, commit=True)
+
             logger.info(
                 f"WandbBackend: Logged {len(rows)} samples for {key} at step {step}"
             )
