@@ -13,7 +13,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import pytz
-
 from monarch.actor import current_rank
 
 from forge.observability.utils import get_actor_name_with_rank
@@ -499,13 +498,21 @@ class MetricCollector:
             collector.push(metric)  # Streams immediately if no_reduce, else accumulates
         """
         if not self._is_initialized:
-            raise ValueError(
-                "MetricCollector was not initialized. This happens when you try to use `record_metric` "
-                "before you have initialized any logging backends. Please call in your main file:\n"
-                "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
-                "`await mlogger.init_backends.call_one(logging_config)`\n"
-                "or, to disable metric logging globally, set env variable `FORGE_DISABLE_METRICS=True`"
+            from forge.util.logging import log_once
+
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg=(
+                    "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
+                    " This happens when you try to use `record_metric` before calling `init_backends`."
+                    " To disable this warning, please call in your main file:\n"
+                    "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                    "`await mlogger.init_backends.call_one(logging_config)`\n"
+                    "or set env variable `FORGE_DISABLE_METRICS=True`"
+                ),
             )
+            return
 
         # Validate metric object
         if not isinstance(metric, Metric):
@@ -536,10 +543,17 @@ class MetricCollector:
             Dict[str, Dict[str, Dict[str, Any]]]: Dict of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
-
         if not self._is_initialized:
-            logger.debug(
-                f"Collector not yet initialized for {get_actor_name_with_rank()}. Call init_backends first."
+            from forge.util.logging import log_once
+
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
+                "\nPlease call in your main file:\n"
+                "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                "`await mlogger.init_backends.call_one(logging_config)`\n"
+                "before calling `flush`",
             )
             return {}
 

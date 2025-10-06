@@ -315,8 +315,10 @@ class GlobalLoggingActor(Actor):
         config = self.config
         if config is None:
             logger.warning(
-                "GlobalLoggingActor flush() called before init_backends(). "
-                "No backends will be flushed."
+                "Cannot flush collected metrics. GlobalLoggingActor.flush() called before init_backends()."
+                " No backends will be flushed. Please call in your main file:\n"
+                "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                "`await mlogger.init_backends.call_one(logging_config)`\n"
             )
             return
 

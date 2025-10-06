@@ -226,13 +226,16 @@ class TestMetricCollector:
         collector3 = MetricCollector()
         assert collector1 is not collector3
 
-    def test_uninitialized_push_raises_error(self, mock_rank):
-        """Test MetricCollector.push() raises error when uninitialized."""
+    def test_uninitialized_push_logs_warning(self, mock_rank, caplog):
+        """Test MetricCollector.push() logs warning when uninitialized."""
         collector = MetricCollector()
         metric = Metric("test", 1.0, Reduce.MEAN)
 
-        with pytest.raises(ValueError, match="MetricCollector was not initialized"):
-            collector.push(metric)
+        # just log warning and return
+        collector.push(metric)
+        assert any(
+            "Metric logging backends" in record.message for record in caplog.records
+        )
 
     def test_invalid_metric_type_raises_error(self, mock_rank):
         """Test MetricCollector.push() raises error for invalid metric type."""
