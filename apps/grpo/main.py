@@ -16,6 +16,7 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
+from forge.actors._torchstore_utils import WeightCleaner
 
 from forge.actors.policy import Policy
 from forge.actors.reference_model import ReferenceModel
@@ -29,7 +30,6 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.util.ops import compute_logprobs
-from forge.util.weight_sync import drop_weights
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -407,6 +407,7 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
+        weight_cleaner = WeightCleaner()
 
         while True:
             # Restart tracer when needed (initial start or after completing a training step)
@@ -435,9 +436,7 @@ async def main(cfg: DictConfig):
                 await policy.update_weights.fanout(training_step)
                 t.step("update_weights")
 
-                if training_step >= 2:
-                    await drop_weights(training_step - 1)
-                    t.step("drop_weights")
+                weight_cleaner.step(training_step - 1)
 
                 t.stop()
                 restart_tracer = True

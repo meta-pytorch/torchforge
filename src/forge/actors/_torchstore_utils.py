@@ -3,12 +3,16 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+import asyncio
 import logging
 import shutil
+import time
 from dataclasses import dataclass
 
 import torch
 import torch.distributed.checkpoint as dcp
+
+import torchstore as ts
 from torch.distributed.checkpoint.metadata import Metadata as DcpMeta
 
 logger = logging.getLogger(__name__)
@@ -69,3 +73,55 @@ def extract_param_name(key: str) -> str:
 
 def get_dcp_whole_state_dict_key(policy_version: int) -> str:
     return f"{get_param_prefix(policy_version)}{KEY_DELIM}{DCP_WHOLE_STATE_TAG}"
+
+
+class WeightCleaner:
+    """Manages asynchronous cleanup of model weights across different policy versions.
+
+    This class handles the deletion of old model weights by maintaining a list of
+    cleanup tasks and tracking the last deleted version to avoid redundant operations.
+    """
+
+    def __init__(self):
+        """Initialize the WeightCleaner with empty task list and reset deletion tracking."""
+        # we need to keep the task around to make sure it's not garbage collected
+        self._tasks = []
+        self._last_deleted_version = -1
+
+    def _remove_done_tasks(self):
+        """Remove completed tasks from the task list to prevent memory leaks."""
+        self._tasks = [task for task in self._tasks if not task.done()]
+
+    def step(self, delete_up_to_version: int):
+        """Schedule deletion of weights for all versions up to the specified version.
+
+        Args:
+            delete_up_to_version (int): The highest policy version to delete (inclusive).
+                All versions from last_deleted_version + 1 to this version will be deleted.
+        """
+        self._remove_done_tasks()
+        if delete_up_to_version <= self._last_deleted_version:
+            return
+        for version in range(self._last_deleted_version + 1, delete_up_to_version + 1):
+            self._tasks.append(asyncio.create_task(drop_weights(version)))
+        self._last_deleted_version = delete_up_to_version
+
+    async def wait(self):
+        """Wait for all scheduled deletion tasks to complete."""
+        await asyncio.gather(*self._tasks)
+
+
+async def drop_weights(version: int):
+    start_time = time.perf_counter()
+    prefix = get_param_prefix(version)
+    matching_keys = await ts.keys(prefix)
+    # TODO: once we have something like `get_meta()` in torchstore, we can just
+    # query the type of the object instead of relying on keys.
+    dcp_key = get_dcp_whole_state_dict_key(version)
+    if dcp_key in matching_keys:
+        dcp_handle = await ts.get(dcp_key)
+        dcp_handle.drop()
+    for key in matching_keys:
+        await ts.delete(key)
+    elapsed = time.perf_counter() - start_time
+    logger.info(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
