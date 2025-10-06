@@ -8,18 +8,19 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
-
 from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,
     LoggerBackend,
     LoggingMode,
     MetricCollector,
+    Reduce,
     reduce_metrics_states,
 )
 
 from forge.observability.utils import detect_actor_name_from_call_stack
+
+from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
 logger = logging.getLogger(__name__)
 
@@ -371,14 +372,21 @@ class GlobalLoggingActor(Actor):
                 return
 
             # Reduce metrics from states
-            reduced_metrics, reduced_samples = reduce_metrics_states(all_local_states)
+            reduced_metrics = reduce_metrics_states(all_local_states)
 
+            # Split into scalar metrics and sample metrics
+            scalar_metrics = [
+                m for m in reduced_metrics if m.reduction != Reduce.SAMPLE
+            ]
+            sample_metrics = {
+                m.key: m.value for m in reduced_metrics if m.reduction == Reduce.SAMPLE
+            }
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
-                if reduced_metrics:
-                    await backend.log_batch(reduced_metrics, global_step)
-                if reduced_samples:
-                    await backend.log_samples(reduced_samples, global_step)
+                if scalar_metrics:
+                    await backend.log_batch(scalar_metrics, global_step)
+                if sample_metrics:
+                    await backend.log_samples(sample_metrics, global_step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:

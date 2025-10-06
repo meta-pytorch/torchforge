@@ -361,21 +361,17 @@ class TestReduceOperations:
                 },
             }
         ]
-        metrics, samples = reduce_metrics_states(states)
+        metrics = reduce_metrics_states(states)
 
-        # Check scalar metrics
-        assert len(metrics) == 1
-        assert metrics[0].key == "loss"
-        assert metrics[0].value == 5.0
-        assert metrics[0].reduction == Reduce.MEAN
+        assert len(metrics) == 2
+        # Convert to dict for easier testing
+        result_dict = {m.key: (m.value, m.reduction) for m in metrics}
 
-        # Verify no sample metrics in the metrics list
-        assert all(m.reduction != Reduce.SAMPLE for m in metrics)
+        assert result_dict["loss"][0] == 5.0
+        assert result_dict["loss"][1] == Reduce.MEAN
 
-        # Check samples dict
-        assert "rollout/sample" in samples
-        assert len(samples["rollout/sample"]) == 1
-        assert samples["rollout/sample"][0] == {"id": 1, "reward": 0.5}
+        assert result_dict["rollout/sample"][0] == [{"id": 1, "reward": 0.5}]
+        assert result_dict["rollout/sample"][1] == Reduce.SAMPLE
 
     def test_multiple_states(self):
         """Test reduce_metrics_states with multiple states."""
@@ -396,29 +392,25 @@ class TestReduceOperations:
             },
             {"accuracy": {"reduction_type": "sum", "total": 15.0}},
         ]
-        metrics, samples = reduce_metrics_states(states)
+        metrics = reduce_metrics_states(states)
+
+        assert len(metrics) == 2
 
         # Convert to dict for easier testing
-        assert len(metrics) == 2
-        result_dict = {metric.key: metric.value for metric in metrics}
-        assert result_dict["loss"] == 30.0 / 5.0  # 6.0
-        assert result_dict["accuracy"] == 15.0
+        result_dict = {m.key: (m.value, m.reduction) for m in metrics}
 
-        # Verify no sample metrics in the metrics list
-        assert all(m.reduction != Reduce.SAMPLE for m in metrics)
+        # Check scalar reductions
+        assert result_dict["loss"][0] == 30.0 / 5.0  # 6.0
+        assert result_dict["loss"][1] == Reduce.MEAN
+        assert result_dict["accuracy"][0] == 15.0
+        assert result_dict["accuracy"][1] == Reduce.SUM
 
-        # Check reduction types for scalar metrics
-        for metric in metrics:
-            if metric.key == "loss":
-                assert metric.reduction == Reduce.MEAN
-            elif metric.key == "accuracy":
-                assert metric.reduction == Reduce.SUM
-
-        # Check samples dict
-        assert "rollout/sample" in samples
-        assert len(samples["rollout/sample"]) == 2
-        assert samples["rollout/sample"][0] == {"id": 1, "reward": 0.5}
-        assert samples["rollout/sample"][1] == {"id": 2, "reward": 0.8}
+        # Check sample concatenation
+        assert result_dict["rollout/sample"][0] == [
+            {"id": 1, "reward": 0.5},
+            {"id": 2, "reward": 0.8},
+        ]
+        assert result_dict["rollout/sample"][1] == Reduce.SAMPLE
 
     def test_mismatched_reduction_types_raises_error(self):
         """Test reduce_metrics_states raises error for mismatched reduction types."""
@@ -449,21 +441,23 @@ class TestReduceOperations:
             },
             {"throughput": {"reduction_type": "max", "max_val": 100.0}},
         ]
-        metrics, samples = reduce_metrics_states(states)
+        metrics = reduce_metrics_states(states)
 
-        # Convert to dict for easier testing
-        result_dict = {metric.key: metric.value for metric in metrics}
-        assert result_dict["loss"] == 30.0 / 5.0  # 6.0
-        assert result_dict["accuracy"] == 5.0
-        assert result_dict["throughput"] == 100.0
+        result_dict = {m.key: (m.value, m.reduction) for m in metrics}
 
-        # Check samples - note that not all ranks have all sample keys
-        assert "train/sample" in samples
-        assert "eval/sample" in samples
-        assert len(samples["train/sample"]) == 1
-        assert len(samples["eval/sample"]) == 1
-        assert samples["train/sample"][0] == {"step": 1}
-        assert samples["eval/sample"][0] == {"step": 2}
+        # Scalar metrics
+        assert result_dict["loss"][0] == 30.0 / 5.0  # 6.0
+        assert result_dict["loss"][1] == Reduce.MEAN
+        assert result_dict["accuracy"][0] == 5.0
+        assert result_dict["accuracy"][1] == Reduce.SUM
+        assert result_dict["throughput"][0] == 100.0
+        assert result_dict["throughput"][1] == Reduce.MAX
+
+        # Sample metrics (merged separately)
+        assert result_dict["train/sample"][0] == [{"step": 1}]
+        assert result_dict["train/sample"][1] == Reduce.SAMPLE
+        assert result_dict["eval/sample"][0] == [{"step": 2}]
+        assert result_dict["eval/sample"][1] == Reduce.SAMPLE
 
 
 class TestBackends:

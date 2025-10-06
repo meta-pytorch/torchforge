@@ -15,9 +15,9 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import pytz
-from monarch.actor import current_rank
 
 from forge.observability.utils import get_actor_name_with_rank
+from monarch.actor import current_rank
 
 logger = logging.getLogger(__name__)
 
@@ -150,55 +150,57 @@ def record_episode_sample(key: str, episode):
     record_metric(key, sample, Reduce.SAMPLE)
 
 
-def reduce_metrics_states(
-    states: List[Dict[str, Dict[str, Any]]]
-) -> tuple[List[Metric], Dict[str, list[dict]]]:
-    """
-    Reduce metric accumulator states across ranks into two groups:
-    - scalar metrics (mean/sum/etc.)
-    - sample metrics (list[dict])
+def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List["Metric"]:
+    """Reduce metric accumulators states to a list of metrics.
 
-    This function merges metric accumulator states from multiple ranks or processes
-    into final reduced values. It automatically distinguishes between scalar reductions
-    (e.g., MEAN, SUM) and structured SAMPLE-type reductions (e.g., per-example dicts).
+    Can be used when reducing metrics across ranks or services, as merging
+    states is more precise than merging locally reduced metrics.
 
     Args:
         states (List[Dict[str, Dict[str, Any]]]): List of state of one or more metrics,
             normally retrieved using `forge.observability.metrics.MetricAccumulator.get_state()`.
 
     Returns:
-        metrics: List[Metric], List of reduced metrics
-        samples: Dict[str, list[dict]], {metric_key: merged_list_of_samples}
+        List[Metric]: List of reduced metrics
 
     Example:
         >>> states = [
         ...     {
-        ...         "loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN},
-        ...         "rollout/sample": {"reduction_type": "sample", "samples": [{"id": 1}]},
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": "mean"},
+        ...         "reward/sample": {
+        ...             "reduction_type": "sample",
+        ...             "samples": [{"episode_id": 1, "reward": 0.5}],
+        ...         },
         ...     },
         ...     {
-        ...         "loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN},
-        ...         "rollout/sample": {"reduction_type": "sample", "samples": [{"id": 2}]},
+        ...         "loss": {"count": 10, "sum": 16, "reduction_type": "mean"},
+        ...         "reward/sample": {
+        ...             "reduction_type": "sample",
+        ...             "samples": [{"episode_id": 2, "reward": 1.0}],
+        ...         },
         ...     },
         ... ]
-        >>> metrics, samples = reduce_metrics_states(states)
-        >>> metrics
-        Metric(key="loss", value=2.0, reduction=Reduce.MEAN)
-        >>> samples
-        {'rollout/sample': [{'id': 1}, {'id': 2}]}
+        >>> metrics = reduce_metrics_states(states)
+        >>> for m in metrics:
+        ...     print(m)
+        Metric(key='loss', value=2.0, reduction=Reduce.MEAN)
+        Metric(
+            key='reward/sample',
+            value=[{'episode_id': 1, 'reward': 0.5},
+                   {'episode_id': 2, 'reward': 1.0}],
+            reduction=Reduce.SAMPLE,
+        )
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
     """
     if not states:
-        return [], {}
+        return []
 
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
-    samples: Dict[str, list[dict]] = {}
-    reduced_metrics: List[Metric] = []
-
+    reduced_metrics = []
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
         if not metric_states:
@@ -218,17 +220,15 @@ def reduce_metrics_states(
         metric_accumulator = Reduce(first_reduction_type).accumulator_class
         reduced_value = metric_accumulator.get_reduced_value_from_states(metric_states)
 
-        if first_reduction_type == Reduce.SAMPLE.value:
-            samples[key] = reduced_value
-        else:
-            metric = Metric(
-                key=key,
-                value=reduced_value,
-                reduction=Reduce(first_reduction_type),
-            )
-            reduced_metrics.append(metric)
+        # Create Metric object with reduced value
+        metric = Metric(
+            key=key,
+            value=reduced_value,
+            reduction=Reduce(first_reduction_type),
+        )
+        reduced_metrics.append(metric)
 
-    return reduced_metrics, samples
+    return reduced_metrics
 
 
 #################
@@ -714,21 +714,24 @@ class MetricCollector:
 
         # Log to PER_RANK_REDUCE backends only (NO_REDUCE already logged in push)
         if self.per_rank_reduce_backends:
-            reduced_metrics, reduced_samples = reduce_metrics_states([states])
+            reduced_metrics = reduce_metrics_states([states])
 
+            # Split into scalar metrics and sample metrics
+            scalar_metrics = [
+                m for m in reduced_metrics if m.reduction != Reduce.SAMPLE
+            ]
+            sample_metrics = {
+                m.key: m.value for m in reduced_metrics if m.reduction == Reduce.SAMPLE
+            }
             # Log to PER_RANK_REDUCE backends
             for backend in self.per_rank_reduce_backends:
-<<<<<<< HEAD
-                if reduced_metrics:
-                    await backend.log_batch(reduced_metrics, global_step)
-                if reduced_samples:
-                    await backend.log_samples(reduced_samples, global_step)
+                if scalar_metrics:
+                    await backend.log_batch(scalar_metrics, global_step)
+                if sample_metrics:
+                    await backend.log_samples(sample_metrics, global_step)
 
         # Update step (used by NO_REDUCE backends in push)
         self.global_step = global_step + 1
-=======
-
->>>>>>> 371e062 (debug; blocked by wandb table upload bug)
 
         return states if return_state else {}
 
