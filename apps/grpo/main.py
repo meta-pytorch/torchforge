@@ -317,7 +317,7 @@ async def main(cfg: DictConfig):
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(
             ProvisionerConfig(
-                launcher_config=LauncherConfig(**cfg.provisioner.launcher)
+                launcher_config=LauncherConfig(**cfg.provisioner.launcher_config)
             )
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})

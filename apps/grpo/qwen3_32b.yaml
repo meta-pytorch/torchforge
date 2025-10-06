@@ -11,7 +11,8 @@ model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 
 provisioner:
-  launcher: slurm
+  launcher_config:
+    launcher: slurm
 
 # Main loop configuration
 rollout_threads: 1   # Recommended to set equal to policy.num_replicas
