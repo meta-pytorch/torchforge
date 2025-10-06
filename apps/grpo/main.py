@@ -32,7 +32,7 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
-from forge.types import LauncherConfig, ProvisionerConfig
+from forge.types import LauncherConfig, ProvisionerConfig, Launcher
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -314,12 +314,12 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Global setups ---- #
-    if cfg.get("provisioner", None) is not None:
-        await init_provisioner(
-            ProvisionerConfig(
-                launcher_config=LauncherConfig(**cfg.provisioner.launcher_config)
-            )
+    # if cfg.get("provisioner", None) is not None:
+    await init_provisioner(
+        ProvisionerConfig(
+            launcher_config=LauncherConfig(launcher=Launcher("slurm")),
         )
+    )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
