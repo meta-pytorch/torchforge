@@ -1,7 +1,6 @@
 name: Build pinned vLLM against PyTorch nightly and upload
 
 on:
-  pull_request:
   push:
     branches:
       - nightly
@@ -23,6 +22,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: d56fa2d461286d4b6a19e4ec66b397bf96925989
       run-smoke-test: false
+      wheel-nightly-policy: gha_workflow_build_preview_wheels_policy
       wheel-upload-path: whl/preview/forge
       package-name: forge
       build-matrix: |
