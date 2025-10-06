@@ -15,9 +15,9 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import pytz
+from monarch.actor import current_rank
 
 from forge.observability.utils import get_actor_name_with_rank
-from monarch.actor import current_rank
 
 logger = logging.getLogger(__name__)
 
@@ -223,17 +223,15 @@ def reduce_metrics_states(
         metric_accumulator = Reduce(first_reduction_type).accumulator_class
         reduced_value = metric_accumulator.get_reduced_value_from_states(metric_states)
 
-        # Create Metric object with reduced value
-        metric = Metric(
-            key=key,
-            value=reduced_value,
-            reduction=Reduce(first_reduction_type),
-        )
-        reduced_metrics.append(metric)
-
-        # Create sample list if this is a SAMPLE reduction
         if first_reduction_type == Reduce.SAMPLE.value:
             samples[key] = reduced_value
+        else:
+            metric = Metric(
+                key=key,
+                value=reduced_value,
+                reduction=Reduce(first_reduction_type),
+            )
+            reduced_metrics.append(metric)
 
     return reduced_metrics, samples
 
@@ -859,7 +857,7 @@ class ConsoleBackend(LoggerBackend):
             return
         import json
 
-        logger.info(f"=== [{self.prefix}] - SAMPLE LOGS STEP {step} ===")
+        logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for key, rows in samples.items():
             logger.info(f"[{key}] ({len(rows)} samples)")
             for sample in rows:

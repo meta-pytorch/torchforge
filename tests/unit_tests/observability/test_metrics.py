@@ -346,38 +346,79 @@ class TestReduceOperations:
 
     def test_empty_states(self):
         """Test reduce_metrics_states with empty input."""
-        result = reduce_metrics_states([])
-        assert result == []
+        metrics, samples = reduce_metrics_states([])
+        assert metrics == []
+        assert samples == {}
 
     def test_single_state(self):
         """Test reduce_metrics_states with single state."""
-        states = [{"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}}]
-        result = reduce_metrics_states(states)
-        assert len(result) == 1
-        assert result[0].key == "loss"
-        assert result[0].value == 5.0
-        assert result[0].reduction == Reduce.MEAN
+        states = [
+            {
+                "loss": {"reduction_type": "mean", "sum": 10.0, "count": 2},
+                "rollout/sample": {
+                    "reduction_type": "sample",
+                    "samples": [{"id": 1, "reward": 0.5}],
+                },
+            }
+        ]
+        metrics, samples = reduce_metrics_states(states)
+
+        # Check scalar metrics
+        assert len(metrics) == 1
+        assert metrics[0].key == "loss"
+        assert metrics[0].value == 5.0
+        assert metrics[0].reduction == Reduce.MEAN
+
+        # Verify no sample metrics in the metrics list
+        assert all(m.reduction != Reduce.SAMPLE for m in metrics)
+
+        # Check samples dict
+        assert "rollout/sample" in samples
+        assert len(samples["rollout/sample"]) == 1
+        assert samples["rollout/sample"][0] == {"id": 1, "reward": 0.5}
 
     def test_multiple_states(self):
         """Test reduce_metrics_states with multiple states."""
         states = [
-            {"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}},
-            {"loss": {"reduction_type": "mean", "sum": 20.0, "count": 3}},
+            {
+                "loss": {"reduction_type": "mean", "sum": 10.0, "count": 2},
+                "rollout/sample": {
+                    "reduction_type": "sample",
+                    "samples": [{"id": 1, "reward": 0.5}],
+                },
+            },
+            {
+                "loss": {"reduction_type": "mean", "sum": 20.0, "count": 3},
+                "rollout/sample": {
+                    "reduction_type": "sample",
+                    "samples": [{"id": 2, "reward": 0.8}],
+                },
+            },
             {"accuracy": {"reduction_type": "sum", "total": 15.0}},
         ]
-        result = reduce_metrics_states(states)
+        metrics, samples = reduce_metrics_states(states)
 
         # Convert to dict for easier testing
-        result_dict = {metric.key: metric.value for metric in result}
+        assert len(metrics) == 2
+        result_dict = {metric.key: metric.value for metric in metrics}
         assert result_dict["loss"] == 30.0 / 5.0  # 6.0
         assert result_dict["accuracy"] == 15.0
 
-        # Also check reduction types
-        for metric in result:
+        # Verify no sample metrics in the metrics list
+        assert all(m.reduction != Reduce.SAMPLE for m in metrics)
+
+        # Check reduction types for scalar metrics
+        for metric in metrics:
             if metric.key == "loss":
                 assert metric.reduction == Reduce.MEAN
             elif metric.key == "accuracy":
                 assert metric.reduction == Reduce.SUM
+
+        # Check samples dict
+        assert "rollout/sample" in samples
+        assert len(samples["rollout/sample"]) == 2
+        assert samples["rollout/sample"][0] == {"id": 1, "reward": 0.5}
+        assert samples["rollout/sample"][1] == {"id": 2, "reward": 0.8}
 
     def test_mismatched_reduction_types_raises_error(self):
         """Test reduce_metrics_states raises error for mismatched reduction types."""
@@ -394,17 +435,35 @@ class TestReduceOperations:
             {
                 "loss": {"reduction_type": "mean", "sum": 10.0, "count": 2},
                 "accuracy": {"reduction_type": "sum", "total": 5.0},
+                "train/sample": {
+                    "reduction_type": "sample",
+                    "samples": [{"step": 1}],
+                },
             },
-            {"loss": {"reduction_type": "mean", "sum": 20.0, "count": 3}},
+            {
+                "loss": {"reduction_type": "mean", "sum": 20.0, "count": 3},
+                "eval/sample": {
+                    "reduction_type": "sample",
+                    "samples": [{"step": 2}],
+                },
+            },
             {"throughput": {"reduction_type": "max", "max_val": 100.0}},
         ]
-        result = reduce_metrics_states(states)
+        metrics, samples = reduce_metrics_states(states)
 
         # Convert to dict for easier testing
-        result_dict = {metric.key: metric.value for metric in result}
+        result_dict = {metric.key: metric.value for metric in metrics}
         assert result_dict["loss"] == 30.0 / 5.0  # 6.0
         assert result_dict["accuracy"] == 5.0
         assert result_dict["throughput"] == 100.0
+
+        # Check samples - note that not all ranks have all sample keys
+        assert "train/sample" in samples
+        assert "eval/sample" in samples
+        assert len(samples["train/sample"]) == 1
+        assert len(samples["eval/sample"]) == 1
+        assert samples["train/sample"][0] == {"step": 1}
+        assert samples["eval/sample"][0] == {"step": 2}
 
 
 class TestBackends:
