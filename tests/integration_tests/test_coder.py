@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Integration tests for forge.actors.coder.SandboxedCoder.
+Integration tests for forge.actors.coder.SandboxedPythonCoder.
 
 Requires enroot to be installed.
 
@@ -16,36 +16,73 @@ import uuid
 
 import pytest
 
-from forge.actors.coder import SandboxedCoder
+from forge.actors.coder import SandboxedPythonCoder
 
 
 @pytest.mark.timeout(30)
 @pytest.mark.asyncio
 async def test_coder_runs_python():
-    """Integration test for SandboxedCoder with real container execution."""
+    """Integration test for SandboxedPythonCoder with real container execution."""
     # Create unique names to avoid test conflicts
-    unique_id = str(uuid.uuid4())[:8]
+    unique_id = str(uuid.uuid1())
     container_name = f"test_sandbox_{unique_id}"
     image_path = f"/tmp/python_test_{unique_id}.sqsh"
 
     coder = None
     try:
-        coder = await SandboxedCoder.as_actor(
+        coder = await SandboxedPythonCoder.as_actor(
             docker_image="docker://python:3.10",
             sqsh_image_path=image_path,
             container_name=container_name,
         )
 
         # Execute code
-        results = await coder.execute.call_one(
+        results, _ = await coder.execute.call_one(
             code="print('hello world')",
         )
+        print("Got results", results)
         assert results == "hello world\n"
 
     finally:
         # Clean up resources
         if coder:
-            await SandboxedCoder.shutdown(coder)
+            await SandboxedPythonCoder.shutdown(coder)
+
+        # Clean up the image file
+        if os.path.exists(image_path):
+            os.unlink(image_path)
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.asyncio
+async def test_coder_catches_error():
+    """Integration test for SandboxedPythonCoder with real container execution."""
+    # Create unique names to avoid test conflicts
+    unique_id = str(uuid.uuid1())
+    container_name = f"test_sandbox_{unique_id}"
+    image_path = f"/tmp/python_test_{unique_id}.sqsh"
+
+    coder = None
+    try:
+        print("starting test")
+        coder = await SandboxedPythonCoder.as_actor(
+            docker_image="docker://python:3.10",
+            sqsh_image_path=image_path,
+            container_name=container_name,
+        )
+        print("Got coder")
+
+        # Execute code
+        _, stderr = await coder.execute.call_one(
+            code="hello world",
+        )
+        print("got stderr", stderr)
+        assert "SyntaxError" in stderr
+
+    finally:
+        # Clean up resources
+        if coder:
+            await SandboxedPythonCoder.shutdown(coder)
 
         # Clean up the image file
         if os.path.exists(image_path):

@@ -5,23 +5,29 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Unit tests for forge.actors.coder.SandboxedCoder.
+Unit tests for forge.actors.coder.SandboxedPythonCoder.
 """
 import os
 import tempfile
 import uuid
+from contextlib import asynccontextmanager
 from unittest.mock import Mock, patch
 
 import pytest
-from forge.actors.coder import SandboxedCoder
+from forge.actors.coder import SandboxedPythonCoder
 
 from monarch.actor import this_proc
 
 
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_coder_execution():
-    """Tests basic coder execution with mocked enroot."""
+@asynccontextmanager
+async def create_mock_coder(
+    execute_stdout="hello world\n",
+    execute_returncode=0,
+    execute_stderr="",
+    import_fails=False,
+    create_fails=False,
+):
+    """Context manager that creates a mocked SandboxedPythonCoder."""
     unique_id = str(uuid.uuid4())[:8]
     container_name = f"test_sandbox_{unique_id}"
 
@@ -33,12 +39,15 @@ async def test_coder_execution():
         with patch("subprocess.run") as mock_run:
 
             def mock_subprocess_run(*args, **kwargs):
-                # Figure out which call this is based on the command
                 cmd = args[0]
                 if "import" in cmd:
                     result = Mock()
-                    result.returncode = 0
-                    result.stderr = ""
+                    if import_fails:
+                        result.returncode = 1
+                        result.stderr = "Failed to import image: network error"
+                    else:
+                        result.returncode = 0
+                        result.stderr = ""
                     return result
                 elif "remove" in cmd:
                     result = Mock()
@@ -46,15 +55,18 @@ async def test_coder_execution():
                     return result
                 elif "create" in cmd:
                     result = Mock()
-                    result.returncode = 0
-                    result.stderr = ""
+                    if create_fails:
+                        result.returncode = 1
+                        result.stderr = "Failed to create container: no space"
+                    else:
+                        result.returncode = 0
+                        result.stderr = ""
                     return result
                 elif "start" in cmd:
                     result = Mock()
-                    result.returncode = 0
-                    result.stdout = "hello world\n"
-                    result.stderr = ""
-                    print(f"Mock execute result: stdout = {repr(result.stdout)}")
+                    result.returncode = execute_returncode
+                    result.stdout = execute_stdout
+                    result.stderr = execute_stderr
                     return result
                 else:
                     raise ValueError(f"Unexpected subprocess call: {cmd}")
@@ -62,26 +74,40 @@ async def test_coder_execution():
             mock_run.side_effect = mock_subprocess_run
 
             coder = this_proc().spawn(
-                "coder",
-                SandboxedCoder,
+                f"coder_{uuid.uuid1()}",
+                SandboxedPythonCoder,
                 "docker://python:3.10",
                 image_path,
                 container_name,
             )
-            await coder.setup.call_one()
 
-            # Execute code (this will trigger more mocked subprocess calls)
-            results = await coder.execute.call_one(
-                code="print('hello world')",
-            )
-
-            # Verify the result
-            assert results == "hello world\n"
+            yield coder, mock_run
 
     finally:
-        # Clean up resources
         if coder:
-            await SandboxedCoder.shutdown(coder)
+            await SandboxedPythonCoder.shutdown(coder)
 
         if os.path.exists(image_path):
             os.unlink(image_path)
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_coder_success():
+    """Test successful execution."""
+    async with create_mock_coder(execute_stdout="Hello World\n") as (coder, _):
+        await coder.setup.call_one()
+        result, _ = await coder.execute.call_one(code="print('Hello World')")
+        assert result == "Hello World\n"
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_coder_execution_failure():
+    """Test execution failure."""
+    async with create_mock_coder(
+        execute_returncode=1, execute_stderr="SyntaxError: invalid syntax"
+    ) as (coder, _):
+        await coder.setup.call_one()
+        output, err = await coder.execute.call_one(code="invalid syntax")
+        assert "SyntaxError" in err

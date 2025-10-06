@@ -18,12 +18,14 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class SandboxedCoder(ForgeActor):
+class SandboxedPythonCoder(ForgeActor):
     """A sandboxed code execution environment using enroot containers.
 
-    SandboxedCoder provides a secure, isolated environment for executing Python code
-    using NVIDIA's enroot containerization technology. It automatically manages the
-    entire container lifecycle including image import, container creation, and cleanup.
+    This is a proof of concept of using enroot to provided a sandboxed
+    environment for executing Python code using NVIDIA's enroot technology.
+
+    It automatically manages the entire container lifecycle including image
+    import, container creation, and cleanup.
 
     The actor follows a three-stage workflow:
     1. Image Management: Automatically imports Docker images to enroot .sqsh format
@@ -59,14 +61,15 @@ class SandboxedCoder(ForgeActor):
     @endpoint
     async def setup(self):
         logging.debug("Setting up sandboxed actor")
-        await self._ensure_image()
+        await self._maybe_create_image()
         self._reset()
 
     @endpoint
     async def reset(self):
+        """Resets the container instance from the base image."""
         self._reset()
 
-    async def _ensure_image(self):
+    async def _maybe_create_image(self):
         """Ensure the enroot image exists, import it if necessary."""
         if not os.path.exists(self.sqsh_image_path):
             logging.debug(
@@ -109,11 +112,14 @@ class SandboxedCoder(ForgeActor):
         logging.debug("Successfully initialized container")
 
     @endpoint
-    async def execute(self, code: str) -> str:
-        """
-        Execute Python code inside the container.
-        :param code: Python source code string to execute.
-        :return: Captured stdout.
+    async def execute(self, code: str) -> tuple[str, str]:
+        """Executes Python code inside the container and returns the output.
+
+        Args:
+            code: Python source code string to execute.
+
+        Returns:
+            The captured stdout and stderr from the execution.
         """
         logging.debug(f"Executing {code}")
         if not self._initialized:
@@ -140,6 +146,6 @@ class SandboxedCoder(ForgeActor):
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            if result.returncode != 0:
-                raise RuntimeError(f"Execution failed:\n{result.stderr}")
-            return result.stdout
+            output = result.stdout
+            error = result.stderr
+            return output, error

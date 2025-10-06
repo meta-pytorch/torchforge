@@ -10,7 +10,7 @@ __all__ = [
     "RLTrainer",
     "ReplayBuffer",
     "TitanRefModel",
-    "SandboxedCoder",
+    "SandboxedPythonCoder",
 ]
 
 
@@ -35,9 +35,9 @@ def __getattr__(name):
         from .reference_model import ReferenceModel
 
         return ReferenceModel
-    elif name == "SandboxedCoder":
-        from .coder import SandboxedCoder
+    elif name == "SandboxedPythonCoder":
+        from .coder import SandboxedPythonCoder
 
-        return SandboxedCoder
+        return SandboxedPythonCoder
     else:
         raise AttributeError(f"module {__name__} has no attribute {name}")
