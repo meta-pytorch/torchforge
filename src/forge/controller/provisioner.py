@@ -229,7 +229,6 @@ class Provisioner:
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
                 env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
-                env_vars["HYPERACTOR_MESSAGE_DELIVER_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
