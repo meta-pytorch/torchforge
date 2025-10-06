@@ -362,6 +362,7 @@ async def main(cfg: DictConfig):
         ),
     )
 
+    # Call after services are initialized
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     print("All services initialized successfully!")
