@@ -18,6 +18,7 @@ class EvaluationMode(Enum):
 
     BEST_RESPONSE = auto()
     RESPONSE_CHECK = auto()
+    MATH_CHECK = auto()
 
 
 @dataclass
@@ -28,7 +29,65 @@ class Judge(Policy):
     and may require more postprocessing
     """
 
-    def _response_check(self, prompt: str, responses: list[str]) -> str:
+    def _math_check(
+        self,
+        prompt: str,
+        responses: list[str],
+        ground_truth: None | str = None,
+    ) -> str:
+        """
+        Construct the generator input. Formats the request such that the generator
+        will return a comma separated list with a [[GOOD]] or [[BAD]] evaluation
+        for each response, corresponding to whether the model thinks the response
+        matches the provided ground_truth. Specifically the generator is prompted to
+        check for mathematical equivalence
+
+        Note: This is not a "good" prompt, it just demonstrates how to make one
+        """
+
+        if ground_truth is None:
+            raise
+
+        system_prompt = f"""
+        You are a math professor. Given the prompt and ground truth solution, evaluate
+        each of the provided attempts and return whether the final solution is
+        numerically equivalent to the ground truth.
+
+        Each response is formatted as [Response #<N>], where <N> represents the
+        attempt.
+
+        Your answer should be a comma separated list of "[[GOOD]]" or "[[BAD]]",
+        corresponding to the same order as the reponses provided.
+
+        - If the answer is irrelevant to the prompt, return "[[BAD]]".
+        - If you are not confident that solution and attempt are equivalent, return "[[BAD]]"
+        - Only return "[[GOOD]]" if the attempt is numerically equivalent
+
+        Do not explain your reasoning, just provide your evaluations.
+        ---
+        Here is the prompt that generated the responses: {prompt}.
+        ---
+        Here is the ground truth: {ground_truth}
+        """
+        response_str = "\n".join(
+            [f"[Response #{i+1}] {resp}" for i, resp in enumerate(responses)]
+        )
+        as_chat = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": response_str},
+        ]
+        tokenizer = self.processor.tokenizer.tokenizer
+        formatted_request = tokenizer.apply_chat_template(
+            as_chat, tokenize=False, add_generation_prompt=True
+        )
+        return formatted_request
+
+    def _response_check(
+        self,
+        prompt: str,
+        responses: list[str],
+        ground_truth: None | str = None,
+    ) -> str:
         """
         Construct the generator input. Formats the request such that the generator
         will return a comma separated list with a [[GOOD]] or [[BAD]] evaluation
@@ -67,7 +126,12 @@ class Judge(Policy):
         )
         return formatted_request
 
-    def _best_response(self, prompt: str, responses: list[str]) -> str:
+    def _best_check(
+        self,
+        prompt: str,
+        responses: list[str],
+        ground_truth: None | str = None,
+    ) -> str:
         """
         Construct the generator input. Format the request such that the generator
         will respond with a single integer corresponding to the response the model
@@ -105,14 +169,18 @@ class Judge(Policy):
         self,
         prompt: str,
         responses: None | list[str] = None,
+        ground_truth: None | str = None,
         evaluation_mode: EvaluationMode = EvaluationMode.BEST_RESPONSE,
     ) -> list[str]:
         _prompting: dict = {
-            EvaluationMode.BEST_RESPONSE: self._response_check,
-            EvaluationMode.ANSWER_CHECK: self._answer_check,
+            EvaluationMode.BEST_RESPONSE: self._best_check,
+            EvaluationMode.RESPONSE_CHECK: self._response_check,
+            EvaluationMode.MATH_CHECK: self._math_check,
         }
 
-        wrapped_prompt: str = _prompting[evaluation_mode](prompt, responses)
+        wrapped_prompt: str = _prompting[evaluation_mode](
+            prompt, responses, ground_truth
+        )
         response: List[Completion] = await self.generate._method(self, wrapped_prompt)
         return self._postprocess_output(response)
 
@@ -125,10 +193,14 @@ class RewardModelJudge(Policy):
     """
 
     # TODO: Add reward models formatting
-    def wrapped_prompt(self, prompt: str, responses: list[str]) -> str:
+    def wrapped_prompt(
+        self, prompt: str, responses: list[str], ground_truth: None | str = None
+    ) -> str:
         return prompt
 
-    def _postprocess_output(self, outputs: list[Completion]) -> list[str]:
+    def _postprocess_output(
+        self, outputs: list[Completion], ground_truth: None | str = None
+    ) -> list[str]:
         return [output.text for output in outputs]
 
     @endpoint

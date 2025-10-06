@@ -13,7 +13,7 @@ import asyncio
 
 import os
 
-from forge.actors.judge import Judge
+from forge.actors.judge import EvaluationMode, Judge
 from forge.cli.config import parse
 from forge.controller.provisioner import shutdown
 
@@ -50,7 +50,7 @@ async def run(cfg: DictConfig):
     print("\nGeneration Results:")
     print("=" * 80)
     for batch, (best, fact) in enumerate(
-        zip(best_response_evaluations, fact_check_evaluations)
+        zip(best_response_evaluations, response_check_evaluations)
     ):
         print(f"Sample {batch + 1}")
         print(f"Evaluation (BEST_RESPONSE): {best}")
