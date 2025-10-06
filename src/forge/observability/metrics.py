@@ -474,30 +474,23 @@ class SampleAccumulator(MetricAccumulator):
     Optionally uses a sample filter to decide what to keep at append/flush time.
     """
 
-    def __init__(
-        self, reduction: Reduce, filter: TopBottomKFilter | None = TopBottomKFilter()
-    ):
+    def __init__(self, reduction: Reduce):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
-        self.filter = filter
+        self.filter = TopBottomKFilter()
 
     def append(self, value: dict) -> None:
         if not isinstance(value, dict):
             raise ValueError(f"Expected dict, got {type(value)}")
 
-        # If filter is provided, only keep the sample if filter_append returns True
-        if self.filter:
-            if self.filter.filter_append(value):
-                self.samples.append(value)
-        else:
+        # Only keep the sample if filter_append returns True
+        if self.filter.filter_append(value):
             self.samples.append(value)
 
     def get_value(self) -> list[dict]:
         """Return locally collected (and optionally filtered) samples."""
-        if self.filter:
-            # Apply flush-time filter (e.g. heap selection, threshold trimming)
-            return self.filter.filter_flush(self.samples)
-        return self.samples
+        # Apply flush-time filter (e.g. heap selection, threshold trimming)
+        return self.filter.filter_flush(self.samples)
 
     def get_state(self) -> Dict[str, Any]:
         """Serialize accumulator state for cross-rank reduction."""
@@ -517,8 +510,7 @@ class SampleAccumulator(MetricAccumulator):
     def reset(self) -> None:
         """Clear local samples and reset filter state."""
         self.samples.clear()
-        if self.filter:
-            self.filter.reset()
+        self.filter.reset()
 
 
 #############
