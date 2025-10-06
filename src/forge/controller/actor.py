@@ -166,6 +166,8 @@ class ForgeActor(Actor):
             mesh_name=cls.mesh_name,
         )
 
+        print(f"Spawning proc mesh {cls.mesh_name} with gpus {cls.with_gpus}")
+
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
         actor_name = kwargs.pop("name", cls.__name__)

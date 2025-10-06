@@ -120,7 +120,7 @@ services:
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
     num_replicas: 1
-    # hosts: 1
+    hosts: 1
     with_gpus: true
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
@@ -137,7 +137,7 @@ actors:
     with_gpus: false
   trainer:
     procs: 4
-    hosts: 1
+    # hosts: 1
     with_gpus: true
   replay_buffer:
     procs: 1
