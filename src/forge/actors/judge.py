@@ -7,8 +7,6 @@
 from dataclasses import dataclass
 from enum import auto, Enum
 
-import torch
-
 from monarch.actor import endpoint
 
 from forge.actors.policy import Policy
@@ -187,6 +185,10 @@ class Judge(Policy):
         return self._postprocess_output(response)
 
 
+from vllm import LLM
+from vllm.outputs import ScoringRequestOutput
+
+
 @dataclass
 class RewardModelJudge:
     """
@@ -194,57 +196,13 @@ class RewardModelJudge:
     evaluate responses without further prompting required.
     """
 
-    def __init__(self, model: str, num_labels: int):
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
+    def __init__(self, model: str):
         self.model_name = model
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            model, num_labels=num_labels
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.model = LLM(model=model, task="score")
 
-    def _wrap_prompt(
-        self,
-        prompt: None | str = None,
-        responses: None | list[str] = None,
-        ground_truth: None | str = None,
-    ) -> str:
-        conv1 = responses[0]
-        conv2 = responses[1]
+    def _postprocess_output(self, outputs: list[ScoringRequestOutput]) -> list[float]:
+        return [output.outputs.score for output in outputs]
 
-        conv1_formatted = self.tokenizer.apply_chat_template(conv1, tokenize=False)
-        conv2_formatted = self.tokenizer.apply_chat_template(conv2, tokenize=False)
-        if self.tokenizer.bos_token is not None and conv1_formatted.startswith(
-            self.tokenizer.bos_token
-        ):
-            conv1_formatted = conv1_formatted[len(self.tokenizer.bos_token) :]
-        if self.tokenizer.bos_token is not None and conv2_formatted.startswith(
-            self.tokenizer.bos_token
-        ):
-            conv2_formatted = conv2_formatted[len(self.tokenizer.bos_token) :]
-        conv1_tokenized = self.tokenizer(conv1_formatted, return_tensors="pt")
-        conv2_tokenized = self.tokenizer(conv2_formatted, return_tensors="pt")
-        return conv1_tokenized, conv2_tokenized
-
-    def _postprocess_output(
-        self, outputs: list[Completion], ground_truth: None | str = None
-    ) -> list[str]:
-        return [output.text for output in outputs]
-
-    def evaluate(
-        self,
-        prompt: None | str = None,
-        responses: None | list[str] = None,
-        ground_truth: None | str = None,
-    ) -> list[str]:
-        conv1_tokenized, conv2_tokenized = self._wrap_prompt(
-            prompt, responses, ground_truth
-        )
-
-        with torch.no_grad():
-            score1 = self.model(**conv1_tokenized).logits[0][0].item()
-            score2 = self.model(**conv2_tokenized).logits[0][0].item()
-        print(f"Score for response 1: {score1}")
-        print(f"Score for response 2: {score2}")
-        # response: List[Completion] = await self.generate._method(self, wrapped_prompt)
-        # return self._postprocess_output(response)
+    def evaluate(self, prompt: str, responses: list[str]) -> list[str]:
+        outputs: list[ScoringRequestOutput] = self.model.score(prompt, responses)
+        return self._postprocess_output(outputs)
