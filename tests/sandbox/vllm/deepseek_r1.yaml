@@ -1,4 +1,4 @@
-# >>> python -m apps.vllm.main --config apps/vllm/deepseek_r1.yaml
+# >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/deepseek_r1.yaml
 
 # NOTE - this won't work until we have proper HostMesh support
 policy:

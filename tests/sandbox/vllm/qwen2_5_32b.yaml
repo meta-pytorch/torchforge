@@ -1,9 +1,9 @@
-# >>> python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
+# >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/qwen2_5_32b.yaml
 
 policy:
   engine_config:
-    model: "meta-llama/Llama-3.1-8B-Instruct"
-    tensor_parallel_size: 2
+    model: "Qwen/Qwen2.5-32B"
+    tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: true
   sampling_config:
@@ -13,8 +13,8 @@ policy:
 
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 4
+    procs: 4
+    num_replicas: 1
     with_gpus: true
 
 
