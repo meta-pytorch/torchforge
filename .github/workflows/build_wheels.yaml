@@ -14,14 +14,14 @@ permissions:
 jobs:
   build:
     name: forge-cu129-nightly
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@ad2d4a86079ce6ae7b181e8e79230bbf38b1c909
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@d56fa2d461286d4b6a19e4ec66b397bf96925989
     strategy:
       fail-fast: false
     with:
       repository: meta-pytorch/forge
       ref: ""
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: ad2d4a86079ce6ae7b181e8e79230bbf38b1c909
+      test-infra-ref: d56fa2d461286d4b6a19e4ec66b397bf96925989
       run-smoke-test: false
       wheel-upload-path: whl/preview/forge
       package-name: forge
