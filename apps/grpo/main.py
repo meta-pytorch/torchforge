@@ -321,7 +321,7 @@ async def main(cfg: DictConfig):
             )
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger(actor_name="Controller")
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
     # ---- Setup services ---- #

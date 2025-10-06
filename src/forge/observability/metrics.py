@@ -507,7 +507,7 @@ class MetricCollector:
                     "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
                     " This happens when you try to use `record_metric` before calling `init_backends`."
                     " To disable this warning, please call in your main file:\n"
-                    "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                    "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                     "`await mlogger.init_backends.call_one(logging_config)`\n"
                     "or set env variable `FORGE_DISABLE_METRICS=True`"
                 ),
@@ -551,7 +551,7 @@ class MetricCollector:
                 level=logging.WARNING,
                 msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
                 "\nPlease call in your main file:\n"
-                "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                 "`await mlogger.init_backends.call_one(logging_config)`\n"
                 "before calling `flush`",
             )

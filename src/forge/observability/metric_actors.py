@@ -27,7 +27,7 @@ _global_logger = None
 
 async def get_or_create_metric_logger(
     proc_mesh: ProcMesh | None = None,
-    actor_name: str | None = None,
+    process_name: str | None = None,
 ) -> "GlobalLoggingActor":
     """Initializes a LocalFetcherActor in the specified process mesh (or current process if None),
     if not already initialized, registers it with the GlobalLoggingActor and returns the
@@ -41,7 +41,7 @@ async def get_or_create_metric_logger(
     Args:
         proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on. If None,
             uses `monarch.actor.this_proc()`.
-        actor_name: Optional meaningful actor name (e.g., "TrainActor", "GeneratorActor") for logging.
+        process_name: Optional meaningful process name (e.g., "TrainActor", "GeneratorActor") for logging.
             If None, will auto-detect from call stack or default to "UnknownActor" if not found.
 
     Returns:
@@ -77,8 +77,8 @@ async def get_or_create_metric_logger(
         await mlogger.shutdown()
     """
 
-    if actor_name is None:
-        actor_name = detect_actor_name_from_call_stack()
+    if process_name is None:
+        process_name = detect_actor_name_from_call_stack()
 
     # Get or create the singleton global logger
     global _global_logger
@@ -105,7 +105,7 @@ async def get_or_create_metric_logger(
     # Setup local_fetcher_actor if needed
     if not proc_has_local_fetcher:
         local_fetcher_actor = proc.spawn(
-            "local_fetcher_actor", LocalFetcherActor, global_logger, actor_name
+            "local_fetcher_actor", LocalFetcherActor, global_logger, process_name
         )
         await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
         proc._local_fetcher = local_fetcher_actor  # pyre-ignore
@@ -124,10 +124,10 @@ class LocalFetcherActor(Actor):
     def __init__(
         self,
         global_logger: Optional["GlobalLoggingActor"] = None,
-        actor_name: str | None = None,
+        process_name: str | None = None,
     ) -> None:
         self.global_logger = global_logger
-        self.actor_name = actor_name  # Passed MetricCollector for logging
+        self.process_name = process_name  # Passed MetricCollector for logging
 
     @endpoint
     async def flush(
@@ -164,7 +164,7 @@ class LocalFetcherActor(Actor):
         """
         collector = MetricCollector()
         await collector.init_backends(
-            metadata_per_primary_backend, config, step, actor_name=self.actor_name
+            metadata_per_primary_backend, config, step, actor_name=self.process_name
         )
 
     @endpoint
@@ -317,7 +317,7 @@ class GlobalLoggingActor(Actor):
             logger.warning(
                 "Cannot flush collected metrics. GlobalLoggingActor.flush() called before init_backends()."
                 " No backends will be flushed. Please call in your main file:\n"
-                "`mlogger = await get_or_create_metric_logger(actor_name='Controller')`\n"
+                "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                 "`await mlogger.init_backends.call_one(logging_config)`\n"
             )
             return

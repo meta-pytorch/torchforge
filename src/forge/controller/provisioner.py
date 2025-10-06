@@ -255,8 +255,8 @@ class Provisioner:
             self._proc_host_map[procs] = host_mesh
 
         # Detect actor name and spawn local logging actor on each process
-        actor_name = detect_actor_name_from_call_stack()
-        _ = await get_or_create_metric_logger(procs, actor_name=actor_name)
+        process_name = detect_actor_name_from_call_stack()
+        _ = await get_or_create_metric_logger(procs, process_name=process_name)
 
         return procs
 
