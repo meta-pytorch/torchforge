@@ -186,15 +186,12 @@ class Policy(PolicyInterface):
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
-
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
-        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
-        # do logging within PolicyWorker
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )

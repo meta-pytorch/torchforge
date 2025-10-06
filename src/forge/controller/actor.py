@@ -12,7 +12,7 @@ from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
+from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -144,28 +144,6 @@ class ForgeActor(Actor):
         """
         pass
 
-    @endpoint
-    async def set_env(self, addr: str, port: str):
-        """A temporary workaround to set master addr/port.
-
-        TODO - issues/144. This should be done in proc_mesh creation.
-        The ideal path:
-        - Create a host mesh
-        - Grab a host from host mesh, from proc 0 spawn an actor that
-          gets addr/port
-        - Spawn procs on the HostMesh with addr/port, setting the
-          addr/port in bootstrap.
-
-        We can't currently do this because HostMesh only supports single
-        proc_mesh creation at the moment. This will be possible once
-        we have "proper HostMesh support".
-
-        """
-        import os
-
-        os.environ["MASTER_ADDR"] = addr
-        os.environ["MASTER_PORT"] = port
-
     @classmethod
     async def launch(cls, *args, **kwargs) -> "ForgeActor":
         """Provisions and deploys a new actor.
@@ -193,10 +171,6 @@ class ForgeActor(Actor):
         actor_name = kwargs.pop("name", cls.__name__)
         actor = proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
-
-        if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
-            host, port = proc_mesh._hostname, proc_mesh._port
-            await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
         return actor
 
