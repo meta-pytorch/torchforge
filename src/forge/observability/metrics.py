@@ -673,7 +673,10 @@ class ConsoleBackend(LoggerBackend):
     async def log_batch(
         self, metrics: List[Metric], step: int, *args, **kwargs
     ) -> None:
-        metrics_str = "\n".join(f"  {metric.key}: {metric.value}" for metric in metrics)
+        metrics_str = "\n".join(
+            f"  {metric.key}: {metric.value}"
+            for metric in sorted(metrics, key=lambda m: m.key)
+        )
         logger.info(
             f"=== [METRICS STEP {step} ===\n{metrics_str}\n==============================\n"
         )
