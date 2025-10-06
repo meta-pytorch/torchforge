@@ -1,9 +1,11 @@
+# >>> python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
+
 # Config for supervised full finetuning using a Llama3.1 8B Instruct model
 #
 # This config assumes that you've run the following command before launching
 # this run:
 #   export HF_HUB_DISABLE_XET=1
-#   uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct
+#   forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
 
 
 # TODO: required by torchtitan
@@ -14,11 +16,9 @@ comm:
 model:
   name: llama3
   flavor: 8B
-  tokenizer_path: /tmp/Llama-3.1-8B-Instruct
+  hf_assets_path: /tmp/Meta-Llama-3.1-8B-Instruct
 
 processes:
-  scheduler: local # local | mast (not supported yet)
-  hosts: 1
   procs: 8
   with_gpus: true
 

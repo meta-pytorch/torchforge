@@ -7,7 +7,6 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
-
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -24,11 +23,13 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
-from forge.controller.provisioner import shutdown
+from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
+
+from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -292,13 +293,20 @@ async def main(cfg: DictConfig):
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
 
-    # initialize before spawning services
+    # ---- Global setups ---- #
+    if cfg.get("provisioner", None) is not None:
+        await init_provisioner(
+            ProvisionerConfig(
+                launcher_config=LauncherConfig(**cfg.provisioner.launcher)
+            )
+        )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
+    await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
     # ---- Setup services ---- #
-    await ts.initialize(strategy=ts.ControllerStorageVolumes())
+
     (
         dataloader,
         policy,
@@ -381,14 +389,14 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            # Calculate reference logprobs
-            ref_logits = await ref_model.forward.route(input_ids)
-            t.step("reference_model_forward")
+            ref_logprobs = await ref_model.forward.route(
+                input_ids, max_req_tokens, return_logprobs=True
+            )
+            t.step("reference_model_calculate_logprobs")
 
-            ref_logprobs = compute_logprobs(ref_logits, input_ids[:, max_req_tokens:])
             for i, episode in enumerate(group.episodes):
                 episode.ref_logprobs = ref_logprobs[i]
-            del ref_logits, ref_logprobs, input_ids
+            del ref_logprobs, input_ids
             t.step("compute_logprobs")
 
             # Calculate advantages and add to replay buffer

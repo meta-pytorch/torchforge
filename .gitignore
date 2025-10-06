@@ -153,6 +153,7 @@ docs/source/generated_examples/
 docs/source/gen_modules/
 docs/source/generated/
 docs/source/sg_execution_times.rst
+docs/source/tutorials
 # pytorch-sphinx-theme gets installed here
 docs/src
 
@@ -197,6 +198,5 @@ wandb/
 assets/wheels/vllm*.whl
 
 # DCP artifacts
-model_state_dict/
 forge_dcp_tmp/
 demo_top_down.md

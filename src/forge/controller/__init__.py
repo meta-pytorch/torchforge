@@ -4,6 +4,19 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 from .actor import ForgeActor
-from .proc_mesh import get_proc_mesh, stop_proc_mesh
+from .provisioner import (
+    get_proc_mesh,
+    host_mesh_from_proc,
+    init_provisioner,
+    shutdown,
+    stop_proc_mesh,
+)
 
-__all__ = ["stop_proc_mesh", "get_proc_mesh", "ForgeActor"]
+__all__ = [
+    "ForgeActor",
+    "get_proc_mesh",
+    "stop_proc_mesh",
+    "init_provisioner",
+    "shutdown",
+    "host_mesh_from_proc",
+]

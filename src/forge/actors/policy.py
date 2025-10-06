@@ -19,23 +19,6 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from forge.actors._torchstore_utils import (
-    extract_param_name,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.types import ProcessConfig
-
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -59,6 +42,23 @@ from vllm.v1.engine.processor import Processor
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
+
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -173,6 +173,7 @@ class Policy(PolicyInterface):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
@@ -186,15 +187,12 @@ class Policy(PolicyInterface):
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
-
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
-        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
-        # do logging within PolicyWorker
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )

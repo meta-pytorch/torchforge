@@ -29,6 +29,7 @@ from torchtitan.experiments.forge.job_config import ForgeJobConfig
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
+from forge.util.ops import compute_logprobs
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -90,8 +91,23 @@ class ReferenceModel(ForgeActor):
         self.model.eval()
 
     @endpoint
-    async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    async def forward(
+        self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool
+    ) -> torch.Tensor:
+        """
+        Args:
+            input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
+            max_req_tokens (int): maximum request length.
+            return_logprobs (bool): whether to return og probabilities instead of raw logits.
 
+            return_logprobs flag significantly impacts the amount of data transferred to the caller:
+            - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
+              This includes the full vocabulary distribution for each token position.
+
+            - When True: Returns log probabilities with shape [group_size, req_length].
+              This only includes probabilities for the request tokens, significantly reducing memory
+              usage and transfer overhead.
+        """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
         record_metric(
@@ -133,5 +149,12 @@ class ReferenceModel(ForgeActor):
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
         t.step("forward")
-        t.stop()
-        return logits
+
+        if not return_logprobs:
+            t.stop()
+            return logits
+        else:
+            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+            t.step("compute_logprobs")
+            t.stop()
+            return logprobs
