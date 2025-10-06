@@ -61,12 +61,12 @@ class SandboxedPythonCoder(ForgeActor):
     async def setup(self):
         logging.debug("Setting up sandboxed actor")
         await self._maybe_create_image()
-        self.recreate()
+        self._recreate()
 
     @endpoint
-    async def reset(self):
-        """Resets the container instance from the base image."""
-        self.recreate()
+    async def recreate(self):
+        """Recreates the container instance from the base image."""
+        self._recreate()
 
     async def _maybe_create_image(self):
         """Ensure the enroot image exists, import it if necessary."""
@@ -88,7 +88,7 @@ class SandboxedPythonCoder(ForgeActor):
         else:
             logging.info(f"Using existing image: {self.sqsh_image_path}")
 
-    def recreate(self):
+    def _recreate(self):
         """(Re)create a clean container instance from the base image."""
         # Remove any old container
         logging.debug(f"Removing container {self.container_name}")
@@ -106,7 +106,7 @@ class SandboxedPythonCoder(ForgeActor):
         )
         logging.debug(f"Container creation result: {result}")
         if result.returncode != 0:
-            raise RuntimeError(f"Failed to reset container: {result.stderr}")
+            raise RuntimeError(f"Failed to recreate container: {result.stderr}")
         self._initialized = True
         logging.debug("Successfully initialized container")
 
@@ -118,11 +118,12 @@ class SandboxedPythonCoder(ForgeActor):
             code: Python source code string to execute.
 
         Returns:
-            The captured stdout and stderr from the execution.
+            The captured stdout and stderr from the execution, as a
+            (stdout, stderr) tuple of strings.
         """
         logging.debug(f"Executing {code}")
         if not self._initialized:
-            raise RuntimeError("Container not initialized. Call reset() first.")
+            raise RuntimeError("Container not initialized. Call recreate() first.")
 
         # Write code to a temporary file that we can mount
         with tempfile.TemporaryDirectory() as tmpdir:
