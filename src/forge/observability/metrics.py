@@ -142,11 +142,6 @@ def record_episode_sample(key: str, episode):
             episode.reward_breakdown or {}
         ),  # per-fn breakdown including the average reward
         "advantage": episode.advantage,
-        "ref_logprobs": float(
-            episode.ref_logprobs.mean().item()
-            if episode.ref_logprobs is not None
-            else None
-        ),
         "request_len": episode.request_len,
         "response_len": episode.response_len,
         "pad_id": episode.pad_id,
@@ -853,16 +848,12 @@ class ConsoleBackend(LoggerBackend):
 
     async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
         """Pretty-print sample-level logs to console."""
-        if not samples:
-            return
         import json
 
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
-        for key, rows in samples.items():
-            logger.info(f"[{key}] ({len(rows)} samples)")
-            for sample in rows:
-                pretty = json.dumps(sample, indent=2, ensure_ascii=False)
-                logger.info(pretty)
+        for table_name, table_rows in samples.items():
+            logger.info(f"[{table_name}] ({len(table_rows)} samples)")
+            logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
         logger.info("==============================================\n")
 
     async def finish(self) -> None:
@@ -1014,24 +1005,24 @@ class WandbBackend(LoggerBackend):
         if not self.run or not samples:
             return
 
-        for key, rows in samples.items():
-            if not rows:
+        for table_name, table_rows in samples.items():
+            if not table_rows:
                 continue
 
             # Use all keys to avoid dropped fields
-            columns = sorted({k for s in rows for k in s.keys()})
+            columns = sorted({k for s in table_rows for k in s.keys()})
             table = wandb.Table(columns=columns)
 
-            for s in rows:
-                values = [s.get(c) for c in columns]
+            for s in table_rows:
+                values = [s.get(c) for c in columns]  # returns None for missing keys
                 table.add_data(*values)
 
             # Unique table name avoids overwrite; commit forces sync
-            table_name = f"{key}_table_step{step}"
-            self.run.log({table_name: table, "_num_rows": len(rows)}, commit=True)
+            table_name = f"{table_name}_table_step{step}"
+            self.run.log({table_name: table, "_num_rows": len(table_rows)}, commit=True)
 
             logger.info(
-                f"WandbBackend: Logged {len(rows)} samples for {key} at step {step}"
+                f"WandbBackend: Logged {len(table_rows)} samples for {table_name} at step {step}"
             )
 
     def get_metadata_for_secondary_ranks(self) -> Dict[str, Any]:
