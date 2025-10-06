@@ -8,7 +8,6 @@ import heapq
 import itertools
 import logging
 import os
-import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -132,7 +131,6 @@ def record_episode_sample(key: str, episode):
     Args:
         key (str): logging prefix (e.g. "rollout/sample").
         episode (Episode): episode object with filled attributes.
-        reward_breakdown (dict[str, float]): per-function rewards, e.g. {"MathReward": 0.8, "FormatReward": 1.0}.
     """
     sample = {
         "episode_id": episode.episode_id,
@@ -245,65 +243,7 @@ def reduce_metrics_states(
 #################
 
 
-class SampleFilter(ABC):
-    """Abstract base class for sample filtering."""
-
-    @abstractmethod
-    def filter_append(self, sample: Dict) -> bool:
-        """
-        Decide whether a sample should be kept at append time.
-        Return True if the sample should be stored, False otherwise.
-        """
-        pass
-
-    def filter_flush(self, samples: List[Dict]) -> List[Dict]:
-        """
-        Optionally filter or transform the collected samples at flush time.
-        Default: return the samples unchanged.
-        """
-        return samples
-
-    def reset(self) -> None:
-        """Clears for next accumulation cycle."""
-        pass
-
-
-class RandomRatioFilter:
-    """Randomly keep a fraction of samples."""
-
-    def __init__(self, ratio=0.05):
-        self.ratio = ratio
-
-    def filter_append(self, sample):
-        return random.random() < self.ratio
-
-
-class RewardThresholdFilter:
-    """
-    Keep samples only if their reward is < lt or > gt (depending on which bound is set).
-    If a bound is None, that side of the filter is disabled.
-    """
-
-    def __init__(self, lt=None, gt=None):
-        self.lt = lt
-        self.gt = gt
-
-    def filter_append(self, sample):
-        r = sample.get("reward", 0.0)
-
-        # If lt is set: drop samples with reward >= lt
-        if self.lt is not None and r >= self.lt:
-            return False
-
-        # If gt is set: drop samples with reward <= gt
-        if self.gt is not None and r <= self.gt:
-            return False
-
-        # Otherwise, keep this sample
-        return True
-
-
-class TopBottomKFilter(SampleFilter):
+class TopBottomKFilter:
     """Keep the top-k and bottom-k samples by a given key (e.g., reward)."""
 
     def __init__(self, top_k=1, bottom_k=1, key="reward"):
@@ -538,18 +478,19 @@ class StdAccumulator(MetricAccumulator):
 class SampleAccumulator(MetricAccumulator):
     """Accumulator for sample-level metrics (e.g., prompt/response/reward dicts).
 
-    Optionally uses a SampleFilter to decide what to keep at append/flush time.
+    Optionally uses a sample filter to decide what to keep at append/flush time.
     """
 
     def __init__(
-        self, reduction: Reduce, filter: SampleFilter | None = TopBottomKFilter()
+        self, reduction: Reduce, filter: TopBottomKFilter | None = TopBottomKFilter()
     ):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
         self.filter = filter
 
     def append(self, value: dict) -> None:
-        assert isinstance(value, dict)
+        if not isinstance(value, dict):
+            raise ValueError(f"Expected dict, got {type(value)}")
 
         # If filter is provided, only keep the sample if filter_append returns True
         if self.filter:
