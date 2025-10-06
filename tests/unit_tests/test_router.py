@@ -325,3 +325,54 @@ async def test_independent_batchers_and_routers_per_endpoint():
 
     finally:
         await service.shutdown()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_rr_batch_incr_bsize5_behaves_like_normal_incr():
+    """Ensure rr_batch_incr_bsize5 (batch_size=5) behaves like a normal incr endpoint for single calls."""
+    service = await Counter.options(procs=1, num_replicas=1).as_service(v=5)
+
+    try:
+        # Initial value
+        assert await service.value.route() == 5
+
+        # Call batched increment once
+        await service.rr_batch_incr_bsize5.route()
+
+        # Should increment exactly once
+        assert await service.value.route() == 6
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_service_endpoint_batching_preserves_order():
+    class MyActor(ForgeActor):
+        def __init__(self):
+            self._num_calls = 0
+            self._sum = 0
+
+        @endpoint
+        async def get_num_calls(self):
+            return self._num_calls
+
+        @endpoint
+        async def get_sum(self):
+            return self._sum
+
+        @service_endpoint(router=RoundRobinRouter, batch_size=5, batch_timeout=0.05)
+        async def test(self, inputs: list[int]):
+            self._num_calls += 1
+            self._sum += sum(inputs)
+            return inputs
+
+    service = await MyActor.options(num_replicas=2, procs=1).as_service()
+    try:
+        results = await asyncio.gather(*[service.test.route(i) for i in range(5)])
+        assert results == [0, 1, 2, 3, 4]
+        assert await service.get_num_calls.route() == 1
+        assert sorted(await service.get_sum.fanout()) == [0, 10]
+    finally:
+        await service.shutdown()
