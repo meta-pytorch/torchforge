@@ -16,12 +16,7 @@ services:
     procs: 4
     num_replicas: 1
     with_gpus: true
-  coder:
-    procs: 1
-    num_replicas: 1
-    with_gpus: false
 
-num_calls: 1
+
 # Optional, otherwise argparse fallback kicks in
-prompt: "Write a Python function that calculates the factorial of a number and test it with factorial(5). Please wrap your code in ```python``` code blocks."
-with_coder: true
+prompt: "Tell me a joke"

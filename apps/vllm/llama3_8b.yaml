@@ -18,8 +18,5 @@ services:
     with_gpus: true
 
 
-num_calls: 100
-# llama3 8b is too dumb to write code
-with_coder: false
 # Optional, otherwise argparse fallback kicks in
 prompt: "Tell me a joke"
