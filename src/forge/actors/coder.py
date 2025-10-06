@@ -62,12 +62,12 @@ class SandboxedPythonCoder(ForgeActor):
     async def setup(self):
         logging.debug("Setting up sandboxed actor")
         await self._maybe_create_image()
-        self._reset()
+        self.recreate()
 
     @endpoint
     async def reset(self):
         """Resets the container instance from the base image."""
-        self._reset()
+        self.recreate()
 
     async def _maybe_create_image(self):
         """Ensure the enroot image exists, import it if necessary."""
@@ -89,7 +89,7 @@ class SandboxedPythonCoder(ForgeActor):
         else:
             logging.info(f"Using existing image: {self.sqsh_image_path}")
 
-    def _reset(self):
+    def recreate(self):
         """(Re)create a clean container instance from the base image."""
         # Remove any old container
         logging.debug(f"Removing container {self.container_name}")
