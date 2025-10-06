@@ -424,7 +424,7 @@ class MetricCollector:
         metadata_per_primary_backend: Optional[Dict[str, Dict[str, Any]]],
         config: Dict[str, Any],
         step: int = 0,
-        actor_name: str | None = None,
+        process_name: str | None = None,
     ) -> None:
         """Initialize per-rank logger backends and MetricCollector state.
 
@@ -440,7 +440,7 @@ class MetricCollector:
                 e.g., {"wandb": {"logging_mode": "per_rank_no_reduce", "project": "my_proj"}}
             step (int, default 0): Initial step for immediate logging. This allows
                 restarting from checkpoints with correct step numbering.
-            actor_name (str | None): The meaningful actor name for logging.
+            process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
             logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
@@ -471,7 +471,7 @@ class MetricCollector:
             await backend.init(
                 role=Role.LOCAL,
                 primary_logger_metadata=primary_metadata,
-                actor_name=actor_name,
+                process_name=process_name,
             )
 
             # Categorize by logging mode
@@ -611,7 +611,7 @@ class LoggerBackend(ABC):
         self,
         role: str,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
-        actor_name: str | None = None,
+        process_name: str | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -666,7 +666,7 @@ class ConsoleBackend(LoggerBackend):
         self,
         role: str,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
-        actor_name: str | None = None,
+        process_name: str | None = None,
     ) -> None:
         pass
 
@@ -719,7 +719,7 @@ class WandbBackend(LoggerBackend):
         self,
         role: str,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
-        actor_name: str | None = None,
+        process_name: str | None = None,
     ) -> None:
 
         if primary_logger_metadata is None:
@@ -731,7 +731,7 @@ class WandbBackend(LoggerBackend):
             )
 
         self.name = (
-            get_actor_name_with_rank(actor_name)
+            get_actor_name_with_rank(process_name)
             if role == Role.LOCAL
             else "global_controller"
         )

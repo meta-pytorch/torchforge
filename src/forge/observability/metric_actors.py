@@ -164,7 +164,7 @@ class LocalFetcherActor(Actor):
         """
         collector = MetricCollector()
         await collector.init_backends(
-            metadata_per_primary_backend, config, step, actor_name=self.process_name
+            metadata_per_primary_backend, config, step, process_name=self.process_name
         )
 
     @endpoint
