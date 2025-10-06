@@ -1,35 +1,34 @@
 # API Reference
 
-This section provides comprehensive API documentation for TorchForge modules and classes.
+This API reference is organized by priority of concepts that users should be exposed to, based on how they're used in the core Forge workflows.
 
-TorchForge is organized into several key modules, each providing specialized functionality for post-training generative AI models:
+```{eval-rst}
+.. toctree::
+   :maxdepth: 2
 
-## Module Overview
-
-**Core Components**
-- [Interfaces & Types](api_core.md) - Core interfaces and type definitions
-- [Actors](api_actors.md) - Model training and inference components
-- [Controller](api_controller.md) - Distributed training orchestration and resource management
-
-**Data Management**
-- [Data](api_data.md) - Data handling utilities, datasets, and data models
-
-**Training Components**
-- [Losses](api_losses.md) - Loss functions for reinforcement learning and supervised fine-tuning
-- [Environments](api_envs.md) - Training and inference environments
-
-**Tools & Utilities**
-- [Utilities](api_util.md) - General utility functions and helpers
-
-```{toctree}
-:maxdepth: 2
-:hidden:
-
-api_core
-api_actors
-api_data
-api_losses
-api_envs
-api_controller
-api_util
+   api_core
+   api_actors
+   api_data_models
+   api_types
+   api_util
+   api_data
+   api_losses
 ```
+
+## Overview
+
+The Forge API is structured around key concepts in order of priority:
+
+1. **[Core Concepts](api_core.md)** - Actor System, ForgeActor, and ForgeService fundamentals
+2. **[Built-in Actors](api_actors.md)** - Policy, Trainer, ReplayBuffer, and ReferenceModel
+3. **[Data Models](api_data_models.md)** - Completion, Prompt, Episode, and other data structures
+4. **[Configuration and Types](api_types.md)** - Core types and configuration classes
+5. **[Utilities](api_util.md)** - Distributed computing, logging, and observability tools
+6. **[Data Processing](api_data.md)** - Rewards, tokenization, and data handling utilities
+7. **[Loss Functions](api_losses.md)** - GRPO and REINFORCE loss implementations
+
+## Quick Start
+
+To get started with Forge, begin with the [Core Concepts](api_core.md) to understand the actor system foundation, then explore the [Built-in Actors](api_actors.md) for common RL workflows.
+
+For a practical example, see the GRPO implementation in `apps/grpo/main.py` which demonstrates how these components work together in a complete reinforcement learning training loop.

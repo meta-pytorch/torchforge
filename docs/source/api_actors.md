@@ -1,19 +1,54 @@
-# Actors
+# Built-in Actors
 
-The actors module contains the core components for model training and inference in TorchForge. This includes policy actors, reference models, replay buffers, and trainers.
+On top of the services/actors foundation, Forge provides implementations of actors that are useful in RL workflows.
 
-## Policy Actor
+## Policy
 
-The policy actor is responsible for model inference and policy interactions during training.
+Inference and generation via vLLM. The {class}`forge.actors.policy.Policy` is a key actor for generating completions from language models.
 
-## Reference Model
+```{eval-rst}
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
 
-The reference model provides baseline comparisons for reinforcement learning algorithms.
-
-## Replay Buffer
-
-The replay buffer manages storage and sampling of training experiences.
+   forge.actors.policy.Policy
+   forge.actors.policy.PolicyWorker
+   forge.actors.policy.EngineConfig
+   forge.actors.policy.SamplingConfig
+```
 
 ## Trainer
 
-The trainer orchestrates the training process and implements training algorithms.
+Training via torchtitan. The {class}`forge.actors.trainer.RLTrainer` handles reinforcement learning training loops.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
+
+   forge.actors.trainer.RLTrainer
+```
+
+## ReplayBuffer
+
+For storing experience and sampling to the trainer - the glue between policy and trainer. The {class}`forge.actors.replay_buffer.ReplayBuffer` manages experience data for RL training.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
+
+   forge.actors.replay_buffer.ReplayBuffer
+```
+
+## ReferenceModel
+
+Used for RL correctness. The {class}`forge.actors.reference_model.ReferenceModel` provides reference logprobs for RL algorithms.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
+
+   forge.actors.reference_model.ReferenceModel
+```
