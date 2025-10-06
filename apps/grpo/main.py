@@ -363,6 +363,8 @@ async def main(cfg: DictConfig):
     )
 
     # Call after services are initialized
+    # TODO (felipemello): if called before, and per_rank_share_run=True, it hangs
+    # probably wandb requires primary runs to finish before shared runs can be initialized
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     print("All services initialized successfully!")

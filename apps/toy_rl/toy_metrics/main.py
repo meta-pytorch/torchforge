@@ -100,7 +100,9 @@ async def main():
     trainer = await TrainActor.options(**service_config).as_service()
     generator = await GeneratorActor.options(**service_config).as_service()
 
-    # Initialize after spawning services
+    # Call after services are initialized
+    # TODO (felipemello): if called before, and per_rank_share_run=True, it hangs
+    # probably wandb requires primary runs to finish before shared runs can be initialized
     await mlogger.init_backends.call_one(config)
 
     for i in range(3):
