@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Remote resource allocation and provisioning."""
+"""Resource allocation and provisioning for both local and remote."""
 import asyncio
 import functools
 import logging
@@ -15,7 +15,7 @@ import uuid
 from typing import Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import HostMesh, ProcMesh, this_host
+from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
@@ -27,6 +27,32 @@ from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+def _get_port() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        addr = s.getsockname()
+        port = addr[1]
+        return str(port)
+
+
+class _RemoteInfoFetcher(Actor):
+    """An actor responsible for getting remote host information."""
+
+    @endpoint
+    def get_info(self) -> tuple[str, str]:
+        return socket.gethostname(), _get_port()
+
+
+async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
+    """Returns the host name and port of the host mesh."""
+    throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
+    fetcher = throwaway_procs.spawn("_fetcher", _RemoteInfoFetcher)
+    fetcher = fetcher.slice(procs=0)
+    host, port = await fetcher.get_info.call_one()
+    await throwaway_procs.stop()
+    return host, port
 
 
 class GpuManager:
@@ -94,6 +120,7 @@ class Provisioner:
         self._host_gpu_map = {
             self._this_host_id: GpuManager(available_local_devices),
         }
+        self._proc_host_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
@@ -132,69 +159,92 @@ class Provisioner:
         with_gpus: bool = False,
         num_hosts: int | None = None,
         mesh_name: Optional[str] = None,
+        host_mesh: HostMesh | None = None,
+        env_vars: dict[str, str] | None = None,
+        addr: str | None = None,
+        port: str | None = None,
     ):
         """Gets a proc mesh.
 
-        num_hosts = None implies that you want a local allocation, this may change.
+        Args:
+            num_procs: The number of processes to allocate.
+            with_gpus: Whether to include GPU allocations.
+                This only adds the CUDA_VISIBLE_DEVICES environment variable.
+            num_hosts: The number of hosts to allocate.
+                If this is set, a remote allocation is created.
+                If this is None, it uses the local host.
+                This behavior may change in the future.
+            host_mesh: The host mesh to allocate the process on.
+                If None, a new host mesh will be created.
+            port: The distributed port to use.
+                If None, a port will be detected.
+            addr: The distributed address to use.
+                If None, an address will be detected.
+
+        Returns:
+            A ProcMesh.
 
         """
+        if env_vars is None:
+            env_vars = {}
+
+        is_remote = num_hosts is not None and num_hosts > 0
+
         async with self._lock:
             server_name = None
-            if num_hosts is not None and num_hosts > 0:
-                created_hosts = len(self._server_names)
-                host_mesh, server_name = await self.create_host_mesh(
-                    name=mesh_name,
-                    num_hosts=num_hosts,
-                )
-                host_id = uuid.uuid1()
-                gpu_manager = GpuManager()
-                self._host_gpu_map[host_id] = gpu_manager
-                host_mesh._host_id = host_id
+            if is_remote:
+                if mesh_name is None:
+                    created_hosts = len(self._server_names)
+                    mesh_name = f"alloc_{created_hosts}"
+                if host_mesh is None:
+                    host_mesh, server_name = await self.create_host_mesh(
+                        name=mesh_name,
+                        num_hosts=num_hosts,
+                    )
+                    host_id = uuid.uuid1()
+                    gpu_manager = GpuManager()
+                    self._host_gpu_map[host_id] = gpu_manager
+                    host_mesh._host_id = host_id
+                else:
+                    host_id = host_mesh._host_id
+                    gpu_manager = self._host_gpu_map[host_id]
             else:
+                # fallback to local
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
                 host_mesh._host_id = self._this_host_id
 
+            def bootstrap(env: dict[str, str]):
+                # bootstrap is run on all processes. We use this
+                # to set environment variables like CUDA etc.
+                import os
+
+                for k, v in env.items():
+                    os.environ[k] = v
+
             if with_gpus:
-                # The ideal path here:
-                # - Create a host mesh
-                # - Grab a host from host mesh, from proc 0 spawn an actor that
-                # gets addr/port
-                # - Spawn procs on the HostMesh with addr/port, setting the
-                # addr/port in bootstrap.
-                # We can't currently do this because HostMesh only supports single
-                # proc_mesh creation at the moment. This will be possible once
-                # we have "proper HostMesh support".
-                def bootstrap(gpu_ids: list[str]):
-                    # This works for single host, needed for vLLM currently.
-                    import os
-
-                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
-                    os.environ["MASTER_ADDR"] = socket.gethostname()
-                    # Multiple actors trying to call _get_port doesn't work
-                    # os.environ["MASTER_PORT"] = _get_port()
-
-                    # Setting the last digit to the first GPU id allows us to i.e.
-                    # create multiple vLLM instances on the same local host.
-                    os.environ["MASTER_PORT"] = f"1234{gpu_ids[0]}"
-                    os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
-                    os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
-
+                if not addr or not port:
+                    addr, port = await get_remote_info(host_mesh)
                 gpu_ids = gpu_manager.get_gpus(num_procs)
-                procs = host_mesh.spawn_procs(
-                    per_host={"gpus": num_procs},
-                    bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
-                )
-                # Pick a random host/port, we'll feed this in afterwards
-                # Once we have true HostMesh support, we can do this on proc 0 of each host
-                # then spin up the proc meshes with the environment afterwards.
-                hostname, port = await self.launcher.remote_setup(procs)
-                procs._hostname = hostname
-                procs._port = port
-                procs._gpu_ids = gpu_ids
-            else:
-                procs = host_mesh.spawn_procs(per_host={"gpus": num_procs})
 
+                env_vars["MASTER_ADDR"] = addr
+                env_vars["MASTER_PORT"] = port
+                env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
+                env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
+                env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
+
+            procs = host_mesh.spawn_procs(
+                per_host={"gpus": num_procs},
+                bootstrap=functools.partial(bootstrap, env=env_vars),
+            )
+
+            if is_remote:
+                await self.launcher.remote_setup(procs)
+
+            # Tag the proc mesh with additional metadata for our own cleanup later
+            if with_gpus:
+                # Applies any launcher specific remote setup.
+                procs._gpu_ids = gpu_ids
             procs._host = host_mesh
 
             # If we created a server, track so we can tear it down later.
@@ -202,11 +252,20 @@ class Provisioner:
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
+            self._proc_host_map[procs] = host_mesh
+
         # Detect actor name and spawn local logging actor on each process
         actor_name = detect_actor_name_from_call_stack()
         _ = await get_or_create_metric_logger(procs, actor_name=actor_name)
 
         return procs
+
+    async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
+        if proc_mesh not in self._proc_host_map:
+            raise ValueError(
+                "The proc mesh was not allocated with an associated hostmesh."
+            )
+        return self._proc_host_map[proc_mesh]
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
@@ -223,6 +282,7 @@ class Provisioner:
             if proc_mesh in self._proc_server_map:
                 server_name = self._proc_server_map[proc_mesh]
                 commands.kill(server_name)
+            del self._proc_host_map[proc_mesh]
 
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
@@ -248,14 +308,50 @@ async def _get_provisioner():
     return _provisioner
 
 
-async def get_proc_mesh(config: ProcessConfig) -> ProcMesh:
+async def get_proc_mesh(
+    process_config: ProcessConfig,
+    host_mesh: HostMesh | None = None,
+    env_vars: dict[str, str] | None = None,
+    port: str | None = None,
+    addr: str | None = None,
+) -> ProcMesh:
+    """Returns a proc mesh from the provisioner.
+
+    Args:
+        process_config: The process config.
+        host_mesh: The host mesh to allocate the process on.
+            If None, a new host mesh will be created.
+        port: The distributed port to use.
+            If None, a port will be detected.
+        addr: The distributed address to use.
+            If None, an address will be detected.
+
+    Returns:
+        A proc mesh.
+
+    """
     provisioner = await _get_provisioner()
     return await provisioner.get_proc_mesh(
-        num_procs=config.procs,
-        with_gpus=config.with_gpus,
-        num_hosts=config.hosts,
-        mesh_name=config.mesh_name,
+        num_procs=process_config.procs,
+        with_gpus=process_config.with_gpus,
+        num_hosts=process_config.hosts,
+        mesh_name=process_config.mesh_name,
+        host_mesh=host_mesh,
+        env_vars=env_vars,
+        port=port,
+        addr=addr,
     )
+
+
+async def host_mesh_from_proc(proc_mesh: ProcMesh):
+    """Returns the host mesh that allocated the original proc_mesh.
+
+    This functionality will be enabled in Monarch, so this is a temporary
+    API.
+
+    """
+    provisioner = await _get_provisioner()
+    return await provisioner.host_mesh_from_proc(proc_mesh)
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
