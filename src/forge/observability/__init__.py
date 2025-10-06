@@ -10,6 +10,7 @@ from .metric_actors import (
     LocalFetcherActor,
 )
 from .metrics import (
+    BackendRole,
     ConsoleBackend,
     get_actor_name_with_rank,
     get_logger_backend_class,
@@ -24,7 +25,6 @@ from .metrics import (
     record_metric,
     Reduce,
     reduce_metrics_states,
-    Role,
     StdAccumulator,
     SumAccumulator,
     WandbBackend,
@@ -43,7 +43,7 @@ __all__ = [
     "trace",
     # Data classes
     "Metric",
-    "Role",
+    "BackendRole",
     # Enums
     "Reduce",
     "LoggingMode",

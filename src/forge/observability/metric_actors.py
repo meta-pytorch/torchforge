@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
 from forge.observability.metrics import (
+    BackendRole,
     get_logger_backend_class,
     LoggerBackend,
     LoggingMode,
@@ -255,7 +256,7 @@ class GlobalLoggingActor(Actor):
             mode = backend_config["logging_mode"]
 
             backend = get_logger_backend_class(backend_name)(backend_config)
-            await backend.init(role="global")
+            await backend.init(role=BackendRole.GLOBAL)
 
             # Extract metadata for per-rank shared modes
             if mode != LoggingMode.GLOBAL_REDUCE:

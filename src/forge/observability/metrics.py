@@ -20,9 +20,8 @@ from forge.observability.utils import get_actor_name_with_rank
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class Role:
-    """Role identifier for metric logging actors.
+class BackendRole:
+    """Backend role constants for metric logging actors.
 
     Defines whether an actor operates as a local (per-rank) or global (controller) role
     in the distributed metrics collection system.
@@ -469,7 +468,7 @@ class MetricCollector:
             # Instantiate backend
             backend = get_logger_backend_class(backend_name)(backend_config)
             await backend.init(
-                role=Role.LOCAL,
+                role=BackendRole.LOCAL,
                 primary_logger_metadata=primary_metadata,
                 process_name=process_name,
             )
@@ -617,7 +616,7 @@ class LoggerBackend(ABC):
         Initializes backend, e.g. wandb.run.init().
 
         Args:
-            role (str): "global" (controller/primary) or "local" (per-rank/secondary).
+            role (BackendRole): "global" (controller/primary) or "local" (per-rank/secondary).
                 Can be used to behave differently for primary vs secondary roles.
             primary_logger_metadata (Optional[Dict[str, Any]]): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
@@ -725,29 +724,29 @@ class WandbBackend(LoggerBackend):
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        if role not in [Role.GLOBAL, Role.LOCAL]:
+        if role not in [BackendRole.GLOBAL, BackendRole.LOCAL]:
             raise ValueError(
-                f"Invalid role {role} for WandbBackend init. Must be '{Role.GLOBAL}' or '{Role.LOCAL}'."
+                f"Invalid role {role} for WandbBackend init. Must be '{BackendRole.GLOBAL}' or '{BackendRole.LOCAL}'."
             )
 
         self.name = (
             get_actor_name_with_rank(process_name)
-            if role == Role.LOCAL
-            else "global_controller"
+            if role == BackendRole.LOCAL
+            else "Controller"
         )
 
         # GLOBAL_REDUCE mode: only inits on controller
         if self.logging_mode == LoggingMode.GLOBAL_REDUCE:
-            if role != Role.GLOBAL:
+            if role != BackendRole.GLOBAL:
                 logger.warning(f"Skipped init for GLOBAL_REDUCE mode and {role} role.")
                 return
             await self._init_global()
 
         # Per-rank modes based on per_rank_share_run bool
-        elif role == Role.GLOBAL and self.per_rank_share_run:
+        elif role == BackendRole.GLOBAL and self.per_rank_share_run:
             await self._init_shared_global()
 
-        elif role == Role.LOCAL:
+        elif role == BackendRole.LOCAL:
             if self.per_rank_share_run:
                 await self._init_shared_local(primary_logger_metadata)
             else:
