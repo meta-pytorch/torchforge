@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+__version__ = ""
+
 # Enables faster downloading. For more info: https://huggingface.co/docs/huggingface_hub/en/guides/download#faster-downloads
 # To disable, run `HF_HUB_ENABLE_HF_TRANSFER=0 tune download <model_config>`
 try:
