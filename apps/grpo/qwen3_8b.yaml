@@ -10,7 +10,6 @@ model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
 
 # Observability configuration
-# Observability configuration
 metric_logging:
   wandb:
     project: grpo-training
