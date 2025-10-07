@@ -22,7 +22,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       run-smoke-test: false
-      wheel-nightly-policy: gha_workflow_build_preview_wheels_policy
+      wheel-nightly-policy: gha_workflow_preview_build_wheels
       wheel-upload-path: whl/preview/forge
       package-name: forge
       build-matrix: |
