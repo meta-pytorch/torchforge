@@ -43,6 +43,20 @@ policy:
     temperature: 1.0
     top_p: 1.0
 
+# Judge configuration
+judge:
+  engine_config:
+    model: "Qwen/Qwen3-4B-Thinking-2507"
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: false
+  sampling_config:
+    n: 1
+    guided_decoding: False
+    max_tokens: ${max_res_tokens}
+    temperature: 0.0
+    top_p: 1.0
+
 # Trainer configuration
 trainer:
   model:
@@ -116,6 +130,10 @@ ref_model:
 services:
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
+    num_replicas: 1
+    with_gpus: true
+  judge:
+    procs: ${judge.engine_config.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   ref_model:
