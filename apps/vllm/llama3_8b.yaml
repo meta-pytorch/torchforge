@@ -6,6 +6,7 @@ policy:
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: true
+    # task: "score"
   sampling_config:
     n: 2
     guided_decoding: false

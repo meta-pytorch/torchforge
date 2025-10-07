@@ -185,30 +185,26 @@ class Judge(Policy):
         return self._postprocess_output(response)
 
 
+from vllm import LLM
+from vllm.outputs import ScoringRequestOutput
+
+
 @dataclass
-class RewardModelJudge(Policy):
+class RewardModelJudge:
     """
     `RewardModels` are typically discriminative models, post trained to
     evaluate responses without further prompting required.
     """
 
-    # TODO: Add reward models formatting
-    def wrapped_prompt(
-        self, prompt: str, responses: list[str], ground_truth: None | str = None
-    ) -> str:
-        return prompt
+    def __init__(self, model: str):
+        # def __init__(self, cfgmodel: str):
+        self.model_name = model
+        self.model = LLM(model=model, task="score")
+        # policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
-    def _postprocess_output(
-        self, outputs: list[Completion], ground_truth: None | str = None
-    ) -> list[str]:
-        return [output.text for output in outputs]
+    def _postprocess_output(self, outputs: list[ScoringRequestOutput]) -> list[float]:
+        return [output.outputs.score for output in outputs]
 
-    @endpoint
-    async def evaluate(
-        self,
-        prompt: str,
-        responses: list[str],
-    ) -> list[str]:
-        wrapped_prompt: str = self._wrap_prompt(prompt, responses)
-        response: List[Completion] = await self.generate._method(self, wrapped_prompt)
-        return self._postprocess_output(response)
+    def evaluate(self, prompt: str, responses: list[str]) -> list[str]:
+        outputs: list[ScoringRequestOutput] = self.model.score(prompt, responses)
+        return self._postprocess_output(outputs)

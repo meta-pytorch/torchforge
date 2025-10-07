@@ -39,7 +39,10 @@ async def run(cfg: DictConfig):
     print(f"Responses: {responses}\n")
     print("Evaluating responses...")
     best_response_evaluations: list[str] = await judge.evaluate.route(
-        prompt=prompt, responses=responses, evaluation_mode=EvaluationMode.BEST_RESPONSE
+        prompt=prompt,
+        responses=responses,
+        ground_truth=ground_truth,
+        evaluation_mode=EvaluationMode.BEST_RESPONSE,
     )
     response_check_evaluations: list[str] = await judge.evaluate.route(
         prompt=prompt,

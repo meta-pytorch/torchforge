@@ -329,6 +329,7 @@ class Policy(PolicyInterface):
         t.step("prompt_truncation")
 
         # process and tokenize prompt
+        # (forge/issues/332) Signature of this changes
         prompt_str, request = self.processor.process_inputs(
             request_id=request_id,
             prompt=prompt_dict,
@@ -340,6 +341,7 @@ class Policy(PolicyInterface):
             priority=priority,
             data_parallel_rank=None,
         )
+        print("Pooling: ", request.pooling_params)
         t.step("process_inputs")
 
         # Wait until we're accepting requests (releases lock while waiting)
@@ -590,6 +592,10 @@ class PolicyWorker(ForgeActor):
 
     @endpoint
     async def execute_model(self, schedule: SchedulerOutput):
+        # print("execute_model: ", self.worker.get_supported_pooling_tasks())
+        # print("execute_model: ", schedule.scheduled_new_reqs)
+        # print("execute_model: ", schedule.scheduled_new_reqs[0].pooling_params)
+        # print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         return self.worker.execute_model(schedule)
 
     async def _load_tensor_parallel_state_dict(
