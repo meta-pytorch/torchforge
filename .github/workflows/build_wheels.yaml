@@ -50,9 +50,3 @@ jobs:
       post-script: .github/packaging/post_build_script.sh
       trigger-event: ${{ github.event_name }}
       build-platform: 'python-build-package'
-  upload:
-    uses: pytorch/test-infra/.github/workflows/_binary_upload.yml
-    strategy:
-      fail-fast: false
-    with:
-
