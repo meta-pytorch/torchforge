@@ -45,9 +45,9 @@ jobs:
       - name: Install torchtitan and torchstore
         run: python -m pip install torchtitan torchstore
       - name: Download and install monarch
-        run: pip install monarch --index-url https://download.pytorch.org/whl/preview/forge
+        run: pip install monarch --extra-index-url https://download.pytorch.org/whl/preview/forge
       - name: Download and install vLLM
-        run: pip install vllm --index-url https://download.pytorch.org/whl/preview/forge
+        run: pip install vllm --extra-index-url https://download.pytorch.org/whl/preview/forge
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
