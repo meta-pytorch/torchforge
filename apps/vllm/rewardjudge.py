@@ -12,6 +12,10 @@ from forge.actors.judge import RewardModelJudge
 
 
 def run():
+    # metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    # mlogger = await get_or_create_metric_logger()
+    # await mlogger.init_backends.call_one(metric_logging_cfg)
+
     prompt = "Jane has 12 apples. She gives 4 apples to her friend Mark, \
     then buys 1 more apple, and finally splits all her apples equally among \
     herself and her 2 siblings. How many apples does each person get?"

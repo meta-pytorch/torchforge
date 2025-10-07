@@ -197,8 +197,10 @@ class RewardModelJudge:
     """
 
     def __init__(self, model: str):
+        # def __init__(self, cfgmodel: str):
         self.model_name = model
         self.model = LLM(model=model, task="score")
+        # policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
 
     def _postprocess_output(self, outputs: list[ScoringRequestOutput]) -> list[float]:
         return [output.outputs.score for output in outputs]
