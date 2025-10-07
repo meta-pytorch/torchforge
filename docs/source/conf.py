@@ -124,6 +124,7 @@ html_theme_options = {
     "navbar_center": "navbar-nav",
     "canonical_url": "https://meta-pytorch.org/forge/",
     "header_links_before_dropdown": 7,
+    "show_nav_level": 2,
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
@@ -176,7 +177,6 @@ sphinx_gallery_conf = {
     "plot_gallery": "True",
     "promote_jupyter_magic": True,
     "backreferences_dir": None,
-    "write_computation_times": True,
     "show_signature": False,
-    "write_computation_times": False
+    "write_computation_times": False,
 }

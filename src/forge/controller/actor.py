@@ -24,40 +24,37 @@ T = TypeVar("T", bound="ForgeActor")
 class ForgeActor(Actor):
     """
     Base class for Forge actors with configurable resource attributes.
+
+    The initialization sets up logging configuration with rank/size information and
+    initializes the actor's process mesh reference. The rank and size are automatically
+    determined from the current execution context.
+
+    Args:
+        *args: Variable length argument list passed to the parent Actor class.
+        **kwargs: Arbitrary keyword arguments passed to the parent Actor class.
     """
-    
+
     procs: int = 1
     """Number of processes to use for this actor. Defaults to 1."""
-    
+
     hosts: int | None = None
     """Number of hosts to distribute the actor across. If None, uses as many
     hosts as needed to accommodate the requested processes. Defaults to None."""
-    
+
     with_gpus: bool = False
     """Whether to allocate GPU resources for this actor. Defaults to False."""
-    
+
     num_replicas: int = 1
     """Number of replicas to create when spawning as a service.
     Only applies when using as_service(). Defaults to 1."""
-    
+
     mesh_name: str | None = None
     """Optional name for the process mesh used by this actor.
     If None, a default name will be generated. Defaults to None."""
-    
+
     _extra_config: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
-        """
-        Initialize the ForgeActor instance.
-        
-        Sets up logging configuration with rank/size information and initializes
-        the actor's process mesh reference. The rank and size are automatically
-        determined from the current execution context.
-        
-        Args:
-            *args: Variable length argument list passed to the parent Actor class.
-            **kwargs: Arbitrary keyword arguments passed to the parent Actor class.
-        """
         if not hasattr(self, "_rank"):
             self._rank = current_rank().rank
         if not hasattr(self, "_size"):
@@ -100,28 +97,28 @@ class ForgeActor(Actor):
         Examples:
 
         * Pre-configure a service with multiple replicas:
-        
+
           .. code-block:: python
-        
+
              service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
              await service.shutdown()
 
         * Default usage without calling options:
 
           .. code-block:: python
-             
+
              service = await MyForgeActor.as_service(...)
              await service.shutdown()
 
         * Pre-configure a single actor
-        
+
           .. code-block:: python
-        
+
              actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
              await actor.shutdown()
-             
+
         * Default usage without calling options
-        
+
           .. code-block:: python
 
              actor = await MyForgeActor.as_actor(...)

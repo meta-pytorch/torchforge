@@ -52,6 +52,21 @@ jobs:
         shell: bash -l {0}
         working-directory: docs
         run: |
+          # Set up library paths to ensure all dependencies are available
+          # This is critical for monarch and other native dependencies that need libpython3.10.so.1.0
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          # Also set CUDA paths if needed
+          if [ -d "/usr/local/cuda-12.9" ]; then
+            export LD_LIBRARY_PATH="/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH}"
+            export CUDA_HOME=/usr/local/cuda-12.9
+          fi
+
+          # Verify dependencies can be imported before building docs
+          echo "Verifying dependencies..."
+          python -c "import forge; print('✓ forge imported successfully')"
+          python -c "import monarch; print('✓ monarch imported successfully')"
+
           set +e  # Don't exit on error
           make html SPHINXOPTS="-WT --keep-going" || echo "Build completed with warnings/errors"
           set -e  # Re-enable exit on error for subsequent commands
