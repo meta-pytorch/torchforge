@@ -486,6 +486,10 @@ class Service:
         )
 
     async def stop(self):
+        """
+        Stops the service and all managed replicas.
+        This method should be called when the service is no longer needed.
+        """
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
         self._shutdown_requested = True
