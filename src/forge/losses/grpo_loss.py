@@ -7,6 +7,8 @@
 import torch
 from torch import nn
 
+from forge.data_models.loss_metrics import LossMetrics
+
 
 class SimpleGRPOLoss(nn.Module):
     """Simplified GRPO Loss for simplified single step updates
@@ -14,16 +16,17 @@ class SimpleGRPOLoss(nn.Module):
         https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624.
     """
 
-    def __init__(self, beta: float = 0.1):
+    def __init__(self, beta: float = 0.1) -> torch.Tensor | LossMetrics:
         super().__init__()
         self.beta = beta
 
     def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
         kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+
         per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
         per_token_loss = -(per_token_policy_loss - self.beta * kl)
         loss = (
             ((per_token_loss * padding_mask).sum(dim=1))
             / (padding_mask.sum(dim=1).clamp(min=1.0))
         ).mean()
-        return loss
+        return loss, LossMetrics(kl_divergence=kl, policy_entropy=torch.tensor(0))
