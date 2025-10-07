@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: forge-cu129-nightly
+    name: forge-cu128-nightly
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
@@ -37,7 +37,7 @@ jobs:
               "package_type": "manywheel",
               "build_name": "manywheel-py3_10-cuda12_8",
               "validation_runner": "linux.4xlarge.nvidia.gpu",
-              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128",
               "channel": "nightly",
               "upload_to_base_bucket": "no",
               "stable_version": "2.8.0",
