@@ -83,7 +83,6 @@ class WeightCleaner:
     """
 
     def __init__(self):
-        """Initialize the WeightCleaner with empty task list and reset deletion tracking."""
         # we need to keep the task around to make sure it's not garbage collected
         self._tasks = []
         self._last_deleted_version = -1
@@ -120,7 +119,7 @@ async def drop_weights(version: int):
     dcp_key = get_dcp_whole_state_dict_key(version)
     if dcp_key in matching_keys:
         dcp_handle = await ts.get(dcp_key)
-        dcp_handle.drop()
+        await asyncio.to_thread(dcp_handle.drop)
     for key in matching_keys:
         await ts.delete(key)
     elapsed = time.perf_counter() - start_time
