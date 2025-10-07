@@ -316,9 +316,7 @@ async def main(cfg: DictConfig):
     # ---- Global setups ---- #
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(
-            ProvisionerConfig(
-                launcher_config=LauncherConfig(**cfg.provisioner.launcher)
-            )
+            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
