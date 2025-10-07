@@ -20,8 +20,6 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.observability.metric_actors import get_or_create_metric_logger
-
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
@@ -263,7 +261,7 @@ class Provisioner:
             self._proc_host_map[procs] = host_mesh
 
         # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -283,9 +281,9 @@ class Provisioner:
             return
         async with self._lock:
             # Deregister local logger from global logger
-            if hasattr(proc_mesh, "_local_fetcher"):
-                global_logger = await get_or_create_metric_logger(proc_mesh)
-                await global_logger.deregister_fetcher.call_one(proc_mesh)
+            # if hasattr(proc_mesh, "_local_fetcher"):
+            #     global_logger = await get_or_create_metric_logger(proc_mesh)
+            #     await global_logger.deregister_fetcher.call_one(proc_mesh)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]

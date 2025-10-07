@@ -436,8 +436,8 @@ class MetricCollector:
         self._is_initialized = True
 
     def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
-        if not self._is_initialized:
-            raise ValueError("Collector not initialized—call init first")
+        # if not self._is_initialized:
+        #     raise ValueError("Collector not initialized—call init first")
 
         if key not in self.accumulators:
             self.accumulators[key] = reduction.accumulator_class(reduction)
