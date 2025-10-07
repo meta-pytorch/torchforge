@@ -23,7 +23,7 @@ jobs:
       test-infra-ref: main
       run-smoke-test: false
       wheel-nightly-policy: gha_workflow_preview_build_wheels
-      wheel-upload-path: whl/preview/forge
+      wheel-upload-path: whl/preview/forge/
       package-name: forge
       build-matrix: |
         {
