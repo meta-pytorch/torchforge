@@ -568,9 +568,6 @@ class MetricCollector:
             states[key] = acc.get_state()
             acc.reset()
 
-        # Update step (used by NO_REDUCE backends in push)
-        self.step = step
-
         # Log to PER_RANK_REDUCE backends only (NO_REDUCE already logged in push)
         if self.per_rank_reduce_backends:
             metrics_for_backends = reduce_metrics_states([states])
@@ -578,6 +575,9 @@ class MetricCollector:
             # Log to PER_RANK_REDUCE backends
             for backend in self.per_rank_reduce_backends:
                 await backend.log_batch(metrics_for_backends, step)
+
+        # Update step (used by NO_REDUCE backends in push)
+        self.step = step + 1
 
         return states if return_state else {}
 
@@ -768,22 +768,32 @@ class WandbBackend(LoggerBackend):
         settings = wandb.Settings(
             mode="shared", x_primary=True, x_label="controller_primary"
         )
-        self.run = wandb.init(project=self.project, group=self.group, settings=settings)
+
+        self.run = wandb.init(
+            project=self.project,
+            group=self.group,
+            settings=settings,
+        )
 
     async def _init_shared_local(self, primary_metadata: Dict[str, Any]):
         import wandb
+        from wandb.sdk.lib.service import service_token
 
         shared_id = primary_metadata.get("shared_run_id")
         if shared_id is None:
             raise ValueError(
                 f"Shared ID required but not provided for {self.name} backend init"
             )
+
+        # Clear any stale service tokens that might be pointing to dead processes
+        # In multiprocessing environments, WandB service tokens can become stale and point
+        # to dead service processes. This causes wandb.init() to hang indefinitely trying
+        # to connect to non-existent services. Clearing forces fresh service connection.
+        service_token.clear_service_in_env()
+
         settings = wandb.Settings(mode="shared", x_primary=False, x_label=self.name)
         self.run = wandb.init(
-            id=shared_id,
-            project=self.project,
-            group=self.group,
-            settings=settings,
+            id=shared_id, project=self.project, group=self.group, settings=settings
         )
 
     async def log_batch(

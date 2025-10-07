@@ -27,7 +27,8 @@ os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
 async def run(cfg: DictConfig):
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger(actor_name="Controller")
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:
         gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
@@ -35,11 +36,6 @@ async def run(cfg: DictConfig):
 
     print("Spawning service...")
     policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
-
-    # Call after services are initialized
-    # TODO (felipemello): if called before, and per_rank_share_run=True, it hangs
-    # probably wandb requires primary runs to finish before shared runs can be initialized
-    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     import time
 

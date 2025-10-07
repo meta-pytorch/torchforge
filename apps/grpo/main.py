@@ -322,6 +322,7 @@ async def main(cfg: DictConfig):
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
+    await mlogger.init_backends.call_one(metric_logging_cfg)
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
     # ---- Setup services ---- #
@@ -349,11 +350,6 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
-
-    # Call after services are initialized
-    # TODO (felipemello): if called before, and per_rank_share_run=True, it hangs
-    # probably wandb requires primary runs to finish before shared runs can be initialized
-    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     print("All services initialized successfully!")
 

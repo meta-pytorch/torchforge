@@ -7,7 +7,7 @@
 import asyncio
 
 import logging
-import time
+from datetime import datetime
 
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
@@ -17,8 +17,13 @@ from forge.observability.perf_tracker import trace, Tracer
 
 from monarch.actor import current_rank, endpoint
 
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("forge.observability.metrics").setLevel(logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logging.getLogger("forge.observability.metrics").setLevel(logging.INFO)
+logging.getLogger("forge.observability.metric_actors").setLevel(logging.INFO)
+# Reduce wandb logging noise
+logging.getLogger("wandb").setLevel(logging.WARNING)
 
 
 class TrainActor(ForgeActor):
@@ -79,8 +84,7 @@ class GeneratorActor(ForgeActor):
 
 # Main
 async def main():
-    """Example demonstrating distributed metric logging with different backends."""
-    group = f"grpo_exp_{int(time.time())}"
+    group = "time" + str(int(datetime.now().timestamp()))
 
     # Config format: {backend_name: backend_config_dict}
     config = {
@@ -89,21 +93,17 @@ async def main():
             "project": "toy_metrics",
             "group": group,
             "logging_mode": "per_rank_no_reduce",
-            "per_rank_share_run": False,
+            "per_rank_share_run": True,
         },
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
     mlogger = await get_or_create_metric_logger(process_name="Controller")
+    await mlogger.init_backends.call_one(config)
 
-    # Spawn services first (triggers registrations via provisioner hook)
+    # Spawn services (will register fetchers)
     trainer = await TrainActor.options(**service_config).as_service()
     generator = await GeneratorActor.options(**service_config).as_service()
-
-    # Call after services are initialized
-    # TODO (felipemello): if called before, and per_rank_share_run=True, it hangs
-    # probably wandb requires primary runs to finish before shared runs can be initialized
-    await mlogger.init_backends.call_one(config)
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
