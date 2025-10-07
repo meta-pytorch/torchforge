@@ -197,6 +197,7 @@ class Batcher:
             batch = [await self._queue.get()]
             start_time = time.monotonic()
 
+            # TODO (dxie): consider making timeout adaptive based on replica load.
             while True:
                 try:
                     timeout = max(
