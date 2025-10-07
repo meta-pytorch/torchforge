@@ -125,7 +125,7 @@ html_theme_options = {
     "canonical_url": "https://meta-pytorch.org/forge/",
     "header_links_before_dropdown": 7,
     "show_nav_level": 2,
-    "show_toc_level": 2
+    "show_toc_level": 2,
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
