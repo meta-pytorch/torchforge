@@ -232,6 +232,9 @@ class Provisioner:
                 env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
+                # Shows detailed logs for Monarch rust failures
+                env_vars["RUST_BACKTRACE"] = "1"
+
             procs = host_mesh.spawn_procs(
                 per_host={"gpus": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),

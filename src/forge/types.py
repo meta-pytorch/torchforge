@@ -159,9 +159,9 @@ class LauncherConfig:
     """A launcher config for the scheduler."""
 
     launcher: Launcher
-    job_name: str
-    services: dict[str, ServiceConfig]
-    actors: dict[str, ProcessConfig]
+    job_name: str = ""
+    services: dict[str, ServiceConfig] = field(default_factory=dict)
+    actors: dict[str, ProcessConfig] = field(default_factory=dict)
 
 
 @dataclass
