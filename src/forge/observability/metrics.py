@@ -124,12 +124,12 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
     collector.push(metric)
 
 
-def record_episode_sample(key: str, episode):
+def record_episode_sample(table_name: str, episode):
     """
     Record a structured sample-level log for a single episode.
 
     Args:
-        key (str): logging prefix (e.g. "rollout/sample").
+        table_name (str): logging prefix (e.g. "rollout/sample").
         episode (Episode): episode object with filled attributes.
     """
     sample = {
@@ -147,7 +147,7 @@ def record_episode_sample(key: str, episode):
         "pad_id": episode.pad_id,
     }
 
-    record_metric(key, sample, Reduce.SAMPLE)
+    record_metric(table_name, sample, Reduce.SAMPLE)
 
 
 def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List["Metric"]:
