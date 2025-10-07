@@ -48,6 +48,8 @@ jobs:
         run: pip install monarch --extra-index-url https://download.pytorch.org/whl/preview/forge
       - name: Download and install vLLM
         run: pip install vllm --extra-index-url https://download.pytorch.org/whl/preview/forge
+      - name: Install dependencies
+        run: python -m pip install --no-build-isolation -e ".[dev]"
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
