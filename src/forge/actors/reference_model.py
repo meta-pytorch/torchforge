@@ -18,6 +18,7 @@ from torch.distributed.tensor import DTensor
 
 from torchtitan.config.job_config import (
     Checkpoint,
+    Comm,
     Compile,
     Model,
     Parallelism,
@@ -42,6 +43,7 @@ class ReferenceModel(ForgeActor):
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     compile: Compile = field(default_factory=Compile)
+    comm: Comm = field(default_factory=Comm)
     training: Training = field(
         default_factory=Training
     )  # Needed in order to set attrs like dtype, garbage collection freq, etc.

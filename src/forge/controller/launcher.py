@@ -299,9 +299,9 @@ class Mastlauncher(BaseLauncher):
 def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if not cfg:
         return None
-    if cfg.launcher == Launcher.SLURM.value:
+    if cfg.launcher == Launcher.SLURM:
         return Slurmlauncher()
-    elif cfg.launcher == Launcher.MAST.value:
+    elif cfg.launcher == Launcher.MAST:
         if not _MAST_AVAILABLE:
             raise ValueError(
                 "MAST imports did not succeed, cannot launch MAST jobs. Please verify your installation"
