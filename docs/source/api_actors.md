@@ -1,54 +1,20 @@
-# Built-in Actors
-
-On top of the services/actors foundation, Forge provides implementations of actors that are useful in RL workflows.
-
-## Policy
-
-Inference and generation via vLLM. The {class}`forge.actors.policy.Policy` is a key actor for generating completions from language models.
+# ForgeActor
 
 ```{eval-rst}
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
-
-   forge.actors.policy.Policy
-   forge.actors.policy.PolicyWorker
-   forge.actors.policy.EngineConfig
-   forge.actors.policy.SamplingConfig
+.. currentmodule:: forge.actors
 ```
 
-## Trainer
-
-Training via torchtitan. The {class}`forge.actors.trainer.RLTrainer` handles reinforcement learning training loops.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
-
-   forge.actors.trainer.RLTrainer
-```
-
-## ReplayBuffer
-
-For storing experience and sampling to the trainer - the glue between policy and trainer. The {class}`forge.actors.replay_buffer.ReplayBuffer` manages experience data for RL training.
+The actors module contains the core components for model training
+and inference in TorchForge. These pre-built actors provide essential
+functionality for reinforcement learning workflows and can be used
+as building blocks for complex distributed training systems.
 
 ```{eval-rst}
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
+.. currentmodule:: forge.controller.actor
 
-   forge.actors.replay_buffer.ReplayBuffer
-```
-
-## ReferenceModel
-
-Used for RL correctness. The {class}`forge.actors.reference_model.ReferenceModel` provides reference logprobs for RL algorithms.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: _autosummary
-   :recursive:
-
-   forge.actors.reference_model.ReferenceModel
+.. autoclass:: ForgeActor
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: logger, setup, set_env
 ```

@@ -12,7 +12,7 @@ from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh
+from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -26,7 +26,6 @@ class ForgeActor(Actor):
     hosts: int | None = None
     with_gpus: bool = False
     num_replicas: int = 1
-    mesh_name: str | None = None
     _extra_config: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
@@ -59,7 +58,6 @@ class ForgeActor(Actor):
         hosts: int | None = None,
         with_gpus: bool = False,
         num_replicas: int = 1,
-        mesh_name: str | None = None,
         **kwargs,
     ) -> Type[T]:
         """
@@ -69,33 +67,46 @@ class ForgeActor(Actor):
         `.as_actor()` or `.as_service()`. Each call creates a separate subclass, so
         multiple different configurations can coexist without interfering with each other.
 
-        ---- Usage Examples ----
+        Examples:
 
-        # Pre-configure a service with multiple replicas
-        service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
-        await service.shutdown()
+        * Pre-configure a service with multiple replicas:
+        
+          .. code-block:: python
+        
+             service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
+             await service.shutdown()
 
-        # Default usage without calling options
-        service = await MyForgeActor.as_service(...)
-        await service.shutdown()
+        * Default usage without calling options:
 
-        # Pre-configure a single actor
-        actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
-        await actor.shutdown()
+          .. code-block:: python
+             
+             service = await MyForgeActor.as_service(...)
+             await service.shutdown()
 
-        # Default usage without calling options
-        actor = await MyForgeActor.as_actor(...)
-        await actor.shutdown()
+        * Pre-configure a single actor
+        
+          .. code-block:: python
+        
+             actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
+             await actor.shutdown()
+
+        * Default usage without calling options
+        
+          .. code-block:: python
+
+             actor = await MyForgeActor.as_actor(...)
+             await actor.shutdown()
         """
 
         attrs = {
             "procs": procs,
+
             "hosts": hosts,
             "with_gpus": with_gpus,
             "num_replicas": num_replicas,
-            "mesh_name": mesh_name,
             "_extra_config": kwargs,
         }
+
 
         return type(cls.__name__, (cls,), attrs)
 
@@ -119,12 +130,11 @@ class ForgeActor(Actor):
             "hosts": cls.hosts,
             "with_gpus": cls.with_gpus,
             "num_replicas": cls.num_replicas,
-            "mesh_name": cls.mesh_name,
             **cls._extra_config,  # all extra fields
         }
         cfg = ServiceConfig(**cfg_kwargs)
 
-        logger.info("Spawning Service for %s", cls.__name__)
+        logger.info("Spawning Service Actor for %s", cls.__name__)
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         return ServiceInterface(service, cls)
@@ -143,6 +153,28 @@ class ForgeActor(Actor):
 
         """
         pass
+
+    @endpoint
+    async def set_env(self, addr: str, port: str):
+        """A temporary workaround to set master addr/port.
+
+        TODO - issues/144. This should be done in proc_mesh creation.
+        The ideal path:
+        - Create a host mesh
+        - Grab a host from host mesh, from proc 0 spawn an actor that
+          gets addr/port
+        - Spawn procs on the HostMesh with addr/port, setting the
+          addr/port in bootstrap.
+
+        We can't currently do this because HostMesh only supports single
+        proc_mesh creation at the moment. This will be possible once
+        we have "proper HostMesh support".
+
+        """
+        import os
+
+        os.environ["MASTER_ADDR"] = addr
+        os.environ["MASTER_PORT"] = port
 
     @classmethod
     async def launch(cls, *args, **kwargs) -> "ForgeActor":
@@ -163,14 +195,17 @@ class ForgeActor(Actor):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
-            mesh_name=cls.mesh_name,
         )
 
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
         actor_name = kwargs.pop("name", cls.__name__)
-        actor = proc_mesh.spawn(actor_name, cls, *args, **kwargs)
+        actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
+
+        if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
+            host, port = proc_mesh._hostname, proc_mesh._port
+            await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
         return actor
 

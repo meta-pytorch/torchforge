@@ -1,34 +1,32 @@
 # API Reference
 
-This API reference is organized by priority of concepts that users should be exposed to, based on how they're used in the core Forge workflows.
-
-```{eval-rst}
-.. toctree::
-   :maxdepth: 2
-
-   api_core
-   api_actors
-   api_data_models
-   api_types
-   api_util
-   api_data
-   api_losses
-```
+This section provides comprehensive API documentation for TorchForge.
 
 ## Overview
 
-The Forge API is structured around key concepts in order of priority:
+TorchForge is a PyTorch native platform for post-training generative AI models,
+designed to streamline reinforcement learning workflows for large language
+models. The platform leverages PyTorch's distributed computing capabilities
+and is built on top of [Monarch](https://meta-pytorch.org/monarch/),
+making extensive use of actors for distributed computation and fault tolerance.
 
-1. **[Core Concepts](api_core.md)** - Actor System, ForgeActor, and ForgeService fundamentals
-2. **[Built-in Actors](api_actors.md)** - Policy, Trainer, ReplayBuffer, and ReferenceModel
-3. **[Data Models](api_data_models.md)** - Completion, Prompt, Episode, and other data structures
-4. **[Configuration and Types](api_types.md)** - Core types and configuration classes
-5. **[Utilities](api_util.md)** - Distributed computing, logging, and observability tools
-6. **[Data Processing](api_data.md)** - Rewards, tokenization, and data handling utilities
-7. **[Loss Functions](api_losses.md)** - GRPO and REINFORCE loss implementations
+Key Features of TorchForge include:
 
-## Quick Start
+- **Actor-Based Architecture**: TorchForge uses an actor-based system for distributed training, providing excellent scalability and fault tolerance.
+- **PyTorch Native**: Built natively on PyTorch, ensuring seamless integration with existing PyTorch workflows.
+- **Post-Training Focus**: Specifically designed for post-training techniques like RLHF, SFT, and other alignment methods.
+- **Distributed by Design**: Supports multi-GPU and multi-node training out of the box.
 
-To get started with Forge, begin with the [Core Concepts](api_core.md) to understand the actor system foundation, then explore the [Built-in Actors](api_actors.md) for common RL workflows.
 
-For a practical example, see the GRPO implementation in `apps/grpo/main.py` which demonstrates how these components work together in a complete reinforcement learning training loop.
+For most use cases, you'll interact with the high-level service
+interfaces, which handle the complexity of actor coordination and
+distributed training automatically.
+
+For advanced users who need fine-grained control, the individual actor
+APIs provide direct access to the underlying distributed components.
+
+```{toctree}
+:maxdepth: 1
+api_actors
+api_service
+```

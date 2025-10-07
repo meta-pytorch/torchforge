@@ -1159,3 +1159,14 @@ class ServiceActor(Actor):
 
     def __repr__(self):
         return f"Service(actor={self._actor_def.__name__})"
+
+
+# Copy docstrings from Service to ServiceActor methods for Sphinx autodoc
+# This ensures ServiceActor methods have complete docstrings while avoiding duplication
+ServiceActor.call.__doc__ = Service._call.__doc__
+ServiceActor.call_all.__doc__ = Service.call_all.__doc__
+ServiceActor.start_session.__doc__ = Service.start_session.__doc__
+ServiceActor.get_metrics.__doc__ = Service.get_metrics.__doc__
+ServiceActor.get_metrics_summary.__doc__ = Service.get_metrics_summary.__doc__
+ServiceActor.terminate_session.__doc__ = Service.terminate_session.__doc__
+ServiceActor.stop.__doc__ = Service.stop.__doc__
