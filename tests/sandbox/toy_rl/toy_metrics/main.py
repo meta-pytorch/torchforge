@@ -88,12 +88,12 @@ async def main():
 
     # Config format: {backend_name: backend_config_dict}
     config = {
-        "console": {"logging_mode": "per_rank_reduce"},
+        "console": {"logging_mode": "global_reduce"},
         "wandb": {
             "project": "toy_metrics",
             "group": group,
-            "logging_mode": "per_rank_no_reduce",
-            "per_rank_share_run": True,
+            "logging_mode": "per_rank_reduce",  # global_reduce, per_rank_reduce, per_rank_no_reduce
+            "per_rank_share_run": False,
         },
     }
 
