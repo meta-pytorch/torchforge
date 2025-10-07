@@ -10,8 +10,6 @@ from typing import Optional, TypeVar
 
 from torch import distributed as dist
 
-T = TypeVar("T", bound=type)
-
 
 def get_logger(level: Optional[str] = None) -> logging.Logger:
     """
