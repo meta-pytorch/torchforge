@@ -886,6 +886,7 @@ class WandbBackend(LoggerBackend):
         self.run = None
         self.logging_mode = LoggingMode(logger_backend_config["logging_mode"])
         self.per_rank_share_run = logger_backend_config.get("per_rank_share_run", False)
+        self._tables: dict[str, "wandb.Table"] = {}
 
     async def init(
         self,
@@ -1000,30 +1001,36 @@ class WandbBackend(LoggerBackend):
         self.run.log(log_data)
 
     async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
-        """Log sample-level data to WandB Tables."""
+        """Log sample-level data incrementally to persistent WandB Tables."""
         import wandb
 
-        if not self.run or not samples:
+        if not self.run:
             return
 
         for table_name, table_rows in samples.items():
             if not table_rows:
                 continue
 
-            # Use all keys to avoid dropped fields
-            columns = sorted({k for s in table_rows for k in s.keys()})
-            table = wandb.Table(columns=columns)
+            # If table doesn't exist yet, create it in INCREMENTAL mode
+            if table_name not in self._tables:
+                columns = list(table_rows[0].keys())
+                table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
+                self._tables[table_name] = table
+                logger.info(
+                    f"WandbBackend: Created new incremental table: {table_name}"
+                )
+            else:
+                table = self._tables[table_name]
 
+            # Add rows (fill missing columns with None)
             for s in table_rows:
-                values = [s.get(c) for c in columns]  # returns None for missing keys
+                values = [s.get(c) for c in table.columns]
                 table.add_data(*values)
 
-            # Unique table name avoids overwrite; commit forces sync
-            table_name = f"{table_name}_table_step{step}"
-            self.run.log({table_name: table, "_num_rows": len(table_rows)}, commit=True)
-
+            # Log the same table object (INCREMENTAL update)
+            self.run.log({f"{table_name}_table": table})
             logger.info(
-                f"WandbBackend: Logged {len(table_rows)} samples for {table_name} at step {step}"
+                f"WandbBackend: Appended {len(table_rows)} rows to incremental table '{table_name}' at step {step}"
             )
 
     def get_metadata_for_secondary_ranks(self) -> Dict[str, Any]:
@@ -1032,7 +1039,19 @@ class WandbBackend(LoggerBackend):
         return {}
 
     async def finish(self) -> None:
+        import wandb
+
         if self.run:
+            # Convert each incremental table to immutable before finishing
+            for table_name, incr_table in self._tables.items():
+                final_table = wandb.Table(
+                    columns=incr_table.columns,
+                    data=incr_table.data,
+                    log_mode="IMMUTABLE",
+                )
+                self.run.log({table_name: final_table})
+                logger.info(f"WandbBackend: Finalized table {table_name}")
+
             self.run.finish()
             logger.info(f"WandbBackend {self.name}: Finished run")
 
