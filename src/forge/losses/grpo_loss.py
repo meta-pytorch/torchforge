@@ -16,7 +16,7 @@ class SimpleGRPOLoss(nn.Module):
         https://github.com/huggingface/trl/blob/417915a3e4d3e3bc8d7b196594308b8eabf928be/trl/trainer/grpo_trainer.py#L1624.
     """
 
-    def __init__(self, beta: float = 0.1) -> torch.Tensor | LossMetrics:
+    def __init__(self, beta: float = 0.1) -> tuple[torch.Tensor, LossMetrics]:
         super().__init__()
         self.beta = beta
 

@@ -30,7 +30,7 @@ class ReinforceLoss(nn.Module):
 
     def forward(
         self, trainer_logits, target_ids, target_mask, target_weights, target_log_probs
-    ) -> torch.Tensor | LossMetrics:
+    ) -> tuple[torch.Tensor, LossMetrics]:
         trainer_log_probs = selective_log_softmax(trainer_logits, target_ids)
         target_mask = target_mask.detach()
         target_weights = target_weights
