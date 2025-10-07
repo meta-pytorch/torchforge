@@ -304,6 +304,42 @@ class TestMetricCollector:
         result = await collector.flush(step=1, return_state=True)
         assert result == {}
 
+    @pytest.mark.asyncio
+    async def test_step_counter_for_no_reduce_backend(self, initialized_collector):
+        """Test step counter increments correctly for no_reduce backends."""
+        collector = initialized_collector["collector"]
+        no_reduce_backend = initialized_collector["no_reduce_backend"]
+
+        # Clean slate
+        no_reduce_backend.immediate_metrics.clear()
+
+        # Start with step 0
+        assert collector.step == 0
+
+        # Push first metric - should use current step (0)
+        first_metric = Metric("loss", 1.0, Reduce.MEAN)
+        collector.push(first_metric)
+
+        # Verify: first metric logged with step 0
+        assert len(no_reduce_backend.immediate_metrics) == 1
+        first_logged_metric, first_step = no_reduce_backend.immediate_metrics[0]
+        assert first_logged_metric.key == "loss"
+        assert first_step == 0
+
+        # Flush at step 5 - this should increment collector.step to 6
+        await collector.flush(step=5)
+        assert collector.step == 6
+
+        # Push second metric - should use new step (6)
+        second_metric = Metric("accuracy", 0.9, Reduce.MEAN)
+        collector.push(second_metric)
+
+        # Verify: second metric logged with step 6
+        assert len(no_reduce_backend.immediate_metrics) == 2
+        second_logged_metric, second_step = no_reduce_backend.immediate_metrics[1]
+        assert second_logged_metric.key == "accuracy"
+        assert second_step == 6
+
 
 class TestReduceOperations:
     """Test reduce_metrics_states function."""
