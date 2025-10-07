@@ -49,7 +49,13 @@ async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     """Returns the host name and port of the host mesh."""
     throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
     fetcher = throwaway_procs.spawn("_fetcher", _RemoteInfoFetcher)
-    fetcher = fetcher.slice(procs=0)
+
+    # This will reduce something like extent = {"hosts": 2, "procs": 1} to
+    # {"hosts": 1, "procs": 1}.
+    singleton_slice = {k: slice(0, 1) for k in fetcher.extent.keys()}
+    fetcher = fetcher.slice(**singleton_slice)
+    # Fetcher should be a singleton at this point - call_one() will fail otherwise
+
     host, port = await fetcher.get_info.call_one()
     await throwaway_procs.stop()
     return host, port
@@ -269,6 +275,12 @@ class Provisioner:
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
+        if proc_mesh not in self._proc_host_map:
+            logger.warning(
+                f"proc mesh {proc_mesh} was requested to be stopped, but was either already stopped or "
+                "was never registered with the provisioner."
+            )
+            return
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):

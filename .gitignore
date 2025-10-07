@@ -200,3 +200,7 @@ assets/wheels/vllm*.whl
 # DCP artifacts
 forge_dcp_tmp/
 demo_top_down.md
+
+
+# enroot / sqsh
+*.sqsh
