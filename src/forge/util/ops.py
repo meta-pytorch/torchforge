@@ -81,7 +81,7 @@ def compute_logprobs(
     batch_size, seq_len, vocab_size = scaled_logits_fp32.shape
     log_probs = -F.cross_entropy(
         scaled_logits_fp32.reshape(-1, vocab_size),
-        input_ids.reshape(-1),
+        input_ids.reshape(-1).long(),
         reduction="none",
     )
 
