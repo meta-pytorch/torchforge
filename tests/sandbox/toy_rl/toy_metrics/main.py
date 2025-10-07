@@ -77,6 +77,19 @@ class GeneratorActor(ForgeActor):
             record_metric("policy/count_sequences_completed", 1, Reduce.SUM)
             record_metric("policy/avg_tokens_per_sample", value, Reduce.MEAN)
 
+            # Sample-level log (e.g. rollout info)
+            record_metric(
+                "rollout/samples",
+                {
+                    "rank": rank,
+                    "step": step,
+                    "substep": substep,
+                    "tokens_generated": value,
+                    "max_tokens": 50,
+                    "timestamp": time.time(),
+                },
+                Reduce.SAMPLE,
+            )
             print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
 
         return value

@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import heapq
 import itertools
 import logging
@@ -663,7 +664,12 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: stream immediately
         for backend in self.per_rank_no_reduce_backends:
-            backend.log_stream(metric=metric, global_step=self.global_step)
+            if metric.reduction == Reduce.SAMPLE:
+                # Wrap singleton Metric into expected {key: [list_of_dicts]} format
+                sample = {metric.key: [metric.value]}
+                asyncio.create_task(backend.log_samples(sample, self.global_step))
+            else:
+                backend.log_stream(metric=metric, global_step=self.global_step)
 
         # Always accumulate for reduction and state return
         key = metric.key
