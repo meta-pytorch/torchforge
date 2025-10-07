@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Usage: python -m apps.toy_rl.sumdigits --config apps/toy_rl/sumdigits.yaml
+# Usage: python -m tests.sandbox.toy_rl.sumdigits --config tests/sandbox/toy_rl/sumdigits.yaml
 
 import asyncio
 import random
@@ -23,9 +23,10 @@ from forge.actors.trainer import _qwen3_hf_to_vllm
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-
 from forge.losses.grpo_loss import SimpleGRPOLoss
-from forge.util.metric_logging import get_metric_logger
+from forge.observability.metric_actors import get_or_create_metric_logger
+
+from forge.observability.metrics import record_metric, Reduce
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -220,7 +221,6 @@ class RefModel(ForgeActor):
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
         self.model.eval()
@@ -267,7 +267,6 @@ class Trainer(ForgeActor):
 
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=torch.bfloat16,
             trust_remote_code=True,
         ).to(self.device)
         self.model.train()
@@ -463,15 +462,14 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
     # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
     policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
-    mlogger = get_metric_logger(
-        "wandb",
-        freq=1,
-        project="sumdigits-training",
-    )
 
     # ---- Setup services ---- #
     print(f"{cfg.policy=}")
     print(f"{cfg.services.policy=}")
+
+    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    mlogger = await get_or_create_metric_logger()
+    await mlogger.init_backends.call_one(metric_logging_cfg)
     await ts.initialize()
     (
         dataloader,
@@ -533,9 +531,9 @@ async def main(cfg: DictConfig):
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
-            mlogger.log("avg_response_len/rollout", avg_response_len, rollout_count)
+            record_metric("avg_response_len/rollout", avg_response_len, Reduce.MEAN)
             avg_reward = sum(e.reward for e in group.episodes) / group_size
-            mlogger.log("avg_reward/rollout", avg_reward, rollout_count)
+            record_metric("avg_reward/rollout", avg_reward, Reduce.MEAN)
 
             rollout_count += 1
 
@@ -550,7 +548,7 @@ async def main(cfg: DictConfig):
             else:
                 loss = await trainer.train_step.call_one(batch[0])
                 training_step += 1
-                mlogger.log("loss/training_step", loss, training_step)
+                record_metric("loss/training_step", loss, Reduce.MEAN)
                 print(f"loss/training_step: {loss} at training step {training_step}")
                 await trainer.push_weights.call(training_step)
                 await policy.update_weights.fanout(training_step)
