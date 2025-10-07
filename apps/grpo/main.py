@@ -444,7 +444,9 @@ async def main(cfg: DictConfig):
                 await policy.update_weights.fanout(training_step)
                 t.step("update_weights")
 
-                weight_cleaner.step(training_step - 1)
+                # weight cleanup is non-blocking, the task is executed in the background
+                weight_cleaner.step(training_step)
+                t.step("weight_cleaner step")
 
                 t.stop()
                 restart_tracer = True
