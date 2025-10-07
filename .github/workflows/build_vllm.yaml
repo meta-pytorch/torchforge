@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - nightly
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -14,7 +13,7 @@ permissions:
 jobs:
   build:
     name: forge-cu129-nightly
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
     with:
