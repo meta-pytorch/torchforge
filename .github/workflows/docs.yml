@@ -67,9 +67,20 @@ jobs:
           python -c "import forge; print('✓ forge imported successfully')"
           python -c "import monarch; print('✓ monarch imported successfully')"
 
-          set +e  # Don't exit on error
-          make html SPHINXOPTS="-WT --keep-going" || echo "Build completed with warnings/errors"
-          set -e  # Re-enable exit on error for subsequent commands
+          # Build docs with -WT (warnings as errors) and --keep-going to see all issues
+          # Capture exit code but continue to see all errors
+          set +e
+          make html SPHINXOPTS="-WT --keep-going"
+          BUILD_EXIT_CODE=$?
+          set -e
+
+          # Report results
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Documentation build failed with warnings or errors (exit code: $BUILD_EXIT_CODE)"
+            exit $BUILD_EXIT_CODE
+          else
+            echo "✅ Documentation build completed successfully with no warnings or errors"
+          fi
       - name: Upload docs artifact
         uses: actions/upload-artifact@v4
         with:
