@@ -132,13 +132,13 @@ class LocalFetcherActor(Actor):
 
     @endpoint
     async def flush(
-        self, step: int, return_state: bool = False
+        self, global_step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
         This should only ever be called by the global logger.
 
         Args:
-            step (int): step used by backends to align all metrics on the same x-axis
+            global_step (int): step used by backends to align all metrics on the same x-axis
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
@@ -146,7 +146,7 @@ class LocalFetcherActor(Actor):
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         collector = MetricCollector()
-        result = await collector.flush(step, return_state=return_state)
+        result = await collector.flush(global_step, return_state=return_state)
         return result
 
     @endpoint
@@ -154,18 +154,21 @@ class LocalFetcherActor(Actor):
         self,
         metadata_per_primary_backend: Dict[str, Dict[str, Any]],
         config: Dict[str, Any],
-        step: int = 0,
+        global_step: int = 0,
     ):
         """Init local (per-rank) logger backends and MetricCollector.
 
         Args:
             metadata_per_primary_backend: Metadata from primary backends for shared state.
             config: Backend configurations with logging modes and settings.
-            step: Initial step for metrics.
+            global_step: Initial step for metrics.
         """
         collector = MetricCollector()
         await collector.init_backends(
-            metadata_per_primary_backend, config, step, process_name=self.process_name
+            metadata_per_primary_backend,
+            config,
+            global_step,
+            process_name=self.process_name,
         )
 
     @endpoint
@@ -302,13 +305,13 @@ class GlobalLoggingActor(Actor):
         del self.fetchers[name]
 
     @endpoint
-    async def flush(self, step: int):
+    async def flush(self, global_step: int):
         """
         Triggers parallel flush/reset on all registered fetchers. Per-rank MetricCollectors
         log to local backends and return states if needed for cross-rank reduction.
 
         Args:
-            step (int): step for logging.
+            global_step (int): step for logging.
         """
         if not self.fetchers:
             return
@@ -329,12 +332,14 @@ class GlobalLoggingActor(Actor):
             for backend_config in config.values()
         )
 
-        logger.debug(f"Global flush for step {step}: {len(self.fetchers)} fetchers")
+        logger.debug(
+            f"Global flush for step {global_step}: {len(self.fetchers)} fetchers"
+        )
 
         # Broadcast flush to all fetchers
         results = await asyncio.gather(
             *[
-                f.flush.call(step, return_state=requires_reduce)
+                f.flush.call(global_step, return_state=requires_reduce)
                 for f in self.fetchers.values()
             ],
             return_exceptions=True,
@@ -362,7 +367,7 @@ class GlobalLoggingActor(Actor):
             all_local_states = extract_values_from_valuemesh(results)
 
             if not all_local_states:
-                logger.warning(f"No states to reduce for step {step}")
+                logger.warning(f"No states to reduce for global_step {global_step}")
                 return
 
             # Reduce metrics from states
@@ -370,7 +375,7 @@ class GlobalLoggingActor(Actor):
 
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
-                await backend.log_batch(reduced_metrics, step)
+                await backend.log_batch(reduced_metrics, global_step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:

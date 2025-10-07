@@ -38,12 +38,12 @@ class TestBasicOperations:
     async def test_local_fetcher_flush(self, local_fetcher):
         """Test LocalFetcherActor flush operations."""
         result_with_state = await local_fetcher.flush.call_one(
-            step=1, return_state=True
+            global_step=1, return_state=True
         )
         assert result_with_state == {}
 
         result_without_state = await local_fetcher.flush.call_one(
-            step=1, return_state=False
+            global_step=1, return_state=False
         )
         assert result_without_state == {}
 
@@ -57,7 +57,7 @@ class TestBasicOperations:
         assert has_fetcher is False
 
         # Global logger flush (should not raise error)
-        await global_logger.flush.call_one(step=1)
+        await global_logger.flush.call_one(global_step=1)
 
     @pytest.mark.asyncio
     async def test_backend_init(self, local_fetcher):
@@ -65,7 +65,7 @@ class TestBasicOperations:
         metadata = {"wandb": {"shared_run_id": "test123"}}
         config = {"console": {"logging_mode": "per_rank_reduce"}}
 
-        await local_fetcher.init_backends.call_one(metadata, config, step=5)
+        await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
         await local_fetcher.shutdown.call_one()
 
 

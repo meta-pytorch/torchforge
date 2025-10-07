@@ -29,12 +29,12 @@ class MockBackend(LoggerBackend):
         self.primary_logger_metadata = primary_logger_metadata or {}
         self.process_name = process_name
 
-    def log_stream(self, metric, step, *args, **kwargs):
-        self.immediate_metrics.append((metric, step))
+    def log_stream(self, metric, global_step, *args, **kwargs):
+        self.immediate_metrics.append((metric, global_step))
 
-    async def log_batch(self, metrics, step, *args, **kwargs):
+    async def log_batch(self, metrics, global_step, *args, **kwargs):
         for metric in metrics:
-            self.logged_metrics.append((metric, step))
+            self.logged_metrics.append((metric, global_step))
 
     async def finish(self):
         self.finish_called = True
@@ -124,7 +124,7 @@ def initialized_collector():
         collector._is_initialized = True
         collector.per_rank_no_reduce_backends = [no_reduce_backend]
         collector.per_rank_reduce_backends = [reduce_backend]
-        collector.step = 0
+        collector.global_step = 0
 
         yield {
             "collector": collector,

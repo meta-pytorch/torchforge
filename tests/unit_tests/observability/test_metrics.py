@@ -271,7 +271,7 @@ class TestMetricCollector:
         assert len(reduce_backend.logged_metrics) == 0
 
         # Test flush
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(global_step=1, return_state=True)
 
         # Should have returned state
         assert "loss" in result
@@ -281,16 +281,16 @@ class TestMetricCollector:
 
         # Should have logged to reduce backend
         assert len(reduce_backend.logged_metrics) == 1
-        logged_metric, step = reduce_backend.logged_metrics[0]
+        logged_metric, global_step = reduce_backend.logged_metrics[0]
         assert logged_metric.key == "loss"
         assert logged_metric.value == 1.5
-        assert step == 1
+        assert global_step == 1
 
     @pytest.mark.asyncio
     async def test_flush_uninitialized_returns_empty(self, mock_rank):
         """Test MetricCollector.flush() returns empty dict when uninitialized."""
         collector = MetricCollector()
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(global_step=1, return_state=True)
         assert result == {}
 
     @pytest.mark.asyncio
@@ -301,7 +301,7 @@ class TestMetricCollector:
         collector.per_rank_no_reduce_backends = []
         collector.per_rank_reduce_backends = []
 
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(global_step=1, return_state=True)
         assert result == {}
 
     @pytest.mark.asyncio
@@ -314,7 +314,7 @@ class TestMetricCollector:
         no_reduce_backend.immediate_metrics.clear()
 
         # Start with step 0
-        assert collector.step == 0
+        assert collector.global_step == 0
 
         # Push first metric - should use current step (0)
         first_metric = Metric("loss", 1.0, Reduce.MEAN)
@@ -326,9 +326,9 @@ class TestMetricCollector:
         assert first_logged_metric.key == "loss"
         assert first_step == 0
 
-        # Flush at step 5 - this should increment collector.step to 6
-        await collector.flush(step=5)
-        assert collector.step == 6
+        # Flush at step 5 - this should increment collector.global_step to 6
+        await collector.flush(global_step=5)
+        assert collector.global_step == 6
 
         # Push second metric - should use new step (6)
         second_metric = Metric("accuracy", 0.9, Reduce.MEAN)
@@ -430,10 +430,10 @@ class TestBackends:
 
         # Test log_stream
         metric = Metric("test", 1.0, Reduce.MEAN)
-        backend.log_stream(metric, step=1)  # Should not raise
+        backend.log_stream(metric, global_step=1)  # Should not raise
 
         # Test log
-        await backend.log_batch([metric], step=1)  # Should not raise
+        await backend.log_batch([metric], global_step=1)  # Should not raise
 
         await backend.finish()  # Should not raise
 
