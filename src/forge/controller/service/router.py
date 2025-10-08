@@ -220,13 +220,18 @@ class Batcher:
             replica = self.inner_router.get_replica(healthy_replicas, None, session_map)
 
             # Merge args for batched call
-            inputs = [b[1][0] for b in batch]
+            if batch and len(batch[0][1]) > 0:
+                # Normal case: endpoints expect positional arguments
+                merged_args = [list(items) for items in zip(*[b[1] for b in batch])]
+                args = tuple(merged_args)
+            else:
+                # No-arg case: just one batched call, no inputs to merge
+                args = ()
 
-            # One request for the entire batch
             batch_req = ServiceRequest(
                 session_id=None,
                 function=self.function,
-                args=(inputs,),
+                args=args,
                 kwargs={},
                 future=asyncio.Future(),
             )
@@ -234,17 +239,24 @@ class Batcher:
             for attempt in range(self._num_attempts):
                 try:
                     # Send whole batch to replica
+                    logger.debug(
+                        f"[Batcher] enqueue request executing function={batch_req.function}, args={batch_req.args}, kwargs={batch_req.kwargs}"
+                    )
                     await replica.enqueue_request(batch_req)
                     results = await batch_req.future
-                    # Normalize result shape.
-                    # The actor endpoint is expected to return one result per input
-                    # If it instead returns a single scalar, replicate that scalar across
-                    # all callers so that every waiting future gets a value.
-                    if not isinstance(results, list) or len(results) != len(batch):
+                    logger.debug(f"[Batcher] results: {results}")
+                    # Normalize result shape
+                    if isinstance(results, (list, tuple)):
+                        results = list(results)
+                        if len(results) != len(batch):
+                            results = [results] * len(batch)
+                    else:
                         results = [results] * len(batch)
 
+                    # Fulfill each individual Future from the batch
                     for (_, _, _, f), r in zip(batch, results):
-                        f.set_result(r)
+                        if not f.done():
+                            f.set_result(r)
                     break
 
                 except Exception as e:

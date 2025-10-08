@@ -34,6 +34,7 @@ class Counter(ForgeActor):
 
     def __init__(self, v: int):
         self.v = v
+        self._num_calls = 0  # number of calls to endpoint functions
 
     @endpoint
     async def value(self) -> int:
@@ -46,31 +47,35 @@ class Counter(ForgeActor):
         raise RuntimeError("I was asked to fail")
 
     @endpoint
-    async def add_to_value(self, amount: int, multiplier: int = 1) -> int:
-        """Add an amount (optionally multiplied) to the current value."""
-        logger.info(f"adding {amount} with {multiplier}")
-        self.v += amount * multiplier
-        return self.v
+    async def get_num_calls(self):
+        """Get the number of calls to endpoint functions."""
+        return self._num_calls
 
     @endpoint
     async def incr(self):
         """Increment the counter."""
+        self._num_calls += 1
         self.v += 1
 
     @service_endpoint(router=RoundRobinRouter, batch_size=3, batch_timeout=1)
     async def rr_batch_incr_bsize3(self):
         """Increment the round-robin counter with batching (batch size = 3)."""
+        self._num_calls += 1
         self.v += 1
 
     @service_endpoint(router=RoundRobinRouter, batch_size=5, batch_timeout=0.05)
-    async def rr_batch_incr_bsize5(self):
+    async def rr_batch_incr_bsize5(self, inputs: list[int]) -> list[int]:
         """Increment the round-robin counter with batching (batch size = 5)."""
-        self.v += 1
+        self._num_calls += 1
+        self.v += sum(inputs)
+        return inputs
 
     @service_endpoint(router=RoundRobinRouter)
-    async def rr_batch_incr_bsize1(self):
-        """Increment the round-robin counter with default batch_size=1."""
-        self.v += 1
+    async def rr_batch_incr_bsize1(self, inputs: list[int]) -> list[int]:
+        """Increment the round-robin counter with batching (batch size = 1)."""
+        self._num_calls += 1
+        self._sum += sum(inputs)
+        return inputs
 
 
 def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
@@ -87,21 +92,7 @@ def make_replica(idx: int, healthy: bool = True, load: int = 0) -> Replica:
     return replica
 
 
-@pytest.mark.asyncio
-@pytest.mark.timeout(10)
-async def test_service_as_actor_preserves_normal_usage():
-    """Ensure that using `as_actor` does not break normal semantics."""
-    service = await Counter.as_actor(5)
-
-    try:
-        assert await service.value.choose() == 5
-
-        # Test increment
-        await service.rr_batch_incr_bsize3.choose()
-        assert await service.value.choose() == 6
-
-    finally:
-        await Counter.shutdown(service)
+# Cnofig tests
 
 
 @pytest.mark.asyncio
@@ -229,27 +220,6 @@ async def test_round_robin_router_distribution():
 
 @pytest.mark.timeout(10)
 @pytest.mark.asyncio
-async def test_round_robin_router_distribution_with_batching():
-    """Test that the RoundRobinRouter distributes sessionless calls evenly across replicas with batch routing."""
-    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
-
-    try:
-        # Make multiple sessionless calls using route()
-        results = []
-        tasks = [service.rr_batch_incr_bsize3.route() for _ in range(6)]
-        await asyncio.gather(*tasks)
-        # Verify that requests were distributed round-robin
-        # Each call increments a single replica, so after 6 calls we expect:
-        # 2 increments per replica (since 3 replicas, 6 calls)
-        values = await service.value.fanout()
-        assert sorted(values) == [0, 3, 3]
-
-    finally:
-        await service.shutdown()
-
-
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
 async def test_session_router_assigns_and_updates_session_map_in_service():
     """Integration: Service with SessionRouter preserves sticky sessions."""
     service = await Counter.options(
@@ -281,50 +251,24 @@ async def test_session_router_assigns_and_updates_session_map_in_service():
         await service.shutdown()
 
 
-@pytest.mark.timeout(10)
+# Batcher tests
+
+
 @pytest.mark.asyncio
-async def test_independent_batchers_and_routers_per_endpoint():
-    """Ensure multiple @service_endpoint endpoints coexist with independent routers/batchers."""
-    service = await Counter.options(procs=1, num_replicas=2).as_service(v=0)
+@pytest.mark.timeout(10)
+async def test_service_as_actor_preserves_normal_usage():
+    """Ensure that using `as_actor` does not break normal semantics."""
+    service = await Counter.as_actor(5)
 
     try:
-        # --- First batch: rr_batch_incr_bsize3 (batch_size = 3) ---
-        tasks = [
-            asyncio.create_task(service.rr_batch_incr_bsize3.route()) for _ in range(4)
-        ]
-        await asyncio.gather(*tasks)
+        assert await service.value.choose() == 5
 
-        values = await service.value.fanout()
-
-        # Expectation:
-        # - First 3 requests form one batch → sent to replica R1 (+3).
-        # - Remaining 1 request forms its own batch → goes to replica R2 (+1).
-        # So totals should be [3, 1] (order depends on round robin).
-        assert sum(values) == 4, f"Expected total=4, got {values}"
-        assert sorted(values) == [1, 3], f"Expected [1, 3], got {values}"
-
-        # --- Second batch: rr_batch_incr_bsize5 (batch_size = 5) ---
-        tasks = [
-            asyncio.create_task(service.rr_batch_incr_bsize5.route()) for _ in range(7)
-        ]
-        await asyncio.gather(*tasks)
-
-        values = await service.value.fanout()
-
-        # Expectation (RoundRobin between replicas):
-        # Starting from previous state (R1=3, R2=1):
-        # - Next 5 requests form one batch → go to R1 (+5).
-        # - Remaining 2 requests form their own batch → go to R2 (+2).
-        #
-        # Final totals:
-        #   R1 = 3 (previous) + 5 = 8
-        #   R2 = 1 (previous) + 2 = 3
-        # So distribution should be [3, 8].
-        assert sum(values) == 11, f"Expected total=11, got {values}"
-        assert sorted(values) == [3, 8], f"Expected [4, 8], got {values}"
+        # Test increment
+        await service.rr_batch_incr_bsize3.choose()
+        assert await service.value.choose() == 6
 
     finally:
-        await service.shutdown()
+        await Counter.shutdown(service)
 
 
 @pytest.mark.timeout(10)
@@ -338,7 +282,7 @@ async def test_rr_batch_incr_bsize5_behaves_like_normal_incr():
         assert await service.value.route() == 5
 
         # Call batched increment once
-        await service.rr_batch_incr_bsize5.route()
+        await service.rr_batch_incr_bsize5.route(1)
 
         # Should increment exactly once
         assert await service.value.route() == 6
@@ -348,31 +292,110 @@ async def test_rr_batch_incr_bsize5_behaves_like_normal_incr():
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 async def test_service_endpoint_batching_preserves_order():
-    class MyActor(ForgeActor):
+    """Ensure that batching preserves the order of calls."""
+    service = await Counter.options(num_replicas=2, procs=1).as_service(0)
+    try:
+        results = await asyncio.gather(
+            *[service.rr_batch_incr_bsize5.route(i) for i in range(5)]
+        )
+        assert results == [0, 1, 2, 3, 4]
+        assert await service.get_num_calls.route() == 1
+        assert sorted(await service.value.fanout()) == [0, 10]
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_service_endpoint_multiple_batches():
+    """
+    Verify that batching correctly splits requests into two batches —
+    one triggered by reaching the batch size limit and another by the batch timeout.
+    """
+    service = await Counter.options(num_replicas=2, procs=1).as_service(0)
+    try:
+        # Enqueue 7 calls → expect two batches (5 + 2)
+        results = await asyncio.gather(
+            *[service.rr_batch_incr_bsize5.route(i) for i in range(7)]
+        )
+        # Verify all individual results were returned in order
+        assert results == [0, 1, 2, 3, 4, 5, 6]
+        # Each replica should have executed one batch (round-robin)
+        assert await service.get_num_calls.fanout() == [1, 1]
+
+        # Replica values reflect the sum of their respective batch inputs
+        # first batch: [0, 1, 2, 3, 4] → 10
+        # second batch: [5, 6] → 11
+        assert sorted(await service.value.fanout()) == [10, 11]
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_round_robin_batcher_distribution_no_args():
+    """
+    Verify that the batching system correctly handles endpoints with **zero arguments**
+    and that the RoundRobinRouter distributes such batched calls evenly across replicas.
+    """
+
+    # --- Launch service with 3 replicas ---
+    service = await Counter.options(procs=1, num_replicas=3).as_service(v=0)
+
+    try:
+        # Enqueue 5 no-arg batched calls
+        await asyncio.gather(*[service.rr_batch_incr_bsize3.route() for _ in range(5)])
+
+        # Check that two replicas incremented their counters once
+        values = await service.value.fanout()
+        assert sorted(values) == [0, 1, 1], f"Unexpected replica values: {values}"
+
+        # Ensure exactly 2 actor invocations occurred (2 batches total)
+        num_calls = await service.get_num_calls.fanout()
+        assert sum(num_calls) == 2, f"Expected 2 batches, got {sum(num_calls)}"
+
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_service_endpoint_batching_multi_arg_merge():
+    """Ensure that batching merges multiple argument lists correctly."""
+
+    class MultiArgActor(ForgeActor):
         def __init__(self):
             self._num_calls = 0
-            self._sum = 0
 
         @endpoint
         async def get_num_calls(self):
             return self._num_calls
 
-        @endpoint
-        async def get_sum(self):
-            return self._sum
-
-        @service_endpoint(router=RoundRobinRouter, batch_size=5, batch_timeout=0.05)
-        async def test(self, inputs: list[int]):
+        @service_endpoint(router=RoundRobinRouter, batch_size=5, batch_timeout=0.1)
+        async def multi_args_sum(self, v1: list[int], v2: list[str]) -> list[str]:
+            """
+            Endpoint that accepts multiple argument lists.
+            Should be invoked once per batch.
+            """
             self._num_calls += 1
-            self._sum += sum(inputs)
-            return inputs
+            # Combine corresponding elements
+            return [f"{x}:{y}" for x, y in zip(v1, v2)]
 
-    service = await MyActor.options(num_replicas=2, procs=1).as_service()
+    service = await MultiArgActor.options(num_replicas=2, procs=1).as_service()
+
     try:
-        results = await asyncio.gather(*[service.test.route(i) for i in range(5)])
-        assert results == [0, 1, 2, 3, 4]
+        # 5 requests will fill one batch of size 5
+        results = await asyncio.gather(
+            *[service.multi_args_sum.route(i, str(i)) for i in range(5)]
+        )
+
+        # Expect exactly one actor invocation
         assert await service.get_num_calls.route() == 1
-        assert sorted(await service.get_sum.fanout()) == [0, 10]
+
+        # Expect results correspond to all merged pairs
+        assert results == ["0:0", "1:1", "2:2", "3:3", "4:4"]
+
     finally:
         await service.shutdown()
