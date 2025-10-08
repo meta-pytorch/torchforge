@@ -548,6 +548,7 @@ class Policy(PolicyInterface):
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                     generator_version=self.policy_version,
+                    metadata={"num_cached_tokens": request_output.num_cached_tokens},
                 )
             )
 

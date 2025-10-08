@@ -184,12 +184,14 @@ async def test_cache_usage():
         first_prompt = (
             "The paged prefix caching mechanism in vLLM is an interesting approach."
         )
+        expected_cached_tokens = 0
         async for res in vllm_model.generate(
             first_prompt, sampling_params, request_id="first_16"
         ):
             vllm_outputs.append(res.outputs[0].text)
-            assert res.num_cached_tokens == 0
+            assert res.num_cached_tokens == expected_cached_tokens
         res = await policy.generate.route(first_prompt)
+        assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
         policy_outputs.append(res[0].text)
 
         # Another 16 tokens to now populate 2 blocks (+ reuse the first block)
@@ -197,22 +199,26 @@ async def test_cache_usage():
             first_prompt
             + " It removes the need to recalculate attention key-values for already processed text."
         )
+        expected_cached_tokens = 16
         async for res in vllm_model.generate(
             second_prompt, sampling_params, request_id="second_16_use_first_block"
         ):
             vllm_outputs.append(res.outputs[0].text)
-            assert res.num_cached_tokens == 16
+            assert res.num_cached_tokens == expected_cached_tokens
         res = await policy.generate.route(second_prompt)
+        assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
         policy_outputs.append(res[0].text)
 
         # The first same 32 tokens should now be populated in blocks
         third_prompt = second_prompt
+        expected_cached_tokens = 32
         async for res in vllm_model.generate(
             third_prompt, sampling_params, request_id="use_both_blocks"
         ):
             vllm_outputs.append(res.outputs[0].text)
-            assert res.num_cached_tokens == 32
+            assert res.num_cached_tokens == expected_cached_tokens
         res = await policy.generate.route(third_prompt)
+        assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
         policy_outputs.append(res[0].text)
 
         # Now, let's clear the cache
@@ -220,12 +226,14 @@ async def test_cache_usage():
         await policy._reset_prefix_cache.route()
 
         # And try the third prompt again (should not use any cached tokens)
+        expected_cached_tokens = 0
         async for res in vllm_model.generate(
             third_prompt, sampling_params, request_id="use_no_blocks_bc_cache_cleared"
         ):
             vllm_outputs.append(res.outputs[0].text)
-            assert res.num_cached_tokens == 0
+            assert res.num_cached_tokens == expected_cached_tokens
         res = await policy.generate.route(third_prompt)
+        assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
         policy_outputs.append(res[0].text)
 
         # Sanity check that outputs are still the same
