@@ -14,4 +14,5 @@ DISABLE_PERF_METRICS = "DISABLE_PERF_METRICS"
 METRIC_TIMER_USES_CUDA = "METRIC_TIMER_USES_CUDA"
 
 # Makes forge.observability.metrics.record_metric a no-op
+# and disables spawning LocalFetcherActor in get_or_create_metric_logger
 FORGE_DISABLE_METRICS = "FORGE_DISABLE_METRICS"
