@@ -29,4 +29,7 @@ APIs provide direct access to the underlying distributed components.
 :maxdepth: 1
 api_actors
 api_service
+api_generator
+api_model
+api_trainer
 ```

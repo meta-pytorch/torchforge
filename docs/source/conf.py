@@ -162,10 +162,14 @@ myst_enable_extensions = [
 autodoc_default_options = {
     "members": True,
     "member-order": "bysource",
-    "special-members": "__init__",
-    "undoc-members": True,
     "exclude-members": "__weakref__",
+    "private-members": False,
 }
+
+# Suppress warnings from third-party library docstrings
+suppress_warnings = [
+    "docutils",  # Suppress docstring formatting issues from third-party libraries
+]
 
 
 # -- Sphinx Gallery configuration -------------------------------------------

@@ -38,8 +38,6 @@ import pprint
 import uuid
 from typing import Dict, List
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
@@ -51,6 +49,8 @@ from forge.controller.service.router import (
     SessionRouter,
 )
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -68,13 +68,6 @@ class Service:
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(
@@ -609,12 +602,6 @@ class ServiceActor(Actor):
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):
@@ -1163,14 +1150,3 @@ class ServiceActor(Actor):
 
     def __repr__(self):
         return f"Service(actor={self._actor_def.__name__})"
-
-
-# Copy docstrings from Service to ServiceActor methods for Sphinx autodoc
-# This ensures ServiceActor methods have complete docstrings while avoiding duplication
-ServiceActor.call.__doc__ = Service._call.__doc__
-ServiceActor.call_all.__doc__ = Service.call_all.__doc__
-ServiceActor.start_session.__doc__ = Service.start_session.__doc__
-ServiceActor.get_metrics.__doc__ = Service.get_metrics.__doc__
-ServiceActor.get_metrics_summary.__doc__ = Service.get_metrics_summary.__doc__
-ServiceActor.terminate_session.__doc__ = Service.terminate_session.__doc__
-ServiceActor.stop.__doc__ = Service.stop.__doc__

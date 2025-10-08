@@ -6,16 +6,7 @@
 
 ```{eval-rst}
 .. autoclass:: Service
+
    :members: call_all, start_session, get_metrics, get_metrics_summary, terminate_session, stop
    :show-inheritance:
-   :exclude-members: __init__
-```
-
-## ServiceActor
-
-```{eval-rst}
-.. autoclass:: ServiceActor
-   :members: call, call_all, start_session, get_metrics, get_metrics_summary, terminate_session, stop
-   :show-inheritance:
-   :exclude-members: __init__
 ```
