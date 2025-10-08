@@ -485,7 +485,7 @@ class Policy(PolicyInterface):
             self.policy_version = policy_version
 
             # After updating the weights, we need to reset the KV cache
-            self.scheduler.kv_cache_manager.reset_prefix_cache()
+            self.scheduler.reset_prefix_cache()
 
         # Resume accepting requests and wake up any waiting generate() calls
         async with self.request_lock:
@@ -493,6 +493,10 @@ class Policy(PolicyInterface):
             self.request_lock.notify_all()
 
         logger.info(f"Weight update completed (now v{self.policy_version})")
+
+    @endpoint
+    async def _reset_prefix_cache(self):
+        self.scheduler.reset_prefix_cache()
 
     @endpoint
     async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
