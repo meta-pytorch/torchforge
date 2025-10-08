@@ -7,7 +7,6 @@
 import asyncio
 
 from forge.actors.policy import Policy
-from forge.observability.metric_actors import get_or_create_metric_logger
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.sampling_params import RequestOutputKind
