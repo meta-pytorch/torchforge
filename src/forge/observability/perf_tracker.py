@@ -11,7 +11,7 @@ import time
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
-from typing import List, Optional, Protocol, Tuple
+from typing import List, Protocol, Tuple
 
 import torch
 
@@ -111,7 +111,7 @@ class Tracer:
         self._active = False
 
         # Timing state
-        self._timer: Optional[_TimerProtocol] = None
+        self._timer: _TimerProtocol | None = None
 
         # Memory tracking state
         self._memory_started = False
@@ -227,7 +227,7 @@ class _TimerCPU(_TimerProtocol):
 
     def __init__(self) -> None:
         self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[float] = None
+        self._chain_start: float | None = None
 
     def start(self) -> None:
         # Reset state for reuse
@@ -259,7 +259,7 @@ class _TimerCUDA(_TimerProtocol):
             Tuple[str, Future[float], int]
         ] = []  # (name, future, submission_index)
         self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[torch.cuda.Event] = None
+        self._chain_start: torch.cuda.Event | None = None
 
     def start(self) -> None:
         """Call before any steps. Clear state for reuse; record initial event on current stream."""

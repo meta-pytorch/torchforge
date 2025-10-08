@@ -7,7 +7,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Union
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
@@ -120,7 +120,7 @@ class LocalFetcherActor(Actor):
     GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
-    def __init__(self, global_logger: Optional["GlobalLoggingActor"] = None) -> None:
+    def __init__(self, global_logger: Union["GlobalLoggingActor", None] = None) -> None:
         self.global_logger = global_logger
         _is_initialized = False
 

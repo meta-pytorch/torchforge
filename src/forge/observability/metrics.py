@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytz
 from monarch.actor import context, current_rank
@@ -60,7 +60,7 @@ class Metric:
     key: str
     value: Any
     reduction: Reduce
-    timestamp: Optional[float] = None
+    timestamp: float | None = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -441,7 +441,7 @@ class MetricCollector:
 
     async def init_backends(
         self,
-        metadata_per_primary_backend: Optional[Dict[str, Dict[str, Any]]],
+        metadata_per_primary_backend: Dict[str, Dict[str, Any]] | None,
         config: Dict[str, Any],
     ) -> None:
         """A logger is represented by a backend, i.e. wandb backend. If reduce_across_ranks=False,
@@ -449,7 +449,7 @@ class MetricCollector:
         once globally.
 
         Args:
-            metadata_per_primary_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from primary
+            metadata_per_primary_backend (Dict[str, Dict[str, Any]] | None): Metadata from primary
                 logger backend, e.g., {"wandb": {"run_id": "abc123"}}.
             config (Dict[str, Any]): Logger backend configuration, e.g. {"wandb": {"project": "my_project"}}.
         """
@@ -592,7 +592,7 @@ class LoggerBackend(ABC):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        primary_logger_metadata: Dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -600,7 +600,7 @@ class LoggerBackend(ABC):
         Args:
             role (BackendRole): BackendRole.GLOBAL (controller/primary) or BackendRole.LOCAL (per-rank/secondary).
                 Can be used to behave differently for primary vs secondary roles.
-            primary_logger_metadata (Optional[Dict[str, Any]]): From global backend for
+            primary_logger_metadata (Dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
 
         Raises: ValueError if missing metadata for shared local init.
@@ -621,7 +621,7 @@ class LoggerBackend(ABC):
     async def finish(self) -> None:
         pass
 
-    def get_metadata_for_secondary_ranks(self) -> Optional[Dict[str, Any]]:
+    def get_metadata_for_secondary_ranks(self) -> Dict[str, Any] | None:
         """Return sharable state after primary init (e.g., for shared modes). Called only on globals."""
         return None
 
@@ -635,7 +635,7 @@ class ConsoleBackend(LoggerBackend):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        primary_logger_metadata: Dict[str, Any] | None = None,
     ) -> None:
         self.prefix = (
             get_actor_name_with_rank()
@@ -688,7 +688,7 @@ class WandbBackend(LoggerBackend):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        primary_logger_metadata: Dict[str, Any] | None = None,
     ) -> None:
 
         if primary_logger_metadata is None:
