@@ -20,7 +20,7 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.env_constants import FORGE_DISABLE_METRICS
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -262,8 +262,11 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # Spawn local fetcher actor on each process and register with global logger
+        if os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true":
+            from forge.observability.metric_actors import get_or_create_metric_logger
+
+            _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -284,6 +287,10 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
+                from forge.observability.metric_actors import (
+                    get_or_create_metric_logger,
+                )
+
                 global_logger = await get_or_create_metric_logger(proc_mesh)
                 await global_logger.deregister_fetcher.call_one(proc_mesh)
 
