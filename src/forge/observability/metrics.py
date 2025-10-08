@@ -5,15 +5,54 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import pytz
 from monarch.actor import context, current_rank
 
 logger = logging.getLogger(__name__)
+
+
+class BackendRole:
+    """Backend role constants for metric logging actors.
+
+    Defines whether an actor operates as a local (per-rank) or global (controller) role
+    in the distributed metrics collection system.
+    """
+
+    LOCAL: str = "local"
+    GLOBAL: str = "global"
+
+
+class LoggingMode(Enum):
+    """Metric logging behavior for distributed training scenarios.
+
+    Each mode serves different observability needs:
+
+    GLOBAL_REDUCE = "global_reduce"
+        Best for: Metrics that are best visualized as a single value per step.
+        Behavior: All ranks accumulate → controller reduces → single log entry
+        Example use: 8 ranks training, want 1 loss value per step averaged across all
+
+    PER_RANK_REDUCE = "per_rank_reduce"
+        Best for: Per-rank performance metrics, debugging individual rank behavior
+        Behavior: Each rank accumulates + logs its own reduced values
+        Example use: Monitor GPU utilization per rank, get 8 separate log entries per step
+
+    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
+        Best for: Real-time streaming, time-series debugging
+        Behavior: Raw values logged immediately on record_metric() calls
+        Example use: See what every rank is doing in real time.
+    """
+
+    GLOBAL_REDUCE = "global_reduce"
+    PER_RANK_REDUCE = "per_rank_reduce"
+    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
 
 
 class Reduce(Enum):
@@ -33,6 +72,24 @@ class Reduce(Enum):
             Reduce.STD: StdAccumulator,
         }
         return mapping[self]
+
+
+@dataclass
+class Metric:
+    """Container for metric data including key, value, reduction type, and timestamp.
+
+    Timestamp is automatically set to current EST time if not provided.
+    """
+
+    key: str
+    value: Any
+    reduction: Reduce
+    timestamp: Optional[float] = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            # Always record in UTC timezone
+            self.timestamp = datetime.now(pytz.UTC).timestamp()
 
 
 def get_actor_name_with_rank() -> str:
@@ -109,8 +166,8 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
     collector.push(key, value, reduction)
 
 
-def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
-    """Reduce metric accumulators states to a single value per metric.
+def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metric]:
+    """Reduce metric accumulators states to a list of metrics.
 
     Can be used when reducing metrics across ranks or services, as merging
     states is more precise than merging locally reduced metrics.
@@ -120,7 +177,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
             normally retrieved using `forge.observability.metrics.MetricAccumulator.get_state()`.
 
     Returns:
-        Dict[str, Any]: Dictionary with format {metric_key: reduced_value}
+        List[Metric]: List of reduced metrics
 
     Example:
         states = [
@@ -128,18 +185,18 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
             {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
         ]
         reduce_metrics_states(states)
-        >>> {"loss": 2.0}
+        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
     """
     if not states:
-        return {}
+        return []
 
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
-    reduced_metrics = {}
+    reduced_metrics = []
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
         if not metric_states:
@@ -158,7 +215,14 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
 
         metric_accumulator = Reduce(first_reduction_type).accumulator_class
         reduced_value = metric_accumulator.get_reduced_value_from_states(metric_states)
-        reduced_metrics[key] = reduced_value
+
+        # Create Metric object with reduced value
+        metric = Metric(
+            key=key,
+            value=reduced_value,
+            reduction=Reduce(first_reduction_type),
+        )
+        reduced_metrics.append(metric)
 
     return reduced_metrics
 
@@ -459,12 +523,12 @@ class MetricCollector:
         self.accumulators[key].append(value)
 
     async def flush(
-        self, step: int, return_state: bool = False
+        self, global_step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
 
         Args:
-            step (int): Step used by backends to align metrics on the same x-axis
+            global_step (int): step used by backends to align metrics on the same x-axis
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
@@ -487,7 +551,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for step {step}"
+                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -499,14 +563,12 @@ class MetricCollector:
 
         # Reduce metrics from states for logging if any per-rank backend
         if self.logger_backends:
-            metrics = {}
-            for key, state in states.items():
-                acc_class = Reduce(state["reduction_type"]).accumulator_class
-                metrics[key] = acc_class.get_reduced_value_from_states([state])
+            # Use reduce_metrics_states for consistency
+            reduced_metrics = reduce_metrics_states([states])
 
             # Log to local logger_backends
             for logger_backend in self.logger_backends:
-                await logger_backend.log(metrics, step)
+                await logger_backend.log(reduced_metrics, global_step)
 
         return states if return_state else {}
 
@@ -554,7 +616,7 @@ class LoggerBackend(ABC):
             primary_logger_metadata = {}
         pass
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
         pass
 
     async def finish(self) -> None:
@@ -582,11 +644,14 @@ class ConsoleBackend(LoggerBackend):
             else "GLOBAL"
         )
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
-        logger.info(f"=== [{self.prefix}] - METRICS STEP {step} ===")
-        for key, value in sorted(metrics.items()):
-            logger.info(f"  {key}: {value}")
-        logger.info("==============================\n")
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
+        metrics_str = "\n".join(
+            f"  {metric.key}: {metric.value}"
+            for metric in sorted(metrics, key=lambda m: m.key)
+        )
+        logger.info(
+            f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
+        )
 
     async def finish(self) -> None:
         pass
@@ -701,11 +766,17 @@ class WandbBackend(LoggerBackend):
             settings=settings,
         )
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
         if self.run:
-            log_data = {**metrics, "global_step": step}
+            # Convert metrics to WandB log format
+            log_data = {"global_step": global_step}
+            for metric in metrics:
+                log_data[metric.key] = metric.value
+
             self.run.log(log_data)
-            logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
+            logger.info(
+                f"WandbBackend: Logged {len(metrics)} metrics at global_step {global_step}"
+            )
         else:
             logger.debug(f"WandbBackend: No run started, skipping log for {self.name}")
 
