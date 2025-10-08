@@ -47,7 +47,7 @@ build_monarch() {
     export RUST_BACKTRACE=1
     export CARGO_TERM_VERBOSE=true
     export CARGO_TERM_COLOR=always
-    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
+    pip wheel --no-build-isolation . -w "$WHL_DIR"
 }
 
 append_date() {
