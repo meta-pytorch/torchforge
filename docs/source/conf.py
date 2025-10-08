@@ -117,6 +117,7 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "html_image",
+    "substitution",
 ]
 
 autodoc_default_options = {
