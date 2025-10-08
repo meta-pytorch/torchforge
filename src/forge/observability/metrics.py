@@ -18,41 +18,15 @@ from monarch.actor import context, current_rank
 logger = logging.getLogger(__name__)
 
 
-class BackendRole:
+class BackendRole(Enum):
     """Backend role constants for metric logging actors.
 
     Defines whether an actor operates as a local (per-rank) or global (controller) role
     in the distributed metrics collection system.
     """
 
-    LOCAL: str = "local"
-    GLOBAL: str = "global"
-
-
-class LoggingMode(Enum):
-    """Metric logging behavior for distributed training scenarios.
-
-    Each mode serves different observability needs:
-
-    GLOBAL_REDUCE = "global_reduce"
-        Best for: Metrics that are best visualized as a single value per step.
-        Behavior: All ranks accumulate → controller reduces → single log entry
-        Example use: 8 ranks training, want 1 loss value per step averaged across all
-
-    PER_RANK_REDUCE = "per_rank_reduce"
-        Best for: Per-rank performance metrics, debugging individual rank behavior
-        Behavior: Each rank accumulates + logs its own reduced values
-        Example use: Monitor GPU utilization per rank, get 8 separate log entries per step
-
-    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
-        Best for: Real-time streaming, time-series debugging
-        Behavior: Raw values logged immediately on record_metric() calls
-        Example use: See what every rank is doing in real time.
-    """
-
-    GLOBAL_REDUCE = "global_reduce"
-    PER_RANK_REDUCE = "per_rank_reduce"
-    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
+    LOCAL = "local"
+    GLOBAL = "global"
 
 
 class Reduce(Enum):
@@ -235,7 +209,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metri
 class MetricAccumulator(ABC):
     """Every metric maps to a MetricAccumulator, which accumulates values and optionally reduces them."""
 
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         self.reduction_type = reduction
 
     @abstractmethod
@@ -266,7 +240,7 @@ class MetricAccumulator(ABC):
 
 
 class MeanAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.sum = 0.0
         self.count = 0
@@ -298,7 +272,7 @@ class MeanAccumulator(MetricAccumulator):
 
 
 class SumAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.total = 0.0
 
@@ -321,7 +295,7 @@ class SumAccumulator(MetricAccumulator):
 
 
 class MaxAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.max_val = float("-inf")
 
@@ -344,7 +318,7 @@ class MaxAccumulator(MetricAccumulator):
 
 
 class MinAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.min_val = float("inf")
 
@@ -367,7 +341,7 @@ class MinAccumulator(MetricAccumulator):
 
 
 class StdAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.sum = 0.0
         self.sum_sq = 0.0
@@ -453,7 +427,7 @@ class MetricCollector:
                 )
         return inst
 
-    def __init__(self):
+    def __init__(self) -> None:
         if hasattr(self, "_is_initialized"):
             return
 
@@ -493,7 +467,7 @@ class MetricCollector:
             # instantiate local backend
             logger_backend = get_logger_backend_class(backend_name)(backend_config)
             await logger_backend.init(
-                role="local", primary_logger_metadata=primary_metadata
+                role=BackendRole.LOCAL, primary_logger_metadata=primary_metadata
             )
             self.logger_backends.append(logger_backend)
 
@@ -592,20 +566,20 @@ class MetricCollector:
 class LoggerBackend(ABC):
     """Abstract logger_backend for metric logging, e.g. wandb, jsonl, etc."""
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         self.logger_backend_config = logger_backend_config
 
     @abstractmethod
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
 
         Args:
-            role (str): "global" (controller/primary) or "local" (per-rank/secondary).
+            role (BackendRole): BackendRole.GLOBAL (controller/primary) or BackendRole.LOCAL (per-rank/secondary).
                 Can be used to behave differently for primary vs secondary roles.
             primary_logger_metadata (Optional[Dict[str, Any]]): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
@@ -630,18 +604,18 @@ class LoggerBackend(ABC):
 class ConsoleBackend(LoggerBackend):
     """Simple console logging of metrics."""
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
 
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.prefix = (
             get_actor_name_with_rank()
             if self.logger_backend_config.get("reduce_across_ranks", True)
-            else "GLOBAL"
+            else "Controller"
         )
 
     async def log(self, metrics: List[Metric], global_step: int) -> None:
@@ -675,7 +649,7 @@ class WandbBackend(LoggerBackend):
         group (str, optional): WandB group name for organizing runs. Defaults to "experiment_group"
     """
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
         self.project = logger_backend_config["project"]
         self.group = logger_backend_config.get("group", "experiment_group")
@@ -688,25 +662,22 @@ class WandbBackend(LoggerBackend):
 
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
 
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        if role not in ["global", "local"]:
-            raise ValueError(
-                f"Invalid role {role} for WandbBackend init. Must be 'global' or 'local'."
-            )
-
         self.name = (
-            get_actor_name_with_rank() if role == "local" else "global_controller"
+            get_actor_name_with_rank()
+            if role == BackendRole.LOCAL
+            else "global_controller"
         )
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:
-            if role != "global":
+            if role != BackendRole.GLOBAL:
                 logger.debug(
                     f"Skipped init for global mode (reduce_across_ranks=True) and {role} role."
                 )
@@ -714,10 +685,10 @@ class WandbBackend(LoggerBackend):
             await self._init_global()
 
         # Per-rank modes based on share_run_id bool
-        elif role == "global" and self.share_run_id:
+        elif role == BackendRole.GLOBAL and self.share_run_id:
             await self._init_shared_global()
 
-        elif role == "local":
+        elif role == BackendRole.LOCAL:
             if self.share_run_id:
                 await self._init_shared_local(primary_logger_metadata)
             else:

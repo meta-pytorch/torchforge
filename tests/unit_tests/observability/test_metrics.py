@@ -16,7 +16,6 @@ from forge.observability.metrics import (
     BackendRole,
     ConsoleBackend,
     get_logger_backend_class,
-    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
     Metric,
@@ -66,15 +65,38 @@ class TestMetricCreation:
             mock_collector.push.assert_called_once_with("loss", 1.5, Reduce.MEAN)
 
     def test_new_enums_and_constants(self):
-        """Test new LoggingMode enum and BackendRole constants."""
-        # Test LoggingMode enum values
-        assert LoggingMode.GLOBAL_REDUCE.value == "global_reduce"
-        assert LoggingMode.PER_RANK_REDUCE.value == "per_rank_reduce"
-        assert LoggingMode.PER_RANK_NO_REDUCE.value == "per_rank_no_reduce"
+        """Test BackendRole constants and usage."""
+        # Test BackendRole enum values
+        assert BackendRole.LOCAL.value == "local"
+        assert BackendRole.GLOBAL.value == "global"
 
-        # Test BackendRole constants
-        assert BackendRole.LOCAL == "local"
-        assert BackendRole.GLOBAL == "global"
+        # Test that BackendRole is a proper Enum
+        assert isinstance(BackendRole.LOCAL, BackendRole)
+        assert isinstance(BackendRole.GLOBAL, BackendRole)
+
+    @patch("forge.observability.metrics.get_actor_name_with_rank")
+    @pytest.mark.asyncio
+    async def test_backend_role_usage(self, mock_actor_name):
+        """Test that BackendRole constants are actually used instead of string literals."""
+        mock_actor_name.return_value = "TestActor_abcd_r0"
+
+        # Test ConsoleBackend
+        console_backend = ConsoleBackend({})
+        await console_backend.init(role=BackendRole.LOCAL)
+
+        # Test WandbBackend role validation without WandB initialization
+        wandb_backend = WandbBackend({"project": "test"})
+
+        # Mock all the WandB init methods to focus only on role validation
+        with patch.object(wandb_backend, "_init_global"), patch.object(
+            wandb_backend, "_init_shared_global"
+        ), patch.object(wandb_backend, "_init_shared_local"), patch.object(
+            wandb_backend, "_init_per_rank"
+        ):
+
+            # Should not raise error for valid roles (type system prevents invalid values)
+            await wandb_backend.init(role=BackendRole.GLOBAL)
+            await wandb_backend.init(role=BackendRole.LOCAL)
 
 
 class TestReduceOperations:

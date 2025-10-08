@@ -13,6 +13,7 @@ from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, th
 
 from forge.env_constants import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
+    BackendRole,
     get_logger_backend_class,
     LoggerBackend,
     MetricCollector,
@@ -147,14 +148,13 @@ class LocalFetcherActor(Actor):
         self,
         metadata_per_primary_backend: Dict[str, Dict[str, Any]],
         config: Dict[str, Any],
-    ):
+    ) -> None:
         """Init local (per-rank) logger backends and MetricCollector."""
         collector = MetricCollector()
         await collector.init_backends(metadata_per_primary_backend, config)
 
     @endpoint
-    async def shutdown(self):
-
+    async def shutdown(self) -> None:
         collector = MetricCollector()
         await collector.shutdown()
 
@@ -185,7 +185,7 @@ class GlobalLoggingActor(Actor):
         self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
 
     @endpoint
-    async def init_backends(self, config: Dict[str, Any]):
+    async def init_backends(self, config: Dict[str, Any]) -> None:
         """
         Sets config in global actor, so other actors can get it, then eagerly initializes backend and MetricCollectors
         in all registered fetchers.
@@ -208,7 +208,7 @@ class GlobalLoggingActor(Actor):
 
         for backend_name, backend_config in config.items():
             backend = get_logger_backend_class(backend_name)(backend_config)
-            await backend.init(role="global")
+            await backend.init(role=BackendRole.GLOBAL)
 
             # Extract metadata from primary logger to be shared with secondary loggers
             # and store it
@@ -236,7 +236,9 @@ class GlobalLoggingActor(Actor):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     @endpoint
-    async def register_fetcher(self, fetcher: LocalFetcherActor, name: str | ProcMesh):
+    async def register_fetcher(
+        self, fetcher: LocalFetcherActor, name: str | ProcMesh
+    ) -> None:
         """Registers a fetcher with the global actor. Each key represents a process mesh.
         If there are 2 processes, each with 2 replicas with N gpus, we would
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
@@ -250,7 +252,7 @@ class GlobalLoggingActor(Actor):
             )
 
     @endpoint
-    async def deregister_fetcher(self, name: str | ProcMesh):
+    async def deregister_fetcher(self, name: str | ProcMesh) -> None:
         if name not in self.fetchers:
             logger.warning(
                 f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
@@ -260,7 +262,7 @@ class GlobalLoggingActor(Actor):
         del self.fetchers[name]
 
     @endpoint
-    async def flush(self, global_step: int):
+    async def flush(self, global_step: int) -> None:
         """
         Triggers parallel flush/reset on all registered fetchers. Per-rank MetricCollectors
         log to local backends and return states if needed for cross-rank reduction.
@@ -339,7 +341,7 @@ class GlobalLoggingActor(Actor):
         return len(self.fetchers)
 
     @endpoint
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         # Finish per-rank logger_backends via fetchers
         if self.fetchers:
             tasks = [fetcher.shutdown.call() for fetcher in self.fetchers.values()]

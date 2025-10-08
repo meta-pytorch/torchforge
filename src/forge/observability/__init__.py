@@ -15,7 +15,6 @@ from .metrics import (
     get_actor_name_with_rank,
     get_logger_backend_class,
     LoggerBackend,
-    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
     Metric,
@@ -46,7 +45,6 @@ __all__ = [
     "BackendRole",
     # Enums
     "Reduce",
-    "LoggingMode",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",
