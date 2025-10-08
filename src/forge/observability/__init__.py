@@ -12,7 +12,6 @@ from .metric_actors import (
 from .metrics import (
     BackendRole,
     ConsoleBackend,
-    get_actor_name_with_rank,
     get_logger_backend_class,
     LoggerBackend,
     MaxAccumulator,
@@ -29,12 +28,12 @@ from .metrics import (
     WandbBackend,
 )
 from .perf_tracker import trace, Tracer
+from .utils import detect_actor_name_from_call_stack, get_actor_name_with_rank
 
 __all__ = [
     # Main API functions
     "record_metric",
     "reduce_metrics_states",
-    "get_actor_name_with_rank",
     "get_logger_backend_class",
     "get_or_create_metric_logger",
     # Performance tracking
@@ -45,6 +44,9 @@ __all__ = [
     "BackendRole",
     # Enums
     "Reduce",
+    # Utility functions
+    "detect_actor_name_from_call_stack",
+    "get_actor_name_with_rank",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",

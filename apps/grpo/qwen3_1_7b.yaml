@@ -18,9 +18,9 @@ metric_logging:
   wandb:
     project: "grpo-training"
     group: "grpo_exp_${oc.env:USER}"
-    reduce_across_ranks: True
+    reduce_across_ranks: False
   console:
-    reduce_across_ranks: True
+    reduce_across_ranks: False
 
 # Dataset configuration
 dataset:

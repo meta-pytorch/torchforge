@@ -13,8 +13,9 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import pytz
-from monarch.actor import context, current_rank
+from monarch.actor import current_rank
 
+from forge.observability.utils import get_actor_name_with_rank
 from forge.util.logging import log_once
 
 logger = logging.getLogger(__name__)
@@ -66,55 +67,6 @@ class Metric:
         if self.timestamp is None:
             # Always record in UTC timezone
             self.timestamp = datetime.now(pytz.UTC).timestamp()
-
-
-def get_actor_name_with_rank() -> str:
-    """
-    Extracts actor information from Monarch context to form a logging name.
-
-    Returns:
-        str: Format "ActorName_replicaId_rLocalRank" (e.g., "TrainActor_abcd_r0").
-             Falls back to "UnknownActor" if context unavailable.
-    """
-    # Add more defensive checks
-    ctx = context()
-    if ctx is None or ctx.actor_instance is None:
-        logger.warning("Context unavailable, using fallback actor name for logging.")
-        return "UnknownActor"
-
-    actor_instance = ctx.actor_instance
-    rank = current_rank()
-
-    actor_id_full = str(actor_instance.actor_id)
-
-    # Parse the actor_id
-    parts = actor_id_full.split(".")
-    rank_name = "UnknownActor"  # fallback
-    if len(parts) >= 2:
-        world_part = parts[0]  # e.g., "_1rjutFUXQrEJ[0]"
-        actor_part = parts[1]  # e.g., "TestActorConfigured[0]"
-
-        # Extract world ID and proc rank
-        world_id = world_part.split("[")[0] if "[" in world_part else world_part
-
-        # Extract clean actor name (remove "Configured" suffix if present)
-        if "[" in actor_part:
-            actor_name = actor_part.split("[")[0]  # e.g., "TestActorConfigured"
-            if actor_name.endswith("Configured"):
-                actor_name = actor_name[:-10]  # Remove "Configured"
-        else:
-            actor_name = actor_part
-
-        # Use last 4 characters of world_id as replica identifier
-        # This is deterministic, readable, and works for any number of replicas
-        replica_id = world_id[-4:] if len(world_id) >= 4 else world_id
-
-        # Use current_rank().rank as the local rank within the replica
-        local_rank = rank.rank
-
-        rank_name = f"{actor_name}_{replica_id}_r{local_rank}"
-
-    return rank_name
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
@@ -443,6 +395,8 @@ class MetricCollector:
         self,
         metadata_per_primary_backend: Optional[Dict[str, Dict[str, Any]]],
         config: Dict[str, Any],
+        global_step: int = 0,
+        process_name: str | None = None,
     ) -> None:
         """A logger is represented by a backend, i.e. wandb backend. If reduce_across_ranks=False,
         the backend is instantiated per-rank, in the MetricCollector, otherwise it is only instantiated
@@ -452,10 +406,13 @@ class MetricCollector:
             metadata_per_primary_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from primary
                 logger backend, e.g., {"wandb": {"run_id": "abc123"}}.
             config (Dict[str, Any]): Logger backend configuration, e.g. {"wandb": {"project": "my_project"}}.
+            global_step (int, default 0): Initial step for metrics.
+            process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
             logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
             return
+        self.global_step = global_step
 
         # instantiate local backends if any
         for backend_name, backend_config in config.items():
@@ -470,7 +427,9 @@ class MetricCollector:
             # instantiate local backend
             logger_backend = get_logger_backend_class(backend_name)(backend_config)
             await logger_backend.init(
-                role=BackendRole.LOCAL, primary_logger_metadata=primary_metadata
+                role=BackendRole.LOCAL,
+                primary_logger_metadata=primary_metadata,
+                process_name=process_name,
             )
             self.logger_backends.append(logger_backend)
 
@@ -498,7 +457,7 @@ class MetricCollector:
                     "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
                     " This happens when you try to use `record_metric` before calling `init_backends`."
                     " To disable this warning, please call in your main file:\n"
-                    "`mlogger = await get_or_create_metric_logger()`\n"
+                    "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                     "`await mlogger.init_backends.call_one(logging_config)`\n"
                     "or set env variable `FORGE_DISABLE_METRICS=True`"
                 ),
@@ -544,7 +503,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
+                f"Collector rank {self.rank}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -569,7 +528,7 @@ class MetricCollector:
         """Shutdown logger_backends if initialized."""
         if not self._is_initialized:
             logger.debug(
-                f"Collector for {get_actor_name_with_rank()} not initialized. Skipping shutdown"
+                f"Collector for rank {self.rank} not initialized. Skipping shutdown"
             )
             return
 
@@ -593,6 +552,7 @@ class LoggerBackend(ABC):
         self,
         role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        process_name: Optional[str] = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -602,6 +562,7 @@ class LoggerBackend(ABC):
                 Can be used to behave differently for primary vs secondary roles.
             primary_logger_metadata (Optional[Dict[str, Any]]): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
+            process_name (str | None): Process name for logging.
 
         Raises: ValueError if missing metadata for shared local init.
         """
@@ -636,12 +597,9 @@ class ConsoleBackend(LoggerBackend):
         self,
         role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        process_name: Optional[str] = None,
     ) -> None:
-        self.prefix = (
-            get_actor_name_with_rank()
-            if self.logger_backend_config.get("reduce_across_ranks", True)
-            else "Controller"
-        )
+        pass
 
     async def log(self, metrics: List[Metric], global_step: int) -> None:
         metrics_str = "\n".join(
@@ -649,7 +607,7 @@ class ConsoleBackend(LoggerBackend):
             for metric in sorted(metrics, key=lambda m: m.key)
         )
         logger.info(
-            f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
+            f"=== [METRICS STEP {global_step}] ===\n{metrics_str}\n==============================\n"
         )
 
     async def finish(self) -> None:
@@ -689,16 +647,13 @@ class WandbBackend(LoggerBackend):
         self,
         role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
+        process_name: Optional[str] = None,
     ) -> None:
 
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        self.name = (
-            get_actor_name_with_rank()
-            if role == BackendRole.LOCAL
-            else "global_controller"
-        )
+        self.name = get_actor_name_with_rank(process_name)
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:

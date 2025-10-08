@@ -19,6 +19,7 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
+from forge.observability.utils import detect_actor_name_from_call_stack
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ _global_logger = None
 
 async def get_or_create_metric_logger(
     proc_mesh: ProcMesh | None = None,
+    process_name: str | None = None,
 ) -> "GlobalLoggingActor":
     """Initializes a LocalFetcherActor in the specified process mesh (or current process if None),
     if not already initialized, registers it with the GlobalLoggingActor and returns the
@@ -40,6 +42,8 @@ async def get_or_create_metric_logger(
     Args:
         proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on. If None,
             uses `monarch.actor.this_proc()`.
+        process_name: Optional process name (e.g., "TrainActor", "GeneratorActor") for logging.
+            If None, will auto-detect from call stack or default to "UnknownActor" if not found.
 
     Returns:
         GlobalLoggingActor: The global logging controller.
@@ -53,7 +57,7 @@ async def get_or_create_metric_logger(
         from forge.observability.metrics import record_metric
 
         # Main process setup
-        mlogger = await get_or_create_metric_logger()
+        mlogger = await get_or_create_metric_logger(process_name="Controller")
 
         # Initialize logging backends
         await mlogger.init_backends({
@@ -66,13 +70,17 @@ async def get_or_create_metric_logger(
 
         # Training loop
         for step in range(max_steps):
-            record_metric("loss", 1.2, step, reduction_type=Reduce.MEAN)
+            record_metric("loss", 1.2, reduction_type=Reduce.MEAN)
             # ... training code with record_metric() calls ...
             await mlogger.flush(step)  # Log metrics for this step
 
         # Shutdown
         await mlogger.shutdown()
     """
+
+    if process_name is None:
+        process_name = detect_actor_name_from_call_stack()
+
     # Get or create the singleton global logger
     global _global_logger
     if _global_logger is None:
@@ -104,7 +112,7 @@ async def get_or_create_metric_logger(
         and os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
     ):
         local_fetcher_actor = proc.spawn(
-            "local_fetcher_actor", LocalFetcherActor, global_logger
+            "local_fetcher_actor", LocalFetcherActor, global_logger, process_name
         )
         await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
         proc._local_fetcher = local_fetcher_actor  # pyre-ignore
@@ -120,8 +128,13 @@ class LocalFetcherActor(Actor):
     GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
-    def __init__(self, global_logger: Optional["GlobalLoggingActor"] = None) -> None:
+    def __init__(
+        self,
+        global_logger: Optional["GlobalLoggingActor"] = None,
+        process_name: str | None = None,
+    ) -> None:
         self.global_logger = global_logger
+        self.process_name = process_name  # Passed to MetricCollector for logging
         _is_initialized = False
 
     @endpoint
@@ -148,10 +161,22 @@ class LocalFetcherActor(Actor):
         self,
         metadata_per_primary_backend: Dict[str, Dict[str, Any]],
         config: Dict[str, Any],
+        global_step: int = 0,
     ) -> None:
-        """Init local (per-rank) logger backends and MetricCollector."""
+        """Init local (per-rank) logger backends and MetricCollector.
+
+        Args:
+            metadata_per_primary_backend (Dict[str, Dict[str, Any]]): Metadata from primary backends for shared state.
+            config (Dict[str, Any]): Backend configurations with logging modes and settings.
+            global_step (int): Initial step for metrics.
+        """
         collector = MetricCollector()
-        await collector.init_backends(metadata_per_primary_backend, config)
+        await collector.init_backends(
+            metadata_per_primary_backend,
+            config,
+            global_step,
+            process_name=self.process_name,
+        )
 
     @endpoint
     async def shutdown(self) -> None:

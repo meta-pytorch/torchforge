@@ -80,12 +80,9 @@ class TestMetricCreation:
         assert isinstance(BackendRole.LOCAL, BackendRole)
         assert isinstance(BackendRole.GLOBAL, BackendRole)
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
     @pytest.mark.asyncio
-    async def test_backend_role_usage(self, mock_actor_name):
+    async def test_backend_role_usage(self):
         """Test that BackendRole constants are actually used instead of string literals."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
-
         # Test ConsoleBackend
         console_backend = ConsoleBackend({})
         await console_backend.init(role=BackendRole.LOCAL)
@@ -295,10 +292,8 @@ class TestCriticalFixes:
         mock_collector_class.assert_called_once()
         mock_collector.push.assert_called_once()
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
-    def test_wandb_backend_creation(self, mock_actor_name):
+    def test_wandb_backend_creation(self):
         """Test WandbBackend creation and basic setup without WandB dependency."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
 
         config = {
             "project": "test_project",
@@ -316,12 +311,9 @@ class TestCriticalFixes:
         metadata = backend.get_metadata_for_secondary_ranks()
         assert metadata == {}  # Should be empty when no run
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
     @pytest.mark.asyncio
-    async def test_console_backend(self, mock_actor_name):
+    async def test_console_backend(self):
         """Test ConsoleBackend basic operations."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
-
         backend = ConsoleBackend({})
 
         await backend.init(role=BackendRole.LOCAL)
