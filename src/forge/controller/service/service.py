@@ -40,14 +40,16 @@ from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
+from forge.controller.service.endpoint import ServiceEndpointProperty
+
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
-
 from forge.controller.service.router import (
-    LeastLoadedRouter,
+    Batcher,
     RoundRobinRouter,
+    Router,
     SessionRouter,
 )
 from forge.types import ServiceConfig
@@ -108,7 +110,10 @@ class Service:
 
         # Initialize the routers
         self._default_router = RoundRobinRouter()
-        self._session_router = SessionRouter(fallback_router=LeastLoadedRouter())
+        self._session_router = SessionRouter(fallback_router=self._default_router)
+
+        # This keeps the map between the registered endpoints and the routers
+        self.routers: dict[str, Router | Batcher] = {}
 
         # Initialize all replicas
         replicas = []
@@ -138,14 +143,67 @@ class Service:
             self._health_loop(poll_rate_s=self._cfg.health_poll_rate)
         )
 
-    async def _call(self, sess_id: str | None, function: str, *args, **kwargs):
+    def _set_router(
+        self, endpoint_name: str, prop: ServiceEndpointProperty | None = None
+    ) -> None:
+        """
+        Ensure a router exists for the given endpoint.
+
+        - If a router is already set, raise an error.
+        - If a ServiceEndpointProperty is provided, construct its router/batcher
+          using the specified configuration.
+        - If not provided, fall back to a default round-robin router.
+
+        Args:
+            endpoint_name: Name of the endpoint.
+            prop: Optional ServiceEndpointProperty object with router, batch_size,
+                  and batch_timeout attributes.
+        """
+
+        # If router already exists, raise an exception
+        if endpoint_name in self.routers:
+            raise AssertionError(f"Router already exists for endpoint: {endpoint_name}")
+
+        # If config is missing or incomplete, use default router
+        if prop is None or not isinstance(prop, ServiceEndpointProperty):
+            return
+
+        # Resolve base router
+        if not callable(prop.router):
+            raise ValueError(f"Router must be callable, got: {prop.router}")
+        else:
+            base_router = prop.router()  # Call the router constructor
+            batch_size = prop.batch_size
+            batch_timeout = prop.batch_timeout
+
+        if not isinstance(base_router, Router):
+            raise ValueError(
+                f"Router must be a Router instance, got: {type(base_router)}"
+            )
+
+        # Wrap in Batcher if batching requested
+        if batch_size > 1:
+            router = Batcher(
+                endpoint_name,
+                base_router,
+                get_healthy_replicas=self._get_healthy_replicas,
+                get_session_map=self._get_session_map,
+                batch_size=batch_size,
+                batch_timeout=batch_timeout,
+            )
+        else:
+            router = base_router
+
+        # Store and return
+        self.routers[endpoint_name] = router
+
+    async def _route(self, sess_id: str | None, function: str, *args, **kwargs):
         """
         Routes a function call to the appropriate replica with load balancing and fault tolerance.
 
         This is the core routing method that handles:
         - Session-based routing for stateful calls
-        - Round-robin load balancing for stateless calls
-        - Custom routing based on context hints
+        - Per-endpoint router selection (round-robin, least-loaded, batching, etc.)
         - Automatic retry on replica failures
         - Request queuing and processing
 
@@ -168,8 +226,15 @@ class Service:
             if ctx:
                 sess_id = ctx["session_id"]
 
-        replica = await self._get_replica(sess_id)
+        router = self.routers.get(function, self._default_router)
 
+        # Case 1: batching is enabled and no session ID (stateless calls only)
+        # Forward the request into the Batcher queue. The batcher will send
+        # the batched requests to the selected replica.
+        if sess_id is None and isinstance(router, Batcher):
+            return await router.route(function, args, kwargs)
+
+        # Case 2: route a single request to a replica
         # Create a ServiceRequest object to queue
         request = ServiceRequest(
             session_id=sess_id,
@@ -178,6 +243,18 @@ class Service:
             kwargs=kwargs,
             future=asyncio.Future(),
         )
+
+        healthy_replicas = [r for r in self._replicas if r.healthy]
+
+        # Select replica:
+        if sess_id is not None:
+            # Case 2.1: sticky sessions
+            replica = self._session_router.get_replica(
+                healthy_replicas, sess_id, self._session_replica_map
+            )
+        else:
+            # Case 2.2: stateless routing
+            replica = self._default_router.get_replica(healthy_replicas)
 
         # Queue the request using replica's method
         await replica.enqueue_request(request)
@@ -196,7 +273,7 @@ class Service:
                 )
             raise
 
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def _fanout(self, function: str, *args, **kwargs) -> List:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 
@@ -211,7 +288,7 @@ class Service:
         Raises:
             RuntimeError: If no healthy replicas are available
         """
-        healthy_replicas = [r for r in self._replicas if r.healthy]
+        healthy_replicas = self._get_healthy_replicas()
 
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for broadcast call")
@@ -256,7 +333,7 @@ class Service:
             del self._session_replica_map[sess_id]
 
         # Retry the call (this will assign to a new healthy replica)
-        return await self._call(sess_id, function, *args, **kwargs)
+        return await self._route(sess_id, function, *args, **kwargs)
 
     async def _migrate_remaining_requests(self, failed_replica: Replica):
         """Migrates remaining requests from a failed replica to healthy replicas."""
@@ -280,9 +357,7 @@ class Service:
         )
 
         # Find healthy replicas
-        healthy_replicas = [
-            r for r in self._replicas if r.healthy and r != failed_replica
-        ]
+        healthy_replicas = self._get_healthy_replicas()
 
         if not healthy_replicas:
             # No healthy replicas, fail all requests
@@ -334,7 +409,7 @@ class Service:
         """Updates service-level metrics."""
         self._metrics.total_sessions = len(self._active_sessions)
         self._metrics.total_replicas = len(self._replicas)
-        self._metrics.healthy_replicas = sum(1 for r in self._replicas if r.healthy)
+        self._metrics.healthy_replicas = len(self._get_healthy_replicas())
         # Store direct references to replica metrics for aggregation
         self._metrics.replica_metrics = {}
         for replica in self._replicas:
@@ -446,6 +521,13 @@ class Service:
         # Update metrics
         self._update_service_metrics()
 
+    def _get_healthy_replicas(self) -> list[Replica]:
+        """Returns a list of healthy replicas."""
+        return [r for r in self._replicas if r.healthy]
+
+    def _get_session_map(self) -> Dict[str, int]:
+        return self._session_replica_map
+
     async def _health_loop(self, poll_rate_s: float):
         """Runs the health loop to monitor and recover replicas.
 
@@ -474,17 +556,6 @@ class Service:
 
             await asyncio.sleep(poll_rate_s)
 
-    async def _get_replica(self, sess_id: str | None) -> "Replica":
-        """Get a replica for the given session ID."""
-        healthy_replicas = [r for r in self._replicas if r.healthy]
-        if sess_id is None:
-            # No session, use the default router
-            return self._default_router.get_replica(healthy_replicas)
-
-        return self._session_router.get_replica(
-            healthy_replicas, sess_id, self._session_replica_map
-        )
-
     async def stop(self):
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
@@ -502,6 +573,15 @@ class Service:
                     await self._health_task
                 except asyncio.CancelledError:
                     logger.info("Health loop task cancelled.")
+
+        # Stop all batchers in routers
+        # Stop all batchers
+        batchers = [
+            router for router in self.routers.values() if isinstance(router, Batcher)
+        ]
+        if batchers:
+            await asyncio.gather(*(b.stop() for b in batchers), return_exceptions=True)
+            logger.info("All batcher loop(s) stopped gracefully.")
 
         # Stop all replicas using their stop method
         await asyncio.gather(
@@ -582,7 +662,7 @@ class Service:
             # Load balancing state
             # Service-level state
             "total_replicas": len(self._replicas),
-            "healthy_replica_count": sum(1 for r in self._replicas if r.healthy),
+            "healthy_replica_count": len(self._get_healthy_replicas()),
             "shutdown_requested": self._shutdown_requested,
             # Metrics summary
             "total_sessions": len(self._active_sessions),
