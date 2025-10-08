@@ -262,7 +262,8 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local logging actor on each process and register with global logger
+        # Spawn local fetcher actor on each process and register with global logger
+        # Can be disabled by FORGE_DISABLE_METRICS env var
         _ = await get_or_create_metric_logger(procs)
         return procs
 

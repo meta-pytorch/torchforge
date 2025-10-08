@@ -437,7 +437,21 @@ class MetricCollector:
 
     def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
         if not self._is_initialized:
-            raise ValueError("Collector not initialized—call init first")
+            from forge.util.logging import log_once
+
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg=(
+                    "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
+                    " This happens when you try to use `record_metric` before calling `init_backends`."
+                    " To disable this warning, please call in your main file:\n"
+                    "`mlogger = await get_or_create_metric_logger()`\n"
+                    "`await mlogger.init_backends.call_one(logging_config)`\n"
+                    "or set env variable `FORGE_DISABLE_METRICS=True`"
+                ),
+            )
+            return
 
         if key not in self.accumulators:
             self.accumulators[key] = reduction.accumulator_class(reduction)
@@ -458,8 +472,16 @@ class MetricCollector:
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         if not self._is_initialized:
-            logger.debug(
-                f"Collector not yet initialized for {get_actor_name_with_rank()}. Call init_backends first."
+            from forge.util.logging import log_once
+
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
+                "\nPlease call in your main file:\n"
+                "`mlogger = await get_or_create_metric_logger()`\n"
+                "`await mlogger.init_backends.call_one(logging_config)`\n"
+                "before calling `flush`",
             )
             return {}
 
@@ -662,6 +684,15 @@ class WandbBackend(LoggerBackend):
             raise ValueError(
                 f"Shared ID required but not provided for {self.name} backend init"
             )
+
+        # Clear any stale service tokens that might be pointing to dead processes
+        # In multiprocessing environments, WandB service tokens can become stale and point
+        # to dead service processes. This causes wandb.init() to hang indefinitely trying
+        # to connect to non-existent services. Clearing forces fresh service connection.
+        from wandb.sdk.lib.service import service_token
+
+        service_token.clear_service_in_env()
+
         settings = wandb.Settings(mode="shared", x_primary=False, x_label=self.name)
         self.run = wandb.init(
             id=shared_id,

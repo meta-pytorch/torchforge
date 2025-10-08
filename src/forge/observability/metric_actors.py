@@ -6,10 +6,12 @@
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, Optional
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
+from forge.env_constants import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
     get_logger_backend_class,
     LoggerBackend,
@@ -95,8 +97,11 @@ async def get_or_create_metric_logger(
             f"Both should be True (already setup) or both False (needs setup)."
         )
 
-    # Setup local_fetcher_actor if needed
-    if not proc_has_local_fetcher:
+    # Setup local_fetcher_actor if needed (unless disabled by environment flag)
+    if (
+        not proc_has_local_fetcher
+        and os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
+    ):
         local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger
         )
