@@ -161,6 +161,8 @@ class TestProvisionerCudaVisibleDevices:
             num_procs=2,
             with_gpus=True,
             num_hosts=None,
+            port="12345",
+            addr="localhost",
         )
         # Verify GPUs were allocated from available set
         remaining_available = local_gpu_manager.get_available_gpus()
