@@ -8,6 +8,7 @@ import asyncio
 
 import logging
 import time
+from datetime import datetime
 
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
@@ -17,7 +18,13 @@ from forge.observability.perf_tracker import trace, Tracer
 
 from monarch.actor import current_rank, endpoint
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logging.getLogger("forge.observability.metrics").setLevel(logging.INFO)
+logging.getLogger("forge.observability.metric_actors").setLevel(logging.INFO)
+# Reduce wandb logging noise
+logging.getLogger("wandb").setLevel(logging.WARNING)
 
 
 class TrainActor(ForgeActor):
@@ -71,6 +78,19 @@ class GeneratorActor(ForgeActor):
             record_metric("policy/count_sequences_completed", 1, Reduce.SUM)
             record_metric("policy/avg_tokens_per_sample", value, Reduce.MEAN)
 
+            # Sample-level log (e.g. rollout info)
+            record_metric(
+                "rollout/samples",
+                {
+                    "rank": rank,
+                    "step": step,
+                    "substep": substep,
+                    "tokens_generated": value,
+                    "max_tokens": 50,
+                    "timestamp": time.time(),
+                },
+                Reduce.SAMPLE,
+            )
             print(f"🎯 Gen rank {rank}: Step {step}.{substep}, tokens={value}")
 
         return value
@@ -78,35 +98,34 @@ class GeneratorActor(ForgeActor):
 
 # Main
 async def main():
-    """Example demonstrating distributed metric logging with different backends."""
-    group = f"grpo_exp_{int(time.time())}"
+    group = "time" + str(int(datetime.now().timestamp()))
 
     # Config format: {backend_name: backend_config_dict}
-    # Each backend can specify reduce_across_ranks to control distributed logging behavior
     config = {
-        "console": {"reduce_across_ranks": True},
+        "console": {"logging_mode": "global_reduce"},
         "wandb": {
-            "project": "my_project",
+            "project": "toy_metrics",
             "group": group,
-            "reduce_across_ranks": False,
-            # Only useful if NOT reduce_across_ranks.
-            "share_run_id": False,  # Share run ID across ranks -- Not recommended.
+            "logging_mode": "per_rank_reduce",  # global_reduce, per_rank_reduce, per_rank_no_reduce
+            "per_rank_share_run": False,
         },
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(config)
 
-    # Spawn services first (triggers registrations via provisioner hook)
+    # Spawn services (will register fetchers)
     trainer = await TrainActor.options(**service_config).as_service()
     generator = await GeneratorActor.options(**service_config).as_service()
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
+        record_metric("main/global_step", 1, Reduce.MEAN)
         await trainer.train_step.fanout(i)
         for sub in range(3):
             await generator.generate_step.fanout(i, sub)
+            await asyncio.sleep(0.1)
         await mlogger.flush.call_one(i)
 
     # shutdown

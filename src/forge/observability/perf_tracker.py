@@ -15,7 +15,7 @@ from typing import List, Optional, Protocol, Tuple
 
 import torch
 
-from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
+from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import record_metric, Reduce
 
 # Thread-local memory tracking state
@@ -125,7 +125,7 @@ class Tracer:
 
         # Start timing (always enabled)
         time_with_gpu_events = (
-            os.getenv(METRIC_TIMER_USES_CUDA, str(self.time_with_gpu)).lower() == "true"
+            os.getenv(METRIC_TIMER_USES_GPU, str(self.time_with_gpu)).lower() == "true"
         ) and torch.cuda.is_available()
         self._timer = _TimerCUDA() if time_with_gpu_events else _TimerCPU()
         self._timer.start()

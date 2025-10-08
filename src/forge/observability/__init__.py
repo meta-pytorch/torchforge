@@ -10,23 +10,26 @@ from .metric_actors import (
     LocalFetcherActor,
 )
 from .metrics import (
+    BackendRole,
     ConsoleBackend,
-    # Utility functions
     get_actor_name_with_rank,
     get_logger_backend_class,
-    # Backend classes
     LoggerBackend,
+    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
-    # Accumulator classes
+    Metric,
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
+    record_episode_sample,
     record_metric,
     Reduce,
     reduce_metrics_states,
+    SampleAccumulator,
     StdAccumulator,
     SumAccumulator,
+    TopBottomKFilter,
     WandbBackend,
 )
 from .perf_tracker import trace, Tracer
@@ -34,6 +37,7 @@ from .perf_tracker import trace, Tracer
 __all__ = [
     # Main API functions
     "record_metric",
+    "record_episode_sample",
     "reduce_metrics_states",
     "get_actor_name_with_rank",
     "get_logger_backend_class",
@@ -41,8 +45,12 @@ __all__ = [
     # Performance tracking
     "Tracer",
     "trace",
+    # Data classes
+    "Metric",
+    "BackendRole",
     # Enums
     "Reduce",
+    "LoggingMode",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",
@@ -59,4 +67,7 @@ __all__ = [
     "MaxAccumulator",
     "MinAccumulator",
     "StdAccumulator",
+    "SampleAccumulator",
+    # Filter classes
+    "TopBottomKFilter",
 ]

@@ -21,6 +21,7 @@ from monarch.tools import commands
 from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.utils import detect_actor_name_from_call_stack
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -262,8 +263,10 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # Detect actor name and spawn local logging actor on each process
+        process_name = detect_actor_name_from_call_stack()
+        _ = await get_or_create_metric_logger(procs, process_name=process_name)
+
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
