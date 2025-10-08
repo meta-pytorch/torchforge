@@ -240,9 +240,9 @@ class Provisioner:
 
                 # Shows detailed logs for Monarch rust failures
                 env_vars["RUST_BACKTRACE"] = "1"
-            
+
             env_vars_to_inherit = ["TORCHSTORE_RDMA_ENABLED"]
-            
+
             for name in env_vars_to_inherit:
                 val = os.environ.get(name)
                 if val is not None:
