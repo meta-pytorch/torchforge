@@ -405,7 +405,7 @@ class Replica:
         # Stop the actor
         if self.actor:
             try:
-                await self.actor_def.shutdown(self.actor)
+                await self.actor_def.shutdown(self.actor, queit=True)
             except Exception as e:
                 logger.warning(
                     "Error stopping proc_mesh for replica %d: %s", self.idx, e

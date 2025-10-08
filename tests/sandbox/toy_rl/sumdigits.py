@@ -574,7 +574,9 @@ async def main(cfg: DictConfig):
             Trainer.shutdown(trainer),
             ReplayBuffer.shutdown(replay_buffer),
             reward_actor.shutdown(),
+            ref_model.shutdown(),
         )
+
         # TODO - add a global shutdown that implicitly shuts down all services
         # and remote allocations
         await shutdown()

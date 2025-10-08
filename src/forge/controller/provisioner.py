@@ -12,7 +12,7 @@ import logging
 import os
 import socket
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -131,6 +131,8 @@ class Provisioner:
         )
         if not self.launcher:
             logger.warning("Launcher not provided, remote allocations will not work.")
+
+        self._allocations: list[Any] = []  # all live actor/service instances
 
     async def initialize(self):
         """Call this after creating the instance"""
@@ -303,8 +305,36 @@ class Provisioner:
                 commands.kill(server_name)
             del self._proc_host_map[proc_mesh]
 
+    async def track_allocation(self, alloc: Any):
+        """Tracks an allocation for cleanup."""
+        self._allocations.append(alloc)
+
+    async def shutdown_all_allocations(self):
+        """Gracefully shut down all tracked actors and services."""
+        from forge.controller.actor import ForgeActor
+        from forge.controller.service import ServiceInterface
+
+        for alloc in self._allocations:
+            try:
+                # --- ServiceInterface ---
+                if isinstance(alloc, ServiceInterface):
+                    await alloc.shutdown()
+
+                # --- ForgeActor instance ---
+                elif isinstance(alloc, ForgeActor):
+                    await alloc.__class__.shutdown(alloc)
+
+                else:
+                    logger.warning(f"Unknown allocation type: {type(alloc)}")
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {alloc}: {e}")
+
+        self._allocations.clear()
+
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
+        await self.shutdown_all_allocations()
         async with self._lock:
             for server_name in self._server_names:
                 commands.kill(server_name)

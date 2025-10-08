@@ -12,7 +12,7 @@ from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh
+from forge.controller.provisioner import _get_provisioner, get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -127,7 +127,9 @@ class ForgeActor(Actor):
         logger.info("Spawning Service for %s", cls.__name__)
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
-        return ServiceInterface(service, cls)
+        service_interface = ServiceInterface(service, cls)
+        await cls.register_allocation(service_interface)
+        return service_interface
 
     @endpoint
     async def setup(self):
@@ -143,6 +145,17 @@ class ForgeActor(Actor):
 
         """
         pass
+
+    @classmethod
+    async def register_allocation(cls, alloc: "ForgeActor | ServiceInterface") -> None:
+        """Registers an allocation (service/actor) with the provisioner."""
+        provisioner = await _get_provisioner()
+        try:
+            provisioner = await _get_provisioner()
+            if provisioner is not None:
+                await provisioner.track_allocation(alloc)
+        except Exception as e:
+            logger.warning(f"Failed to register allocation {alloc}: {e}")
 
     @classmethod
     async def launch(cls, *args, **kwargs) -> "ForgeActor":
@@ -185,13 +198,16 @@ class ForgeActor(Actor):
         """
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(*args, **actor_kwargs)
+        await cls.register_allocation(actor)
         return actor
 
     @classmethod
-    async def shutdown(cls, actor: "ForgeActor"):
+    async def shutdown(cls, actor: "ForgeActor", queit: bool = False):
         """Shuts down an actor.
         This method is used by `Service` to teardown a replica.
         """
+        if not queit:
+            logger.info(f"Shutting down actor {getattr(actor, 'name', cls.__name__)}")
         if actor._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
         await stop_proc_mesh(actor._proc_mesh)

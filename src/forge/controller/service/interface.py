@@ -200,6 +200,7 @@ class ServiceInterface:
         """
         Shut down the underlying Service.
         """
+        logger.info(f"Shutting down service {self.actor_def.__name__}")
         await self._service.stop()
 
     def session(self) -> "SessionContext":
