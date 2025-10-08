@@ -33,7 +33,7 @@ jobs:
               "gpu_arch_type": "cpu",
               "gpu_arch_version": "12.6",
               "desired_cuda": "cu126",
-              "container_image": "pytorch/manylinux2_28-builder:cuda12.8",
+              "container_image": "pytorch/manylinux2_28-builder:cuda12.6",
               "package_type": "manywheel",
               "build_name": "manywheel-py3_10-cuda12_6",
               "validation_runner": "linux.12xlarge.memory",
