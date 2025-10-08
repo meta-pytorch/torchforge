@@ -51,10 +51,6 @@ async def test_same_output():
         vllm_model = AsyncLLM.from_engine_args(args)
 
         # Setup Policy service
-        # TODO: Remove metric logger instantiation after https://github.com/meta-pytorch/forge/pull/303 lands
-        mlogger = await get_or_create_metric_logger()
-        await mlogger.init_backends.call_one({"console": {"log_per_rank": False}})
-
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
@@ -145,9 +141,6 @@ async def test_cache_usage():
         vllm_model = AsyncLLM.from_engine_args(args)
 
         # Setup Policy service
-        # TODO: Remove metric logger instantiation after https://github.com/meta-pytorch/forge/pull/303 lands
-        mlogger = await get_or_create_metric_logger()
-        await mlogger.init_backends.call_one({"console": {"log_per_rank": False}})
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
