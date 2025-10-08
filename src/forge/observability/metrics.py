@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from monarch.actor import context, current_rank
 
+from forge.util.logging import log_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -437,8 +439,6 @@ class MetricCollector:
 
     def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
         if not self._is_initialized:
-            from forge.util.logging import log_once
-
             log_once(
                 logger,
                 level=logging.WARNING,
@@ -472,8 +472,6 @@ class MetricCollector:
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         if not self._is_initialized:
-            from forge.util.logging import log_once
-
             log_once(
                 logger,
                 level=logging.WARNING,
