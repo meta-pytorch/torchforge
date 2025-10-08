@@ -1,6 +1,7 @@
 name: Build nightly wheels and publish to PyTorch Index
 
 on:
+  pull_request:
   push:
     branches:
       - nightly
