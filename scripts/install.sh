@@ -162,7 +162,6 @@ main() {
     echo "======================"
     echo ""
     echo "Note: Run this from the root of the forge repository"
-    echo "This script requires GitHub CLI (gh) to download large wheels"
     if [ "$USE_SUDO" = "true" ]; then
         echo "System packages will be installed via system package manager (requires sudo)"
         check_sudo
@@ -186,6 +185,7 @@ main() {
 
     # Install Monarch from wheel at download.pytorch.org
     log_info "Downloading and installing Monarch wheel..."
+    pip install -r https://raw.githubusercontent.com/meta-pytorch/monarch/main/requirements.txt
     pip install monarch --extra-index-url https://download.pytorch.org/whl/preview/forge
 
     # Install vLLM from wheel at download.pytorch.org
@@ -193,7 +193,7 @@ main() {
     pip install vllm --extra-index-url https://download.pytorch.org/whl/preview/forge
 
     log_info "Installing Forge from source..."
-    pip install -e .
+    pip install -e ".[dev]"
 
     # Set up environment
     log_info "Setting up environment..."
