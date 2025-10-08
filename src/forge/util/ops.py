@@ -74,7 +74,7 @@ def compute_logprobs(
     logits = logits[:, -input_ids.size(1) - 1 : -1, :].to(input_ids.device)
     scaled_logits = logits / temperature
 
-    # Convert to fp32 for numerical stability
+    # Cast up to fp32 for numerical stability
     scaled_logits_fp32 = scaled_logits.float()
 
     # get per-token log probs
