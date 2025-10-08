@@ -261,7 +261,7 @@ main() {
     download_vllm_wheel
 
     log_info "Installing PyTorch nightly..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
+    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu126
 
     log_info "Installing all wheels (local + downloaded)..."
     pip install "$WHEEL_DIR"/*.whl
