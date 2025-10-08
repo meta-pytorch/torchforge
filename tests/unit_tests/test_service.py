@@ -118,9 +118,9 @@ async def test_as_actor_default_usage():
 @pytest.mark.timeout(10)
 async def test_options_applies_config():
     """Test config via options class."""
-    actor_cls = Counter.options(procs=1, with_gpus=True, num_replicas=2)
+    actor_cls = Counter.options(procs=1, with_gpus=False, num_replicas=2)
     assert actor_cls.procs == 1
-    assert actor_cls.with_gpus is True
+    assert actor_cls.with_gpus is False
     assert actor_cls.num_replicas == 2
 
     actor = await actor_cls.as_actor(v=3)

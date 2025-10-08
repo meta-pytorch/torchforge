@@ -18,7 +18,6 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
-
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -173,6 +172,7 @@ class Policy(PolicyInterface):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
@@ -186,15 +186,12 @@ class Policy(PolicyInterface):
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
         policy_proc_config.with_gpus = False
-
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
-        # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
-        # do logging within PolicyWorker
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )

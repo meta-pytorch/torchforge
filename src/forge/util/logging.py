@@ -6,11 +6,9 @@
 
 import logging
 from functools import lru_cache
-from typing import Optional, TypeVar
+from typing import Optional
 
 from torch import distributed as dist
-
-T = TypeVar("T", bound=type)
 
 
 def get_logger(level: Optional[str] = None) -> logging.Logger:

@@ -1,0 +1,28 @@
+# >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/deepseek_r1.yaml
+
+# NOTE - this won't work until we have proper HostMesh support
+policy:
+  engine_config:
+    model: "deepseek-ai/DeepSeek-R1-0528"
+    tensor_parallel_size: 16
+    pipeline_parallel_size: 1
+    enable_expert_parallel: true
+    # enforce_eager: true
+  sampling_config:
+    n: 2
+    guided_decoding: false
+    max_tokens: 512
+
+provisioner:
+  launcher: slurm
+
+services:
+  policy:
+    procs: 8
+    hosts: 2
+    num_replicas: 1
+    with_gpus: true
+
+
+# Optional, otherwise argparse fallback kicks in
+prompt: "Tell me a joke"
