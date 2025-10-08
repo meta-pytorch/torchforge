@@ -27,6 +27,8 @@ from forge.types import ProcessConfig, ProvisionerConfig
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+_ENV_VARS_TO_INHERIT = ["TORCHSTORE_RDMA_ENABLED"]
+
 
 def _get_port() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -241,9 +243,7 @@ class Provisioner:
                 # Shows detailed logs for Monarch rust failures
                 env_vars["RUST_BACKTRACE"] = "1"
 
-            env_vars_to_inherit = ["TORCHSTORE_RDMA_ENABLED"]
-
-            for name in env_vars_to_inherit:
+            for name in _ENV_VARS_TO_INHERIT:
                 val = os.environ.get(name)
                 if val is not None:
                     env_vars[name] = val
