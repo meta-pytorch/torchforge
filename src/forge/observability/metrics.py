@@ -56,6 +56,12 @@ class Metric:
     """Container for metric data including key, value, reduction type, and timestamp.
 
     Timestamp is automatically set to current EST time if not provided.
+
+    Args:
+        key: str
+        value: Any
+        reduction: Reduce
+        timestamp: Optional[float] = None
     """
 
     key: str
@@ -410,7 +416,9 @@ class MetricCollector:
             process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
-            logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
+            logger.debug(
+                f"Rank {get_actor_name_with_rank()}: MetricCollector already initialized"
+            )
             return
         self.global_step = global_step
 
@@ -503,7 +511,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {self.rank}: No metrics to flush for global_step {global_step}"
+                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -599,7 +607,7 @@ class ConsoleBackend(LoggerBackend):
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
         process_name: Optional[str] = None,
     ) -> None:
-        pass
+        self.prefix = get_actor_name_with_rank(actor_name=process_name)
 
     async def log(self, metrics: List[Metric], global_step: int) -> None:
         metrics_str = "\n".join(
@@ -607,7 +615,7 @@ class ConsoleBackend(LoggerBackend):
             for metric in sorted(metrics, key=lambda m: m.key)
         )
         logger.info(
-            f"=== [METRICS STEP {global_step}] ===\n{metrics_str}\n==============================\n"
+            f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
         )
 
     async def finish(self) -> None:
@@ -653,7 +661,7 @@ class WandbBackend(LoggerBackend):
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        self.name = get_actor_name_with_rank(process_name)
+        self.name = get_actor_name_with_rank(actor_name=process_name)
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:

@@ -12,7 +12,6 @@ from .metric_actors import (
 from .metrics import (
     BackendRole,
     ConsoleBackend,
-    get_logger_backend_class,
     LoggerBackend,
     MaxAccumulator,
     MeanAccumulator,
