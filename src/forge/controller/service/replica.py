@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 

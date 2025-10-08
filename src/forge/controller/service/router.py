@@ -138,10 +138,8 @@ class Batcher:
             batch_timeout=0.01,
         )
 
-        request = ServiceRequest(...)
-
-        # Enqueue a request to be sent to a replica
-        await batcher.enqueue(request)
+        # Enqueue a endpoint call to be sent to a replica
+        results = await batcher.route(function, args, kwargs)
     """
 
     def __init__(
@@ -213,12 +211,6 @@ class Batcher:
                 except asyncio.TimeoutError:
                     break
 
-            session_map = self.get_session_map()
-            healthy_replicas = self.get_healthy_replicas()
-
-            # One routing decision for the whole batch
-            replica = self.inner_router.get_replica(healthy_replicas, None, session_map)
-
             # Merge args for batched call
             if batch and len(batch[0][1]) > 0:
                 # Normal case: endpoints expect positional arguments
@@ -228,29 +220,34 @@ class Batcher:
                 # No-arg case: just one batched call, no inputs to merge
                 args = ()
 
-            batch_req = ServiceRequest(
-                session_id=None,
-                function=self.function,
-                args=args,
-                kwargs={},
-                future=asyncio.Future(),
-            )
-
             for attempt in range(self._num_attempts):
+                session_map = self.get_session_map()
+                healthy_replicas = self.get_healthy_replicas()
+
+                # One routing decision for the whole batch
+                replica = self.inner_router.get_replica(
+                    healthy_replicas, None, session_map
+                )
+
+                batch_req = ServiceRequest(
+                    session_id=None,
+                    function=self.function,
+                    args=args,
+                    kwargs={},
+                    future=asyncio.Future(),
+                )
+
                 try:
                     # Send whole batch to replica
-                    logger.debug(
-                        f"[Batcher] enqueue request executing function={batch_req.function}, args={batch_req.args}, kwargs={batch_req.kwargs}"
-                    )
                     await replica.enqueue_request(batch_req)
                     results = await batch_req.future
-                    logger.debug(f"[Batcher] results: {results}")
                     # Normalize result shape
                     if isinstance(results, (list, tuple)):
                         results = list(results)
                         if len(results) != len(batch):
                             results = [results] * len(batch)
                     else:
+                        # scalar result, broadcast to batch size
                         results = [results] * len(batch)
 
                     # Fulfill each individual Future from the batch
@@ -263,13 +260,6 @@ class Batcher:
                     if attempt < self._num_attempts - 1 and not replica.healthy:
                         logger.debug(
                             f"Replica {replica.idx} failed during request, retrying on healthy replica. Exception: {e}"
-                        )
-                        healthy_replicas = self.get_healthy_replicas()
-                        session_map = self.get_session_map()
-                        if not healthy_replicas:
-                            raise RuntimeError("No healthy replicas available") from e
-                        replica = self.inner_router.get_replica(
-                            healthy_replicas, None, session_map
                         )
                         continue
                     else:

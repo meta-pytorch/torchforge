@@ -182,7 +182,7 @@ def service_endpoint(
 
     Example:
         class MyForgeActor(ForgeActor):
-            @service_endpoint(router=RoundRobinRouter(), batch_size=16, batch_timeout=0.05)
+            @service_endpoint(router=RoundRobinRouter, batch_size=16, batch_timeout=0.05)
             async def predict(self, x): ...
     """
 
