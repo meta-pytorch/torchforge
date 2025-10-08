@@ -52,7 +52,7 @@ class TestMetricCreation:
         assert metric.timestamp == custom_time
 
     def test_record_metric(self, mock_rank):
-        """Test record_metric calls collector correctly."""
+        """Test record_metric creates correct Metric and calls collector."""
         # Mock the MetricCollector constructor to return a mock instance
         mock_collector = MagicMock()
 
@@ -61,8 +61,14 @@ class TestMetricCreation:
         ):
             record_metric("loss", 1.5, Reduce.MEAN)
 
-            # Verify push was called on the mock collector with correct parameters
-            mock_collector.push.assert_called_once_with("loss", 1.5, Reduce.MEAN)
+            # Verify push was called on the mock collector
+            mock_collector.push.assert_called_once()
+
+            # Verify the metric passed to push
+            pushed_metric = mock_collector.push.call_args[0][0]
+            assert pushed_metric.key == "loss"
+            assert pushed_metric.value == 1.5
+            assert pushed_metric.reduction == Reduce.MEAN
 
     def test_new_enums_and_constants(self):
         """Test BackendRole constants and usage."""
@@ -250,9 +256,10 @@ class TestCriticalFixes:
     def test_uninitialized_push_logs_warning(self, mock_rank, caplog):
         """Test MetricCollector.push() logs warning when uninitialized."""
         collector = MetricCollector()
+        metric = Metric("test", 1.0, Reduce.MEAN)
 
         # Should not raise error, just log warning and return
-        collector.push("test", 1.0, Reduce.MEAN)
+        collector.push(metric)
         assert any(
             "Metric logging backends" in record.message for record in caplog.records
         )
@@ -317,7 +324,7 @@ class TestCriticalFixes:
 
         backend = ConsoleBackend({})
 
-        await backend.init(role="local")
+        await backend.init(role=BackendRole.LOCAL)
 
         # Test log - should not raise
         # Create a test metric

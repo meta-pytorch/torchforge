@@ -118,8 +118,7 @@ def get_actor_name_with_rank() -> str:
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
-    """
-    Records a metric value for later reduction and logging.
+    """Thin wrapper to send metrics to per-rank local MetricCollectors.
 
     Relies on a per-rank MetricCollector singleton for ease of use, i.e.
     call `record_metric` anywhere in the code without moving the
@@ -134,12 +133,14 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
 
     Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
     """
-    # Skip metrics collection if disabled for tests
+    # Skip metrics collection
     if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
         return
 
+    # timestamp is added automatically by the Metric class
+    metric = Metric(key=key, value=value, reduction=reduction)
     collector = MetricCollector()
-    collector.push(key, value, reduction)
+    collector.push(metric)
 
 
 def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metric]:
@@ -475,7 +476,20 @@ class MetricCollector:
 
         self._is_initialized = True
 
-    def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
+    def push(self, metric: Metric) -> None:
+        """Process a metric according to configured logging modes.
+
+        Args:
+            metric: Metric dataclass containing key, value, reduction type, and timestamp.
+
+        Raises:
+            TypeError: If metric is not a Metric object.
+
+        Example:
+            collector = MetricCollector()
+            metric = Metric("loss", 0.5, Reduce.MEAN)
+            collector.push(metric)
+        """
         if not self._is_initialized:
             log_once(
                 logger,
@@ -491,10 +505,17 @@ class MetricCollector:
             )
             return
 
-        if key not in self.accumulators:
-            self.accumulators[key] = reduction.accumulator_class(reduction)
+        # Validate metric object
+        if not isinstance(metric, Metric):
+            raise TypeError(f"Expected {Metric} object, got {type(metric)}")
 
-        self.accumulators[key].append(value)
+        # Always accumulate for reduction and state return
+        key = metric.key
+        if key not in self.accumulators:
+            self.accumulators[key] = metric.reduction.accumulator_class(
+                metric.reduction
+            )
+        self.accumulators[key].append(metric.value)
 
     async def flush(
         self, global_step: int, return_state: bool = False
@@ -584,11 +605,17 @@ class LoggerBackend(ABC):
 
         Raises: ValueError if missing metadata for shared local init.
         """
-        if primary_logger_metadata is None:
-            primary_logger_metadata = {}
         pass
 
+    @abstractmethod
     async def log(self, metrics: List[Metric], global_step: int) -> None:
+        """
+        Log a batch of metrics to the backend.
+
+        Args:
+            metrics: List of Metric objects to log.
+            global_step: Step number for x-axis alignment across metrics.
+        """
         pass
 
     async def finish(self) -> None:
