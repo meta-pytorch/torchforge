@@ -6,11 +6,14 @@
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, Optional
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
+from forge.env_constants import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
+    BackendRole,
     get_logger_backend_class,
     LoggerBackend,
     MetricCollector,
@@ -95,13 +98,16 @@ async def get_or_create_metric_logger(
             f"Both should be True (already setup) or both False (needs setup)."
         )
 
-    # Setup local_fetcher_actor if needed
-    if not proc_has_local_fetcher:
+    # Setup local_fetcher_actor if needed (unless disabled by environment flag)
+    if (
+        not proc_has_local_fetcher
+        and os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
+    ):
         local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger
         )
         await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
-        proc._local_fetcher = local_fetcher_actor
+        proc._local_fetcher = local_fetcher_actor  # pyre-ignore
 
     return global_logger
 
@@ -120,13 +126,13 @@ class LocalFetcherActor(Actor):
 
     @endpoint
     async def flush(
-        self, step: int, return_state: bool = False
+        self, global_step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
         This should only ever be called by the global logger.
 
         Args:
-            step (int): train step used by backends to align all metrics on the same x-axis
+            global_step (int): step used by backends to align all metrics on the same x-axis
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
@@ -134,7 +140,7 @@ class LocalFetcherActor(Actor):
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         collector = MetricCollector()
-        result = await collector.flush(step, return_state=return_state)
+        result = await collector.flush(global_step, return_state=return_state)
         return result
 
     @endpoint
@@ -142,14 +148,13 @@ class LocalFetcherActor(Actor):
         self,
         metadata_per_primary_backend: Dict[str, Dict[str, Any]],
         config: Dict[str, Any],
-    ):
+    ) -> None:
         """Init local (per-rank) logger backends and MetricCollector."""
         collector = MetricCollector()
         await collector.init_backends(metadata_per_primary_backend, config)
 
     @endpoint
-    async def shutdown(self):
-
+    async def shutdown(self) -> None:
         collector = MetricCollector()
         await collector.shutdown()
 
@@ -180,7 +185,7 @@ class GlobalLoggingActor(Actor):
         self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
 
     @endpoint
-    async def init_backends(self, config: Dict[str, Any]):
+    async def init_backends(self, config: Dict[str, Any]) -> None:
         """
         Sets config in global actor, so other actors can get it, then eagerly initializes backend and MetricCollectors
         in all registered fetchers.
@@ -203,7 +208,7 @@ class GlobalLoggingActor(Actor):
 
         for backend_name, backend_config in config.items():
             backend = get_logger_backend_class(backend_name)(backend_config)
-            await backend.init(role="global")
+            await backend.init(role=BackendRole.GLOBAL)
 
             # Extract metadata from primary logger to be shared with secondary loggers
             # and store it
@@ -231,7 +236,9 @@ class GlobalLoggingActor(Actor):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     @endpoint
-    async def register_fetcher(self, fetcher: LocalFetcherActor, name: str | ProcMesh):
+    async def register_fetcher(
+        self, fetcher: LocalFetcherActor, name: str | ProcMesh
+    ) -> None:
         """Registers a fetcher with the global actor. Each key represents a process mesh.
         If there are 2 processes, each with 2 replicas with N gpus, we would
         have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
@@ -245,7 +252,7 @@ class GlobalLoggingActor(Actor):
             )
 
     @endpoint
-    async def deregister_fetcher(self, name: str | ProcMesh):
+    async def deregister_fetcher(self, name: str | ProcMesh) -> None:
         if name not in self.fetchers:
             logger.warning(
                 f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
@@ -255,13 +262,13 @@ class GlobalLoggingActor(Actor):
         del self.fetchers[name]
 
     @endpoint
-    async def flush(self, step: int):
+    async def flush(self, global_step: int) -> None:
         """
         Triggers parallel flush/reset on all registered fetchers. Per-rank MetricCollectors
         log to local backends and return states if needed for cross-rank reduction.
 
         Args:
-            step (int): Global step for logging.
+            global_step (int): step for logging.
         """
         if not self.fetchers:
             return
@@ -280,12 +287,14 @@ class GlobalLoggingActor(Actor):
             for backend_config in config.values()
         )
 
-        logger.debug(f"Global flush for step {step}: {len(self.fetchers)} fetchers")
+        logger.debug(
+            f"Global flush for global_step {global_step}: {len(self.fetchers)} fetchers"
+        )
 
         # Broadcast flush to all fetchers
         results = await asyncio.gather(
             *[
-                f.flush.call(step, return_state=requires_reduce)
+                f.flush.call(global_step, return_state=requires_reduce)
                 for f in self.fetchers.values()
             ],
             return_exceptions=True,
@@ -309,10 +318,10 @@ class GlobalLoggingActor(Actor):
                         )
 
             if not all_local_states:
-                logger.warning(f"No states to reduce for step {step}")
+                logger.warning(f"No states to reduce for global_step {global_step}")
                 return
 
-            # Reduce
+            # Reduce metrics from states
             reduced_metrics = reduce_metrics_states(all_local_states)
 
             # Log to each global logger_backend
@@ -320,7 +329,7 @@ class GlobalLoggingActor(Actor):
                 logger_backend_name,
                 logger_backend,
             ) in self.global_logger_backends.items():
-                await logger_backend.log(reduced_metrics, step)
+                await logger_backend.log(reduced_metrics, global_step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:
@@ -332,7 +341,7 @@ class GlobalLoggingActor(Actor):
         return len(self.fetchers)
 
     @endpoint
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         # Finish per-rank logger_backends via fetchers
         if self.fetchers:
             tasks = [fetcher.shutdown.call() for fetcher in self.fetchers.values()]

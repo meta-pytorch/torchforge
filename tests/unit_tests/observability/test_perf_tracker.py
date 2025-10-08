@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
-from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
+from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import Reduce
 
 from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Tracer
@@ -135,7 +135,7 @@ class TestTracingModes:
         if timer == "gpu" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        monkeypatch.setenv(METRIC_TIMER_USES_CUDA, str(timer == "gpu"))
+        monkeypatch.setenv(METRIC_TIMER_USES_GPU, str(timer == "gpu"))
 
         async def run_concurrent_tasks():
             start_time = time.perf_counter()
@@ -370,17 +370,17 @@ class TestEnvironmentConfiguration:
             ("false", _TimerCPU),
         ],
     )
-    def test_metric_timer_uses_cuda_override(
+    def test_metric_timer_uses_gpu_override(
         self, env_value, expected_backend, monkeypatch
     ):
-        """Test METRIC_TIMER_USES_CUDA env var overrides timer parameter."""
+        """Test METRIC_TIMER_USES_GPU env var overrides timer parameter."""
         if env_value == "true" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
         with patch("torch.cuda.is_available", return_value=True), patch(
             "forge.observability.perf_tracker.record_metric"
         ):
-            monkeypatch.setenv(METRIC_TIMER_USES_CUDA, env_value)
+            monkeypatch.setenv(METRIC_TIMER_USES_GPU, env_value)
 
             # Test with timer="cpu" (should be overridden by env)
             tracer = Tracer("env_test", timer="cpu")

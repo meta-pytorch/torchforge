@@ -99,6 +99,12 @@ class SamplingConfig:
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
 
+    def asdict(self):
+        # Use the full object instead of a Dict
+        ret = asdict(self)
+        ret["guided_decoding"] = self.guided_decoding
+        return ret
+
 
 @dataclass
 class EngineConfig(EngineArgs):
@@ -254,7 +260,7 @@ class Policy(PolicyInterface):
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_config, overrides=asdict(self.sampling_config)
+            self.vllm_config, overrides=self.sampling_config.asdict()
         )
 
         # Setup processors

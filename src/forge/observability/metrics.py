@@ -5,15 +5,30 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import pytz
 from monarch.actor import context, current_rank
 
+from forge.util.logging import log_once
+
 logger = logging.getLogger(__name__)
+
+
+class BackendRole(Enum):
+    """Backend role constants for metric logging actors.
+
+    Defines whether an actor operates as a local (per-rank) or global (controller) role
+    in the distributed metrics collection system.
+    """
+
+    LOCAL = "local"
+    GLOBAL = "global"
 
 
 class Reduce(Enum):
@@ -33,6 +48,24 @@ class Reduce(Enum):
             Reduce.STD: StdAccumulator,
         }
         return mapping[self]
+
+
+@dataclass
+class Metric:
+    """Container for metric data including key, value, reduction type, and timestamp.
+
+    Timestamp is automatically set to current EST time if not provided.
+    """
+
+    key: str
+    value: Any
+    reduction: Reduce
+    timestamp: Optional[float] = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            # Always record in UTC timezone
+            self.timestamp = datetime.now(pytz.UTC).timestamp()
 
 
 def get_actor_name_with_rank() -> str:
@@ -85,8 +118,7 @@ def get_actor_name_with_rank() -> str:
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
-    """
-    Records a metric value for later reduction and logging.
+    """Thin wrapper to send metrics to per-rank local MetricCollectors.
 
     Relies on a per-rank MetricCollector singleton for ease of use, i.e.
     call `record_metric` anywhere in the code without moving the
@@ -101,16 +133,18 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
 
     Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
     """
-    # Skip metrics collection if disabled for tests
+    # Skip metrics collection
     if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
         return
 
+    # timestamp is added automatically by the Metric class
+    metric = Metric(key=key, value=value, reduction=reduction)
     collector = MetricCollector()
-    collector.push(key, value, reduction)
+    collector.push(metric)
 
 
-def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, Any]:
-    """Reduce metric accumulators states to a single value per metric.
+def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> List[Metric]:
+    """Reduce metric accumulators states to a list of metrics.
 
     Can be used when reducing metrics across ranks or services, as merging
     states is more precise than merging locally reduced metrics.
@@ -120,7 +154,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
             normally retrieved using `forge.observability.metrics.MetricAccumulator.get_state()`.
 
     Returns:
-        Dict[str, Any]: Dictionary with format {metric_key: reduced_value}
+        List[Metric]: List of reduced metrics
 
     Example:
         states = [
@@ -128,18 +162,18 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
             {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
         ]
         reduce_metrics_states(states)
-        >>> {"loss": 2.0}
+        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
     """
     if not states:
-        return {}
+        return []
 
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
-    reduced_metrics = {}
+    reduced_metrics = []
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
         if not metric_states:
@@ -158,7 +192,14 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
 
         metric_accumulator = Reduce(first_reduction_type).accumulator_class
         reduced_value = metric_accumulator.get_reduced_value_from_states(metric_states)
-        reduced_metrics[key] = reduced_value
+
+        # Create Metric object with reduced value
+        metric = Metric(
+            key=key,
+            value=reduced_value,
+            reduction=Reduce(first_reduction_type),
+        )
+        reduced_metrics.append(metric)
 
     return reduced_metrics
 
@@ -171,7 +212,7 @@ def reduce_metrics_states(states: List[Dict[str, Dict[str, Any]]]) -> Dict[str, 
 class MetricAccumulator(ABC):
     """Every metric maps to a MetricAccumulator, which accumulates values and optionally reduces them."""
 
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         self.reduction_type = reduction
 
     @abstractmethod
@@ -202,7 +243,7 @@ class MetricAccumulator(ABC):
 
 
 class MeanAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.sum = 0.0
         self.count = 0
@@ -234,7 +275,7 @@ class MeanAccumulator(MetricAccumulator):
 
 
 class SumAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.total = 0.0
 
@@ -257,7 +298,7 @@ class SumAccumulator(MetricAccumulator):
 
 
 class MaxAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.max_val = float("-inf")
 
@@ -280,7 +321,7 @@ class MaxAccumulator(MetricAccumulator):
 
 
 class MinAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.min_val = float("inf")
 
@@ -303,7 +344,7 @@ class MinAccumulator(MetricAccumulator):
 
 
 class StdAccumulator(MetricAccumulator):
-    def __init__(self, reduction: Reduce):
+    def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
         self.sum = 0.0
         self.sum_sq = 0.0
@@ -389,7 +430,7 @@ class MetricCollector:
                 )
         return inst
 
-    def __init__(self):
+    def __init__(self) -> None:
         if hasattr(self, "_is_initialized"):
             return
 
@@ -429,28 +470,60 @@ class MetricCollector:
             # instantiate local backend
             logger_backend = get_logger_backend_class(backend_name)(backend_config)
             await logger_backend.init(
-                role="local", primary_logger_metadata=primary_metadata
+                role=BackendRole.LOCAL, primary_logger_metadata=primary_metadata
             )
             self.logger_backends.append(logger_backend)
 
         self._is_initialized = True
 
-    def push(self, key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
+    def push(self, metric: Metric) -> None:
+        """Process a metric according to configured logging modes.
+
+        Args:
+            metric: Metric dataclass containing key, value, reduction type, and timestamp.
+
+        Raises:
+            TypeError: If metric is not a Metric object.
+
+        Example:
+            collector = MetricCollector()
+            metric = Metric("loss", 0.5, Reduce.MEAN)
+            collector.push(metric)
+        """
         if not self._is_initialized:
-            raise ValueError("Collector not initialized—call init first")
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg=(
+                    "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
+                    " This happens when you try to use `record_metric` before calling `init_backends`."
+                    " To disable this warning, please call in your main file:\n"
+                    "`mlogger = await get_or_create_metric_logger()`\n"
+                    "`await mlogger.init_backends.call_one(logging_config)`\n"
+                    "or set env variable `FORGE_DISABLE_METRICS=True`"
+                ),
+            )
+            return
 
+        # Validate metric object
+        if not isinstance(metric, Metric):
+            raise TypeError(f"Expected {Metric} object, got {type(metric)}")
+
+        # Always accumulate for reduction and state return
+        key = metric.key
         if key not in self.accumulators:
-            self.accumulators[key] = reduction.accumulator_class(reduction)
-
-        self.accumulators[key].append(value)
+            self.accumulators[key] = metric.reduction.accumulator_class(
+                metric.reduction
+            )
+        self.accumulators[key].append(metric.value)
 
     async def flush(
-        self, step: int, return_state: bool = False
+        self, global_step: int, return_state: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
 
         Args:
-            step (int): Step used by backends to align metrics on the same x-axis
+            global_step (int): step used by backends to align metrics on the same x-axis
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
@@ -458,14 +531,20 @@ class MetricCollector:
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         if not self._is_initialized:
-            logger.debug(
-                f"Collector not yet initialized for {get_actor_name_with_rank()}. Call init_backends first."
+            log_once(
+                logger,
+                level=logging.WARNING,
+                msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
+                "\nPlease call in your main file:\n"
+                "`mlogger = await get_or_create_metric_logger()`\n"
+                "`await mlogger.init_backends.call_one(logging_config)`\n"
+                "before calling `flush`",
             )
             return {}
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for step {step}"
+                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -477,14 +556,12 @@ class MetricCollector:
 
         # Reduce metrics from states for logging if any per-rank backend
         if self.logger_backends:
-            metrics = {}
-            for key, state in states.items():
-                acc_class = Reduce(state["reduction_type"]).accumulator_class
-                metrics[key] = acc_class.get_reduced_value_from_states([state])
+            # Use reduce_metrics_states for consistency
+            reduced_metrics = reduce_metrics_states([states])
 
             # Log to local logger_backends
             for logger_backend in self.logger_backends:
-                await logger_backend.log(metrics, step)
+                await logger_backend.log(reduced_metrics, global_step)
 
         return states if return_state else {}
 
@@ -508,31 +585,37 @@ class MetricCollector:
 class LoggerBackend(ABC):
     """Abstract logger_backend for metric logging, e.g. wandb, jsonl, etc."""
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         self.logger_backend_config = logger_backend_config
 
     @abstractmethod
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
 
         Args:
-            role (str): "global" (controller/primary) or "local" (per-rank/secondary).
+            role (BackendRole): BackendRole.GLOBAL (controller/primary) or BackendRole.LOCAL (per-rank/secondary).
                 Can be used to behave differently for primary vs secondary roles.
             primary_logger_metadata (Optional[Dict[str, Any]]): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
 
         Raises: ValueError if missing metadata for shared local init.
         """
-        if primary_logger_metadata is None:
-            primary_logger_metadata = {}
         pass
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+    @abstractmethod
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
+        """
+        Log a batch of metrics to the backend.
+
+        Args:
+            metrics: List of Metric objects to log.
+            global_step: Step number for x-axis alignment across metrics.
+        """
         pass
 
     async def finish(self) -> None:
@@ -546,25 +629,28 @@ class LoggerBackend(ABC):
 class ConsoleBackend(LoggerBackend):
     """Simple console logging of metrics."""
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
 
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.prefix = (
             get_actor_name_with_rank()
             if self.logger_backend_config.get("reduce_across_ranks", True)
-            else "GLOBAL"
+            else "Controller"
         )
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
-        logger.info(f"=== [{self.prefix}] - METRICS STEP {step} ===")
-        for key, value in sorted(metrics.items()):
-            logger.info(f"  {key}: {value}")
-        logger.info("==============================\n")
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
+        metrics_str = "\n".join(
+            f"  {metric.key}: {metric.value}"
+            for metric in sorted(metrics, key=lambda m: m.key)
+        )
+        logger.info(
+            f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
+        )
 
     async def finish(self) -> None:
         pass
@@ -588,7 +674,7 @@ class WandbBackend(LoggerBackend):
         group (str, optional): WandB group name for organizing runs. Defaults to "experiment_group"
     """
 
-    def __init__(self, logger_backend_config: Dict[str, Any]):
+    def __init__(self, logger_backend_config: Dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
         self.project = logger_backend_config["project"]
         self.group = logger_backend_config.get("group", "experiment_group")
@@ -601,25 +687,22 @@ class WandbBackend(LoggerBackend):
 
     async def init(
         self,
-        role: str,
+        role: BackendRole,
         primary_logger_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
 
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        if role not in ["global", "local"]:
-            raise ValueError(
-                f"Invalid role {role} for WandbBackend init. Must be 'global' or 'local'."
-            )
-
         self.name = (
-            get_actor_name_with_rank() if role == "local" else "global_controller"
+            get_actor_name_with_rank()
+            if role == BackendRole.LOCAL
+            else "global_controller"
         )
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:
-            if role != "global":
+            if role != BackendRole.GLOBAL:
                 logger.debug(
                     f"Skipped init for global mode (reduce_across_ranks=True) and {role} role."
                 )
@@ -627,10 +710,10 @@ class WandbBackend(LoggerBackend):
             await self._init_global()
 
         # Per-rank modes based on share_run_id bool
-        elif role == "global" and self.share_run_id:
+        elif role == BackendRole.GLOBAL and self.share_run_id:
             await self._init_shared_global()
 
-        elif role == "local":
+        elif role == BackendRole.LOCAL:
             if self.share_run_id:
                 await self._init_shared_local(primary_logger_metadata)
             else:
@@ -662,6 +745,15 @@ class WandbBackend(LoggerBackend):
             raise ValueError(
                 f"Shared ID required but not provided for {self.name} backend init"
             )
+
+        # Clear any stale service tokens that might be pointing to dead processes
+        # In multiprocessing environments, WandB service tokens can become stale and point
+        # to dead service processes. This causes wandb.init() to hang indefinitely trying
+        # to connect to non-existent services. Clearing forces fresh service connection.
+        from wandb.sdk.lib.service import service_token
+
+        service_token.clear_service_in_env()
+
         settings = wandb.Settings(mode="shared", x_primary=False, x_label=self.name)
         self.run = wandb.init(
             id=shared_id,
@@ -670,11 +762,17 @@ class WandbBackend(LoggerBackend):
             settings=settings,
         )
 
-    async def log(self, metrics: Dict[str, Any], step: int) -> None:
+    async def log(self, metrics: List[Metric], global_step: int) -> None:
         if self.run:
-            log_data = {**metrics, "global_step": step}
+            # Convert metrics to WandB log format
+            log_data = {"global_step": global_step}
+            for metric in metrics:
+                log_data[metric.key] = metric.value
+
             self.run.log(log_data)
-            logger.info(f"WandbBackend: Logged {len(metrics)} metrics at step {step}")
+            logger.info(
+                f"WandbBackend: Logged {len(metrics)} metrics at global_step {global_step}"
+            )
         else:
             logger.debug(f"WandbBackend: No run started, skipping log for {self.name}")
 
