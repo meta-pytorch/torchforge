@@ -6,6 +6,16 @@
 
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._rust_bindings.monarch_hyperactor.config import configure
+    from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+    configure(
+        default_transport=ChannelTransport.MetaTlsWithHostname,
+    )
+
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1
+
 import asyncio
 import time
 import uuid
@@ -31,8 +41,8 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.controller.provisioner import init_provisioner, IS_MONARCH_HOSTMESH_V1
-
+from forge.controller.provisioner import init_provisioner
+from forge.env_constants import IS_MONARCH_HOSTMESH_V1
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint

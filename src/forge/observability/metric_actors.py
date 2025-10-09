@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Any, Union
 
-from forge.env_constants import IS_MONARCH_HOSTMESH_V1
+from forge.env_constants import IS_MONARCH_HOSTMESH_V1, FORGE_DISABLE_METRICS
 
 from monarch.actor import Actor, endpoint, ProcMesh
 if IS_MONARCH_HOSTMESH_V1:

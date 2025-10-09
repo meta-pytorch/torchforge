@@ -174,6 +174,7 @@ class RLTrainer(ForgeActor):
             "use_dcp",
             "use_vllm_builtin_load",
             "dcp_path",
+            "job",
             "vllm_tp_DEPRECATED",
         }:
             engine_config.pop(key)  # Not part of job config

@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """Resource allocation and provisioning for both local and remote."""
+
 import asyncio
 import functools
 import logging
@@ -13,12 +14,11 @@ import os
 import socket
 import uuid
 
-from forge.env_constants import FORGE_DISABLE_METRICS, IS_MONARCH_HOSTMESH_V1
-
-from monarch._src.actor.shape import NDSlice, Shape
+from monarch._src.actor.shape import NDSlice, Shape, Extent
 from monarch.tools import commands
 from monarch.actor import Actor, endpoint, ProcMesh
 
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1, FORGE_DISABLE_METRICS
 if IS_MONARCH_HOSTMESH_V1:
     from monarch._src.actor.v1.host_mesh import HostMesh, this_host
 else:
@@ -157,7 +157,7 @@ class Provisioner:
             # TODO: remove dummy dimension once Monarch supports HostMesh without it
             host_mesh = HostMesh.allocate_nonblocking(
                 name=name,
-                extent=Extent(["hosts", "procs"], [num_hosts, 1]),
+                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
                 allocator=alloc,
                 alloc_constraints=alloc_constraints,
             )
@@ -261,10 +261,16 @@ class Provisioner:
                 # Shows detailed logs for Monarch rust failures
                 env_vars["RUST_BACKTRACE"] = "1"
 
-            procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
-                bootstrap=functools.partial(bootstrap, env=env_vars),
-            )
+            if IS_MONARCH_HOSTMESH_V1:                
+                procs = host_mesh.spawn_procs(
+                    per_host={"gpus": num_procs},
+                    setup=functools.partial(bootstrap, env=env_vars),
+                )
+            else:
+                procs = host_mesh.spawn_procs(
+                    per_host={"gpus": num_procs},
+                    bootstrap=functools.partial(bootstrap, env=env_vars),
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)
