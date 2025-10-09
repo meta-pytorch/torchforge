@@ -163,17 +163,20 @@ class Tracer:
         self._active = False
 
     def _start_memory_tracking(self) -> None:
-        if not (self.track_memory and torch.cuda.is_available()):
-            return
+        is_outer_scope = not _is_memory_active()
+        should_track = (
+            self.track_memory and is_outer_scope and torch.cuda.is_available()
+        )
 
-        if _is_memory_active():
+        if self.track_memory and not is_outer_scope:
             _warn_nested_memory_tracking(self.prefix)
             return
 
-        _set_memory_active(True)
-        torch.cuda.reset_max_memory_allocated()
-        self._start_mem = torch.cuda.memory_allocated()
-        self._memory_started = True
+        if should_track:
+            _set_memory_active(True)
+            torch.cuda.reset_max_memory_allocated()
+            self._start_mem = torch.cuda.memory_allocated()
+            self._memory_started = True
 
     def _stop_memory_tracking(self) -> None:
         if not self._memory_started:
