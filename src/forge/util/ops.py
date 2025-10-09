@@ -85,4 +85,4 @@ def compute_logprobs(
         reduction="none",
     )
 
-    return log_probs.reshape(batch_size, seq_len)
+    return logprobs.reshape(batch_size, seq_len)
