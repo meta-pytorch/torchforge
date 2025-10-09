@@ -2,7 +2,7 @@
 # >>> python -m apps.mast.main --config apps/mast/qwen3_1_7b_mast.yaml
 
 # Global configuration
-group_size: 8
+group_size: 16
 batch_size: 32
 max_req_tokens: 1024
 max_res_tokens: 1024
