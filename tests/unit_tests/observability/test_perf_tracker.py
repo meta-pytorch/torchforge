@@ -7,7 +7,7 @@
 import asyncio
 import time
 from contextlib import contextmanager
-from typing import List, Literal, Tuple, Union
+from typing import Literal, Union
 from unittest.mock import Mock, patch
 
 import pytest
@@ -21,7 +21,7 @@ from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Trace
 @pytest.fixture
 def mock_record_metric_calls(monkeypatch):
     """Mock record_metric that tracks all calls."""
-    calls: List[Tuple[str, float, Reduce]] = []
+    calls: list[tuple[str, float, Reduce]] = []
 
     def mock_record_metric(name, val, red):
         calls.append((name, val, red))
@@ -309,29 +309,39 @@ class TestErrorConditionsAndCompatibility:
         cpu_timer.start()
         time.sleep(0.005)
         cpu_timer.step("cpu_step1")
-        durations1 = cpu_timer.get_all_durations()
+        cpu_durations_list1, cpu_final_ms1 = cpu_timer.get_all_durations()
 
         cpu_timer.start()
         time.sleep(0.005)
         cpu_timer.step("cpu_step2")
-        durations2 = cpu_timer.get_all_durations()
+        cpu_durations_list2, cpu_final_ms2 = cpu_timer.get_all_durations()
 
-        assert len(durations1) == 1 and durations1[0][0] == "cpu_step1"
-        assert len(durations2) == 1 and durations2[0][0] == "cpu_step2"
+        assert (
+            len(cpu_durations_list1) == 1 and cpu_durations_list1[0][0] == "cpu_step1"
+        )
+        assert (
+            len(cpu_durations_list2) == 1 and cpu_durations_list2[0][0] == "cpu_step2"
+        )
 
         # Test CUDA timer reuse (if available)
         if torch.cuda.is_available():
             cuda_timer = _TimerCUDA()
             cuda_timer.start()
             cuda_timer.step("cuda_step1")
-            cuda_durations1 = cuda_timer.get_all_durations()
+            cuda_durations_list1, cuda_final_ms1 = cuda_timer.get_all_durations()
 
             cuda_timer.start()
             cuda_timer.step("cuda_step2")
-            cuda_durations2 = cuda_timer.get_all_durations()
+            cuda_durations_list2, cuda_final_ms2 = cuda_timer.get_all_durations()
 
-            assert len(cuda_durations1) == 1 and cuda_durations1[0][0] == "cuda_step1"
-            assert len(cuda_durations2) == 1 and cuda_durations2[0][0] == "cuda_step2"
+            assert (
+                len(cuda_durations_list1) == 1
+                and cuda_durations_list1[0][0] == "cuda_step1"
+            )
+            assert (
+                len(cuda_durations_list2) == 1
+                and cuda_durations_list2[0][0] == "cuda_step2"
+            )
 
     def test_exception_handling_context_manager(self, mock_record_metric_calls):
         """Test context manager properly cleans up on exception."""
