@@ -7,7 +7,7 @@
 import asyncio
 import time
 from contextlib import contextmanager
-from typing import List, Literal, Tuple, Union
+from typing import Literal, Union
 from unittest.mock import Mock, patch
 
 import pytest
@@ -21,7 +21,7 @@ from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Trace
 @pytest.fixture
 def mock_record_metric_calls(monkeypatch):
     """Mock record_metric that tracks all calls."""
-    calls: List[Tuple[str, float, Reduce]] = []
+    calls: list[tuple[str, float, Reduce]] = []
 
     def mock_record_metric(name, val, red):
         calls.append((name, val, red))

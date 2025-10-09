@@ -16,6 +16,7 @@ echo "build dir is $BUILD_DIR"
 echo "wheel dir is $WHL_DIR"
 
 build_monarch() {
+    export MONARCH_PACKAGE_NAME="torchmonarch"
     # Get Rust build related pieces
     if ! command -v rustup &> /dev/null; then
         echo "getting rustup"

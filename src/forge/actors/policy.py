@@ -246,7 +246,7 @@ class Policy(PolicyInterface):
 
         self.request_id = 0
         self.policy_version = 0
-        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
         # TODO: Investigate whether this can be combined with `policy.running`
         # Whether this policy is accepting requests.
@@ -491,7 +491,7 @@ class Policy(PolicyInterface):
             self.policy_version = policy_version
 
             # After updating the weights, we need to reset the KV cache
-            self.scheduler.kv_cache_manager.reset_prefix_cache()
+            self.scheduler.reset_prefix_cache()
 
         # Resume accepting requests and wake up any waiting generate() calls
         async with self.request_lock:
@@ -499,6 +499,10 @@ class Policy(PolicyInterface):
             self.request_lock.notify_all()
 
         logger.info(f"Weight update completed (now v{self.policy_version})")
+
+    @endpoint
+    async def _reset_prefix_cache(self):
+        self.scheduler.reset_prefix_cache()
 
     @endpoint
     async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
@@ -550,6 +554,7 @@ class Policy(PolicyInterface):
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                     generator_version=self.policy_version,
+                    metadata={"num_cached_tokens": request_output.num_cached_tokens},
                 )
             )
 
