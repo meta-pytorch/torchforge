@@ -307,14 +307,22 @@ class Provisioner:
 
     async def track_allocation(self, alloc: Any):
         """Tracks an allocation for cleanup."""
+        from forge.controller.service import ServiceInterface
+
         self._allocations.append(alloc)
+        alloc_type = "service" if isinstance(alloc, ServiceInterface) else "actor"
+        print(
+            f"Registered allocation {alloc_type} {alloc}, current allocations len: {len(self._allocations)}"
+        )
 
     async def shutdown_all_allocations(self):
         """Gracefully shut down all tracked actors and services."""
+        from monarch._src.actor.actor_mesh import ActorMesh
+
         from forge.controller.actor import ForgeActor
         from forge.controller.service import ServiceInterface
 
-        for alloc in self._allocations:
+        for alloc in reversed(self._allocations):
             try:
                 # --- ServiceInterface ---
                 if isinstance(alloc, ServiceInterface):
@@ -323,6 +331,21 @@ class Provisioner:
                 # --- ForgeActor instance ---
                 elif isinstance(alloc, ForgeActor):
                     await alloc.__class__.shutdown(alloc)
+
+                # --- ActorMesh (spawned actor group) ---
+                elif isinstance(alloc, ActorMesh):
+                    actor_cls = getattr(alloc, "_class", None)
+                    if actor_cls is not None and hasattr(actor_cls, "shutdown"):
+                        await actor_cls.shutdown(alloc)
+                    else:
+                        # fallback if class not available
+                        inner = getattr(alloc, "_inner", None)
+                        if hasattr(inner, "shutdown"):
+                            await inner.shutdown()
+                        else:
+                            logger.warning(
+                                f"ActorMesh {alloc.__name__} has no shutdown()"
+                            )
 
                 else:
                     logger.warning(f"Unknown allocation type: {type(alloc)}")
