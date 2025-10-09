@@ -114,7 +114,7 @@ class Tracer:
         self.time_with_gpu = timer == "gpu"
         self._disable = (
             os.getenv(DISABLE_PERF_METRICS, "false") == "true"
-            or os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
+            or os.getenv(FORGE_DISABLE_METRICS, "false").lower() == "true"
         )
         self._active = False
 
