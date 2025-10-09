@@ -48,7 +48,8 @@ build_monarch() {
     export RUST_BACKTRACE=1
     export CARGO_TERM_VERBOSE=true
     export CARGO_TERM_COLOR=always
-    pip wheel --no-build-isolation . -w "$WHL_DIR"
+    pip wheel --no-build-isolation --no-deps . -w "$WHL_DIR"
+
 }
 
 append_date() {
@@ -67,6 +68,15 @@ append_date() {
     fi
 }
 
+smoke_test() {
+    cd "$WHL_DIR"
+    pip install --pre torch --no-cache-dir --index-url https://download.pytorch.org/whl/nightly/cu129
+    pip install -r https://raw.githubusercontent.com/meta-pytorch/monarch/main/requirements.txt
+    pip install torchmonarch-0.0.1-cp310-cp310-linux_x86_64.whl
+    python -c "from monarch import actor"
+    echo "import successful"
+}
 
 build_monarch
 append_date
+smoke_test
