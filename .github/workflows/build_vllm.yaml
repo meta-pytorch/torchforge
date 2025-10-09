@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: forge-cu126-nightly
+    name: forge-cu129-nightly
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
@@ -31,13 +31,13 @@ jobs:
             {
               "python_version": "3.10",
               "gpu_arch_type": "cpu",
-              "gpu_arch_version": "12.6",
-              "desired_cuda": "cu126",
-              "container_image": "pytorch/manylinux2_28-builder:cuda12.6",
+              "gpu_arch_version": "12.9",
+              "desired_cuda": "cu129",
+              "container_image": "pytorch/manylinux2_28-builder:cuda12.9",
               "package_type": "manywheel",
-              "build_name": "manywheel-py3_10-cuda12_6",
+              "build_name": "manywheel-py3_10-cuda12_9",
               "validation_runner": "linux.12xlarge.memory",
-              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129",
               "channel": "nightly",
               "upload_to_base_bucket": "no",
               "stable_version": "2.8.0",

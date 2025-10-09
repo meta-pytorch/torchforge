@@ -160,6 +160,10 @@ class RLTrainer(ForgeActor):
         }
         os.environ.update(env)
 
+        # compile loss
+        logger.info("Compiling loss")
+        self.loss = torch.compile(self.loss)
+
     @endpoint
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
