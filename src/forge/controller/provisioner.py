@@ -13,20 +13,22 @@ import os
 import socket
 import uuid
 
+from forge.env_constants import FORGE_DISABLE_METRICS, IS_MONARCH_HOSTMESH_V1
+
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
+from monarch.actor import Actor, endpoint, ProcMesh
+
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+else:
+    from monarch.actor import HostMesh, this_host
 
 from forge.controller.launcher import BaseLauncher, get_launcher
-
-from forge.env_constants import FORGE_DISABLE_METRICS
-
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-IS_MONARCH_HOSTMESH_V1 = os.environ.get("MONARCH_HOSTMESH_V1", "0") == "1"
 
 def _get_port() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -150,12 +152,21 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-
-        host_mesh = HostMesh(
-            Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
-            allocator=alloc,
-            alloc_constraints=alloc_constraints,
-        )
+        if IS_MONARCH_HOSTMESH_V1:
+            # "procs" here is actually a dumby value, which Monarch requires but will ignore
+            # TODO: remove dummy dimension once Monarch supports HostMesh without it
+            host_mesh = HostMesh.allocate_nonblocking(
+                name=name,
+                extent=Extent(["hosts", "procs"], [num_hosts, 1]),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
+        else:
+            host_mesh = HostMesh(
+                Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
         self._host_mesh_map[name] = host_mesh
         return (
             host_mesh

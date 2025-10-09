@@ -3,7 +3,7 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 """Centralized constants for environment variable names used in the project."""
 
 # Performance metrics in forge.observability.perf_tracker.py becomes no-op
@@ -16,3 +16,6 @@ METRIC_TIMER_USES_GPU = "METRIC_TIMER_USES_GPU"
 # Makes forge.observability.metrics.record_metric a no-op
 # and disables spawning LocalFetcherActor in get_or_create_metric_logger
 FORGE_DISABLE_METRICS = "FORGE_DISABLE_METRICS"
+
+# Experimental monarch features
+IS_MONARCH_HOSTMESH_V1 = os.environ.get("MONARCH_HOSTMESH_V1", "0") == "1"
