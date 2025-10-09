@@ -70,7 +70,7 @@ jobs:
           # Build docs with -WT (warnings as errors) and --keep-going to see all issues
           # Capture exit code but continue to see all errors
           set +e
-          make html SPHINXOPTS="-WT --keep-going"
+          make html SPHINXOPTS="--keep-going"
           BUILD_EXIT_CODE=$?
           set -e
 

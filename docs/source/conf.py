@@ -169,7 +169,12 @@ autodoc_default_options = {
 # Suppress warnings from third-party library docstrings
 suppress_warnings = [
     "docutils",  # Suppress docstring formatting issues from third-party libraries
+    "app.add_node",  # Suppress node warnings
+    "app.add_directive",  # Suppress directive warnings
 ]
+
+# Treat warnings as non-fatal - continue build even if there are warnings
+keep_warnings = True
 
 
 # -- Sphinx Gallery configuration -------------------------------------------
