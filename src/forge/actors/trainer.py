@@ -108,7 +108,7 @@ class RLTrainer(ForgeActor):
     comm: Comm = field(default_factory=Comm)
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = False
     dcp_path: str = "forge_dcp_tmp"
     vllm_tp_DEPRECATED: int = 1  # noqa: N815
 

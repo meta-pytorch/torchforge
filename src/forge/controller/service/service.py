@@ -104,7 +104,7 @@ class Service:
 
     async def __initialize__(self):
         """Initializes the service and starts the health loop."""
-        logger.debug(f"Starting service up with {self._cfg.num_replicas} replicas.")
+        print(f"Starting service up with {self._cfg.num_replicas} replicas.")
 
         # Initialize the routers
         self._default_router = RoundRobinRouter()
@@ -125,12 +125,13 @@ class Service:
             )
             replicas.append(replica)
 
-        logger.debug(
+        print(
             f"Queued {num_replicas} replicas for initialization. Total replicas: {len(self._replicas)}"
         )
 
         # Initialize all replicas in parallel
         await asyncio.gather(*[r.initialize() for r in replicas])
+        print(f"done w/ initialization. Total replicas: {len(self._replicas)}")
         self._replicas = replicas
 
         # Start the health loop in the background

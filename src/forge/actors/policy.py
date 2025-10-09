@@ -163,11 +163,12 @@ class Policy(PolicyInterface):
         engine_config: EngineConfig | Mapping = EngineConfig(),
         sampling_config: SamplingConfig | Mapping = SamplingConfig(),
         available_devices: str | None = None,
-        use_dcp: bool = True,
+        use_dcp: bool = False,
         **kwargs,
     ) -> "Policy":
         # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         # automatically.
+        print("trying to launch")
         process_config: ProcessConfig = ProcessConfig(
             procs=cls.procs,
             hosts=cls.hosts,
@@ -175,6 +176,7 @@ class Policy(PolicyInterface):
             mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
+        print("worker_procs")
 
         # TODO - issues/144 we will want to ensure colocation with workers
         # We're currently locating the Policy on the local host proc mesh
@@ -188,17 +190,18 @@ class Policy(PolicyInterface):
         policy_proc_config.with_gpus = False
 
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
-
+        print("policy procs")
         if isinstance(engine_config, Mapping):
             engine_config = EngineConfig.from_dict(engine_config)
 
         vllm_config = engine_config.create_vllm_config()
         # TODO (felipemello): LocalFetcherActor doesnt spawn with this, so cannot
         # do logging within PolicyWorker
+        print("spawning workers")
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
-
+        print("spawning workers")
         if isinstance(sampling_config, Mapping):
             sampling_config = SamplingConfig(**sampling_config)
 
@@ -536,7 +539,7 @@ class PolicyWorker(ForgeActor):
     state_dict_key: str = "model_state_dict"
     # TODO: remove this later since no plumbing exists to change this value.
     # Also, whether to use dcp or not can be inferred from torchstore get() call.
-    use_dcp: bool = True
+    use_dcp: bool = False
 
     # used for tesing purposes only
     _test_prev_params = {}
@@ -566,6 +569,7 @@ class PolicyWorker(ForgeActor):
 
         checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
         dcp_metadata = None
+        print(f"policy worker={self.use_dcp=}")
         if self.use_dcp:
             dcp_metadata = await ts.get(checkpoint_id)
 

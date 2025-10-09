@@ -4,6 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pip install --force-reinstall --no-deps . && python -m apps.mast.main --config apps/mast/qwen3_1_7b_mast.yaml
+
+from monarch._rust_bindings.monarch_hyperactor.config import configure
+from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+configure(
+    default_transport=ChannelTransport.MetaTlsWithHostname,
+)
+
 import asyncio
 import getpass
 import uuid
@@ -12,12 +20,26 @@ from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
 from forge.controller.provisioner import init_provisioner, JOB_NAME_KEY, SCHEDULER_KEY
 
+
+from monarch.actor import context
 from forge.types import Scheduler
 from omegaconf import DictConfig
 
 DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"
 DEFAULT_CHECKPOINT_FOLDER = "/mnt/wsfuse/teamforge/forge_runs/"
 
+
+import monarch
+from monarch.actor import Actor, endpoint
+
+print(f"{str(context().actor_instance.actor_id)=}")
+
+
+class Foo(Actor):
+    @endpoint
+    async def ping(self):
+        print("pong")
+        return "pong"
 
 async def main(cfg: DictConfig):
     """Main module for launching mast jobs for GRPO training."""
@@ -39,6 +61,7 @@ async def main(cfg: DictConfig):
 
     # init mast provisioner
     await init_provisioner(cfg)
+
     await grpo_main(cfg)
 
 

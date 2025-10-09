@@ -8,7 +8,9 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
+from monarch.actor import Actor, endpoint, ProcMesh#, this_proc#, get_or_spawn_controller
+from monarch._src.actor.v1.host_mesh import this_proc
+from monarch._src.actor.v1.proc_mesh import get_or_spawn_controller
 
 from forge.observability.metrics import (
     get_logger_backend_class,
@@ -73,9 +75,11 @@ async def get_or_create_metric_logger(
     # Get or create the singleton global logger
     global _global_logger
     if _global_logger is None:
+        print(f"spawning controller {get_or_spawn_controller=}")
         _global_logger = await get_or_spawn_controller(
             "global_logger", GlobalLoggingActor
         )
+        print(f"done spawning controller {get_or_spawn_controller=}")
     global_logger = _global_logger
 
     # Determine process context

@@ -126,7 +126,9 @@ class ForgeActor(Actor):
 
         logger.info("Spawning Service for %s", cls.__name__)
         service = Service(cfg, cls, actor_args, actor_kwargs)
+        print("created service")
         await service.__initialize__()
+        print("created done init")
         return ServiceInterface(service, cls)
 
     @endpoint
@@ -188,10 +190,14 @@ class ForgeActor(Actor):
             mesh_name=cls.mesh_name,
         )
 
+        print("getting proc mesh")
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
+        print("got proc mesh")
         actor_name = kwargs.pop("name", cls.__name__)
         actor = proc_mesh.spawn(actor_name, cls, *args, **kwargs)
+        print("spawned acotrs")
+        
         actor._proc_mesh = proc_mesh
 
         if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):

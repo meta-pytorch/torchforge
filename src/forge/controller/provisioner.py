@@ -18,7 +18,9 @@ from typing import Optional
 import monarch
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+# from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import Actor, endpoint, ProcMesh
+from monarch._src.actor.v1.host_mesh import HostMesh, this_host
 from monarch.tools import commands
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config
@@ -253,6 +255,7 @@ class Provisioner(BaseProvisioner):
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
                 gpu_ids = gpu_manager.get_gpus(num_procs)
+                print("spawning with gpuss")
                 procs = host_mesh.spawn_procs(
                     per_host={"gpus": num_procs},
                     bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
@@ -314,9 +317,10 @@ async def init_provisioner(cfg: DictConfig | None = None):
             scheduler = cfg.get(SCHEDULER_KEY, Scheduler.LOCAL.value)
         if scheduler == Scheduler.MAST.value:
             from forge.controller.launcher.mast import MastProvisioner
-
+            print("init")
             _provisioner = MastProvisioner(cfg=cfg)
             await _provisioner.initialize()
+            print("init")
         else:
             _provisioner = Provisioner()
     return _provisioner

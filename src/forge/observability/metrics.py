@@ -102,7 +102,7 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
     Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
     """
     # Skip metrics collection if disabled for tests
-    if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
+    if True:#os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
         return
 
     collector = MetricCollector()

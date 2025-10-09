@@ -14,6 +14,9 @@ import subprocess
 import uuid
 from typing import Optional
 
+TRANSPORT = "metatls(Hostname)"
+os.environ["HYPERACTOR_MESH_ROOT_CLIENT_TRANSPORT"] = TRANSPORT
+
 import torchx.specs as specs
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 
@@ -29,7 +32,10 @@ try:
 except ImportError as e:
     print(f"Warning: Monarch imports failed: {e}")
     print("Monarch functionality will be limited")
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+# from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import Actor, endpoint, ProcMesh
+from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+from monarch._src.actor.shape import Extent
 from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.config import Config, Workspace
@@ -151,6 +157,7 @@ class MastProvisioner(BaseProvisioner):
         self.cfg = cfg
         job_name = cfg.get(JOB_NAME_KEY, None)
         self.job_name = job_name or self.create_job_name()
+        self.host_mesh_map = {}
 
     async def initialize(self):
         """Call this after creating the instance"""
@@ -175,19 +182,34 @@ class MastProvisioner(BaseProvisioner):
 
     async def create_host_mesh(self, name: str, num_hosts: int):
         """Creates a remote server and a HostMesh on it."""
+
         logger.debug(f"Creating remote server for mesh: {name}")
         server_name = f"{SCHEDULER_NAME}:///{self.job_name}"
         alloc, alloc_constraints = await self.get_mast_allocator(
             task_group=name, job_name=self.job_name
         )
+
+        host_mesh = HostMesh.allocate_nonblocking(
+            name=name,
+            extent=Extent(["hosts", "procs"], [num_hosts, 1]), # i actually have no idea what the second value is
+            allocator=alloc,
+            alloc_constraints=alloc_constraints,
+        )
+        self.host_mesh_map[name] = host_mesh
+        print(f"saving host_mesh {num_hosts=}")
+
         return (
-            HostMesh(
-                shape=Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
-                allocator=alloc,
-                alloc_constraints=alloc_constraints,
-            ),
+            # hostmesh v1
+            host_mesh,
+            # hostmesh v0
+            # HostMesh(       
+            #     shape=Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+            #     allocator=alloc,
+            #     alloc_constraints=alloc_constraints,
+            # ),
             server_name,
         )
+        
 
     async def get_proc_mesh(
         self,
@@ -222,7 +244,7 @@ class MastProvisioner(BaseProvisioner):
                 def bootstrap(gpu_ids: list[str]):
                     # This works for single host, needed for vLLM currently.
                     import os
-
+                    import socket
                     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
                     os.environ["MASTER_ADDR"] = socket.gethostname()
                     os.environ["MASTER_PORT"] = f"1234{gpu_ids[0]}"
@@ -230,12 +252,15 @@ class MastProvisioner(BaseProvisioner):
                     os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
                 gpu_ids = gpu_manager.get_gpus(num_procs)
+                print("trying to spawn some actors")
                 procs = host_mesh.spawn_procs(
                     per_host={"gpus": num_procs},
-                    bootstrap=functools.partial(bootstrap, gpu_ids=gpu_ids),
+                    setup=functools.partial(bootstrap, gpu_ids=gpu_ids),
                 )
                 await procs.initialized
+                print("setting up setup")
                 setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
+                print("done")
                 hostname, port = await setup.get_info.choose()
                 await setup.mount.call(mount_dst="/mnt/wsfuse")
                 procs._hostname = hostname
@@ -251,7 +276,7 @@ class MastProvisioner(BaseProvisioner):
                 self._server_names.append(server_name)
                 self._proc_server_map[procs] = server_name
 
-        _ = await get_or_create_metric_logger(procs)
+        # _ = await get_or_create_metric_logger(procs)
 
         return procs
 
@@ -278,11 +303,11 @@ class MastProvisioner(BaseProvisioner):
                 commands.kill(server_name)
 
     async def launch_mast_job(self):
-        handle = self.create_server_handle()
-        server_spec = info(handle)
-        if server_spec and server_spec.state == AppState.RUNNING:
-            print(f"Job {self.job_name} is already running. Skipping launch.")
-            return server_spec
+        # handle = self.create_server_handle()
+        # server_spec = info(handle)
+        # if server_spec and server_spec.state == AppState.RUNNING:
+        #     print(f"Job {self.job_name} is already running. Skipping launch.")
+        #     return server_spec
 
         config = Config(
             scheduler="mast_conda",
@@ -300,13 +325,14 @@ class MastProvisioner(BaseProvisioner):
                 dirs=[workspace_dir for workspace_dir in EDITABLE_WORKSPACE_PATHS],
             ),
         )
-
-        await commands.get_or_create(self.job_name, config)
+        print("get or create")
+        server_spec = await commands.get_or_create(self.job_name, config)
+        print("foooo")
         return server_spec
 
     def add_additional_packages(self, packages: Packages) -> Packages:
         packages.add_package("oil.oilfs:stable")
-        packages.add_package("manifold.manifoldfs")
+        packages.add_package("manifold.manifoldfs:prod")
         return packages
 
     def build_appdef(self) -> specs.AppDef:
@@ -344,7 +370,7 @@ class MastProvisioner(BaseProvisioner):
             # Create list of mesh names with indices and num_hosts
             if with_gpus and num_hosts > 0:
                 mesh_list = [
-                    f"{mesh_name}_{i}:{num_hosts}:{SKU}" for i in range(num_replicas)
+                    f"{mesh_name}{i}:{num_hosts}:{SKU}" for i in range(num_replicas)
                 ]
                 meshes.extend(mesh_list)
 

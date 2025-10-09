@@ -157,9 +157,9 @@ class Replica:
         assert self.actor is None, "Actor should not be set yet"
         try:
             # Deploy the actor and its underlying resources
-            logger.debug(f"Launching actor for replica {self.idx}")
+            print(f"Launching actor for replica {self.idx}")
 
-            mesh_name_with_replica = f"{self.proc_config.mesh_name}_{self.idx}"
+            mesh_name_with_replica = f"{self.proc_config.mesh_name}{self.idx}"
             self.proc_config.mesh_name = mesh_name_with_replica
             if hasattr(self.actor_def, "mesh_name"):
                 self.actor_def.mesh_name = mesh_name_with_replica

@@ -8,7 +8,9 @@
 
 import logging
 
-from monarch.actor import Actor, ActorError, endpoint, get_or_spawn_controller
+from monarch.actor import Actor, endpoint#, get_or_spawn_controller
+from monarch._src.actor.v1.proc_mesh import get_or_spawn_controller
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

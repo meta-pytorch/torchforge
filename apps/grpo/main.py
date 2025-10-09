@@ -27,7 +27,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
-from forge.controller.provisioner import shutdown
+from forge.controller.provisioner import shutdown, _get_provisioner
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -318,12 +318,14 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # initialize before spawning services
+    print("initializing metric logger")
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
+    print("done initializing metric logger")
 
     # ---- Setup services ---- #
-    await ts.initialize(strategy=ts.ControllerStorageVolumes())
+    # await ts.initialize(strategy=ts.ControllerStorageVolumes())
     (
         dataloader,
         policy,
@@ -332,23 +334,49 @@ async def main(cfg: DictConfig):
         compute_advantages,
         ref_model,
         reward_actor,
-    ) = await asyncio.gather(
-        DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.actors.trainer).as_actor(
+    # ) = await asyncio.gather(
+    #     DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
+    #     Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+    #     RLTrainer.options(**cfg.actors.trainer).as_actor(
+    #         **cfg.trainer, loss=simple_grpo_loss
+    #     ),
+    #     ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
+    #         **cfg.replay_buffer, collate=collate
+    #     ),
+    #     ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
+    #     ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+    #     RewardActor.options(**cfg.services.reward_actor).as_service(
+    #         reward_functions=[MathReward(), ThinkingReward()]
+    #     )
+    # )
+
+    ) = (
+        await DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
+        await Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        await RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
-        ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
+        await ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
         ),
-        ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
-        ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
-        RewardActor.options(**cfg.services.reward_actor).as_service(
+        await ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
+        await ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        await RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
-        ),
+        )
     )
 
+    p = await _get_provisioner()
+    assert "trainer" in p.host_mesh_map
+    trainer_hosts = p.host_mesh_map["trainer"]
+    torchstore_proc_mesh = trainer_hosts.spawn_procs(per_host={"gpus": 8})
+    await ts.initialize(
+        mesh= torchstore_proc_mesh,
+        strategy=ts.LocalRankStrategy()
+    )
+    print("Torchstore initialized successfully")
     print("All services initialized successfully!")
+    
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
