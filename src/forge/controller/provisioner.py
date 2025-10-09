@@ -264,10 +264,8 @@ class Provisioner:
         # Spawn local fetcher actor on each process and register with global logger
         if os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true":
             from forge.observability.metric_actors import get_or_create_metric_logger
-            from forge.observability.utils import detect_actor_name_from_call_stack
 
-            process_name = detect_actor_name_from_call_stack()
-            _ = await get_or_create_metric_logger(procs, process_name=process_name)
+            _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
