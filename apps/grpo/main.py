@@ -495,18 +495,6 @@ async def main(cfg: DictConfig):
         # TODO (felipemello) find more elegant solution
         await mlogger.shutdown.call_one()
         await asyncio.sleep(2)
-
-        await asyncio.gather(
-            DatasetActor.shutdown(dataloader),
-            policy.shutdown(),
-            RLTrainer.shutdown(trainer),
-            ReplayBuffer.shutdown(replay_buffer),
-            ComputeAdvantages.shutdown(compute_advantages),
-            ref_model.shutdown(),
-            reward_actor.shutdown(),
-        )
-        # TODO - add a global shutdown that implicitly shuts down all services
-        # and remote allocations
         await shutdown()
 
 

@@ -222,7 +222,6 @@ async def main(cfg: DictConfig):
         print("Training interrupted by user")
     finally:
         print("Shutting down trainer...")
-        await RLTrainer.shutdown(trainer)
         await mlogger.shutdown.call_one()
         await shutdown()
         print("Trainer shutdown complete.")

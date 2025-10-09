@@ -67,7 +67,6 @@ async def run(cfg: DictConfig):
         print("-" * 80)
 
     print("\nShutting down...")
-    await policy.shutdown()
     await shutdown()
 
 
