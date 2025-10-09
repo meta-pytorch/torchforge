@@ -490,7 +490,6 @@ async def main(cfg: DictConfig):
         training_task.cancel()
     finally:
         print("Shutting down...")
-
         # give mlogger time to shutdown backends, otherwise they can stay running.
         # TODO (felipemello) find more elegant solution
         await mlogger.shutdown.call_one()

@@ -328,24 +328,11 @@ class Provisioner:
                 if isinstance(alloc, ServiceInterface):
                     await alloc.shutdown()
 
-                # --- ForgeActor instance ---
-                elif isinstance(alloc, ForgeActor):
-                    await alloc.__class__.shutdown(alloc)
-
-                # --- ActorMesh (spawned actor group) ---
-                elif isinstance(alloc, ActorMesh):
-                    actor_cls = getattr(alloc, "_class", None)
-                    if actor_cls is not None and hasattr(actor_cls, "shutdown"):
-                        await actor_cls.shutdown(alloc)
-                    else:
-                        # fallback if class not available
-                        inner = getattr(alloc, "_inner", None)
-                        if hasattr(inner, "shutdown"):
-                            await inner.shutdown()
-                        else:
-                            logger.warning(
-                                f"ActorMesh {alloc.__name__} has no shutdown()"
-                            )
+                # --- Actor instance (ForgeActor or underlying ActorMesh) ---
+                elif isinstance(alloc, (ForgeActor, ActorMesh)):
+                    # Get the class to call shutdown on (ForgeActor or its bound class)
+                    actor_cls = getattr(alloc, "_class", None) or alloc.__class__
+                    await actor_cls.shutdown(alloc)
 
                 else:
                     logger.warning(f"Unknown allocation type: {type(alloc)}")
