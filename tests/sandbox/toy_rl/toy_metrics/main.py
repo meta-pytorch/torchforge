@@ -82,15 +82,13 @@ async def main():
     group = f"grpo_exp_{int(time.time())}"
 
     # Config format: {backend_name: backend_config_dict}
-    # Each backend can specify reduce_across_ranks to control distributed logging behavior
     config = {
-        "console": {"reduce_across_ranks": True},
+        "console": {"logging_mode": "global_reduce"},
         "wandb": {
-            "project": "my_project",
+            "project": "toy_metrics",
             "group": group,
-            "reduce_across_ranks": False,
-            # Only useful if NOT reduce_across_ranks.
-            "share_run_id": False,  # Share run ID across ranks -- Not recommended.
+            "logging_mode": "per_rank_reduce",  # global_reduce, per_rank_reduce, per_rank_no_reduce
+            "per_rank_share_run": True,
         },
     }
 

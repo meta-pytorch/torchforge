@@ -32,6 +32,32 @@ class BackendRole(Enum):
     GLOBAL = "global"
 
 
+class LoggingMode(Enum):
+    """Metric logging behavior for distributed training scenarios.
+
+    Each mode serves different observability needs:
+
+    GLOBAL_REDUCE = "global_reduce"
+        Best for: Metrics that are best visualized as a single value per step.
+        Behavior: All ranks accumulate → controller reduces → single log entry
+        Example use: 8 ranks training, want 1 loss value per training step averaged across all
+
+    PER_RANK_REDUCE = "per_rank_reduce"
+        Best for: Per-rank performance metrics, debugging individual rank behavior
+        Behavior: Each rank accumulates + logs its own reduced values
+        Example use: Monitor GPU utilization per rank, get 8 separate log entries per step
+
+    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
+        Best for: Real-time streaming, time-series debugging
+        Behavior: Raw values logged immediately on record_metric() calls. Ignores reduce type.
+        Example use: See what every rank is doing in real time.
+    """
+
+    GLOBAL_REDUCE = "global_reduce"
+    PER_RANK_REDUCE = "per_rank_reduce"
+    PER_RANK_NO_REDUCE = "per_rank_no_reduce"
+
+
 class Reduce(Enum):
     MEAN = "mean"
     SUM = "sum"
@@ -358,22 +384,23 @@ class StdAccumulator(MetricAccumulator):
 class MetricCollector:
     """Per-rank singleton for accumulating, retrieving and flushing metrics to backends.
 
-    A logger is represented by a backend, i.e. wandb backend. If reduce_across_ranks=False,
-    the backend is instantiated per-rank, in the MetricCollector, otherwise it is instantiated once globally,
-    in the GlobalLoggingActor.
+    Supports multiple logging backends, each with different logging modes.
+    For options, check `forge.observability.metrics.LoggerBackend` and `forge.observability.metrics.LoggingMode`.
 
-    - Ensures one instance per process; actors call record_metric() which delegates here.
+    Properties:
+    - Ensures one instance per rank;
+    - Using `record_metric()` delegates here;
     - Init via GlobalLoggingActor -> LocalFetcherActor -> per-rank MetricCollector;
     - GlobalLoggingActor flushes trigger reductions and log for any locally setup backend. Can optionally also
-    return non-reduced states for global aggregation. This can be different for each backend.
-    - Resets accumulators post-flush to avoid leaks across train steps;
+    return non-reduced states for global aggregation.
+    - Resets accumulators post-flush to avoid leaks across steps;
     """
 
     _instances: dict[int, "MetricCollector"] = {}
     _singleton_rank: int
 
     def __new__(cls):
-        """Singleton per-rank, ensures one instance per process."""
+        """Singleton per-rank, ensures one instance per rank."""
         rank = current_rank().rank
 
         if rank not in cls._instances:
@@ -394,7 +421,9 @@ class MetricCollector:
 
         self.accumulators: dict[str, MetricAccumulator] = {}
         self.rank = current_rank().rank
-        self.logger_backends: list[LoggerBackend] = []
+        self.per_rank_reduce_backends: list[LoggerBackend] = []
+        self.per_rank_no_reduce_backends: list[LoggerBackend] = []
+        self.global_step: int = 0  # Set on `init_backends` and updated on `flush`
         self._is_initialized = False
 
     async def init_backends(
@@ -404,28 +433,47 @@ class MetricCollector:
         global_step: int = 0,
         process_name: str | None = None,
     ) -> None:
-        """A logger is represented by a backend, i.e. wandb backend. If reduce_across_ranks=False,
-        the backend is instantiated per-rank, in the MetricCollector, otherwise it is only instantiated
-        once globally.
+        """Initialize per-rank logger backends and MetricCollector state.
+
+        A logger backend is represented by a backend class (e.g. WandBBackend, ConsoleBackend).
+        Backends are categorized by their logging_mode. For details, see `forge.observability.metrics.LoggingMode`.
 
         Args:
-            metadata_per_primary_backend (dict[str, dict[str, Any]] | None): Metadata from primary
-                logger backend, e.g., {"wandb": {"run_id": "abc123"}}.
-            config (dict[str, Any]): Logger backend configuration, e.g. {"wandb": {"project": "my_project"}}.
-            global_step (int, default 0): Initial step for metrics.
+            metadata_per_primary_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from primary
+                logger backends for backends that require shared state across processes, e.g.,
+                {"wandb": {"shared_run_id": "abc123"}}.
+            config (Dict[str, Any]): Backend configurations where each key is a backend name
+                and value contains logging_mode and backend-specific settings.
+                e.g., {"wandb": {"logging_mode": "per_rank_no_reduce", "project": "my_proj"}}
+            global_step (int, default 0): Initial step for logging. Can be used when
+                resuming from a checkpoint.
             process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
-            logger.debug(
-                f"Rank {get_actor_name_with_rank()}: MetricCollector already initialized"
-            )
+            logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
             return
+
+        # Initialize step tracking for immediate logging
         self.global_step = global_step
 
-        # instantiate local backends if any
+        self.per_rank_reduce_backends: list[LoggerBackend] = []
+        self.per_rank_no_reduce_backends: list[LoggerBackend] = []
+
+        # Initialize backends based on logging mode
+        # logging_mode is expected to be a LoggingMode enum from GlobalLoggingActor validation
         for backend_name, backend_config in config.items():
-            if backend_config.get("reduce_across_ranks", True):
-                continue  # Skip local backend instantiation and use global instead
+            mode = backend_config["logging_mode"]
+
+            # Defensive check - logging_mode should already be a LoggingMode enum
+            if not isinstance(mode, LoggingMode):
+                raise TypeError(
+                    f"Expected LoggingMode enum for {backend_name}.logging_mode, got {type(mode).__name__}: {mode}."
+                )
+
+            # Skip local instantiation for GLOBAL_REDUCE
+            # Backend will be instantiated in GlobalLoggingActor
+            if mode == LoggingMode.GLOBAL_REDUCE:
+                continue
 
             # get metadata from primary backend if any
             primary_metadata = {}
@@ -433,29 +481,36 @@ class MetricCollector:
                 primary_metadata = metadata_per_primary_backend.get(backend_name, {})
 
             # instantiate local backend
-            logger_backend = get_logger_backend_class(backend_name)(backend_config)
-            await logger_backend.init(
+            backend = get_logger_backend_class(backend_name)(backend_config)
+            await backend.init(
                 role=BackendRole.LOCAL,
                 primary_logger_metadata=primary_metadata,
                 process_name=process_name,
             )
-            self.logger_backends.append(logger_backend)
+
+            # Categorize by logging mode
+            if mode == LoggingMode.PER_RANK_NO_REDUCE:
+                self.per_rank_no_reduce_backends.append(backend)
+            else:
+                self.per_rank_reduce_backends.append(backend)
 
         self._is_initialized = True
 
     def push(self, metric: Metric) -> None:
         """Process a metric according to configured logging modes.
 
-        Args:
-            metric: Metric dataclass containing key, value, reduction type, and timestamp.
+        Behavior depends on backend modes:
+        - PER_RANK_NO_REDUCE: Stream metric immediately to backends
+        - PER_RANK_REDUCE/GLOBAL_REDUCE: Accumulate for per step batch logging
 
-        Raises:
-            TypeError: If metric is not a Metric object.
+        Args:
+            metric (): Metric dataclass
+            metric (Metric): Metric dataclass
 
         Example:
             collector = MetricCollector()
             metric = Metric("loss", 0.5, Reduce.MEAN)
-            collector.push(metric)
+            collector.push(metric)  # Streams immediately if no_reduce, else accumulates
         """
         if not self._is_initialized:
             log_once(
@@ -474,7 +529,13 @@ class MetricCollector:
 
         # Validate metric object
         if not isinstance(metric, Metric):
-            raise TypeError(f"Expected {Metric} object, got {type(metric)}")
+            raise TypeError(
+                f"Expected {Metric} object, got {metric} of type {type(metric)}"
+            )
+
+        # For PER_RANK_NO_REDUCE backends: stream without reduce
+        for backend in self.per_rank_no_reduce_backends:
+            backend.log_stream(metric=metric, global_step=self.global_step)
 
         # Always accumulate for reduction and state return
         key = metric.key
@@ -503,7 +564,7 @@ class MetricCollector:
                 level=logging.WARNING,
                 msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
                 "\nPlease call in your main file:\n"
-                "`mlogger = await get_or_create_metric_logger()`\n"
+                "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                 "`await mlogger.init_backends.call_one(logging_config)`\n"
                 "before calling `flush`",
             )
@@ -521,27 +582,29 @@ class MetricCollector:
             states[key] = acc.get_state()
             acc.reset()
 
-        # Reduce metrics from states for logging if any per-rank backend
-        if self.logger_backends:
-            # Use reduce_metrics_states for consistency
-            reduced_metrics = reduce_metrics_states([states])
+        # Reduce and log to PER_RANK_REDUCE backends only (NO_REDUCE backends already logged in push)
+        if self.per_rank_reduce_backends:
+            metrics_for_backends = reduce_metrics_states([states])
 
-            # Log to local logger_backends
-            for logger_backend in self.logger_backends:
-                await logger_backend.log(reduced_metrics, global_step)
+            for backend in self.per_rank_reduce_backends:
+                await backend.log_batch(metrics_for_backends, global_step)
+
+        # Update step (used by NO_REDUCE backends in push)
+        self.global_step = global_step + 1
 
         return states if return_state else {}
 
     async def shutdown(self):
         """Shutdown logger_backends if initialized."""
+
         if not self._is_initialized:
             logger.debug(
-                f"Collector for rank {get_actor_name_with_rank()} not initialized. Skipping shutdown"
+                f"Collector for {get_actor_name_with_rank()} not initialized. Skipping shutdown"
             )
             return
 
-        for logger_backend in self.logger_backends:
-            await logger_backend.finish()
+        for backend in self.per_rank_reduce_backends + self.per_rank_no_reduce_backends:
+            await backend.finish()
 
 
 ###########
@@ -577,13 +640,23 @@ class LoggerBackend(ABC):
         pass
 
     @abstractmethod
-    async def log(self, metrics: list[Metric], global_step: int) -> None:
-        """
-        Log a batch of metrics to the backend.
+    async def log_batch(
+        self, metrics: list[Metric], global_step: int, *args, **kwargs
+    ) -> None:
+        """Log batch of accumulated metrics to backend"""
+        pass
 
-        Args:
-            metrics: list of Metric objects to log.
-            global_step: Step number for x-axis alignment across metrics.
+    def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -> None:
+        """Stream single metric to backend immediately.
+
+        NOTE: This method is called synchronously.
+        If your backend requires async I/O operations:
+        - Use asyncio.create_task() for fire-and-forget logging
+        - Consider internal buffering to avoid blocking the caller
+
+        Example for async backend:
+            def log_stream(self, metric, global_step):
+                asyncio.create_task(self._async_log(metric, global_step))
         """
         pass
 
@@ -609,7 +682,9 @@ class ConsoleBackend(LoggerBackend):
     ) -> None:
         self.prefix = get_actor_name_with_rank(actor_name=process_name)
 
-    async def log(self, metrics: list[Metric], global_step: int) -> None:
+    async def log_batch(
+        self, metrics: list[Metric], global_step: int, *args, **kwargs
+    ) -> None:
         metrics_str = "\n".join(
             f"  {metric.key}: {metric.value}"
             for metric in sorted(metrics, key=lambda m: m.key)
@@ -618,24 +693,27 @@ class ConsoleBackend(LoggerBackend):
             f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
         )
 
+    def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -> None:
+        """Stream metric to console immediately."""
+        logger.info(f"{metric.key}: {metric.value}")
+
     async def finish(self) -> None:
         pass
 
 
 class WandbBackend(LoggerBackend):
     """
-    Weights & Biases logging backend for distributed training.
+    Weights & Biases logging backend.
 
-    Supports 3 types of modes as described in https://docs.wandb.ai/guides/track/log/distributed-training/:
-    Track a single process: reduce_across_ranks=True
-    Track each process separately: reduce_across_ranks=False, share_run_id=False
-    Track all processes to a single run: reduce_across_ranks=False, share_run_id=True
+    For logging mode details, see `forge.observability.metrics.LoggingMode` documentation.
+
+    More details on wandb distributed logging here: https://docs.wandb.ai/guides/track/log/distributed-training/
 
     Configuration:
-        reduce_across_ranks (bool, default True): If True, log reduced metrics only from controller (global mode).
-            If False, enables per-rank logging; then use share_run_id to pick mode.
-        share_run_id (bool, default False): Only used if reduce_across_ranks=False.
-            True -> shared run across ranks; False -> separate runs per rank.
+        logging_mode (LoggingMode): Determines logging behavior
+        per_rank_share_run (bool, default False): For per-rank modes, whether to share run ID across ranks.
+            If true, then a single wandb is created and all ranks log to it. Its particularly useful if
+            logging with no_reduce to capture a time based stream of information. Not recommended if reducing values.
         project (str): WandB project name
         group (str, optional): WandB group name for organizing runs. Defaults to "experiment_group"
     """
@@ -646,10 +724,8 @@ class WandbBackend(LoggerBackend):
         self.group = logger_backend_config.get("group", "experiment_group")
         self.name = None
         self.run = None
-        self.reduce_across_ranks = logger_backend_config.get(
-            "reduce_across_ranks", True
-        )
-        self.share_run_id = logger_backend_config.get("share_run_id", False)
+        self.logging_mode = LoggingMode(logger_backend_config["logging_mode"])
+        self.per_rank_share_run = logger_backend_config.get("per_rank_share_run", False)
 
     async def init(
         self,
@@ -663,21 +739,19 @@ class WandbBackend(LoggerBackend):
 
         self.name = get_actor_name_with_rank(actor_name=process_name)
 
-        # Default global mode: only inits on controller
-        if self.reduce_across_ranks:
+        # GLOBAL_REDUCE mode: only inits on controller
+        if self.logging_mode == LoggingMode.GLOBAL_REDUCE:
             if role != BackendRole.GLOBAL:
-                logger.debug(
-                    f"Skipped init for global mode (reduce_across_ranks=True) and {role} role."
-                )
+                logger.warning(f"Skipped init for GLOBAL_REDUCE mode and {role} role.")
                 return
             await self._init_global()
 
-        # Per-rank modes based on share_run_id bool
-        elif role == BackendRole.GLOBAL and self.share_run_id:
+        # Per-rank modes based on per_rank_share_run bool
+        elif role == BackendRole.GLOBAL and self.per_rank_share_run:
             await self._init_shared_global()
 
         elif role == BackendRole.LOCAL:
-            if self.share_run_id:
+            if self.per_rank_share_run:
                 await self._init_shared_local(primary_logger_metadata)
             else:
                 await self._init_per_rank()
@@ -725,22 +799,38 @@ class WandbBackend(LoggerBackend):
             settings=settings,
         )
 
-    async def log(self, metrics: list[Metric], global_step: int) -> None:
-        if self.run:
-            # Convert metrics to WandB log format
-            log_data = {"global_step": global_step}
-            for metric in metrics:
-                log_data[metric.key] = metric.value
-
-            self.run.log(log_data)
-            logger.info(
-                f"WandbBackend: Logged {len(metrics)} metrics at global_step {global_step}"
-            )
-        else:
+    async def log_batch(
+        self, metrics: list[Metric], global_step: int, *args, **kwargs
+    ) -> None:
+        if not self.run:
             logger.debug(f"WandbBackend: No run started, skipping log for {self.name}")
+            return
+
+        # Convert metrics to WandB log format
+        log_data = {"step": global_step}
+        for metric in metrics:
+            log_data[metric.key] = metric.value
+
+        self.run.log(log_data)
+        logger.info(
+            f"WandbBackend: Logged {len(metrics)} metrics at step {global_step}"
+        )
+
+    def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -> None:
+        """Stream single metric to WandB with both step and timestamp."""
+        if not self.run:
+            return
+
+        # Log with both step and timestamp - users can choose x-axis in WandB UI
+        log_data = {
+            metric.key: metric.value,
+            "global_step": global_step,
+            "_timestamp": metric.timestamp,
+        }
+        self.run.log(log_data)
 
     def get_metadata_for_secondary_ranks(self) -> dict[str, Any]:
-        if self.run and not self.reduce_across_ranks and self.share_run_id:
+        if self.run and self.per_rank_share_run:
             return {"shared_run_id": self.run.id}
         return {}
 

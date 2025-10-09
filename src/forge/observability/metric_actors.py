@@ -16,6 +16,7 @@ from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,
     LoggerBackend,
+    LoggingMode,
     MetricCollector,
     reduce_metrics_states,
 )
@@ -61,8 +62,8 @@ async def get_or_create_metric_logger(
 
         # Initialize logging backends
         await mlogger.init_backends({
-            "console": {"reduce_across_ranks": True},
-            "wandb": {"project": "my_project", "reduce_across_ranks": False}
+            "console": {"logging_mode": "global_reduce"},
+            "wandb": {"project": "my_project", "logging_mode": "per_rank_reduce"}
         })
 
         # Initialize services...
@@ -185,22 +186,19 @@ class LocalFetcherActor(Actor):
 
 
 class GlobalLoggingActor(Actor):
-    """Coordinates metric logging across all ranks for every training step.
+    """Coordinates metric logging across all ranks for every global step.
 
     Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
     for per-rank and/or global reduction logging modes.
 
-    If a backend config has flag `reduce_across_ranks=False`, an instance of the backend
-    is initialized per-rank, otherwise it is done once globally.
-
     This GlobalLoggingActor should be spawned once in the controller. A LocalFetcherActor
     is automatically spawned per-rank in `forge.controller.provisioner.py` and registered
     with this actor. The LocalFetcherActor is responsible for instantiating
-    the per-rank MetricCollector.
+    the per-rank MetricCollector and working as a bridge between GlobalLoggingActor and processes.
 
     In summary, the flow is:
-    - GlobalLoggingActor init_backends() -> LocalFetcherActor init_backends() -> per-rank MetricCollector
-    - GlobalLoggingActor flush() -> LocalFetcherActor flush() -> per-rank MetricCollector flush
+    - GlobalLoggingActor.init_backends() -> LocalFetcherActor.init_backends() -> per-rank MetricCollector.init_backends()
+    - GlobalLoggingActor.flush() -> LocalFetcherActor.flush() -> per-rank MetricCollector.flush
     """
 
     def __init__(self):
@@ -209,45 +207,86 @@ class GlobalLoggingActor(Actor):
         self.global_logger_backends: dict[str, LoggerBackend] = {}
         self.metadata_per_primary_backend: dict[str, dict[str, Any]] = {}
 
+    def _validate_backend_config(
+        self, backend_name: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Validate and normalize backend configuration."""
+        if "logging_mode" not in config:
+            logger.debug(
+                f"logging_mode not provided for backend {backend_name}. Defaulting to global_reduce."
+            )
+
+        mode_str = config.get("logging_mode", "global_reduce")
+        mode = LoggingMode(mode_str)
+
+        # Validate per_rank_share_run configuration
+        share_run = config.get("per_rank_share_run", False)
+        if mode == LoggingMode.GLOBAL_REDUCE and share_run:
+            logger.warning(
+                f"{backend_name}: per_rank_share_run ignored in {mode.value} mode. "
+                "Set it to False or change logging_mode to per rank."
+            )
+
+        # WandB-specific warning for suboptimal configuration
+        if (
+            backend_name == "wandb"
+            and mode == LoggingMode.PER_RANK_REDUCE
+            and share_run
+        ):
+            logger.warning(
+                "WandB: Using 'per_rank_reduce' with 'per_rank_share_run=True' is not recommended. "
+                "This configuration can lead to confusing metrics where reduced values from multiple ranks "
+                "are written to the same run. Consider either:\n"
+                "  1. Set 'per_rank_share_run=False' to create separate runs per rank, OR\n"
+                "  2. Use 'per_rank_no_reduce' for real-time streaming to a shared run"
+            )
+
+        return {
+            **config,
+            "logging_mode": mode,
+        }
+
     @endpoint
     async def init_backends(self, config: dict[str, Any]) -> None:
-        """
-        Sets config in global actor, so other actors can get it, then eagerly initializes backend and MetricCollectors
+        """Sets config in global actor, initializes primary backends and eagerly initializes MetricCollectors
         in all registered fetchers.
 
-        A backend is always initialized in the controller (primary backend) and can be used as a logger or as a source
-        for metadata to be shared with per-rank backends, e.g. shared run IDs for wandb.
-
-        The backend instantiation is controlled by the backend config flag `reduce_across_ranks`: if False,
-        a per-rank backend is initialized, i.e. if there are 2 ranks, each will have its own backend,
-        and will log independently, i.e. each rank will have its own run in wandb.
-
-        Else, if True, the GlobalLoggingActor will fetch all local metrics collectors to get their states
-        and reduce them to a single value, which will be logged by the primary backend in this controller.
+        The backend instantiation is controlled by the logging_mode field. Primary backends
+        (instantiated in the controller) can provide metadata to be shared with secondary backends on ranks,
+        e.g. shared run IDs for WandB. For details on logging modes, see `forge.observability.metrics.LoggingMode`.
 
         Args:
-            config (dict[str, Any]): Config for metric logging where keys are backend names,
-                e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
-        """
-        self.config = config
+            config (dict[str, Any]): Config for metric logging where keys are backend names.
+                e.g. {
+                "console": {"logging_mode": "global_reduce"},
+                "wandb": {"project": "my_project", "logging_mode": "per_rank_no_reduce"}
+                }
 
+        Raises:
+            ValueError: If backend config is invalid or missing required fields.
+        """
+        self.config = {}
+
+        # Validate and normalize each backend config
         for backend_name, backend_config in config.items():
+            self.config[backend_name] = self._validate_backend_config(
+                backend_name, backend_config
+            )
+
+        # Initialize backends based on logging mode
+        for backend_name, backend_config in self.config.items():
+            mode = backend_config["logging_mode"]
+
             backend = get_logger_backend_class(backend_name)(backend_config)
             await backend.init(role=BackendRole.GLOBAL)
 
-            # Extract metadata from primary logger to be shared with secondary loggers
-            # and store it
-            reduce_across_ranks = backend_config.get("reduce_across_ranks", True)
-            if not reduce_across_ranks:
-                primary_backend_metadata = (
-                    backend.get_metadata_for_secondary_ranks() or {}
-                )
-                self.metadata_per_primary_backend[
-                    backend_name
-                ] = primary_backend_metadata
+            # Extract metadata from primary logger to be shared with per-rank loggers
+            if mode != LoggingMode.GLOBAL_REDUCE:
+                primary_metadata = backend.get_metadata_for_secondary_ranks() or {}
+                self.metadata_per_primary_backend[backend_name] = primary_metadata
 
-            # Store global logger backends
-            if reduce_across_ranks:
+            # Store global logger backends for later flush
+            if mode == LoggingMode.GLOBAL_REDUCE:
                 self.global_logger_backends[backend_name] = backend
 
         # Eager init collectors on all registered fetchers in parallel, passing primary states and config
@@ -301,19 +340,21 @@ class GlobalLoggingActor(Actor):
         config = self.config
         if config is None:
             logger.warning(
-                "GlobalLoggingActor flush() called before init_backends(). "
-                "No backends will be flushed."
+                "Cannot flush collected metrics. GlobalLoggingActor.flush() called before init_backends()."
+                " No backends will be flushed. Please call in your main file:\n"
+                "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
+                "`await mlogger.init_backends.call_one(logging_config)`\n"
             )
             return
-        # if reduce_across_ranks=True, we need to reduce the states from all ranks
-        # and log with the primary backend
+
+        # Check if need to do reduce and retrieve states from fetchers
         requires_reduce = any(
-            backend_config.get("reduce_across_ranks", True)
+            backend_config["logging_mode"] == LoggingMode.GLOBAL_REDUCE
             for backend_config in config.values()
         )
 
         logger.debug(
-            f"Global flush for global_step {global_step}: {len(self.fetchers)} fetchers"
+            f"Global flush for global step {global_step}: {len(self.fetchers)} fetchers"
         )
 
         # Broadcast flush to all fetchers
@@ -326,21 +367,25 @@ class GlobalLoggingActor(Actor):
         )
 
         if requires_reduce:
-            # Handle exceptions and extract values from ValueMesh results
-            all_local_states = []
-            for result in results:
-                if isinstance(result, BaseException):
-                    logger.warning(f"Flush failed on a fetcher: {result}")
-                    continue
 
-                # result is a generator that outputs a pair [{'gpus': i/N}, {metric_key1: metric_state1, ...}}]
-                for gpu_info, local_metric_state in result.items():
-                    if isinstance(local_metric_state, dict):
-                        all_local_states.append(local_metric_state)
-                    else:
-                        logger.warning(
-                            f"Unexpected result from fetcher. {gpu_info=}, {local_metric_state=}"
-                        )
+            def extract_values_from_valuemesh(results):
+                all_local_states = []
+                for result in results:
+                    if isinstance(result, BaseException):
+                        logger.warning(f"Flush failed on a fetcher: {result}")
+                        continue
+
+                    # result is a generator that outputs a pair [{'gpus': i/N}, {metric_key1: metric_state1, ...}}]
+                    for gpu_info, local_metric_state in result.items():
+                        if isinstance(local_metric_state, dict):
+                            all_local_states.append(local_metric_state)
+                        else:
+                            logger.warning(
+                                f"Unexpected result from fetcher. {gpu_info=}, {local_metric_state=}"
+                            )
+                return all_local_states
+
+            all_local_states = extract_values_from_valuemesh(results)
 
             if not all_local_states:
                 logger.warning(f"No states to reduce for global_step {global_step}")
@@ -349,12 +394,9 @@ class GlobalLoggingActor(Actor):
             # Reduce metrics from states
             reduced_metrics = reduce_metrics_states(all_local_states)
 
-            # Log to each global logger_backend
-            for (
-                logger_backend_name,
-                logger_backend,
-            ) in self.global_logger_backends.items():
-                await logger_backend.log(reduced_metrics, global_step)
+            # Log to global backends
+            for backend_name, backend in self.global_logger_backends.items():
+                await backend.log_batch(reduced_metrics, global_step)
 
     @endpoint
     def has_fetcher(self, name: str | ProcMesh) -> bool:
