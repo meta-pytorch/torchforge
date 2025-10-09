@@ -307,13 +307,7 @@ class Provisioner:
 
     async def track_allocation(self, alloc: Any):
         """Tracks an allocation for cleanup."""
-        from forge.controller.service import ServiceInterface
-
         self._allocations.append(alloc)
-        alloc_type = "service" if isinstance(alloc, ServiceInterface) else "actor"
-        print(
-            f"Registered allocation {alloc_type} {alloc}, current allocations len: {len(self._allocations)}"
-        )
 
     async def shutdown_all_allocations(self):
         """Gracefully shut down all tracked actors and services."""

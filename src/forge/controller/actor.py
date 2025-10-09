@@ -149,11 +149,9 @@ class ForgeActor(Actor):
     @classmethod
     async def register_allocation(cls, alloc: "ForgeActor | ServiceInterface") -> None:
         """Registers an allocation (service/actor) with the provisioner."""
-        provisioner = await _get_provisioner()
         try:
             provisioner = await _get_provisioner()
-            if provisioner is not None:
-                await provisioner.track_allocation(alloc)
+            await provisioner.track_allocation(alloc)
         except Exception as e:
             logger.warning(f"Failed to register allocation {alloc}: {e}")
 
