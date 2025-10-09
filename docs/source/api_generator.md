@@ -4,7 +4,8 @@
 .. currentmodule:: forge.actors.policy
 ```
 
-The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM.
+The Generator (Policy) is the core inference engine in TorchForge,
+built on top of [vLLM](https://docs.vllm.ai/en/latest/).
 It manages model serving, text generation, and weight updates for reinforcement learning workflows.
 
 ## Policy
