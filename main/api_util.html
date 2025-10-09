@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-10-08T14:05:55+00:00" />
+    <meta property="article:modified_time" content="2025-10-09T00:35:14+00:00" />
     <title>Utilities &#8212; torchforge 0.1 documentation</title>
   
   
@@ -55,7 +55,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 08, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 09, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -205,7 +205,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 08, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 09, 2025"/>
 
   </head>
 
@@ -779,7 +779,7 @@ of ranks) and rank number of the current process in the default process group.</
 <dd><p>Get a logger with a stream handler.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>level</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The logging level. See <a class="reference external" href="https://docs.python.org/3/library/logging.html#levels">https://docs.python.org/3/library/logging.html#levels</a> for list of levels.</p>
+<dd class="field-odd"><p><strong>level</strong> (<em>str</em><em> | </em><em>None</em>) – The logging level. See <a class="reference external" href="https://docs.python.org/3/library/logging.html#levels">https://docs.python.org/3/library/logging.html#levels</a> for list of levels.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -1096,7 +1096,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">logging
        "headline": "Utilities",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api_util.html",
-       "articleBody": "Utilities# General utility functions and helpers used throughout TorchForge. Distributed Computing# Utilities for distributed training and communication. forge.util.distributed.get_world_size_and_rank() \u2192 tuple[int, int][source]# Function that gets the current world size (aka total number of ranks) and rank number of the current process in the default process group. Returns: world size, rank Return type: tuple[int, int] Logging# Logging configuration and utilities. forge.util.logging.get_logger(level: str | None = None) \u2192 Logger[source]# Get a logger with a stream handler. Parameters: level (Optional[str]) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for list of levels. Example \u003e\u003e\u003e logger = get_logger(\"INFO\") \u003e\u003e\u003e logger.info(\"Hello world!\") INFO:torchtune.utils._logging:Hello world! Returns: The logger. Return type: logging.Logger forge.util.logging.log_rank_zero(logger: Logger, msg: str, level: int = 20) \u2192 None[source]# Logs a message only on rank zero. Parameters: logger (logging.Logger) \u2013 The logger. msg (str) \u2013 The warning message. level (int) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for values. Defaults to logging.INFO. forge.util.logging.log_once(logger: Logger, msg: str, level: int = 20) \u2192 None[source]# Logs a message only once. LRU cache is used to ensure a specific message is logged only once, similar to how warn() works when the once rule is set via command-line or environment variable. Parameters: logger (logging.Logger) \u2013 The logger. msg (str) \u2013 The warning message. level (int) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for values. Defaults to logging.INFO.",
+       "articleBody": "Utilities# General utility functions and helpers used throughout TorchForge. Distributed Computing# Utilities for distributed training and communication. forge.util.distributed.get_world_size_and_rank() \u2192 tuple[int, int][source]# Function that gets the current world size (aka total number of ranks) and rank number of the current process in the default process group. Returns: world size, rank Return type: tuple[int, int] Logging# Logging configuration and utilities. forge.util.logging.get_logger(level: str | None = None) \u2192 Logger[source]# Get a logger with a stream handler. Parameters: level (str | None) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for list of levels. Example \u003e\u003e\u003e logger = get_logger(\"INFO\") \u003e\u003e\u003e logger.info(\"Hello world!\") INFO:torchtune.utils._logging:Hello world! Returns: The logger. Return type: logging.Logger forge.util.logging.log_rank_zero(logger: Logger, msg: str, level: int = 20) \u2192 None[source]# Logs a message only on rank zero. Parameters: logger (logging.Logger) \u2013 The logger. msg (str) \u2013 The warning message. level (int) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for values. Defaults to logging.INFO. forge.util.logging.log_once(logger: Logger, msg: str, level: int = 20) \u2192 None[source]# Logs a message only once. LRU cache is used to ensure a specific message is logged only once, similar to how warn() works when the once rule is set via command-line or environment variable. Parameters: logger (logging.Logger) \u2013 The logger. msg (str) \u2013 The warning message. level (int) \u2013 The logging level. See https://docs.python.org/3/library/logging.html#levels for values. Defaults to logging.INFO.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
