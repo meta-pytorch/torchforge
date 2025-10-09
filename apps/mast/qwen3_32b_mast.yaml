@@ -3,9 +3,9 @@
 
 # Global configuration
 group_size: 8
-batch_size: 16
-max_req_tokens: 512
-max_res_tokens: 512
+batch_size: 32
+max_req_tokens: 1024
+max_res_tokens: 1024
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 launcher: mast
@@ -71,8 +71,8 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 8
-    tensor_parallel_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 8
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
@@ -129,13 +129,13 @@ ref_model:
 services:
   policy:
     procs: ${policy.engine_config.tensor_parallel_size}
-    num_replicas: 2
+    num_replicas: 4
     with_gpus: true
     mesh_name: policy
     hosts: 1
   ref_model:
-    procs: 4
-    num_replicas: 2
+    procs: ${ref_model.parallelism.tensor_parallel_degree}
+    num_replicas: 1
     with_gpus: true
     mesh_name: ref_model
     hosts: 1
