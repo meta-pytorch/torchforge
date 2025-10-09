@@ -20,7 +20,9 @@ class SimpleGRPOLoss(nn.Module):
         super().__init__()
         self.beta = beta
 
-    def forward(self, logprobs, ref_logprobs, advantages, padding_mask):
+    def forward(
+        self, logprobs, ref_logprobs, advantages, padding_mask
+    ) -> tuple[torch.tensor, LossMetrics]:
         kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
 
         per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
@@ -29,4 +31,12 @@ class SimpleGRPOLoss(nn.Module):
             ((per_token_loss * padding_mask).sum(dim=1))
             / (padding_mask.sum(dim=1).clamp(min=1.0))
         ).mean()
-        return loss, LossMetrics(kl_divergence=kl, policy_entropy=torch.tensor(0))
+
+        kl_padded = kl * padding_mask
+        # We want to save consistency with Reduce.MEAN in the trainer.
+        # Unfortunately, just kl * padding_mask is not working due to the different factor in the denominator
+        kl_padded = kl.sum(dim=1) / padding_mask.sum(dim=1).clamp(min=1.0)
+
+        return loss, LossMetrics(
+            kl_divergence=kl_padded, policy_entropy=torch.tensor(0)
+        )
