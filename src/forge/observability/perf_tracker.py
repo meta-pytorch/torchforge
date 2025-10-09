@@ -11,7 +11,7 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
-from typing import List, Optional, Protocol, Tuple
+from typing import Protocol
 
 import torch
 
@@ -112,7 +112,7 @@ class Tracer:
         self._active = False
 
         # Timing state
-        self._timer: Optional[_TimerProtocol] = None
+        self._timer: _TimerProtocol | None = None
 
         # Memory tracking state
         self._memory_started = False
@@ -191,7 +191,7 @@ class Tracer:
         self._memory_started = False
 
     def _record_timing_metrics(
-        self, durations: List[Tuple[str, float]], final_ms: float
+        self, durations: list[tuple[str, float]], final_ms: float
     ) -> None:
         total_ms = sum(d_ms for _, d_ms in durations) + final_ms
         total_s = total_ms / 1000.0
@@ -211,7 +211,7 @@ class _TimerProtocol(Protocol):
     def step(self, name: str) -> None:
         ...
 
-    def get_all_durations(self) -> Tuple[List[Tuple[str, float]], float]:
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
         ...
 
 
@@ -221,8 +221,8 @@ class _TimerCPU(_TimerProtocol):
     """
 
     def __init__(self) -> None:
-        self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[float] = None
+        self._durations: list[tuple[str, float]] = []
+        self._chain_start: float | None = None
 
     def start(self) -> None:
         # Reset state for reuse
@@ -237,7 +237,7 @@ class _TimerCPU(_TimerProtocol):
         self._durations.append((name, delta_ms))
         self._chain_start = now
 
-    def get_all_durations(self) -> Tuple[List[Tuple[str, float]], float]:
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
         """Retrieve list of (step_name, duration) tuples.
         Also computes and returns final duration since last step (or start if none)."""
         final_ms = 0.0
@@ -264,11 +264,11 @@ class _TimerCUDA(_TimerProtocol):
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available for timing")
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self._futures: List[
-            Tuple[str, Future[float], int]
+        self._futures: list[
+            tuple[str, Future[float], int]
         ] = []  # (name, future, submission_index)
-        self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[torch.cuda.Event] = None
+        self._durations: list[tuple[str, float]] = []
+        self._chain_start: torch.cuda.Event | None = None
 
     def start(self) -> None:
         """Call before any steps. Clear state for reuse; record initial event on current stream."""
@@ -324,7 +324,7 @@ class _TimerCUDA(_TimerProtocol):
 
         self._futures = still_pending
 
-    def get_all_durations(self) -> Tuple[List[Tuple[str, float]], float]:
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
         """Retrieve list of (step_name, duration) tuples in random order after waiting for background polls to finish.
         Also computes and returns final duration since last step (or start if none)."""
         # Submit final as a special step (reuses step logic; no collect needed here)
