@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import jinja2
 from jinja2 import StrictUndefined
@@ -28,8 +28,8 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
 
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file
-        tokenizer_config_json_path (Optional[str]): Path to tokenizer_config.json file. Default: None
-        generation_config_path (Optional[str]): Path to generation_config.json file.
+        tokenizer_config_json_path (str | None): Path to tokenizer_config.json file. Default: None
+        generation_config_path (str | None): Path to generation_config.json file.
             Default: None
 
     Raises:
@@ -40,8 +40,8 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
         self,
         tokenizer_json_path: str,
         *,
-        tokenizer_config_json_path: Optional[str] = None,
-        generation_config_path: Optional[str] = None,
+        tokenizer_config_json_path: str | None = None,
+        generation_config_path: str | None = None,
     ):
         self.tokenizer = Tokenizer.from_file(tokenizer_json_path)
         if not (tokenizer_config_json_path or generation_config_path):
@@ -209,8 +209,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
 
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file
-        tokenizer_config_json_path (Optional[str]): Path to tokenizer_config.json file. Default: None
-        generation_config_path (Optional[str]): Path to generation_config.json file.
+        tokenizer_config_json_path (str | None): Path to tokenizer_config.json file. Default: None
+        generation_config_path (str | None): Path to generation_config.json file.
             Default: None
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
@@ -220,8 +220,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         self,
         tokenizer_json_path: str,
         *,
-        tokenizer_config_json_path: Optional[str] = None,
-        generation_config_path: Optional[str] = None,
+        tokenizer_config_json_path: str | None = None,
+        generation_config_path: str | None = None,
         truncation_type: str = "right",
     ):
         self.base_tokenizer = HuggingFaceBaseTokenizer(
@@ -274,7 +274,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         self,
         messages: list[Message],
         add_eos: bool = True,
-        max_seq_len: Optional[int] = None,
+        max_seq_len: int | None = None,
     ) -> tuple[list[int], list[bool]]:
         tokenized_messages = []
         mask = []
