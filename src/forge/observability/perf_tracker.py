@@ -152,8 +152,8 @@ class Tracer:
             raise ValueError("Tracer must be started before calling stop")
 
         # Stop timing
-        durations, final_ms = self._timer.get_all_durations()  # pyre-ignore
-        self._record_timing_metrics(durations, final_ms)
+        durations, stop_step_ms = self._timer.get_all_durations()  # pyre-ignore
+        self._record_timing_metrics(durations, stop_step_ms)
         self._timer = None
 
         # Stop memory tracking
@@ -194,9 +194,9 @@ class Tracer:
         self._memory_started = False
 
     def _record_timing_metrics(
-        self, durations: list[tuple[str, float]], final_ms: float
+        self, durations: list[tuple[str, float]], stop_step_ms: float
     ) -> None:
-        total_ms = sum(d_ms for _, d_ms in durations) + final_ms
+        total_ms = sum(d_ms for _, d_ms in durations) + stop_step_ms
         total_s = total_ms / 1000.0
         record_metric(f"{self.prefix}/total_duration_avg_s", total_s, Reduce.MEAN)
         record_metric(f"{self.prefix}/total_duration_max_s", total_s, Reduce.MAX)
@@ -241,18 +241,18 @@ class _TimerCPU(_TimerProtocol):
         self._chain_start = now
 
     def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
-        """Retrieve list of (step_name, duration) tuples.
-        Also computes and returns final duration since last step (or start if none)."""
-        final_ms = 0.0
+        """Retrieve list of (step_name, duration) tuples and last step duration
+        between tracer.stop and the last step (or start if none)."""
+        stop_step_ms = 0.0
         if self._chain_start is not None:
             now = time.perf_counter()
-            final_ms = (now - self._chain_start) * 1000
-        return self._durations[:], final_ms
+            stop_step_ms = (now - self._chain_start) * 1000
+        return self._durations[:], stop_step_ms
 
 
 class _TimerCUDA(_TimerProtocol):
-    """CUDA timing backend for Tracer: Chains events on current stream for precise GPU durations.
-    Steps submit non-blocking futures; polls async in another thread.
+    """CUDA timing backend with non-blocking events and futures.
+    Uses a thread pool to poll CUDA events asynchronously without blocking the main thread.
 
     Example:
         timer = _TimerCUDA()
@@ -260,7 +260,7 @@ class _TimerCUDA(_TimerProtocol):
         # torch.mm(a, b)  # ~100ms GPU
         timer.step("matmul")
         # torch.mm(c, d)  # ~200ms
-        durs_steps, final_step = timer.get_all_durations()  # ([( "matmul", 100 )], 200)
+        durs_steps, stop_step_ms = timer.get_all_durations()  # ([( "matmul", 100 )], 200)
     """
 
     def __init__(self, max_workers: int = 2) -> None:
@@ -328,27 +328,28 @@ class _TimerCUDA(_TimerProtocol):
         self._futures = still_pending
 
     def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
-        """Retrieve list of (step_name, duration) tuples in random order after waiting for background polls to finish.
-        Also computes and returns final duration since last step (or start if none)."""
-        # Submit final as a special step (reuses step logic; no collect needed here)
-        stop_step = f"_final_internal_{id(self)}"
+        """Retrieve list of (step_name, duration) tuples and last step duration
+        between tracer.stop and the last step (or start if none). Order of tuples is random.
+        """
+        # Final timing since last step (or start) until this function is called
+        stop_step = f"_stop_step_{id(self)}"
         self.step(stop_step)
 
         # Wait on remaining futures
         self._collect_completed_futures(wait_till_done=True)
         self._futures.clear()
 
-        # Extract final_ms
-        final_ms = 0.0
+        # Extract stop_step_ms
+        stop_step_ms = 0.0
         durations = [
             (name, duration) for name, duration in self._durations if name != stop_step
         ]
         for name, duration in self._durations:
             if name == stop_step:
-                final_ms = duration
+                stop_step_ms = duration
                 break
 
-        return durations, final_ms
+        return durations, stop_step_ms
 
     def __del__(self) -> None:
         # Fallback cleanup in finalizer
