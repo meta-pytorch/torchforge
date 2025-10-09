@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Resource allocation and provisioning for both local and remote."""
+"""Remote and local resource manager for allocation and provisioning."""
 import asyncio
 import functools
 import logging
@@ -20,7 +20,7 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.env_constants import FORGE_DISABLE_METRICS
+from forge.env_constants import all_constants, FORGE_DISABLE_METRICS
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -220,9 +220,21 @@ class Provisioner:
                 host_mesh._host_id = self._this_host_id
 
             def bootstrap(env: dict[str, str]):
+                """Runs on process startup.
+
+                We use this to set environment variables like CUDA, etc.
+                We prefer to pass in an environment variable to bootstrap,
+                but there are occasionally host-specific pieces that must
+                be set once the process is alive.
+
+                """
                 # bootstrap is run on all processes. We use this
                 # to set environment variables like CUDA etc.
                 import os
+
+                # vLLM requires this environment variable when spawning model servers
+                # across multiple nodes.
+                os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
 
                 for k, v in env.items():
                     os.environ[k] = v
@@ -234,12 +246,24 @@ class Provisioner:
 
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
+
+                # Set the PTD world size
+                world_size = num_procs * (num_hosts or 1)
+                env_vars["WORLD_SIZE"] = str(world_size)
                 env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
+
+                # Increase Monarch timeout for individual actor calls.
                 env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
+                # Inherit Forge-relevant environment variables from the system
+                for constant in all_constants():
+                    value = os.environ.get(constant, None)
+                    if value:
+                        env_vars[constant] = value
+
                 # Shows detailed logs for Monarch rust failures
-                env_vars["RUST_BACKTRACE"] = "1"
+                env_vars["RUST_BACKTRACE"] = "full"
 
             procs = host_mesh.spawn_procs(
                 per_host={"gpus": num_procs},

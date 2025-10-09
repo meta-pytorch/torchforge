@@ -587,8 +587,8 @@ class PolicyWorker(ForgeActor):
 
     @endpoint
     async def setup(self):
-        # TODO: remove ["gpus"] when monarch implements a flat rank
-        self.rank = current_rank()["gpus"]
+        self.rank = current_rank().rank
+        os.environ["RANK"] = str(self.rank)
         self.worker = self.setup_worker()
 
     @endpoint
