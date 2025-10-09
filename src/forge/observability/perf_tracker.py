@@ -15,7 +15,11 @@ from typing import Protocol
 
 import torch
 
-from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_GPU
+from forge.env_constants import (
+    DISABLE_PERF_METRICS,
+    FORGE_DISABLE_METRICS,
+    METRIC_TIMER_USES_GPU,
+)
 from forge.observability.metrics import record_metric, Reduce
 
 logger = logging.getLogger(__name__)
@@ -108,7 +112,10 @@ class Tracer:
         self.prefix = prefix
         self.track_memory = track_memory
         self.time_with_gpu = timer == "gpu"
-        self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
+        self._disable = (
+            os.getenv(DISABLE_PERF_METRICS, "false") == "true"
+            or os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
+        )
         self._active = False
 
         # Timing state
