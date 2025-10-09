@@ -536,7 +536,7 @@ class MetricCollector:
         """Shutdown logger_backends if initialized."""
         if not self._is_initialized:
             logger.debug(
-                f"Collector for rank {self.rank} not initialized. Skipping shutdown"
+                f"Collector for rank {get_actor_name_with_rank()} not initialized. Skipping shutdown"
             )
             return
 
