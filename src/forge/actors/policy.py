@@ -246,7 +246,7 @@ class Policy(PolicyInterface):
 
         self.request_id = 0
         self.policy_version = 0
-        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
         # TODO: Investigate whether this can be combined with `policy.running`
         # Whether this policy is accepting requests.

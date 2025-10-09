@@ -14,7 +14,7 @@ import contextvars
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Generic, List, ParamSpec, TypeVar
+from typing import Generic, ParamSpec, TypeVar
 
 from monarch._src.actor.endpoint import EndpointProperty
 
@@ -96,7 +96,7 @@ class ServiceEndpoint(Generic[P, R]):
         sess_id = kwargs.pop("sess_id", None)
         return await self.service._call(sess_id, self.endpoint_name, *args, **kwargs)
 
-    async def fanout(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def fanout(self, *args: P.args, **kwargs: P.kwargs) -> list[R]:
         """Broadcasts a request to all healthy replicas and returns the results as a list."""
         result = await self.service.call_all(self.endpoint_name, *args, **kwargs)
         return result
@@ -107,7 +107,7 @@ class ServiceEndpoint(Generic[P, R]):
             "Services only support route() and fanout()."
         )
 
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def call(self, *args: P.args, **kwargs: P.kwargs) -> list[R]:
         raise NotImplementedError(
             "You tried to use call() on a service, not an actor. "
             "Services only support route() and fanout()."
@@ -119,7 +119,7 @@ class ServiceEndpoint(Generic[P, R]):
             "Services only support route() and fanout()."
         )
 
-    async def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def broadcast(self, *args: P.args, **kwargs: P.kwargs) -> list[R]:
         raise NotImplementedError(
             "You tried to use broadcast() on a service, not an actor. "
             "Services only support route() and fanout()."
@@ -157,7 +157,7 @@ class ServiceEndpointV2(Generic[P, R]):
             sess_id, self.endpoint_name, *args, **kwargs
         )
 
-    async def call(self, *args: P.args, **kwargs: P.kwargs) -> List[R]:
+    async def call(self, *args: P.args, **kwargs: P.kwargs) -> list[R]:
         """Broadcasts a request to all healthy replicas and returns the results as a list."""
         result = await self.actor_mesh.call_all.call_one(
             self.endpoint_name, *args, **kwargs
@@ -315,9 +315,9 @@ class Router(ABC):
     @abstractmethod
     def get_replica(
         self,
-        healthy_replicas: List[Replica],
+        healthy_replicas: list[Replica],
         sess_id: str | None = None,
-        session_map: Dict[str, int] | None = None,
+        session_map: dict[str, int] | None = None,
     ) -> Replica:
         """Select a replica from the list based on routing logic."""
         pass
