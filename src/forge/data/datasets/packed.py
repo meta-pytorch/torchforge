@@ -7,7 +7,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Any, Generic, Iterable, Iterator, Optional, TypeVar
+from typing import Any, Generic, Iterable, Iterator, TypeVar
 
 import torch
 from torch.nn.attention.flex_attention import (
@@ -329,13 +329,13 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             self._buffer.clear()
 
         # current_pack: the current pack being built
-        self._current_pack: Optional[dict[str, list]] = None
+        self._current_pack: dict[str, list] | None = None
 
         # current_pack_size: the number of tokens in the current pack
         self._current_pack_size: int = 0
 
         # iterator: the iterator over the dataset
-        self._iterator: Optional[Iterator[SampleType]] = None
+        self._iterator: Iterator[SampleType] | None = None
 
         # current_doc_id_in_pack: the document ID to use for the next sample
         self._current_doc_id_in_pack: int = 0
@@ -367,7 +367,7 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             except StopIteration:
                 self._exhausted = True
 
-    def _find_next_fitting_sample(self, remaining_size: int) -> Optional[int]:
+    def _find_next_fitting_sample(self, remaining_size: int) -> int | None:
         """
         Find the first sample in the buffer that fits in the remaining space.
 
@@ -375,7 +375,7 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             remaining_size (int): The remaining space in the current pack.
 
         Returns:
-            Optional[int]: The index of the sample in the buffer, or None if no sample fits.
+            int | None: The index of the sample in the buffer, or None if no sample fits.
 
         Example:
             self._buffer = deque([(sample1, 200), (sample2, 100), (sample3, 48), (sample4, 200)])
@@ -397,7 +397,7 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
                 return i
         return None
 
-    def _build_one_pack(self, iterator: Iterator[SampleType]) -> Optional[SampleDict]:
+    def _build_one_pack(self, iterator: Iterator[SampleType]) -> SampleDict | None:
         """
         Builds a pack of samples from the buffer.
 
@@ -405,7 +405,7 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             iterator (Iterator[SampleType]): The iterator over the dataset.
 
         Returns:
-            Optional[SampleDict]: The pack of samples, or None if the dataset is exhausted.
+            SampleDict | None: The pack of samples, or None if the dataset is exhausted.
         """
         # Start a new pack if necessary
         if self._current_pack is None:

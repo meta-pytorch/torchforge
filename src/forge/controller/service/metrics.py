@@ -12,7 +12,6 @@ health status information.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 from forge.controller.service.replica import ReplicaMetrics
 
@@ -35,7 +34,7 @@ class ServiceMetrics:
     """
 
     # Replica metrics
-    replica_metrics: Dict[int, ReplicaMetrics] = field(default_factory=dict)
+    replica_metrics: dict[int, ReplicaMetrics] = field(default_factory=dict)
     # Service-level metrics
     total_sessions: int = 0
     healthy_replicas: int = 0
@@ -50,7 +49,7 @@ class ServiceMetrics:
             for metrics in self.replica_metrics.values()
         )
 
-    def get_avg_queue_depth(self, replicas: List) -> float:
+    def get_avg_queue_depth(self, replicas: list) -> float:
         """Get average queue depth across all healthy replicas."""
         healthy_replicas = [r for r in replicas if r.healthy]
         if not healthy_replicas:
@@ -58,7 +57,7 @@ class ServiceMetrics:
         total_queue_depth = sum(r.request_queue.qsize() for r in healthy_replicas)
         return total_queue_depth / len(healthy_replicas)
 
-    def get_avg_capacity_utilization(self, replicas: List) -> float:
+    def get_avg_capacity_utilization(self, replicas: list) -> float:
         """Get average capacity utilization across all healthy replicas."""
         healthy_replicas = [r for r in replicas if r.healthy]
         if not healthy_replicas:

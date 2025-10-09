@@ -4,22 +4,250 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Unit tests for core metrics functionality focusing on critical fixes in Diff 1."""
+"""Unit tests for core metrics functionality."""
 
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import (
+    BackendRole,
     ConsoleBackend,
     get_logger_backend_class,
+    MaxAccumulator,
     MeanAccumulator,
+    Metric,
     MetricCollector,
+    MinAccumulator,
     record_metric,
     Reduce,
+    reduce_metrics_states,
+    StdAccumulator,
+    SumAccumulator,
     WandbBackend,
 )
+
+
+class TestMetricCreation:
+    """Test Metric object creation and record_metric function - Diff 2 features."""
+
+    def test_metric_creation_automatic_timestamp(self, mock_rank):
+        """Test Metric object creation with automatic timestamp."""
+        before_time = time.time()
+        metric = Metric("test_key", 42.0, Reduce.MEAN)
+        after_time = time.time()
+
+        assert metric.key == "test_key"
+        assert metric.value == 42.0
+        assert metric.reduction == Reduce.MEAN
+        assert metric.timestamp is not None
+        assert before_time <= metric.timestamp <= after_time
+
+    def test_metric_creation_custom_timestamp(self, mock_rank):
+        """Test Metric object creation with custom timestamp."""
+        custom_time = 1234567890.0
+        metric = Metric("test_key2", 24.0, Reduce.SUM, timestamp=custom_time)
+        assert metric.timestamp == custom_time
+
+    def test_record_metric(self, mock_rank):
+        """Test record_metric creates correct Metric and calls collector."""
+        # Mock the MetricCollector constructor to return a mock instance
+        mock_collector = MagicMock()
+
+        with patch(
+            "forge.observability.metrics.MetricCollector", return_value=mock_collector
+        ):
+            record_metric("loss", 1.5, Reduce.MEAN)
+
+            # Verify push was called on the mock collector
+            mock_collector.push.assert_called_once()
+
+            # Verify the metric passed to push
+            pushed_metric = mock_collector.push.call_args[0][0]
+            assert pushed_metric.key == "loss"
+            assert pushed_metric.value == 1.5
+            assert pushed_metric.reduction == Reduce.MEAN
+
+    def test_new_enums_and_constants(self):
+        """Test BackendRole constants and usage."""
+        # Test BackendRole enum values
+        assert BackendRole.LOCAL.value == "local"
+        assert BackendRole.GLOBAL.value == "global"
+
+        # Test that BackendRole is a proper Enum
+        assert isinstance(BackendRole.LOCAL, BackendRole)
+        assert isinstance(BackendRole.GLOBAL, BackendRole)
+
+    @patch("forge.observability.metrics.get_actor_name_with_rank")
+    @pytest.mark.asyncio
+    async def test_backend_role_usage(self, mock_actor_name):
+        """Test that BackendRole constants are actually used instead of string literals."""
+        mock_actor_name.return_value = "TestActor_abcd_r0"
+
+        # Test ConsoleBackend
+        console_backend = ConsoleBackend({})
+        await console_backend.init(role=BackendRole.LOCAL)
+
+        # Test WandbBackend role validation without WandB initialization
+        wandb_backend = WandbBackend({"project": "test"})
+
+        # Mock all the WandB init methods to focus only on role validation
+        with patch.object(wandb_backend, "_init_global"), patch.object(
+            wandb_backend, "_init_shared_global"
+        ), patch.object(wandb_backend, "_init_shared_local"), patch.object(
+            wandb_backend, "_init_per_rank"
+        ):
+
+            # Should not raise error for valid roles (type system prevents invalid values)
+            await wandb_backend.init(role=BackendRole.GLOBAL)
+            await wandb_backend.init(role=BackendRole.LOCAL)
+
+
+class TestReduceOperations:
+    """Test reduce_metrics_states function returning List[Metric] - Diff 2 feature."""
+
+    def test_empty_states(self):
+        """Test reduce_metrics_states with empty input."""
+        result = reduce_metrics_states([])
+        assert result == []
+
+    def test_single_state(self):
+        """Test reduce_metrics_states with single state."""
+        states = [{"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}}]
+        result = reduce_metrics_states(states)
+        assert len(result) == 1
+        assert result[0].key == "loss"
+        assert result[0].value == 5.0
+        assert result[0].reduction == Reduce.MEAN
+
+    def test_multiple_states(self):
+        """Test reduce_metrics_states with multiple states."""
+        states = [
+            {"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}},
+            {"loss": {"reduction_type": "mean", "sum": 20.0, "count": 3}},
+            {"accuracy": {"reduction_type": "sum", "total": 15.0}},
+        ]
+        result = reduce_metrics_states(states)
+
+        # Convert to dict for easier testing
+        result_dict = {metric.key: metric.value for metric in result}
+        assert result_dict["loss"] == 30.0 / 5.0  # 6.0
+        assert result_dict["accuracy"] == 15.0
+
+        # Also check reduction types
+        for metric in result:
+            if metric.key == "loss":
+                assert metric.reduction == Reduce.MEAN
+            elif metric.key == "accuracy":
+                assert metric.reduction == Reduce.SUM
+
+    def test_mismatched_reduction_types_raises_error(self):
+        """Test reduce_metrics_states raises error for mismatched reduction types."""
+        states = [
+            {"loss": {"reduction_type": "mean", "sum": 10.0, "count": 2}},
+            {"loss": {"reduction_type": "sum", "total": 20.0}},
+        ]
+        with pytest.raises(ValueError, match="Mismatched reduction types"):
+            reduce_metrics_states(states)
+
+
+class TestAccumulators:
+    """Test all accumulator classes and their operations - Diff 2 extensions."""
+
+    def test_sum_accumulator(self):
+        """Test SumAccumulator operations."""
+        acc = SumAccumulator(Reduce.SUM)
+
+        acc.append(5.0)
+        acc.append(3.0)
+        assert acc.get_value() == 8.0
+
+        state = acc.get_state()
+        assert state["total"] == 8.0
+        assert state["reduction_type"] == "sum"
+
+        acc.reset()
+        assert acc.get_value() == 0.0
+
+    def test_max_accumulator(self):
+        """Test MaxAccumulator operations."""
+        acc = MaxAccumulator(Reduce.MAX)
+
+        acc.append(5.0)
+        acc.append(10.0)
+        acc.append(3.0)
+        assert acc.get_value() == 10.0
+
+        state = acc.get_state()
+        assert state["max_val"] == 10.0
+        assert state["reduction_type"] == "max"
+
+    def test_min_accumulator(self):
+        """Test MinAccumulator operations."""
+        acc = MinAccumulator(Reduce.MIN)
+
+        acc.append(5.0)
+        acc.append(10.0)
+        acc.append(3.0)
+        assert acc.get_value() == 3.0
+
+        state = acc.get_state()
+        assert state["min_val"] == 3.0
+        assert state["reduction_type"] == "min"
+
+    def test_std_accumulator(self):
+        """Test StdAccumulator operations."""
+        acc = StdAccumulator(Reduce.STD)
+
+        # Test with zero/one values
+        assert acc.get_value() == 0.0
+        acc.append(5.0)
+        assert acc.get_value() == 0.0  # std of single value is 0
+
+        # Test with multiple values
+        acc.append(7.0)  # values: 5, 7, mean=6, std=1
+        assert abs(acc.get_value() - 1.0) < 0.001
+
+        state = acc.get_state()
+        assert state["sum"] == 12.0
+        assert state["sum_sq"] == 74.0  # 5^2 + 7^2 = 25 + 49 = 74
+        assert state["count"] == 2
+
+    @pytest.mark.parametrize(
+        "accumulator_class,states,expected",
+        [
+            (
+                MeanAccumulator,
+                [
+                    {"reduction_type": "mean", "sum": 10.0, "count": 2},
+                    {"reduction_type": "mean", "sum": 20.0, "count": 3},
+                ],
+                6.0,  # (10+20) / (2+3)
+            ),
+            (
+                SumAccumulator,
+                [
+                    {"reduction_type": "sum", "total": 10.0},
+                    {"reduction_type": "sum", "total": 15.0},
+                ],
+                25.0,
+            ),
+        ],
+    )
+    def test_accumulator_state_reduction(self, accumulator_class, states, expected):
+        """Test cross-accumulator state reduction."""
+        result = accumulator_class.get_reduced_value_from_states(states)
+        assert result == expected
+
+    def test_reduce_enum_accumulator_mapping(self):
+        """Test that Reduce enum correctly maps to accumulator classes."""
+        assert Reduce.MEAN.accumulator_class == MeanAccumulator
+        assert Reduce.SUM.accumulator_class == SumAccumulator
+        assert Reduce.MAX.accumulator_class == MaxAccumulator
+        assert Reduce.MIN.accumulator_class == MinAccumulator
+        assert Reduce.STD.accumulator_class == StdAccumulator
 
 
 class TestCriticalFixes:
@@ -28,9 +256,10 @@ class TestCriticalFixes:
     def test_uninitialized_push_logs_warning(self, mock_rank, caplog):
         """Test MetricCollector.push() logs warning when uninitialized."""
         collector = MetricCollector()
+        metric = Metric("test", 1.0, Reduce.MEAN)
 
         # Should not raise error, just log warning and return
-        collector.push("test", 1.0, Reduce.MEAN)
+        collector.push(metric)
         assert any(
             "Metric logging backends" in record.message for record in caplog.records
         )
@@ -41,7 +270,7 @@ class TestCriticalFixes:
         collector = MetricCollector()
 
         # Should not raise error, just log warning and return empty dict
-        result = await collector.flush(step=1, return_state=True)
+        result = await collector.flush(global_step=1, return_state=True)
         assert result == {}
         assert any(
             "Cannot flush collected metrics" in record.message
@@ -95,10 +324,12 @@ class TestCriticalFixes:
 
         backend = ConsoleBackend({})
 
-        await backend.init(role="local")
+        await backend.init(role=BackendRole.LOCAL)
 
         # Test log - should not raise
-        await backend.log({"test": 1.0}, step=1)
+        # Create a test metric
+        test_metric = Metric("test", 1.0, Reduce.MEAN)
+        await backend.log([test_metric], global_step=1)
 
         await backend.finish()  # Should not raise
 
