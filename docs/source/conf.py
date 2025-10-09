@@ -58,6 +58,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx-autodoc-typehints",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
@@ -165,6 +166,13 @@ autodoc_default_options = {
     "exclude-members": "__weakref__",
     "private-members": False,
 }
+
+# Autodoc configuration for cleaner signatures
+autodoc_preserve_defaults = True  # Preserves default values without expansion
+autodoc_typehints = "description"  # Move type hints to description instead of signature
+autodoc_typehints_description_target = (
+    "documented"  # Only add types to documented params
+)
 
 # Suppress warnings from third-party library docstrings
 suppress_warnings = [
