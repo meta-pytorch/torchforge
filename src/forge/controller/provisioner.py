@@ -26,6 +26,7 @@ from forge.types import ProcessConfig, ProvisionerConfig
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+IS_MONARCH_HOSTMESH_V1 = os.environ.get("MONARCH_HOSTMESH_V1", "0") == "1"
 
 def _get_port() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -125,6 +126,7 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
         self._proc_host_map = {}
+        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
@@ -148,14 +150,22 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
+
+        host_mesh = HostMesh(
+            Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
+            allocator=alloc,
+            alloc_constraints=alloc_constraints,
+        )
+        self._host_mesh_map[name] = host_mesh
         return (
-            HostMesh(
-                Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
-                allocator=alloc,
-                alloc_constraints=alloc_constraints,
-            ),
+            host_mesh
+            ,
             server_name,
         )
+
+    def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns a HostMesh by name. Assumes the requested hostmesh already exists."""
+        return self._host_mesh_map[name]
 
     async def get_proc_mesh(
         self,
