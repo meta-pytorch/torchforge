@@ -25,6 +25,7 @@ It manages model serving, text generation, and weight updates for reinforcement 
 .. autoclass:: EngineConfig
    :members:
    :undoc-members:
+   :no-inherited-members:
 ```
 
 ### SamplingConfig
