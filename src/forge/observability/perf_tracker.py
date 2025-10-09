@@ -11,7 +11,7 @@ import time
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
-from typing import List, Protocol, Tuple
+from typing import Protocol
 
 import torch
 
@@ -216,7 +216,7 @@ class _TimerProtocol(Protocol):
     def step(self, name: str) -> None:
         ...
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
+    def get_all_durations(self) -> list[tuple[str, float]]:
         ...
 
 
@@ -226,7 +226,7 @@ class _TimerCPU(_TimerProtocol):
     """
 
     def __init__(self) -> None:
-        self._durations: List[Tuple[str, float]] = []
+        self._durations: list[tuple[str, float]] = []
         self._chain_start: float | None = None
 
     def start(self) -> None:
@@ -242,7 +242,7 @@ class _TimerCPU(_TimerProtocol):
         self._durations.append((name, delta_ms))
         self._chain_start = now
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
+    def get_all_durations(self) -> list[tuple[str, float]]:
         return self._durations[:]
 
 
@@ -255,10 +255,10 @@ class _TimerCUDA(_TimerProtocol):
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available for timing")
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self._futures: List[
-            Tuple[str, Future[float], int]
+        self._futures: list[
+            tuple[str, Future[float], int]
         ] = []  # (name, future, submission_index)
-        self._durations: List[Tuple[str, float]] = []
+        self._durations: list[tuple[str, float]] = []
         self._chain_start: torch.cuda.Event | None = None
 
     def start(self) -> None:
@@ -323,7 +323,7 @@ class _TimerCUDA(_TimerProtocol):
 
         self._futures = still_pending
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
+    def get_all_durations(self) -> list[tuple[str, float]]:
         """Retrieve list of (name, duration) tuples in submission order after waiting for background polls to finish."""
         # Wait and collect if pendings; return durations.
         self._collect_completed_futures()
