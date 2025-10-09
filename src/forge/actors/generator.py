@@ -18,7 +18,6 @@ from dataclasses import asdict, dataclass, field, fields
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
-
 from monarch.actor import current_rank, endpoint, ProcMesh
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
@@ -100,6 +99,12 @@ class SamplingConfig:
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
 
+    def asdict(self):
+        # Use the full object instead of a Dict
+        ret = asdict(self)
+        ret["guided_decoding"] = self.guided_decoding
+        return ret
+
 
 @dataclass
 class EngineConfig(EngineArgs):
@@ -173,6 +178,7 @@ class Generator(GeneratorInterface):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
@@ -186,7 +192,6 @@ class Generator(GeneratorInterface):
         generator_proc_config.procs = 1
         generator_proc_config.hosts = None
         generator_proc_config.with_gpus = False
-
         generator_proc = await get_proc_mesh(process_config=generator_proc_config)
 
         if isinstance(engine_config, Mapping):
@@ -243,7 +248,7 @@ class Generator(GeneratorInterface):
 
         self.request_id = 0
         self.generator_version = 0
-        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
         # TODO: Investigate whether this can be combined with `generator.running`
         # Whether this generator is accepting requests.
@@ -257,7 +262,7 @@ class Generator(GeneratorInterface):
 
         # Setup sampling params
         self.sampling_params = get_default_sampling_params(
-            self.vllm_config, overrides=asdict(self.sampling_config)
+            self.vllm_config, overrides=self.sampling_config.asdict()
         )
 
         # Setup processors
@@ -490,7 +495,7 @@ class Generator(GeneratorInterface):
             self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
-            self.scheduler.kv_cache_manager.reset_prefix_cache()
+            self.scheduler.reset_prefix_cache()
 
         # Resume accepting requests and wake up any waiting generate() calls
         async with self.request_lock:
@@ -500,7 +505,11 @@ class Generator(GeneratorInterface):
         logger.info(f"Weight update completed (now v{self.generator_version})")
 
     @endpoint
-    async def update_weights_DEPRECATED(self, version: int):  # noqa: N802
+    async def _reset_prefix_cache(self):
+        self.scheduler.reset_prefix_cache()
+
+    @endpoint
+    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
         # TODO: If generating long sequences, this might be long and will block generator weight updates
         curr_requests = [fut for _, fut in self.requests.values()]
         if curr_requests:
@@ -549,6 +558,7 @@ class Generator(GeneratorInterface):
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                     generator_version=self.generator_version,
+                    metadata={"num_cached_tokens": request_output.num_cached_tokens},
                 )
             )
 

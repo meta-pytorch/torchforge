@@ -23,7 +23,7 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.cli.config import parse
-from forge.controller import ForgeActor, spawn_actors
+from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
@@ -130,16 +130,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
     def setup_data(self):
-        print(os.path.join(self.job_config.model.tokenizer_path, "tokenizer.json"))
+        print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer.json"
+                self.job_config.model.hf_assets_path, "tokenizer.json"
             ),
             tokenizer_config_json_path=os.path.join(
-                self.job_config.model.tokenizer_path, "tokenizer_config.json"
+                self.job_config.model.hf_assets_path, "tokenizer_config.json"
             ),
             generation_config_path=os.path.join(
-                self.job_config.model.tokenizer_path, "generation_config.json"
+                self.job_config.model.hf_assets_path, "generation_config.json"
             ),
         )
 
@@ -280,22 +280,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 async def run(cfg: DictConfig) -> None:
     logging.info("Spawing recipe...")
     process_cfg = cfg.pop("processes")
-    recipe = await spawn_actors(
-        "sft",
-        ForgeSFTRecipe,
-        {"config": cfg},
-        process_cfg,
-        set_address=True,
-    )
+    recipe = await ForgeSFTRecipe.options(**process_cfg).as_actor(cfg)
 
     logging.info("Created recipe, running setup.")
-    await recipe.setup.fanout()
+    await recipe.setup.call()
 
     logging.info("Recipe has been setup. Training now.")
-    await recipe.train.fanout()
+    await recipe.train.call()
 
     logging.info("Done training. Clean up")
-    await recipe.cleanup.fanout()
+    await recipe.cleanup.call()
     await recipe.mesh.stop()
     logging.info("All done!")
 

@@ -1,3 +1,5 @@
+# >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/qwen2_5_32b.yaml
+
 policy:
   engine_config:
     model: "Qwen/Qwen2.5-32B"
@@ -12,7 +14,6 @@ policy:
 services:
   policy:
     procs: 4
-    hosts: 1
     num_replicas: 1
     with_gpus: true
 
