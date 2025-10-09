@@ -74,12 +74,12 @@ def compute_logprobs(
     logits = logits[:, -input_ids.size(1) - 1 : -1, :].to(input_ids.device)
     scaled_logits = logits / temperature
 
-    # Convert to fp32 for numerical stability
+    # Cast up to fp32 for numerical stability
     scaled_logits_fp32 = scaled_logits.float()
 
     # get per-token log probs
     batch_size, seq_len, vocab_size = scaled_logits_fp32.shape
-    log_probs = -F.cross_entropy(
+    logprobs = -F.cross_entropy(
         scaled_logits_fp32.reshape(-1, vocab_size),
         input_ids.reshape(-1).long(),
         reduction="none",
