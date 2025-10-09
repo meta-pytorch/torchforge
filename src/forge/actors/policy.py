@@ -223,7 +223,7 @@ class Policy(PolicyInterface):
 
     @classmethod
     async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
-        cls: type["Policy"], actor: "Policy"
+        cls: type["Policy"], actor: "Policy", quiet: bool = False
     ):
         assert (
             actor._policy_proc is not None

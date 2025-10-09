@@ -202,11 +202,11 @@ class ForgeActor(Actor):
         return actor
 
     @classmethod
-    async def shutdown(cls, actor: "ForgeActor", queit: bool = False):
+    async def shutdown(cls, actor: "ForgeActor", quiet: bool = False):
         """Shuts down an actor.
         This method is used by `Service` to teardown a replica.
         """
-        if not queit:
+        if not quiet:
             logger.info(f"Shutting down actor {getattr(actor, 'name', cls.__name__)}")
         if actor._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
