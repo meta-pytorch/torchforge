@@ -13,7 +13,7 @@ job_name: forge-qwen3-32b
 checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
-rollout_threads: 8
+rollout_threads: 32 # make this 4x the number of policy replicas seems to work well
 
 # Observability configuration
 metric_logging:

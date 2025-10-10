@@ -14,7 +14,7 @@ provisioner:
   launcher: slurm
 
 # Main loop configuration
-rollout_threads: 32 # make this equal to the batch size seems to work well
+rollout_threads: 32 # make this 4x the number of policy replicas seems to work well
 
 # Observability configuration
 metric_logging:
