@@ -3,10 +3,10 @@
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 
 # Global configuration
-group_size: 2
+group_size: 8
 local_batch_size: 16 # per-device batch size
 max_req_tokens: 512
-max_res_tokens: 1536
+max_res_tokens: 1024
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 
@@ -14,7 +14,7 @@ provisioner:
   launcher: slurm
 
 # Main loop configuration
-rollout_threads: 1   # Recommended to set equal to policy.num_replicas
+rollout_threads: 1
 
 # Observability configuration
 metric_logging:
@@ -37,7 +37,7 @@ dataset:
 policy:
   engine_config:
     model: ${model}
-    tensor_parallel_size: 4
+    tensor_parallel_size: 8
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_config:

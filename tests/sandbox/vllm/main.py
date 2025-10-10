@@ -39,9 +39,69 @@ from forge.types import (
     ServiceConfig,
 )
 
+import time
+from collections import deque
+
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
 os.environ["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
+
+import time
+import statistics
+from collections import deque
+
+class ThroughputTracker:
+    def __init__(self, window_size=60):  # 60 second window
+        self.window_size = window_size
+        self.request_times = deque()
+        self.token_counts = deque()
+        self.latencies = deque()  # Store latency for each request
+        self.last_print = time.time()
+        self.print_interval = 10  # Print every 10 seconds
+
+    def start_request(self):
+        """Call this when starting a request. Returns the start time."""
+        return time.time()
+
+    def end_request(self, start_time, num_tokens):
+        """Call this when a request completes."""
+        end_time = time.time()
+        latency = end_time - start_time
+
+        self.request_times.append(end_time)
+        self.token_counts.append(num_tokens)
+        self.latencies.append(latency)
+
+        # Remove old entries outside the window
+        cutoff_time = end_time - self.window_size
+        while self.request_times and self.request_times[0] < cutoff_time:
+            self.request_times.popleft()
+            self.token_counts.popleft()
+            self.latencies.popleft()
+
+        # Print throughput info periodically
+        if end_time - self.last_print >= self.print_interval:
+            self.print_metrics()
+            self.last_print = end_time
+
+    def print_metrics(self):
+        if not self.request_times:
+            return
+
+        time_window = time.time() - self.request_times[0] if len(self.request_times) > 1 else self.print_interval
+        requests_per_sec = len(self.request_times) / max(time_window, 1)
+        tokens_per_sec = sum(self.token_counts) / max(time_window, 1)
+
+        # Calculate latency statistics
+        if self.latencies:
+            avg_latency = statistics.mean(self.latencies)
+            sorted_latencies = sorted(self.latencies)
+            p50_latency = statistics.median(sorted_latencies)
+            p95_latency = sorted_latencies[int(0.95 * len(sorted_latencies))] if len(sorted_latencies) > 0 else 0
+            p99_latency = sorted_latencies[int(0.99 * len(sorted_latencies))] if len(sorted_latencies) > 0 else 0
+
+            print(f"📊 Throughput: {requests_per_sec:.2f} req/sec | {tokens_per_sec:.2f} tok/sec")
+            print(f"⏱️ Latency: avg={avg_latency:.1f}s | p50={p50_latency:.1f}s | p95={p95_latency:.1f}s | p99={p99_latency:.1f}s")
 
 
 @dataclass
@@ -108,8 +168,20 @@ async def run(cfg: DictConfig):
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
     )
 
+    max_res_tokens = cfg.get("max_res_tokens", None)
+    assert max_res_tokens is not None, "max_res_tokens must be specified in config"
+    group_size = cfg.get("group_size", None)
+    assert group_size is not None, "group_size must be specified in config"
+    token_per_request = max_res_tokens * group_size
+    num_rollout_threads = cfg.get("rollout_threads", 1)
+
+    throughput_tracker = ThroughputTracker()
+
     async def continuous_rollouts():
         print("Starting continuous rollouts")
+        print(f"  {max_res_tokens=}")
+        print(f"  {group_size=}")
+        print(f"  {num_rollout_threads=}")
         while True:
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
@@ -120,22 +192,27 @@ async def run(cfg: DictConfig):
 
             t.step("data_loading")
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generate.route(prompt)
-            version = await policy.get_version.route()
 
+            request_start_time = throughput_tracker.start_request()
+            responses = await policy.generate.route(prompt)
+            throughput_tracker.end_request(request_start_time, token_per_request)
             t.step("policy_generation")
 
-            print(f"#------ request  ------#")
-            print(prompt)
-            print("#------ target   ------#")
-            print(target)
-            print("#------ response ------#")
-            print(responses[0].text)
-            print()
+            # print(f"#------ request  ------#")
+            # print(prompt)
+            # print("#------ target   ------#")
+            # print(target)
+            print(f"#------ responses ------#")
+            # print(responses[0].text)
+            # print()
+            assert len(responses) == group_size
 
 
-    rollout_task = asyncio.create_task(continuous_rollouts())
-    await asyncio.gather(rollout_task)
+    rollout_tasks = [
+        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+    ]
+
+    await asyncio.gather(*rollout_tasks)
     print("\nShutting down...")
     await policy.shutdown()
     await shutdown()
