@@ -268,6 +268,7 @@ class Replica:
                 success = False
             except asyncio.InvalidStateError:
                 # Future was already cancelled — safe to ignore during shutdown
+                logger.warning(f"Got invalid state error on replica {self.idx}.")
                 self.mark_failed()
                 success = False
             except Exception as e:
