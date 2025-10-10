@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Dict, List
 
 from .interface import Router
 from .replica import Replica
@@ -22,9 +21,9 @@ class RoundRobinRouter(Router):
 
     def get_replica(
         self,
-        healthy_replicas: List[Replica],
+        healthy_replicas: list[Replica],
         sess_id: str | None = None,
-        session_map: Dict[str, int] | None = None,
+        session_map: dict[str, int] | None = None,
     ) -> Replica:
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for load balancing")
@@ -40,9 +39,9 @@ class LeastLoadedRouter(Router):
 
     def get_replica(
         self,
-        healthy_replicas: List[Replica],
+        healthy_replicas: list[Replica],
         sess_id: str | None = None,
-        session_map: Dict[str, int] | None = None,
+        session_map: dict[str, int] | None = None,
     ) -> Replica:
         if not healthy_replicas:
             raise RuntimeError("No healthy replicas available for session assignment")
@@ -57,9 +56,9 @@ class SessionRouter(Router):
 
     def get_replica(
         self,
-        healthy_replicas: List[Replica],
+        healthy_replicas: list[Replica],
         sess_id: str | None = None,
-        session_map: Dict[str, int] | None = None,
+        session_map: dict[str, int] | None = None,
     ) -> Replica:
         if sess_id is None:
             raise ValueError("SessionRouter requires a session ID")

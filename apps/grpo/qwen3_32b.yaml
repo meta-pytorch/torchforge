@@ -4,7 +4,7 @@
 
 # Global configuration
 group_size: 16
-batch_size: 32
+local_batch_size: 32 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 1024
 model: "Qwen/Qwen3-32B"
@@ -59,7 +59,7 @@ trainer:
   lr_scheduler:
     warmup_steps: 1
   training:
-    local_batch_size: ${batch_size}
+    local_batch_size: ${local_batch_size}
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
@@ -87,7 +87,7 @@ trainer:
 
 # Replay buffer configuration
 replay_buffer:
-  batch_size: ${batch_size}
+  batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
   # dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
   dp_size: 1

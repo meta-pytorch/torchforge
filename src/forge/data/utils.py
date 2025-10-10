@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 import torch
 
@@ -118,7 +118,7 @@ class TuneMessage:
 def truncate(
     tokens: list[Any],
     max_seq_len: int,
-    eos_id: Optional[Any] = None,
+    eos_id: Any | None = None,
     truncation_type: str = "right",
 ) -> list[Any]:
     """
@@ -128,7 +128,7 @@ def truncate(
     Args:
         tokens (list[Any]): list of tokens to truncate
         max_seq_len (int): maximum length of the list
-        eos_id (Optional[Any]): token to replace the last token with. If None, the
+        eos_id (Any | None): token to replace the last token with. If None, the
             last token will not be replaced. Default is None.
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
