@@ -2,7 +2,7 @@
 
 We aim to make distributed observability effortless. You can call `record_metric(key, val, reduce_type)` from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. No boilerplate required-just call, flush, and visualize. Disable with `FORGE_DISABLE_METRICS=true`.
 
-## Your Superpowers
+## 1. Your Superpowers
 
 ### Call `record_metric` from Anywhere
 
@@ -78,12 +78,12 @@ await mlogger.flush(global_step=0) # Flush and reset
 Output:
 ```bash
 === [GlobalReduce] - METRICS STEP 0 ===
-my_cuda_loop/memory_delta_end_start_avg_gb: 0.015
-my_cuda_loop/memory_peak_max_gb:           0.042
+my_cuda_loop/memory_delta_end_start_avg_gb:   0.015
+my_cuda_loop/memory_peak_max_gb:              0.042
 my_cuda_loop/my_metric_mm_a_b/duration_avg_s: 0.031
 my_cuda_loop/my_metric_mm_a_b/duration_max_s: 0.186
-my_cuda_loop/total_duration_avg_s:         0.094
-my_cuda_loop/total_duration_max_s:         0.187
+my_cuda_loop/total_duration_avg_s:            0.094
+my_cuda_loop/total_duration_max_s:            0.187
 ```
 
 For convenience, you can also use `Tracer` as a context manager or decorator:
@@ -101,12 +101,12 @@ with trace(prefix="train_step", track_memory=True, timer="gpu") as t:
 ```python
 from forge.observability.perf_tracker import trace
 
-@trace(prefix="fwd_pass", track_memory=False, timer="cpu")
+@trace(prefix="my_reward_fn", track_memory=False, timer="cpu")
 async def reward_fn(x):  # Supports both synchronous and asynchronous functions
     return 1.0 if x > 0 else 0.0
 ```
 
-### Logging Modes
+## 2. Logging Modes
 
 Defined per backend. You have three options:
 
@@ -188,7 +188,7 @@ Finally, with `"logging_mode": "per_rank_no_reduce"`
 [1] [MyActor-1/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 1
 ```
 
-### Using Multiple Backends
+## 3. Using Multiple Backends
 
 For example, you can log reduced metrics to Weights & Biases while using "per_rank_no_reduce" for debugging logs. We support multiple backends during logger initialization:
 
@@ -204,8 +204,7 @@ await mlogger.init_backends.call_one({
 
 Extend `LoggerBackend` for custom logging, such as saving data to JSONL files, sending Slack notifications when a metric hits a threshold, or supporting tools like MLFlow or Grafana. After writing your backend, register it with `forge.observability.metrics.get_logger_backend_class`.
 
-# TODO: we need a better solution here that doesn't involve commiting to forge
-# e.g. register_new_backend_type(my_custom_backend_type)
+TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_backend_type(my_custom_backend_type)
 
 ```python
 class ConsoleBackend(LoggerBackend):
@@ -224,12 +223,11 @@ class ConsoleBackend(LoggerBackend):
         print(metric)
 ```
 
-### Adding a New Reduce Type
+## 4. Adding a New Reduce Type
 
 Metrics are accumulated each time `record_metric` is called. The following example implements the `Reduce.MEAN` accumulator. By tracking `sum` and `count`, it efficiently supports accurate global reduction. Users can extend this by adding custom reduce types, such as `WordCounterAccumulator` or `SampleAccumulator`, and registering them with `forge.observability.metrics.Reduce`. For details on how this is used, see `forge.observability.metrics.MetricCollector`.
 
-# TODO: we need a better solution here that doesn't involve commiting to forge
-# e.g. register_new_reduce_type(my_custom_reduce_type)
+TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_reduce_type(my_custom_reduce_type)
 
 ```python
 class MeanAccumulator(MetricAccumulator):
@@ -262,7 +260,7 @@ class MeanAccumulator(MetricAccumulator):
         self.count = 0
 ```
 
-### Behind the Scenes
+## 5. Behind the Scenes
 
 We have two main requirements:
 1. Metrics must be accumulated somewhere.
