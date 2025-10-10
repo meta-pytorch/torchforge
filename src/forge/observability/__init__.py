@@ -10,15 +10,14 @@ from .metric_actors import (
     LocalFetcherActor,
 )
 from .metrics import (
+    BackendRole,
     ConsoleBackend,
-    # Utility functions
     get_actor_name_with_rank,
     get_logger_backend_class,
-    # Backend classes
     LoggerBackend,
     MaxAccumulator,
     MeanAccumulator,
-    # Accumulator classes
+    Metric,
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
@@ -41,6 +40,9 @@ __all__ = [
     # Performance tracking
     "Tracer",
     "trace",
+    # Data classes
+    "Metric",
+    "BackendRole",
     # Enums
     "Reduce",
     # Actor classes

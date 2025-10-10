@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-docs:
+    if: github.repository_owner == 'meta-pytorch'
     name: Build Documentation
     runs-on: linux.g5.4xlarge.nvidia.gpu
     timeout-minutes: 30

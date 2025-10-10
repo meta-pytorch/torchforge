@@ -23,13 +23,11 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
-  use_vllm_builtin_load: true
 
 # Trainer configuration
 trainer:
   model_name: ${model}
   learning_rate: 1e-5
-  use_vllm_builtin_load: true
 
 # Reference model configuration
 ref_model:

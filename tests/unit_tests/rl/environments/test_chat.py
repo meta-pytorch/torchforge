@@ -10,7 +10,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 import torch
@@ -29,9 +29,9 @@ class MockTokenizer:
 
     def apply_chat_template(
         self,
-        conversation: List[Dict[str, str]],
-        tools: Optional[List[Dict]] = None,
-        documents: Optional[List[Dict[str, str]]] = None,
+        conversation: list[dict[str, str]],
+        tools: Optional[list[dict]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
@@ -42,7 +42,7 @@ class MockTokenizer:
         return_tensors: Optional[str] = None,
         return_dict: bool = False,
         return_assistant_tokens_mask: bool = False,
-        tokenizer_kwargs: Optional[Dict[str, Any]] = None,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> torch.Tensor:
         """Mock implementation of apply_chat_template."""
@@ -90,7 +90,7 @@ class TestChatState(unittest.TestCase):
 
     def test_init_with_values(self):
         """Test initialization with provided values."""
-        messages: List[Message] = [{"role": "user", "content": "Hello"}]
+        messages: list[Message] = [{"role": "user", "content": "Hello"}]
         tokens = [torch.tensor([1, 2, 3])]
         state = ChatState(history_messages=messages, history_tokens=tokens)
         self.assertEqual(state.history_messages, messages)
@@ -111,7 +111,7 @@ class TestChatObservation(unittest.TestCase):
 
     def test_init_with_values(self):
         """Test initialization with provided values."""
-        messages: List[Message] = [{"role": "user", "content": "Hello"}]
+        messages: list[Message] = [{"role": "user", "content": "Hello"}]
         tokens = torch.tensor([1, 2, 3])
         obs = ChatObservation(
             messages=messages,
