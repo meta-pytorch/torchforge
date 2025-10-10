@@ -156,6 +156,8 @@ class RLTrainer(ForgeActor):
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
+        logger.info("Compiling loss")
+        self.loss = torch.compile(self.loss)
 
     @endpoint
     async def setup(self):
