@@ -8,7 +8,6 @@ policy:
     enforce_eager: true
   sampling_config:
     n: 2
-    guided_decoding: false
     max_tokens: 512
 
 services:

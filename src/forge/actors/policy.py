@@ -26,7 +26,7 @@ from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput, RequestOutput
-from vllm.sampling_params import SamplingParams
+from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 from vllm.usage.usage_lib import UsageContext
 from vllm.utils import get_distributed_init_method
@@ -153,8 +153,8 @@ class Policy(PolicyInterface):
 
         if isinstance(sampling_params, Mapping):
             sampling_params = SamplingParams.from_optional(**sampling_params)
-            print("*" * 20)
-            print(sampling_params)
+            sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
+            logger.debug(f"Resolved sampling params: {sampling_params}")
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)

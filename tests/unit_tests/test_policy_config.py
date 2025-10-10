@@ -74,7 +74,6 @@ class TestPolicyConfig(unittest.TestCase):
 
         sampling_dict = {
             "n": 1357,
-            "guided_decoding": True,
             "max_tokens": 2468,
         }
 
@@ -95,8 +94,6 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
         self.assertEqual(policy.sampling_config.n, 1357)
-        # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-        self.assertIsNotNone(policy.sampling_config.guided_decoding)
         self.assertEqual(policy.sampling_config.max_tokens, 2468)
 
         # Test that engine_dict accepts and preserves nested dict structure
@@ -126,7 +123,6 @@ class TestPolicyConfig(unittest.TestCase):
 
         sampling_config:
           n: 2468
-          guided_decoding: true
           max_tokens: 1357
 
         available_devices: "yaml-test-device-xyz"
@@ -148,8 +144,6 @@ class TestPolicyConfig(unittest.TestCase):
             self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
             self.assertEqual(policy.sampling_config.n, 2468)
-            # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-            self.assertIsNotNone(policy.sampling_config.guided_decoding)
             self.assertEqual(policy.sampling_config.max_tokens, 1357)
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
