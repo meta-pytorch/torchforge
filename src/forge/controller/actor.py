@@ -81,11 +81,11 @@ class ForgeActor(Actor):
 
         # Pre-configure a single actor
         actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
-        await actor.shutdown()
+        await MyForgeActor.shutdown(actor)
 
         # Default usage without calling options
         actor = await MyForgeActor.as_actor(...)
-        await actor.shutdown()
+        await MyForgeActor.shutdown(actor)
         """
 
         attrs = {

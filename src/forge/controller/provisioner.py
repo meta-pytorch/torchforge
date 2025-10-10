@@ -13,7 +13,7 @@ import os
 import socket
 import uuid
 
-from typing import Any, Optional
+from typing import Any
 
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
