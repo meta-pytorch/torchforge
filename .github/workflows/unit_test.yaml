@@ -37,9 +37,7 @@ jobs:
           echo "before export"
           echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
           echo "LD_PRELOAD: ${LD_PRELOAD}"
-          ls -ahl ${CONDA_PREFIX}
-          ls -ahl ${CONDA_PREFIX}/lib
-          ls -ahl usr/lib
+          ls -ahl $CONDA/envs/test/lib
           export LD_PRELOAD=${CONDA_PREFIX}/lib/libpython3.10.so.1.0:${LD_PRELOAD}
           export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib/libpython3.10.so.1.0:${LD_LIBRARY_PATH}
           echo "after export"
