@@ -8,6 +8,8 @@
 
 import os
 
+import pytest
+
 from forge.env_constants import (
     all_constants,
     all_env_vars,
@@ -23,56 +25,47 @@ class TestGetValue:
 
     def test_get_value_returns_default_when_unset(self):
         """Test get_value returns default when env var is not set."""
-        test_var = EnvVar(
-            name="UNSET_TEST_VAR", default="default_value", description="Test"
-        )
-        if "UNSET_TEST_VAR" in os.environ:
-            del os.environ["UNSET_TEST_VAR"]
-
-        value = get_value(test_var)
-        print(f"Got {value}")
-        assert value == "default_value"
+        value = get_value("DISABLE_PERF_METRICS")
+        assert value is False
 
     def test_get_value_returns_env_value_when_set(self):
         """Test get_value returns env var value when set."""
-        test_var = EnvVar(
-            name="SET_TEST_VAR", default="default_value", description="Test"
-        )
-        os.environ["SET_TEST_VAR"] = "custom_value"
+        os.environ["MONARCH_STDERR_LOG"] = "debug"
 
         try:
-            value = get_value(test_var)
-            assert value == "custom_value"
+            value = get_value("MONARCH_STDERR_LOG")
+            assert value == "debug"
         finally:
-            del os.environ["SET_TEST_VAR"]
+            del os.environ["MONARCH_STDERR_LOG"]
 
-    def test_get_value_bool_auto_cast(self):
-        """Test get_value auto-casts to bool when default is bool."""
-        test_var = EnvVar(name="BOOL_TEST_VAR", default=False, description="Test")
-
-        os.environ["BOOL_TEST_VAR"] = "true"
+    def test_get_value_bool_auto_cast_with_true(self):
+        """Test get_value auto-casts 'true' to bool."""
+        os.environ["DISABLE_PERF_METRICS"] = "true"
         try:
-            assert get_value(test_var) is True
+            assert get_value("DISABLE_PERF_METRICS") is True
         finally:
-            del os.environ["BOOL_TEST_VAR"]
+            del os.environ["DISABLE_PERF_METRICS"]
 
-        os.environ["BOOL_TEST_VAR"] = "false"
+    def test_get_value_bool_auto_cast_with_one(self):
+        """Test get_value auto-casts '1' to bool."""
+        os.environ["DISABLE_PERF_METRICS"] = "1"
         try:
-            assert get_value(test_var) is False
+            assert get_value("DISABLE_PERF_METRICS") is True
         finally:
-            del os.environ["BOOL_TEST_VAR"]
+            del os.environ["DISABLE_PERF_METRICS"]
 
-    def test_get_value_with_explicit_cast(self):
-        """Test get_value with explicit cast_type."""
-        test_var = EnvVar(name="INT_VAR", default=0, description="Test")
-        os.environ["INT_VAR"] = "42"
-
+    def test_get_value_bool_auto_cast_with_false(self):
+        """Test get_value auto-casts 'false' to bool."""
+        os.environ["DISABLE_PERF_METRICS"] = "false"
         try:
-            value = get_value(test_var, cast_type=int)
-            assert value == 42
-            assert isinstance(value, int)
+            assert get_value("DISABLE_PERF_METRICS") is False
         finally:
-            del os.environ["INT_VAR"]
+            del os.environ["DISABLE_PERF_METRICS"]
+
+    def test_get_value_raises_key_error_for_unregistered(self):
+        """Test get_value raises KeyError for unregistered env var."""
+        with pytest.raises(KeyError, match="not registered"):
+            get_value("NONEXISTENT_VAR")
 
 
 class TestPredefinedConstants:
@@ -93,11 +86,11 @@ class TestPredefinedConstants:
         if DISABLE_PERF_METRICS.name in os.environ:
             del os.environ[DISABLE_PERF_METRICS.name]
 
-        assert get_value(DISABLE_PERF_METRICS) is False
+        assert get_value(DISABLE_PERF_METRICS.name) is False
 
         os.environ[DISABLE_PERF_METRICS.name] = "true"
         try:
-            assert get_value(DISABLE_PERF_METRICS) is True
+            assert get_value(DISABLE_PERF_METRICS.name) is True
         finally:
             del os.environ[DISABLE_PERF_METRICS.name]
 

@@ -36,5 +36,5 @@ def mock_metrics_globally(monkeypatch):
             pass
     """
 
-    monkeypatch.setenv(FORGE_DISABLE_METRICS, "true")
+    monkeypatch.setenv(FORGE_DISABLE_METRICS.name, "true")
     return Mock()

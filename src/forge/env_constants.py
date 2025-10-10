@@ -77,34 +77,41 @@ def _build_registry() -> dict[str, EnvVar]:
 _ENV_VAR_REGISTRY: dict[str, EnvVar] = _build_registry()
 
 
-def get_value(env_var: EnvVar, cast_type: type | None = None) -> Any:
+def get_value(env_var_name: str) -> Any:
     """Get the value of an environment variable with fallback to default.
 
     Args:
-        env_var: The EnvVar configuration object.
-        cast_type: Optional type to cast the value to. If not provided, returns as string or default.
+        env_var_name: The name of the environment variable.
 
     Returns:
-        The environment variable value or its default.
+        The environment variable value, auto-converted to the appropriate type
+        based on the default value, or the default value if not set.
+
+    Raises:
+        KeyError: If the env_var_name is not registered.
     """
-    print(f"Trying to get {env_var}")
-    value = os.environ.get(env_var.name, None)
-    print(f"Default value: {value}")
+    if env_var_name not in _ENV_VAR_REGISTRY:
+        raise KeyError(
+            f"Environment variable '{env_var_name}' is not registered. "
+            f"Available variables: {list(_ENV_VAR_REGISTRY.keys())}"
+        )
+
+    env_var = _ENV_VAR_REGISTRY[env_var_name]
+    value = os.environ.get(env_var_name)
 
     if value is None:
-        print(f"Returning {env_var.default}")
         return env_var.default
 
-    if cast_type is None:
-        # If default is a bool, auto-cast to bool
-        if isinstance(env_var.default, bool):
-            return value.lower() in ("true", "1", "yes")
-        return value
-
-    # Cast to the requested type
-    if cast_type == bool:
+    # Auto-convert based on the default type
+    if isinstance(env_var.default, bool):
         return value.lower() in ("true", "1", "yes")
-    return cast_type(value)
+    elif isinstance(env_var.default, int):
+        return int(value)
+    elif isinstance(env_var.default, float):
+        return float(value)
+    else:
+        # Return as string for other types
+        return value
 
 
 def all_env_vars() -> dict[str, EnvVar]:
