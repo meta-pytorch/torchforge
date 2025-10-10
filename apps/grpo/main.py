@@ -325,15 +325,19 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Global setups ---- #
-    provisioner = None
+    provisioner_config = None
     if cfg.get("provisioner", None) is not None:
-        provisioner = await init_provisioner(
-            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
+        provisioner_config = ProvisionerConfig(
+            launcher_config=LauncherConfig(**cfg.provisioner)
         )
+
+    provisioner = provisioner = await init_provisioner(provisioner_config) 
+    
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
+    assert provisioner is not None and IS_MONARCH_HOSTMESH_V1
     if provisioner is None or not IS_MONARCH_HOSTMESH_V1:
         await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
