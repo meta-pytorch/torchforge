@@ -270,7 +270,6 @@ class Replica:
                 # Future was already cancelled — safe to ignore during shutdown
                 self.mark_failed()
                 success = False
-                pass
             except Exception as e:
                 logger.debug(f"Got unexpected error on replica {self.idx}. Error:\n{e}")
                 self.mark_failed()

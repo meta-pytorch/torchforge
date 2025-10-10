@@ -349,7 +349,8 @@ async def main(cfg: DictConfig):
         ),
     )
 
-    max_steps = cfg.trainer.training.steps
+    # Set max_steps to the configured value, or -1 if not specified or Null
+    max_steps = cfg.trainer.training.steps or -1
 
     print("All services initialized successfully!")
 
@@ -436,7 +437,7 @@ async def main(cfg: DictConfig):
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
 
-        while max_steps is None or training_step < max_steps:
+        while max_steps < 0 or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
