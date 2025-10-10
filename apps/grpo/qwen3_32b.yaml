@@ -122,26 +122,33 @@ services:
     num_replicas: 1
     hosts: 1
     with_gpus: true
+    mesh_name: policy
   ref_model:
     procs: ${ref_model.parallelism.tensor_parallel_degree}
     num_replicas: 1
     with_gpus: true
+    mesh_name: ref_model
   reward_actor:
     procs: 1
     num_replicas: 1
     with_gpus: false
+    mesh_name: reward_actor
 
 actors:
   dataset:
     procs: 1
     with_gpus: false
+    mesh_name: dataset
   trainer:
     procs: 8
     hosts: 1
     with_gpus: true
+    mesh_name: trainer
   replay_buffer:
     procs: 1
     with_gpus: false
+    mesh_name: replay_buffer
   compute_advantages:
     procs: 1
     with_gpus: false
+    mesh_name: compute_advantages
