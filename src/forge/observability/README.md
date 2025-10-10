@@ -1,6 +1,6 @@
 # Observability in Forge
 
-We aim to make distributed observability effortless. You can call `record_metric(key, val, reduce_type)` from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. You can visualize aggregated results globally, per-rank or as a stream. No boilerplate required-just call, flush, and visualize. Disable with `FORGE_DISABLE_METRICS=true`.
+We aim to make distributed observability effortless. You can call `record_metric(key, val, reduce_type)` from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. You can visualize aggregated results globally, per-rank or as a stream. No boilerplate required - just call, flush, and visualize. Disable with `FORGE_DISABLE_METRICS=true`.
 
 ## 1. Your Superpowers
 
@@ -21,8 +21,8 @@ def my_fn(my_metrics):
     return my_metrics
 ```
 
+Simple example (for a distributed one, check the next section)
 ```python
-#full example
 import asyncio
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 
@@ -33,7 +33,7 @@ async def main():
 
     # Have this in any process
     def my_fn(number):
-        record_metric("my_sum_metric", number, Reduce.SUM)   #  sum(1,2,3)
+        record_metric("my_sum_metric", number, Reduce.SUM)   # sum(1,2,3)
         record_metric("my_max_metric", number, Reduce.MAX)   # max(1,2,3)
         record_metric("my_mean_metric", number, Reduce.MEAN) # mean(1,2,3)
 
@@ -42,7 +42,7 @@ async def main():
         my_fn(number)
 
     # Flush
-    await mlogger.flush.call_one(global_step=0)  # Flushes and resets metric accumulators
+    await mlogger.flush.call_one(global_step=0)
 
     # Shutdown when done
     await mlogger.shutdown.call_one()
@@ -70,13 +70,13 @@ import torch
 # ... Initialize logger (as shown in previous example)
 
 def my_fn():
-    a, b = torch.randn(1000, 1000, device="cuda"), torch.randn(1000, 1000, device="cuda")
+    a = torch.randn(1000, 1000, device="cuda")
 
     t = Tracer(prefix="my_cuda_loop", track_memory=True, timer="gpu")
     t.start()
     for _ in range(3):
-        torch.mm(a, b)
-        t.step("my_metric_mm_a_b")
+        torch.mm(a, a)
+        t.step("my_metric_mm")
     t.stop()
 
 # Accumulate metrics
@@ -91,8 +91,8 @@ Output:
 === [GlobalReduce] - METRICS STEP 0 ===
 my_cuda_loop/memory_delta_end_start_avg_gb:   0.015
 my_cuda_loop/memory_peak_max_gb:              0.042
-my_cuda_loop/my_metric_mm_a_b/duration_avg_s: 0.031
-my_cuda_loop/my_metric_mm_a_b/duration_max_s: 0.186
+my_cuda_loop/my_metric_mm/duration_avg_s:     0.031
+my_cuda_loop/my_metric_mm/duration_max_s:     0.186
 my_cuda_loop/total_duration_avg_s:            0.094
 my_cuda_loop/total_duration_max_s:            0.187
 ```
@@ -116,10 +116,9 @@ async def reward_fn(x):  # Supports both sync/async functions
 
 Defined per backend. You have three options:
 
-- **global_reduce**: N ranks = 1 charts. Ranks accumulate → Controller reduces → 1 entry per flush. Ideal for a single aggregated view (e.g., average loss chart).
-- **per_rank_reduce**: N ranks = N charts. Each rank reduces locally → log once per rank per flush. Ideal for per-rank performance debugging (e.g., GPU utilization).
-- **per_rank_no_reduce**: N ranks = N charts. Values are logged immediately without reduction. Ideal for real-time streams.
-
+- **global_reduce**: N ranks = 1 chart. Reduces metrics across all ranks. Ideal for a single aggregated view (e.g., average loss chart).
+- **per_rank_reduce**: N ranks = N charts. Each rank reduces locally and logs to its own logger. Ideal for per-rank performance debugging (e.g., GPU utilization).
+- **per_rank_no_reduce**: N ranks = N charts.  Each rank streams to its own logger without reduction. Ideal for real-time streams.
 
 Consider an example with an actor running on 2 replicas, each with 2 processes, for a total of 4 ranks. We will record the sum of the rank values. For example, rank_0 records 0, and rank_1 records 1.
 
@@ -162,18 +161,21 @@ if __name__ == "__main__":
 Output when `"logging_mode": "global_reduce"`
 ```bash
 === [GlobalReduce] - METRICS STEP 0 ===
-my_sum_rank_metric: 4.0 # (rank_0 + rank_1) * 2 steps * 2 replicas
+my_sum_rank_metric: 4.0 # (0 + 1) * 2 steps * 2 replicas
 ===============
 ```
 
 Now, let’s set `"logging_mode": "per_rank_reduce"`:
 ```bash
+# replica 1
 === [MyActor_661W_r0] - METRICS STEP 0 ===
 my_sum_rank_metric: 0.0 # (rank_0) * 2 steps
 ===============
 === [MyActor_661W_r1] - METRICS STEP 0 ===
 my_sum_rank_metric: 2.0 # (rank_1) * 2 steps
 ===============
+
+# replica 2
 === [MyActor_wQ1g_r0] - METRICS STEP 0 ===
 my_sum_rank_metric: 0.0 # (rank_0) * 2 steps
 ===============
@@ -182,7 +184,7 @@ my_sum_rank_metric: 2.0 # (rank_1) * 2 steps
 ===============
 ```
 
-Finally, with `"logging_mode": "per_rank_no_reduce"`
+Finally, with `"logging_mode": "per_rank_no_reduce"`, we have a stream with no reduction:
 ```bash
 [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0
 [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0
@@ -279,12 +281,12 @@ To address #1, we use a `MetricCollector` per process to store state. For exampl
 To address #2, we automatically spawn a `LocalFetcherActor` for each process and register it with the `GlobalLoggingActor`. This allows the `GlobalLoggingActor` to know which actors to call, and each `LocalFetcherActor` can access the local `MetricCollector`. This spawning and registration occurs in `forge.controller.provisioner.py::get_proc_mesh`.
 
 So you may ask: "what about the backends"? They live in two places:
-    a) In each MetricCollector if the backend is marked as per_rank.
-    b) In the GlobalLoggingActor if the backend is marked as global_reduce.
+- In each MetricCollector if the backend is marked as per_rank.
+- In the GlobalLoggingActor if the backend is marked as global_reduce.
 
 In summary:
 1. One `GlobalLoggingActor` serves as the controller.
 2. For each process, `forge.controller.provisioner.py::get_proc_mesh` spawns a `LocalFetcherActor`, so N ranks = N `LocalFetcherActor` instances. These are registered with the `GlobalLoggingActor`.
-3. Each rank has a singleton `MetricCollector`, acting as the local storage for metrics.
+3. Each rank has a singleton `MetricCollector`, holding accumulated metrics and per_rank backends.
 4. Calling `record_metric(key, value, reduce_type)` stores metrics locally in the `MetricCollector`.
 5. When GlobalLoggingActor.flush() -> all LocalFetcherActor.flush() --> MetricCollector.flush()
