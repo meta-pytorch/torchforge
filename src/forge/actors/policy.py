@@ -65,10 +65,10 @@ class Policy(PolicyInterface):
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     available_devices: str | None = None
     use_dcp: bool = True
-    # Gets set up by setup
+    # Remaining variables are initialized in self.setup()
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
-    policy_worker: "PolicyWorker" = None
+    policy_worker: PolicyWorker | None = None
     policy_version: int | None = None
 
     def __post_init__(self):
@@ -96,8 +96,7 @@ class Policy(PolicyInterface):
         use_dcp: bool = True,
         **kwargs,
     ) -> "Policy":
-        # Note - get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
-        # automatically.
+        # Note: get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         process_config: ProcessConfig = ProcessConfig(
             procs=cls.procs,
             hosts=cls.hosts,
@@ -168,8 +167,10 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def setup(self):
-        # Set up policy_worker
-        assert self.policy_worker is not None, "Policy worker should not be None"
+        if self.policy_worker is None:
+            raise RuntimeError(
+                "Policy worker should not be None. Usually it would be attached to Policy in the ``launch`` method."
+            )
         await self.policy_worker.setup.call()
 
         self.request_id = 0
@@ -179,10 +180,9 @@ class Policy(PolicyInterface):
         # TODO: Investigate whether this can be combined with `policy.running`
         # Whether this policy is accepting requests.
         self.accepting_requests = True
-        # Guard for accepting_requests
-        self.request_lock = asyncio.Condition()
-        # Guard for updating requests
-        self.update_lock = asyncio.Condition()
+
+        self.request_lock = asyncio.Condition()  # Guard for accepting_requests
+        self.update_lock = asyncio.Condition()  # Guard for updating requests
 
         self.vllm_config: VllmConfig = self.engine_args.create_engine_config(
             UsageContext.LLM_CLASS
