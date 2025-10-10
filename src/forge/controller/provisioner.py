@@ -12,7 +12,6 @@ import logging
 import os
 import socket
 import uuid
-from typing import Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -163,7 +162,7 @@ class Provisioner:
         num_procs: int,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: Optional[str] = None,
+        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,

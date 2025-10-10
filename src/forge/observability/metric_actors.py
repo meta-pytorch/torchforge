@@ -6,7 +6,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
@@ -116,14 +116,14 @@ class LocalFetcherActor(Actor):
     GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
     """
 
-    def __init__(self, global_logger: Optional["GlobalLoggingActor"] = None) -> None:
+    def __init__(self, global_logger: Union["GlobalLoggingActor", None] = None) -> None:
         self.global_logger = global_logger
         _is_initialized = False
 
     @endpoint
     async def flush(
         self, global_step: int, return_state: bool = False
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """Log to local logger backends (if any), reset accumulators and return metric states dict if return_state=True.
         This should only ever be called by the global logger.
 
@@ -132,7 +132,7 @@ class LocalFetcherActor(Actor):
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
-            Dict[str, Dict[str, Any]]: Dict of {metric_key: metric_state},
+            dict[str, dict[str, Any]]: of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         collector = MetricCollector()
@@ -142,8 +142,8 @@ class LocalFetcherActor(Actor):
     @endpoint
     async def init_backends(
         self,
-        metadata_per_primary_backend: Dict[str, Dict[str, Any]],
-        config: Dict[str, Any],
+        metadata_per_primary_backend: dict[str, dict[str, Any]],
+        config: dict[str, Any],
     ) -> None:
         """Init local (per-rank) logger backends and MetricCollector."""
         collector = MetricCollector()
@@ -175,13 +175,13 @@ class GlobalLoggingActor(Actor):
     """
 
     def __init__(self):
-        self.fetchers: Dict[str, LocalFetcherActor] = {}
-        self.config: Dict[str, Any] | None = None
-        self.global_logger_backends: Dict[str, LoggerBackend] = {}
-        self.metadata_per_primary_backend: Dict[str, Dict[str, Any]] = {}
+        self.fetchers: dict[str, LocalFetcherActor] = {}
+        self.config: dict[str, Any] | None = None
+        self.global_logger_backends: dict[str, LoggerBackend] = {}
+        self.metadata_per_primary_backend: dict[str, dict[str, Any]] = {}
 
     @endpoint
-    async def init_backends(self, config: Dict[str, Any]) -> None:
+    async def init_backends(self, config: dict[str, Any]) -> None:
         """
         Sets config in global actor, so other actors can get it, then eagerly initializes backend and MetricCollectors
         in all registered fetchers.
@@ -197,7 +197,7 @@ class GlobalLoggingActor(Actor):
         and reduce them to a single value, which will be logged by the primary backend in this controller.
 
         Args:
-            config (Dict[str, Any]): Config for metric logging where keys are backend names,
+            config (dict[str, Any]): Config for metric logging where keys are backend names,
                 e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
         """
         self.config = config
