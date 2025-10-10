@@ -60,10 +60,10 @@ DISABLE_PERF_METRICS = EnvVar(
 
 METRIC_TIMER_USES_GPU = EnvVar(
     name="METRIC_TIMER_USES_GPU",
-    default=False,
+    default=None,
     description=(
         "Force all timing methods in forge.observability.perf_tracker.py "
-        "to use CPU timer if False or GPU timer if True. If unset, defaults to the assigned value to the function."
+        "to use CPU timer if False or GPU timer if True. If unset (None), defaults to the timer parameter."
     ),
 )
 

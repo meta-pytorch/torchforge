@@ -8,13 +8,7 @@
 
 import os
 
-from forge.env_constants import (
-    all_constants,
-    all_env_vars,
-    DISABLE_PERF_METRICS,
-    EnvVar,
-    FORGE_DISABLE_METRICS,
-)
+from forge.env import all_env_vars, DISABLE_PERF_METRICS, EnvVar, FORGE_DISABLE_METRICS
 
 
 class TestEnvVarGetValue:
@@ -30,7 +24,7 @@ class TestEnvVarGetValue:
 
     def test_get_value_returns_env_value_when_set(self):
         """Test get_value returns env var value when set."""
-        from forge.env_constants import MONARCH_STDERR_LEVEL
+        from forge.env import MONARCH_STDERR_LEVEL
 
         os.environ["MONARCH_STDERR_LOG"] = "debug"
 
@@ -92,28 +86,37 @@ class TestPredefinedConstants:
             del os.environ[DISABLE_PERF_METRICS.name]
 
 
-class TestRegistry:
-    """Test the automatic registry functionality."""
+class TestAllEnvVars:
+    """Test the all_env_vars() function."""
 
-    def test_all_constants_returns_list_of_names(self):
-        """Test all_constants returns a list of env var names."""
-        constants = all_constants()
-        assert isinstance(constants, list)
-        assert "DISABLE_PERF_METRICS" in constants
-        assert "FORGE_DISABLE_METRICS" in constants
-
-    def test_all_env_vars_returns_dict_of_env_vars(self):
-        """Test all_env_vars returns a dictionary of EnvVar objects."""
+    def test_all_env_vars_returns_list(self):
+        """Test that all_env_vars returns a list."""
         env_vars = all_env_vars()
-        assert isinstance(env_vars, dict)
-        assert "DISABLE_PERF_METRICS" in env_vars
-        assert isinstance(env_vars["DISABLE_PERF_METRICS"], EnvVar)
-        assert env_vars["DISABLE_PERF_METRICS"] == DISABLE_PERF_METRICS
+        assert isinstance(env_vars, list)
 
-    def test_registry_is_automatically_populated(self):
-        """Test that the registry is automatically populated."""
+    def test_all_env_vars_contains_only_env_var_instances(self):
+        """Test that all_env_vars returns only EnvVar instances."""
         env_vars = all_env_vars()
-        constants = all_constants()
+        assert len(env_vars) > 0
+        assert all(isinstance(var, EnvVar) for var in env_vars)
 
-        assert len(env_vars) == len(constants)
-        assert len(env_vars) >= 6  # At least the 6 predefined constants
+    def test_all_env_vars_contains_expected_constants(self):
+        """Test that all_env_vars includes known constants."""
+        env_vars = all_env_vars()
+        env_var_names = {var.name for var in env_vars}
+
+        assert "DISABLE_PERF_METRICS" in env_var_names
+        assert "FORGE_DISABLE_METRICS" in env_var_names
+        assert "MONARCH_STDERR_LOG" in env_var_names
+
+    def test_all_env_vars_is_cached(self):
+        """Test that all_env_vars uses caching."""
+        first_call = all_env_vars()
+        second_call = all_env_vars()
+        assert first_call is second_call
+
+    def test_all_env_vars_can_iterate_and_get_values(self):
+        """Test that all_env_vars can be used to iterate and get values."""
+        for env_var in all_env_vars():
+            value = env_var.get_value()
+            assert value is not None or env_var.default is None

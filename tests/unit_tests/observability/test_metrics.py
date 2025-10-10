@@ -410,7 +410,7 @@ class TestMetricActorDisabling:
         import os
 
         import forge.observability.metric_actors
-        from forge.env_constants import FORGE_DISABLE_METRICS
+        from forge.env import FORGE_DISABLE_METRICS
         from monarch.actor import this_host
 
         # set fresh env
@@ -418,7 +418,7 @@ class TestMetricActorDisabling:
         forge.observability.metric_actors._global_logger = None
 
         if env_var_value is not None:
-            os.environ[FORGE_DISABLE_METRICS] = env_var_value
+            os.environ[FORGE_DISABLE_METRICS.name] = env_var_value
 
         procs = this_host().spawn_procs(per_host={"cpus": 1})
 
