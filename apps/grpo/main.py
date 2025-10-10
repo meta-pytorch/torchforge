@@ -349,9 +349,6 @@ async def main(cfg: DictConfig):
         ),
     )
 
-    if "steps" not in cfg.trainer.training:
-        raise ValueError("`cfg.trainer.training.steps` must be defined (can be null).")
-
     max_steps = cfg.trainer.training.steps
 
     print("All services initialized successfully!")
