@@ -61,6 +61,8 @@ jobs:
         run: |
           export LD_PRELOAD=${CONDA}/envs/test/lib/libpython3.10.so.1.0:${LD_PRELOAD}
           export LD_LIBRARY_PATH=${CONDA}/envs/test/lib/libpython3.10.so.1.0:${LD_LIBRARY_PATH}
+          echo "LD_PRELOAD=${LD_PRELOAD}"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
