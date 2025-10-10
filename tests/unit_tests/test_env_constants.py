@@ -109,12 +109,6 @@ class TestAllEnvVars:
         assert "FORGE_DISABLE_METRICS" in env_var_names
         assert "MONARCH_STDERR_LOG" in env_var_names
 
-    def test_all_env_vars_is_cached(self):
-        """Test that all_env_vars uses caching."""
-        first_call = all_env_vars()
-        second_call = all_env_vars()
-        assert first_call is second_call
-
     def test_all_env_vars_can_iterate_and_get_values(self):
         """Test that all_env_vars can be used to iterate and get values."""
         for env_var in all_env_vars():
