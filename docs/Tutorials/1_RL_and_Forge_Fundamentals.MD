@@ -213,7 +213,7 @@ Each step has different:
 Unlike supervised learning where you process independent batches, RL requires coordination:
 
 ```python
-# This won't work - creates bottlenecks and resource waste
+# While this does work, it creates bottlenecks and resource waste
 def naive_rl_step():
     # Policy waits idle while reward model works
     response = policy_model.generate(prompt)  # GPU busy
@@ -368,7 +368,7 @@ group_size = 1
 Production scaling - multiply num_replicas for services or spawn multiple actors:
 - Policy: num_replicas=8 for high inference demand
 - RewardActor: num_replicas=16 for parallel evaluation
-- Trainer: Multiple actors for distributed training (RLTrainer handles this internally)
+- Trainer: Multiple processes for distributed training (RLTrainer handles this internally)
 
 
 ### Fault Tolerance
