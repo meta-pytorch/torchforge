@@ -6,7 +6,6 @@
 
 """Centralized constants for environment variable names used in the project."""
 
-import functools
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -107,7 +106,6 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
 )
 
 
-@functools.cache
 def all_env_vars() -> list[EnvVar]:
     """Retrieves all registered environment variable names."""
     env_vars = []
