@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from forge.env import MONARCH_HOSTMESH_V1
+
 """Remote and local resource manager for allocation and provisioning."""
 import asyncio
 import functools
@@ -14,7 +16,8 @@ import socket
 import uuid
 
 from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import Actor, endpoint, ProcMesh
+
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
@@ -25,6 +28,14 @@ from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+if MONARCH_HOSTMESH_V1.get_value():
+    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+
+    logger.info("Using Monarch HostMesh v1...")
+else:
+    from monarch.actor import HostMesh, this_host
 
 
 def _get_port() -> str:
@@ -148,14 +159,29 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-        return (
-            HostMesh(
+
+        if MONARCH_HOSTMESH_V1.get_value():
+            # We are asking Monarch to allocate a single process on
+            # every host, reflected in the Extent we provide below.
+
+            # Technically, this is ["hosts", "procs"] but to reduce
+            # confusion on its relationship with procs elsewhere,
+            # we call it "no_dim".
+
+            # TODO - remove this once Monarch supports HostMesh without it.
+            host_mesh = HostMesh.allocate_nonblocking(
+                name=name,
+                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
+        else:
+            host_mesh = HostMesh(
                 Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
                 allocator=alloc,
                 alloc_constraints=alloc_constraints,
-            ),
-            server_name,
-        )
+            )
+        return host_mesh, server_name
 
     async def get_proc_mesh(
         self,
@@ -256,7 +282,7 @@ class Provisioner:
                     env_vars[env_var.name] = str(env_var.get_value())
 
             procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
+                per_host={"procs": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),
             )
 

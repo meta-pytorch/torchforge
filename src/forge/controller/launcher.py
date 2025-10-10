@@ -15,14 +15,18 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
-
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
+from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+
+from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
+
+from forge.env import MONARCH_HOSTMESH_V1
 
 from forge.types import Launcher, LauncherConfig
 
@@ -116,7 +120,8 @@ class BaseLauncher:
 
 class Slurmlauncher(BaseLauncher):
     async def initialize(self) -> None:
-        pass
+        if MONARCH_HOSTMESH_V1.get_value():
+            configure(default_transport=ChannelTransport.Tcp)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
@@ -172,6 +177,9 @@ class Mastlauncher(BaseLauncher):
         self.job_name = self.cfg.job_name or self.create_job_name()
 
     async def initialize(self) -> None:
+        if MONARCH_HOSTMESH_V1.get_value():
+            configure(default_transport=ChannelTransport.MetaTlsWithHostname)
+
         await self.launch_mast_job()
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
