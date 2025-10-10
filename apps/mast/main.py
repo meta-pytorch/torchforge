@@ -4,6 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._rust_bindings.monarch_hyperactor.config import configure
+    from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+    configure(
+        default_transport=ChannelTransport.MetaTlsWithHostname,
+    )
+
 import asyncio
 import getpass
 import uuid

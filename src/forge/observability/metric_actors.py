@@ -9,9 +9,16 @@ import logging
 import os
 from typing import Any, Union
 
-from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
+from forge.env_constants import IS_MONARCH_HOSTMESH_V1, FORGE_DISABLE_METRICS
 
-from forge.env_constants import FORGE_DISABLE_METRICS
+from monarch.actor import Actor, endpoint, ProcMesh
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._src.actor.v1.proc_mesh import get_or_spawn_controller
+    from monarch._src.actor.v1.host_mesh import this_proc
+else:
+    from monarch.actor import get_or_spawn_controller, this_proc
+
+
 from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,

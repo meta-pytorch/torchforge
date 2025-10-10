@@ -18,6 +18,17 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+)
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -38,17 +49,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-)
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -112,7 +112,7 @@ class RLTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = False
     dcp_path: str = "forge_dcp_tmp"
     vllm_tp_DEPRECATED: int = 1  # noqa: N815
     use_vllm_builtin_load: bool = True
@@ -174,6 +174,7 @@ class RLTrainer(ForgeActor):
             "use_dcp",
             "use_vllm_builtin_load",
             "dcp_path",
+            "job",
             "vllm_tp_DEPRECATED",
         }:
             engine_config.pop(key)  # Not part of job config

@@ -190,7 +190,6 @@ class Mastlauncher(BaseLauncher):
     async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
         setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
         await setup.mount.call(mount_dst="/mnt/wsfuse")
-        return await setup.get_info.choose()
 
     async def launch_mast_job(self):
         handle = self.create_server_handle()

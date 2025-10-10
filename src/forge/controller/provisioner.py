@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """Resource allocation and provisioning for both local and remote."""
+
 import asyncio
 import functools
 import logging
@@ -13,19 +14,21 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch._src.actor.shape import NDSlice, Shape, Extent
 from monarch.tools import commands
+from monarch.actor import Actor, endpoint, ProcMesh
+
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1, FORGE_DISABLE_METRICS
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+else:
+    from monarch.actor import HostMesh, this_host
 
 from forge.controller.launcher import BaseLauncher, get_launcher
-
-from forge.env_constants import FORGE_DISABLE_METRICS
-
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
 
 def _get_port() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -125,6 +128,7 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
         self._proc_host_map = {}
+        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
@@ -148,14 +152,31 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-        return (
-            HostMesh(
+        if IS_MONARCH_HOSTMESH_V1:
+            # "procs" here is actually a dumby value, which Monarch requires but will ignore
+            # TODO: remove dummy dimension once Monarch supports HostMesh without it
+            host_mesh = HostMesh.allocate_nonblocking(
+                name=name,
+                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
+        else:
+            host_mesh = HostMesh(
                 Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
                 allocator=alloc,
                 alloc_constraints=alloc_constraints,
-            ),
+            )
+        self._host_mesh_map[name] = host_mesh
+        return (
+            host_mesh
+            ,
             server_name,
         )
+
+    def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns a HostMesh by name. Assumes the requested hostmesh already exists."""
+        return self._host_mesh_map[name]
 
     async def get_proc_mesh(
         self,
@@ -240,10 +261,16 @@ class Provisioner:
                 # Shows detailed logs for Monarch rust failures
                 env_vars["RUST_BACKTRACE"] = "1"
 
-            procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
-                bootstrap=functools.partial(bootstrap, env=env_vars),
-            )
+            if IS_MONARCH_HOSTMESH_V1:                
+                procs = host_mesh.spawn_procs(
+                    per_host={"gpus": num_procs},
+                    setup=functools.partial(bootstrap, env=env_vars),
+                )
+            else:
+                procs = host_mesh.spawn_procs(
+                    per_host={"gpus": num_procs},
+                    bootstrap=functools.partial(bootstrap, env=env_vars),
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)

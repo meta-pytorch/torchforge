@@ -6,6 +6,16 @@
 
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1
+if IS_MONARCH_HOSTMESH_V1:
+    from monarch._rust_bindings.monarch_hyperactor.config import configure
+    from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+    configure(
+        default_transport=ChannelTransport.MetaTlsWithHostname,
+    )
+
+from forge.env_constants import  IS_MONARCH_HOSTMESH_V1
+
 import asyncio
 import time
 import uuid
@@ -31,7 +41,8 @@ from forge.data.rewards import MathReward, ThinkingReward
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
+from forge.controller.provisioner import init_provisioner
+from forge.env_constants import IS_MONARCH_HOSTMESH_V1
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
@@ -314,14 +325,17 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Global setups ---- #
+    provisioner = None
     if cfg.get("provisioner", None) is not None:
-        await init_provisioner(
+        provisioner = await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
-    await ts.initialize(strategy=ts.ControllerStorageVolumes())
+
+    if provisioner is None or not IS_MONARCH_HOSTMESH_V1:
+        await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
     # ---- Setup services ---- #
 
@@ -348,8 +362,18 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+    print("Services initialized successfully!")
 
-    print("All services initialized successfully!")
+    if provisioner is not None and IS_MONARCH_HOSTMESH_V1:
+        #TODO: support multiple host meshses
+        trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
+        #TODO: support multiple host meshses
+        trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
+        await ts.initialize(
+            mesh=trainer_hosts.spawn_procs(per_host={"gpus": 8}),
+            strategy=ts.LocalRankStrategy()
+        )
+    print("Torchstore initialized successfully")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
