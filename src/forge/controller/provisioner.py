@@ -223,9 +223,9 @@ class Provisioner:
                 """Runs on process startup.
 
                 We use this to set environment variables like CUDA, etc.
-                We prefer to pass in an environment variable to bootstrap,
-                but there are occasionally host-specific pieces that must
-                be set once the process is alive.
+                We prefer to pass in environment variables to bootstrap,
+                but there are occasionally host-specific environments that can
+                only be set once the process is alive on remote hosts.
 
                 """
                 # bootstrap is run on all processes. We use this

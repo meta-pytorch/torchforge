@@ -3,7 +3,7 @@
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 
 # Global configuration
-group_size: 16
+group_size: 2
 batch_size: 8
 max_req_tokens: 512
 max_res_tokens: 512
