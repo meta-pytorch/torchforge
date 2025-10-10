@@ -71,8 +71,8 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 4
-    tensor_parallel_degree: 2
+    data_parallel_shard_degree: 8
+    tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
@@ -85,7 +85,7 @@ trainer:
     interval: 500
     async_mode: "disabled"
   activation_checkpoint:
-    mode: selective
+    mode: full
     selective_ac_option: op
   comm:
     # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP
@@ -112,7 +112,7 @@ ref_model:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: 2
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -121,6 +121,10 @@ ref_model:
     enable: true
     initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
     initial_load_in_hf: true
+  comm:
+    # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP
+    # from oilfs if the traienr is not in the same region as in oilfs
+    init_timeout_seconds: 1200
 
 # All resource allocations
 services:
@@ -131,7 +135,7 @@ services:
     mesh_name: policy
     hosts: 1
   ref_model:
-    procs: 1
+    procs: 2
     num_replicas: 2
     with_gpus: true
     mesh_name: ref_model

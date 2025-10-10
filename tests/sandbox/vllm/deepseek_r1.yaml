@@ -13,6 +13,9 @@ policy:
     guided_decoding: false
     max_tokens: 512
 
+provisioner:
+  launcher: slurm
+
 services:
   policy:
     procs: 8

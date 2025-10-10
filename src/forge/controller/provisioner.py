@@ -12,7 +12,6 @@ import logging
 import os
 import socket
 import uuid
-from typing import Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -20,7 +19,7 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.env_constants import FORGE_DISABLE_METRICS
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -48,7 +47,13 @@ async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     """Returns the host name and port of the host mesh."""
     throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
     fetcher = throwaway_procs.spawn("_fetcher", _RemoteInfoFetcher)
-    fetcher = fetcher.slice(procs=0)
+
+    # This will reduce something like extent = {"hosts": 2, "procs": 1} to
+    # {"hosts": 1, "procs": 1}.
+    singleton_slice = {k: slice(0, 1) for k in fetcher.extent.keys()}
+    fetcher = fetcher.slice(**singleton_slice)
+    # Fetcher should be a singleton at this point - call_one() will fail otherwise
+
     host, port = await fetcher.get_info.call_one()
     await throwaway_procs.stop()
     return host, port
@@ -157,7 +162,7 @@ class Provisioner:
         num_procs: int,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: Optional[str] = None,
+        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,
@@ -232,6 +237,9 @@ class Provisioner:
                 env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
                 env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
+                # Shows detailed logs for Monarch rust failures
+                env_vars["RUST_BACKTRACE"] = "1"
+
             procs = host_mesh.spawn_procs(
                 per_host={"gpus": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),
@@ -253,8 +261,11 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # Spawn local fetcher actor on each process and register with global logger
+        if os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true":
+            from forge.observability.metric_actors import get_or_create_metric_logger
+
+            _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -275,6 +286,10 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
+                from forge.observability.metric_actors import (
+                    get_or_create_metric_logger,
+                )
+
                 global_logger = await get_or_create_metric_logger(proc_mesh)
                 await global_logger.deregister_fetcher.call_one(proc_mesh)
 

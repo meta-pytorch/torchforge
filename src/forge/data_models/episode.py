@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Sequence
 
 import torch
 
@@ -32,7 +32,7 @@ class Episode:
 
     # The log probabilities of the target tokens, for prompt part it's set to 0,
     # for generation part it's computed from the Generator/Sampler.
-    log_probs: Optional[torch.Tensor] = None
+    log_probs: torch.Tensor | None = None
 
     # TODO: add more fields as required
     state: str = ""
