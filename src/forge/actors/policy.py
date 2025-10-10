@@ -126,7 +126,7 @@ class Policy(PolicyInterface):
             engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
             logger.debug(f"Resolved engine args: {engine_args}")
 
-        vllm_config = engine_args.create_vllm_config(UsageContext.LLM_CLASS)
+        vllm_config = engine_args.create_engine_config(UsageContext.LLM_CLASS)
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
@@ -187,7 +187,7 @@ class Policy(PolicyInterface):
         # Guard for updating requests
         self.update_lock = asyncio.Condition()
 
-        self.vllm_config: VllmConfig = self.engine_args.create_vllm_config(
+        self.vllm_config: VllmConfig = self.engine_args.create_engine_config(
             UsageContext.LLM_CLASS
         )
 
