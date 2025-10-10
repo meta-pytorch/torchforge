@@ -60,7 +60,7 @@ jobs:
       - name: Patch shared paths
         run: |
           export LD_PRELOAD=${CONDA_PREFIX}/lib/libpython3.10.so.1.0:${LD_PRELOAD}
-          export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}
+          export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib/libpython3.10.so.1.0:${LD_LIBRARY_PATH}
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
