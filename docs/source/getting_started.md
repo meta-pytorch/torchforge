@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Getting Started
 
 This guide will walk you through installing TorchForge, understanding its dependencies, verifying your setup, and running your first training job.
