@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 import jinja2
 
