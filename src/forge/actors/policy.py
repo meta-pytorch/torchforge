@@ -12,7 +12,7 @@ import os
 import sys
 from collections.abc import Mapping
 from copy import copy
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass, field, fields
 
 import torch
 import torch.distributed.checkpoint as dcp
@@ -41,51 +41,25 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-# @dataclass
-# class SamplingConfig:
-#     """
-#     Overrides for vLLMs sampling params.
-
-#     Note: We'll want to tie this closer to or directly use vllm's
-#             SamplingParams. It is currently used to track a supported
-#             subset
-
-#     Args:
-#         n: Number of samples to generate.
-#         guided_decoding: Whether to use guided decoding.
-#         max_tokens: Maximum number of tokens to generate.
-#     """
-
-#     n: int = 1
-#     guided_decoding: bool = False
-#     max_tokens: int = 512
-#     temperature: float = 1.0
-#     top_p: float = 1.0
-#     logprobs: int = 1
-
-#     def __post_init__(self):
-#         super().__init__()
-#         gd_params = None
-#         if self.guided_decoding:
-#             gd_params = GuidedDecodingParams(choice=["Positive", "Negative"])
-#         self.guided_decoding = gd_params
-
-#     @classmethod
-#     def from_dict(cls, d: Mapping):
-#         d = dict(d)
-#         all_fields = set(cls.__dataclass_fields__.keys())
-#         valid_args = {k: v for k, v in d.items() if k in all_fields}
-#         return cls(**valid_args)
-
-#     def asdict(self):
-#         # Use the full object instead of a Dict
-#         ret = asdict(self)
-#         ret["guided_decoding"] = self.guided_decoding
-#         return ret
 
 
 @dataclass
