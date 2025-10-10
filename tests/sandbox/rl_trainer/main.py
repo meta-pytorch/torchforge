@@ -156,7 +156,7 @@ async def main(cfg: DictConfig):
     await init_provisioner(
         ProvisionerConfig(
             launcher_config=LauncherConfig(
-                launcher=Launcher(cfg.get(LAUNCHER_KEY, Launcher.SLURM.value)),
+                launcher=cfg.get(LAUNCHER_KEY, Launcher.SLURM.value),
                 job_name=cfg.get(JOB_NAME_KEY, None),
                 services={k: ServiceConfig(**v) for k, v in cfg.services.items()},
                 actors={k: ProcessConfig(**v) for k, v in cfg.actors.items()},

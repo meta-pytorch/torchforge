@@ -256,6 +256,9 @@ class RLTrainer(ForgeActor):
         t = Tracer("rl_trainer_perf/step", timer="gpu", track_memory=True)
         t.start()
 
+        for i in inputs:
+            logger.info(f"inputs: {len(i)}")
+
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
         local_targets = targets[self.engine.dp_rank]
