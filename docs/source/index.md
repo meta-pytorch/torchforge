@@ -242,7 +242,6 @@ faq
 
 * {ref}`genindex` - Index of all documented objects
 * {ref}`modindex` - Python module index
-* {ref}`search` - Search the documentation
 
 ---
 
