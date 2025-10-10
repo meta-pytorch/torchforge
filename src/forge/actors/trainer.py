@@ -21,7 +21,6 @@ import torchstore as ts
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
-from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -114,8 +113,6 @@ class RLTrainer(ForgeActor):
     state_dict_key: str = "model_state_dict"
     use_dcp: bool = True
     dcp_path: str = "forge_dcp_tmp"
-    vllm_tp_DEPRECATED: int = 1  # noqa: N815
-    use_vllm_builtin_load: bool = True
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -160,10 +157,6 @@ class RLTrainer(ForgeActor):
         }
         os.environ.update(env)
 
-        # compile loss
-        logger.info("Compiling loss")
-        self.loss = torch.compile(self.loss)
-
     @endpoint
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
@@ -172,9 +165,7 @@ class RLTrainer(ForgeActor):
             "loss",
             "state_dict_key",
             "use_dcp",
-            "use_vllm_builtin_load",
             "dcp_path",
-            "vllm_tp_DEPRECATED",
         }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
@@ -307,75 +298,11 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    async def push_weights_DEPRECATED(  # noqa: N802
-        self, policy_version: int, vllm_tp_DEPRECATED: int = 1
-    ) -> None:  # noqa: N802
-        """[Deprecated] This method pushes weights to torchstore in the vllm format,
-        which is buggy and not scalable to other models.
-        Deprecated in favor of push_weights."""
-        return await self._push_weights_DEPRECATED(policy_version, vllm_tp_DEPRECATED)
-
-    async def _push_weights_DEPRECATED(  # noqa: N802
-        self, policy_version: int, vllm_tp_DEPRECATED: int
-    ) -> None:  # noqa: N802
-        # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
-        # TODO:
-        # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
-        #    May need to replicate the same in this code path.
-        # 2. Unify CheckpointManager and TorchStore weights save control path.
-        if "model" not in self.engine.checkpointer.states:
-            raise RuntimeError("Model state not found in checkpointer state")
-
-        sd = self.engine.checkpointer.states["model"].state_dict()
-        flattened_state_dict, _ = flatten_state_dict(sd)
-
-        if self.engine.checkpointer.sd_adapter is None:
-            raise RuntimeError(
-                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
-            )
-        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-
-        # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(
-            sd=hf_state_dict,
-            num_layers=self.engine.model_args.n_layers,
-            vllm_tp=vllm_tp_DEPRECATED,
-        )
-
-        key = f"{self.state_dict_key}{DELIM}{policy_version}"
-        if self.use_dcp:
-            # TODO - DCP should probably be being saved to NFS explicitly?
-            # Right now it will only save everything locally
-            storage_writer = torch.distributed.checkpoint.FileSystemWriter(
-                key, single_file_per_rank=False, thread_count=8
-            )
-            metadata = dcp.save(
-                storage_writer=storage_writer, state_dict=vllm_ready_hf_sd
-            )
-            await ts.put(key, metadata)
-
-            # Delete old weight versions if they exist
-            if self.rank == 0:
-                cleanup_old_weight_versions(
-                    state_dict_key=self.state_dict_key,
-                    delim=DELIM,
-                    current_policy_version=policy_version,
-                )
-        else:
-            await ts.put_state_dict(vllm_ready_hf_sd, key)
-
-    @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
         t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
         t.start()
         logger.info(f"Pushing weights for policy version {policy_version}")
-        if not self.use_vllm_builtin_load:
-            result = await self._push_weights_DEPRECATED(
-                policy_version, self.vllm_tp_DEPRECATED
-            )
-            t.step("push_weights_DEPRECATED")
-            return result
 
         start_time = time.perf_counter()
         if "model" not in self.engine.checkpointer.states:
