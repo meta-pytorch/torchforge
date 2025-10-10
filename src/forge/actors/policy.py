@@ -53,6 +53,7 @@ from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
 from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
+from forge.env import TORCHSTORE_USE_RDMA
 from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
@@ -140,7 +141,7 @@ class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     available_devices: str | None = None
-    use_dcp: bool = True
+    use_dcp: bool = not TORCHSTORE_USE_RDMA.get_value()
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None
