@@ -6,7 +6,7 @@
 group_size: 2
 batch_size: 8
 max_req_tokens: 512
-max_res_tokens: 512
+max_res_tokens: 1536
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 
@@ -14,7 +14,7 @@ provisioner:
   launcher: slurm
 
 # Main loop configuration
-rollout_threads: 1   # Recommended to set equal to policy.num_replicas
+rollout_threads: 8  # Recommended to set equal to policy.num_replicas
 
 # Observability configuration
 metric_logging:
