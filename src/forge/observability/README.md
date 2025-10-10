@@ -4,7 +4,7 @@ We aim to make distributed observability effortless. You can call `record_metric
 
 ## 1. Your Superpowers
 
-### Call `record_metric` from Anywhere
+### 1.1 Call `record_metric` from Anywhere
 
 Simple to use, with no need to pass dictionaries around.
 
@@ -46,7 +46,7 @@ my_max_metric:  3.0
 my_mean_metric: 2.0
 ```
 
-### Track Performance: Timing and Memory
+### 1.2 Track Performance: Timing and Memory
 
 Use `Tracer` for tracking durations and memory usage. Overhead is minimal, and GPU timing is non-blocking. Set `timer="gpu"` for kernel-level precision. Tracer leverages `record_metric` in the backend.
 
@@ -61,12 +61,12 @@ def my_fn():
         1000, 1000, device="cuda"
     )
 
-    tracer = Tracer(prefix="my_cuda_loop", track_memory=True, timer="gpu")
-    tracer.start()
+    t = Tracer(prefix="my_cuda_loop", track_memory=True, timer="gpu")
+    t.start()
     for _ in range(3):
         torch.mm(a, b)
-        tracer.step("my_metric_mm_a_b")
-    tracer.stop()
+        t.step("my_metric_mm_a_b")
+    t.stop()
 
 # Accumulate metrics
 for _ in range(2):
@@ -96,21 +96,16 @@ with trace(prefix="train_step", track_memory=True, timer="gpu") as t:
     loss = model(x)
     t.step("bwd")
     loss.backward()
-```
-
-```python
-from forge.observability.perf_tracker import trace
 
 @trace(prefix="my_reward_fn", track_memory=False, timer="cpu")
 async def reward_fn(x):  # Supports both synchronous and asynchronous functions
     return 1.0 if x > 0 else 0.0
 ```
-
 ## 2. Logging Modes
 
 Defined per backend. You have three options:
 
-- **global_reduce**: N ranks = 1 charts. Ranks accumulate → controller reduces → 1 entry per flush. Ideal for a single aggregated view (e.g., average loss chart).
+- **global_reduce**: N ranks = 1 charts. Ranks accumulate → Controller reduces → 1 entry per flush. Ideal for a single aggregated view (e.g., average loss chart).
 - **per_rank_reduce**: N ranks = N charts. Each rank reduces locally → log once per rank per flush. Ideal for per-rank performance debugging (e.g., GPU utilization).
 - **per_rank_no_reduce**: N ranks = N charts. Values are logged immediately without reduction. Ideal for real-time streams.
 
@@ -153,7 +148,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Output:
+Output :
 ```bash
 === [GlobalReduce] - METRICS STEP 0 ===
 my_sum_rank_metric: 4.0 # (rank_0 + rank_1) * 2 steps * 2 replicas
@@ -190,7 +185,7 @@ Finally, with `"logging_mode": "per_rank_no_reduce"`
 
 ## 3. Using Multiple Backends
 
-For example, you can log reduced metrics to Weights & Biases while using "per_rank_no_reduce" for debugging logs. We support multiple backends during logger initialization:
+For example, you can do `global_reduce` with Weights & Biases while using `per_rank_no_reduce` for debugging logs on the console.
 
 ```python
 mlogger = await get_or_create_metric_logger(process_name="Controller")
@@ -200,13 +195,14 @@ await mlogger.init_backends.call_one({
 })
 ```
 
-### Adding a New Backend
+### 3.1 Adding a New Backend
 
 Extend `LoggerBackend` for custom logging, such as saving data to JSONL files, sending Slack notifications when a metric hits a threshold, or supporting tools like MLFlow or Grafana. After writing your backend, register it with `forge.observability.metrics.get_logger_backend_class`.
 
 TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_backend_type(my_custom_backend_type)
 
 ```python
+# Example of a custom backend
 class ConsoleBackend(LoggerBackend):
     def __init__(self, logger_backend_config: dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
@@ -225,11 +221,12 @@ class ConsoleBackend(LoggerBackend):
 
 ## 4. Adding a New Reduce Type
 
-Metrics are accumulated each time `record_metric` is called. The following example implements the `Reduce.MEAN` accumulator. By tracking `sum` and `count`, it efficiently supports accurate global reduction. Users can extend this by adding custom reduce types, such as `WordCounterAccumulator` or `SampleAccumulator`, and registering them with `forge.observability.metrics.Reduce`. For details on how this is used, see `forge.observability.metrics.MetricCollector`.
+Metrics are accumulated each time `record_metric` is called. The following example implements the `Reduce.MEAN` accumulator. Users can extend this by adding custom reduce types, such as `WordCounterAccumulator` or `SampleAccumulator`, and registering them with `forge.observability.metrics.Reduce`. For details on how this is used, see `forge.observability.metrics.MetricCollector`.
 
 TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_reduce_type(my_custom_reduce_type)
 
 ```python
+# Example of a custom reduce type
 class MeanAccumulator(MetricAccumulator):
     def __init__(self, reduction: Reduce) -> None:
         super().__init__(reduction)
@@ -284,6 +281,10 @@ def my_fn(my_metrics):
 ```
 
 To address #2, we automatically spawn a `LocalFetcherActor` for each process and register it with the `GlobalLoggingActor`. This allows the `GlobalLoggingActor` to know which actors to call, and each `LocalFetcherActor` can access the local `MetricCollector`. This spawning and registration occurs in `forge.controller.provisioner.py::get_proc_mesh`.
+
+So you may ask: "what about the backends"? They live in two places:
+    a) In each MetricCollector if the backend is marked as per_rank.
+    b) In the GlobalLoggingActor if the backend is marked as global_reduce.
 
 In summary:
 1. One `GlobalLoggingActor` serves as the controller.
