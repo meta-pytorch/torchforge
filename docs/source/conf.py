@@ -191,6 +191,13 @@ suppress_warnings = [
 # Treat warnings as non-fatal - continue build even if there are warnings
 keep_warnings = True
 
+# Napoleon settings for Google-style docstrings (from torchtitan and other dependencies)
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_preprocess_types = False
+
 
 # -- Sphinx Gallery configuration -------------------------------------------
 sphinx_gallery_conf = {
