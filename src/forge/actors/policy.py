@@ -61,6 +61,28 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class Policy(PolicyInterface):
+    """Instance of a vLLM-based Policy.
+
+    This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
+    main difference is that all communications are controlled here via Monarch's proc meshes.
+
+    Args:
+        engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
+        sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
+        available_devices (str): The available devices to use for the vLLM engine.
+        use_dcp (bool): Whether to use DCP for NFS-based weight sync.
+
+    Example:
+    >>> policy = await Policy.options(procs=1, num_replicas=1, with_gpus=True).as_service(
+    ...     engine_args=EngineArgs(...),
+    ...     sampling_params=SamplingParams(...),
+    ...     )
+    >>> await policy.generate("Tell me a joke")
+    Completion(prompt="Tell me a joke", text="A: Why did the chicken cross the road? B: To get to the other side.",
+    token_ids=[...], logprobs=[...])
+    >>> await policy.shutdown()
+    """
+
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     available_devices: str | None = None
@@ -69,7 +91,6 @@ class Policy(PolicyInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     policy_worker: PolicyWorker | None = None
-    policy_version: int | None = None
 
     def __post_init__(self):
         super().__init__()
@@ -77,6 +98,7 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.running = False
+        self.policy_version: int = 0
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
@@ -96,6 +118,12 @@ class Policy(PolicyInterface):
         use_dcp: bool = True,
         **kwargs,
     ) -> "Policy":
+        """We overwrite the default Service launch method in order to setup Actors within this "coordinating" Actor.
+        We first create a proc_mesh for the workers, then a proc_mesh for the policy, and then we spawn the workers
+        and the policy in setup.
+
+        The args here generally should match those in the `__init__` method of the Policy class.
+        """
         # Note: get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         process_config: ProcessConfig = ProcessConfig(
             procs=cls.procs,
@@ -174,11 +202,9 @@ class Policy(PolicyInterface):
         await self.policy_worker.setup.call()
 
         self.request_id = 0
-        self.policy_version = 0
         self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
         # TODO: Investigate whether this can be combined with `policy.running`
-        # Whether this policy is accepting requests.
         self.accepting_requests = True
 
         self.request_lock = asyncio.Condition()  # Guard for accepting_requests
