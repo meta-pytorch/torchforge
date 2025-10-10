@@ -2,11 +2,9 @@
 
 Welcome to TorchForge! This guide will walk you through installing TorchForge, understanding its dependencies, verifying your setup, and running your first training job.
 
-##  Prerequisites
+## System Requirements
 
 Before installing TorchForge, ensure your system meets the following requirements.
-
-### System Requirements
 
 | Component | Requirement | Notes |
 |-----------|-------------|-------|
@@ -18,25 +16,25 @@ Before installing TorchForge, ensure your system meets the following requirement
 | **RAM** | 32GB+ recommended | Depends on model size |
 | **Disk Space** | 50GB+ free | For models, datasets, and checkpoints |
 
-### Required Tools
+## Prerequisites
 
-1. **Conda or Miniconda**: For environment management
-   - Download from [conda.io](https://docs.conda.io/en/latest/miniconda.html)
+- **Conda or Miniconda**: For environment management
+  - Download from [conda.io](https://docs.conda.io/en/latest/miniconda.html)
 
-2. **GitHub CLI (gh)**: Required for downloading pre-packaged dependencies
-   - Install instructions: [github.com/cli/cli#installation](https://github.com/cli/cli#installation)
-   - After installing, authenticate with: `gh auth login`
-   - You can use either HTTPS or SSH as the authentication protocol
+- **GitHub CLI (gh)**: Required for downloading pre-packaged dependencies
+  - Install instructions: [github.com/cli/cli#installation](https://github.com/cli/cli#installation)
+  - After installing, authenticate with: `gh auth login`
+  - You can use either HTTPS or SSH as the authentication protocol
 
-3. **Git**: For cloning the repository
-   - Usually pre-installed on Linux systems
-   - Verify with: `git --version`
+- **Git**: For cloning the repository
+  - Usually pre-installed on Linux systems
+  - Verify with: `git --version`
 
 ## Understanding TorchForge's Dependencies
 
 TorchForge is built on a carefully curated stack of components, each solving specific challenges in distributed RL. Understanding these dependencies helps you troubleshoot issues and customize your setup.
 
-### Monarch: The Distributed Foundation
+### Monarch
 
 **What it is:** Monarch is a PyTorch-native distributed programming framework that brings single-controller orchestration to entire clusters.
 
@@ -53,7 +51,7 @@ TorchForge is built on a carefully curated stack of components, each solving spe
 - Multipart messaging for zero-copy data transfers
 - Integration with PyTorch's distributed primitives
 
-### vLLM: High-Performance Inference
+### vLLM
 
 **What it is:** A fast and memory-efficient inference engine optimized for large language models.
 
@@ -67,7 +65,7 @@ TorchForge is built on a carefully curated stack of components, each solving spe
 
 **Technical details:** vLLM version 0.10.0+ is required. TorchForge integrates directly with vLLM's engine, giving you access to customize generation strategies, memory management, and inference logic.
 
-### TorchTitan: Production Training Infrastructure
+### TorchTitan
 
 **What it is:** Meta's production-grade LLM training platform with advanced parallelism support.
 
@@ -81,7 +79,7 @@ TorchForge is built on a carefully curated stack of components, each solving spe
 
 **Technical details:** TorchForge integrates with TorchTitan for training step logic and sharding strategies, enabling experimentation without framework constraints.
 
-### TorchStore: Weight Synchronization
+### TorchStore
 
 **What it is:** A distributed, in-memory key-value store for PyTorch tensors, built on Monarch.
 
@@ -95,7 +93,7 @@ TorchForge is built on a carefully curated stack of components, each solving spe
 
 **Technical details:** TorchStore provides a simple key-value interface while optimizing data movement behind the scenes, staying distributed across the cluster until requested.
 
-### PyTorch Nightly: Cutting-Edge Features
+### PyTorch Nightly
 
 **Why Nightly:** TorchForge requires the latest PyTorch features:
 - **Native DTensor Support**: Distributed tensors that span multiple devices
@@ -107,198 +105,148 @@ TorchForge is built on a carefully curated stack of components, each solving spe
 
 ## Installation
 
-TorchForge offers two installation methods. Choose the one that fits your setup:
+TorchForge uses pre-packaged wheels for all dependencies, making installation faster and more reliable.
 
-### Method 1: Basic Installation (Recommended)
+1. **Clone the Repository**
 
-This method uses pre-packaged wheels for all dependencies, making installation faster and more reliable.
+   ```bash
+   git clone https://github.com/meta-pytorch/forge.git
+   cd forge
+   ```
 
-**Step 1: Clone the Repository**
+2. **Create Conda Environment**
 
-```bash
-git clone https://github.com/meta-pytorch/forge.git
-cd forge
-```
+   ```bash
+   conda create -n forge python=3.10
+   conda activate forge
+   ```
 
-**Step 2: Create Conda Environment**
+3. **Run Installation Script**
 
-```bash
-conda create -n forge python=3.10
-conda activate forge
-```
+   ```bash
+   ./scripts/install.sh
+   ```
 
-**Step 3: Run Installation Script**
+   The installation script will:
+   - Install system dependencies using DNF (or your package manager)
+   - Download pre-built wheels for PyTorch nightly, Monarch, vLLM, and TorchTitan
+   - Install TorchForge and all Python dependencies
+   - Configure the environment for GPU training
 
-```bash
-./scripts/install.sh
-```
+   ```{tip}
+   **Using sudo instead of conda**: If you prefer installing system packages directly rather than through conda, use:
+   `./scripts/install.sh --use-sudo`
+   ```
 
-The installation script will:
-- Install system dependencies using DNF (or your package manager)
-- Download pre-built wheels for PyTorch nightly, Monarch, vLLM, and TorchTitan
-- Install TorchForge and all Python dependencies
-- Configure the environment for GPU training
+4. **Verify Installation**
 
-```{tip}
-**Using sudo instead of conda**: If you prefer installing system packages directly rather than through conda, use:
-`./scripts/install.sh --use-sudo`
-```
+   Test that TorchForge is properly installed:
 
-**Step 4: Verify Installation**
+   ```bash
+   python -c "import forge; print(f'TorchForge version: {forge.__version__}')"
+   python -c "import monarch; print('Monarch: OK')"
+   python -c "import vllm; print(f'vLLM version: {vllm.__version__}')"
+   ```
 
-Test that TorchForge is properly installed:
-
-```bash
-python -c "import forge; print(f'TorchForge version: {forge.__version__}')"
-python -c "import monarch; print('Monarch: OK')"
-python -c "import vllm; print(f'vLLM version: {vllm.__version__}')"
-```
-
-### Method 2: Meta Internal Installation (Alternative)
-
-For Meta employees or those with access to Meta's internal tools:
-
-**Step 1: Install uv Package Manager**
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-**Step 2: Clone and Setup**
-
-```bash
-git clone https://github.com/meta-pytorch/forge
-cd forge
-uv sync --all-extras
-source .venv/bin/activate
-```
-
-**Step 3: Configure CUDA**
-
-```bash
-# Install CUDA if needed
-feature install --persist cuda_12_9
-
-# Set environment variables
-export CUDA_VERSION=12.9
-export NVCC=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-$CUDA_VERSION/bin/nvcc
-export CUDA_HOME=/usr/local/cuda-$CUDA_VERSION
-export PATH="$CUDA_HOME/bin:$PATH"
-export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
-export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-```
-
-**Step 4: Build vLLM from Source**
-
-```bash
-git clone https://github.com/vllm-project/vllm.git --branch v0.10.0
-cd vllm
-python use_existing_torch.py
-uv pip install -r requirements/build.txt
-uv pip install --no-build-isolation -e .
-```
-
-```{warning}
-When adding packages to `pyproject.toml`, use `uv sync --inexact` to avoid removing Monarch and vLLM.
-```
+   ```{warning}
+   When adding packages to `pyproject.toml`, use `uv sync --inexact` to avoid removing Monarch and vLLM.
+   ```
 
 ## Verifying Your Setup
 
 After installation, verify that all components are working correctly:
 
-### Check GPU Availability
+1. **Check GPU Availability**
 
-```bash
-python -c "import torch; print(f'GPUs available: {torch.cuda.device_count()}')"
-```
+   ```bash
+   python -c "import torch; print(f'GPUs available: {torch.cuda.device_count()}')"
+   ```
 
-Expected output: `GPUs available: 2` (or more)
+   Expected output: `GPUs available: 2` (or more)
 
-### Check CUDA Version
+2. **Check CUDA Version**
 
-```bash
-python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
-```
+   ```bash
+   python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
+   ```
 
-Expected output: `CUDA version: 12.8` (or higher)
+   Expected output: `CUDA version: 12.8` (or higher)
 
-### Check All Dependencies
+3. **Check All Dependencies**
 
-```bash
-# Check core components
-python -c "import torch, forge, monarch, vllm; print('All imports successful')"
+   ```bash
+   # Check core components
+   python -c "import torch, forge, monarch, vllm; print('All imports successful')"
 
-# Check specific versions
-python -c "
-import torch
-import forge
-import vllm
+   # Check specific versions
+   python -c "
+   import torch
+   import forge
+   import vllm
 
-print(f'PyTorch: {torch.__version__}')
-print(f'TorchForge: {forge.__version__}')
-print(f'vLLM: {vllm.__version__}')
-print(f'CUDA: {torch.version.cuda}')
-print(f'GPUs: {torch.cuda.device_count()}')
-"
-```
+   print(f'PyTorch: {torch.__version__}')
+   print(f'TorchForge: {forge.__version__}')
+   print(f'vLLM: {vllm.__version__}')
+   print(f'CUDA: {torch.version.cuda}')
+   print(f'GPUs: {torch.cuda.device_count()}')
+   "
+   ```
 
-### Verify Monarch
+4. **Verify Monarch**
 
-```bash
-python -c "
-from monarch.actor import Actor, this_host
+   ```bash
+   python -c "
+   from monarch.actor import Actor, this_host
 
-# Test basic Monarch functionality
-procs = this_host().spawn_procs({'gpus': 1})
-print('Monarch: Process spawning works')
-"
-```
+   # Test basic Monarch functionality
+   procs = this_host().spawn_procs({'gpus': 1})
+   print('Monarch: Process spawning works')
+   "
+   ```
 
 ## Quick Start Examples
 
-Now that TorchForge is installed, let's run some training examples:
+Now that TorchForge is installed, let's run some training examples.
 
 ### Example 1: Supervised Fine-Tuning (SFT)
 
 Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
 
-**Step 1: Download the Model**
+1. **Download the Model**
 
-```bash
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --output-dir /tmp/Meta-Llama-3.1-8B-Instruct \
-  --ignore-patterns "original/consolidated.00.pth"
-```
+   ```bash
+   uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
+     --output-dir /tmp/Meta-Llama-3.1-8B-Instruct \
+     --ignore-patterns "original/consolidated.00.pth"
+   ```
 
-```{note}
-Model downloads require Hugging Face authentication. Run `huggingface-cli login` first if you haven't already.
-```
+   ```{note}
+   Model downloads require Hugging Face authentication. Run `huggingface-cli login` first if you haven't already.
+   ```
 
-**Step 2: Run Training**
+2. **Run Training**
 
-```bash
-uv run forge run --nproc_per_node 2 \
-  apps/sft/main.py \
-  --config apps/sft/llama3_8b.yaml
-```
+   ```bash
+   uv run forge run --nproc_per_node 2 \
+     apps/sft/main.py \
+     --config apps/sft/llama3_8b.yaml
+   ```
 
-**What's Happening:**
-- `--nproc_per_node 2`: Use 2 GPUs for training
-- `apps/sft/main.py`: SFT training script
-- `--config apps/sft/llama3_8b.yaml`: Configuration file with hyperparameters
-- **TorchTitan** handles model sharding across the 2 GPUs
-- **Monarch** coordinates the distributed training
+   **What's Happening:**
+   - `--nproc_per_node 2`: Use 2 GPUs for training
+   - `apps/sft/main.py`: SFT training script
+   - `--config apps/sft/llama3_8b.yaml`: Configuration file with hyperparameters
+   - **TorchTitan** handles model sharding across the 2 GPUs
+   - **Monarch** coordinates the distributed training
 
-**Expected Output:**
-```
-Initializing process group...
-Loading model from /tmp/Meta-Llama-3.1-8B-Instruct...
-Starting training...
-Epoch 1/10 | Step 100 | Loss: 2.45 | LR: 0.0001
-...
-```
+   **Expected Output:**
+   ```
+   Initializing process group...
+   Loading model from /tmp/Meta-Llama-3.1-8B-Instruct...
+   Starting training...
+   Epoch 1/10 | Step 100 | Loss: 2.45 | LR: 0.0001
+   ...
+   ```
 
 ### Example 2: GRPO Training
 

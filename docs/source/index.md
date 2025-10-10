@@ -51,6 +51,7 @@ Meta's production-grade LLM training platform with FSDP, pipeline parallelism, a
 :::
 
 :::{grid-item-card} **TorchStore**
+:link: https://github.com/meta-pytorch/torchstore
 
 Distributed, in-memory key-value store for PyTorch tensors built on Monarch, optimized for weight synchronization with automatic DTensor resharding.
 
@@ -224,11 +225,8 @@ TorchForge has been validated in real-world deployments:
 Before starting significant work, signal your intention in the issue tracker to coordinate with maintainers.
 ```
 
-## Documentation Contents
-
 ```{toctree}
 :maxdepth: 2
-:caption: Documentation
 
 getting_started
 concepts
@@ -242,7 +240,6 @@ faq
 
 * {ref}`genindex` - Index of all documented objects
 * {ref}`modindex` - Python module index
-* {ref}`search` - Search the documentation
 
 ---
 
