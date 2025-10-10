@@ -254,7 +254,7 @@ class Provisioner:
 
                 # Inherit Forge-relevant environment variables from the system
                 for env_var in all_env_vars():
-                    env_vars[env_var.name] = env_var.get_value()
+                    env_vars[env_var.name] = str(env_var.get_value())
 
             procs = host_mesh.spawn_procs(
                 per_host={"gpus": num_procs},
