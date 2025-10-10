@@ -19,6 +19,36 @@ class EnvVar:
     default: Any
     description: str
 
+    def get_value(self) -> Any:
+        """Get the value of this environment variable with fallback to default.
+
+        Returns:
+            The environment variable value, auto-converted to the appropriate type
+            based on the default value, or the default value if not set.
+
+        Example:
+            >>> DISABLE_PERF_METRICS.get_value()
+            False
+            >>> os.environ["DISABLE_PERF_METRICS"] = "true"
+            >>> DISABLE_PERF_METRICS.get_value()
+            True
+        """
+        value = os.environ.get(self.name)
+
+        if value is None:
+            return self.default
+
+        # Auto-convert based on the default type
+        if isinstance(self.default, bool):
+            return value.lower() in ("true", "1", "yes")
+        elif isinstance(self.default, int):
+            return int(value)
+        elif isinstance(self.default, float):
+            return float(value)
+        else:
+            # Return as string for other types
+            return value
+
 
 # Environment variable definitions
 DISABLE_PERF_METRICS = EnvVar(
@@ -75,43 +105,6 @@ def _build_registry() -> dict[str, EnvVar]:
 
 # Registry of all environment variables (automatically populated)
 _ENV_VAR_REGISTRY: dict[str, EnvVar] = _build_registry()
-
-
-def get_value(env_var_name: str) -> Any:
-    """Get the value of an environment variable with fallback to default.
-
-    Args:
-        env_var_name: The name of the environment variable.
-
-    Returns:
-        The environment variable value, auto-converted to the appropriate type
-        based on the default value, or the default value if not set.
-
-    Raises:
-        KeyError: If the env_var_name is not registered.
-    """
-    if env_var_name not in _ENV_VAR_REGISTRY:
-        raise KeyError(
-            f"Environment variable '{env_var_name}' is not registered. "
-            f"Available variables: {list(_ENV_VAR_REGISTRY.keys())}"
-        )
-
-    env_var = _ENV_VAR_REGISTRY[env_var_name]
-    value = os.environ.get(env_var_name)
-
-    if value is None:
-        return env_var.default
-
-    # Auto-convert based on the default type
-    if isinstance(env_var.default, bool):
-        return value.lower() in ("true", "1", "yes")
-    elif isinstance(env_var.default, int):
-        return int(value)
-    elif isinstance(env_var.default, float):
-        return float(value)
-    else:
-        # Return as string for other types
-        return value
 
 
 def all_env_vars() -> dict[str, EnvVar]:
