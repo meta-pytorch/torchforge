@@ -6,7 +6,7 @@ policy:
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: true
-  sampling_config:
+  sampling_params:
     n: 2
     max_tokens: 512
 

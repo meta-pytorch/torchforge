@@ -14,7 +14,7 @@ policy:
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
-  sampling_config:
+  sampling_params:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0

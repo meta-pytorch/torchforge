@@ -30,13 +30,14 @@ class TestPolicyConfig(unittest.TestCase):
     )
     def test_policy_default_initialization(self):
         """Policy initializes with default values."""
-        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+        from forge.actors.policy import EngineConfig, Policy
+        from vllm.sampling_params import SamplingParams
 
         policy = Policy()
 
         # Default factories
         self.assertIsInstance(policy.engine_config, EngineConfig)
-        self.assertIsInstance(policy.sampling_config, SamplingConfig)
+        self.assertIsInstance(policy.sampling_params, SamplingParams)
         self.assertIsNone(policy.available_devices)
 
         # Worker defaults
@@ -47,17 +48,18 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
         # Sampling defaults
-        self.assertEqual(policy.sampling_config.n, 1)
-        self.assertFalse(policy.sampling_config.guided_decoding)
-        self.assertEqual(policy.sampling_config.max_tokens, 512)
+        self.assertEqual(policy.sampling_params.n, 1)
+        self.assertFalse(policy.sampling_params.guided_decoding)
+        self.assertEqual(policy.sampling_params.max_tokens, 512)
 
     @pytest.mark.skipif(
         _import_error(),
         reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_policy_with_dict_configs(self):
-        """Policy accepts dicts for engine_config and sampling_config, including nested dicts."""
-        from forge.actors.policy import EngineConfig, Policy, SamplingConfig
+        """Policy accepts dicts for engine_config and sampling_params, including nested dicts."""
+        from forge.actors.policy import EngineConfig, Policy
+        from vllm.sampling_params import SamplingParams
 
         # Test with nested dict structure
         engine_dict = {
@@ -79,12 +81,12 @@ class TestPolicyConfig(unittest.TestCase):
 
         policy = Policy(
             engine_config=engine_dict,
-            sampling_config=sampling_dict,
+            sampling_params=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
 
         self.assertIsInstance(policy.engine_config, EngineConfig)
-        self.assertIsInstance(policy.sampling_config, SamplingConfig)
+        self.assertIsInstance(policy.sampling_params, SamplingParams)
 
         # Test basic fields
         self.assertEqual(policy.engine_config.model, "test-model-6789")
@@ -93,8 +95,8 @@ class TestPolicyConfig(unittest.TestCase):
         self.assertTrue(policy.engine_config.enforce_eager)
         self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
-        self.assertEqual(policy.sampling_config.n, 1357)
-        self.assertEqual(policy.sampling_config.max_tokens, 2468)
+        self.assertEqual(policy.sampling_params.n, 1357)
+        self.assertEqual(policy.sampling_params.max_tokens, 2468)
 
         # Test that engine_dict accepts and preserves nested dict structure
         # The original engine_dict should remain unchanged and accessible
@@ -121,7 +123,7 @@ class TestPolicyConfig(unittest.TestCase):
           pipeline_parallel_size: 5678
           enforce_eager: true
 
-        sampling_config:
+        sampling_params:
           n: 2468
           max_tokens: 1357
 
@@ -143,8 +145,8 @@ class TestPolicyConfig(unittest.TestCase):
             self.assertTrue(policy.engine_config.enforce_eager)
             self.assertTrue(policy.engine_config._is_v1_supported_oracle())
 
-            self.assertEqual(policy.sampling_config.n, 2468)
-            self.assertEqual(policy.sampling_config.max_tokens, 1357)
+            self.assertEqual(policy.sampling_params.n, 2468)
+            self.assertEqual(policy.sampling_params.max_tokens, 1357)
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
 

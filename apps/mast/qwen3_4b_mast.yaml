@@ -42,7 +42,7 @@ policy:
     # TODO: Had to disable this becasue vLLm wouldn't like
     # needs to revisited.
     disable_custom_all_reduce: true
-  sampling_config:
+  sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0

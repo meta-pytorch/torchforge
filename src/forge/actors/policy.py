@@ -94,8 +94,8 @@ class EngineConfig(EngineArgs):
 
 @dataclass
 class Policy(PolicyInterface):
-    engine_config: EngineConfig = field(default_factory=EngineConfig)
-    sampling_params: SamplingParams = field(default_factory=SamplingParams)
+    engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
+    sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     available_devices: str | None = None
     use_dcp: bool = True
     # Gets set up by setup
@@ -110,6 +110,13 @@ class Policy(PolicyInterface):
         self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.running = False
+
+        if isinstance(self.engine_config, Mapping):
+            self.engine_config = EngineConfig.from_dict(self.engine_config)
+
+        if isinstance(self.sampling_params, Mapping):
+            self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
+            self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]

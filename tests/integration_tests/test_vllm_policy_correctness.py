@@ -61,7 +61,7 @@ async def test_same_output():
                 "gpu_memory_utilization": GPU_MEMORY_UTILIZATION,
                 "enable_prefix_caching": ENABLE_PREFIX_CACHING,
             },
-            sampling_config={
+            sampling_params={
                 "n": N_SAMPLES,
                 "max_tokens": MAX_TOKENS,
                 "temperature": TEMPERATURE,
@@ -152,7 +152,7 @@ async def test_cache_usage():
                 "enable_prefix_caching": ENABLE_PREFIX_CACHING,
                 "block_size": 16,
             },
-            sampling_config={
+            sampling_params={
                 "n": N_SAMPLES,
                 "max_tokens": MAX_TOKENS,
                 "temperature": TEMPERATURE,
