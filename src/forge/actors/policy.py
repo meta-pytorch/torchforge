@@ -655,7 +655,7 @@ class PolicyWorker(ForgeActor):
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
         with profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.GPU],
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             record_shapes=True,
             on_trace_ready=lambda p: trace_handler(self.rank, p),
             with_stack=True,
