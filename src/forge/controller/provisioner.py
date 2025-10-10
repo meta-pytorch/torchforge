@@ -15,7 +15,7 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import NDSlice, Shape
+from monarch._src.actor.shape import Extent, NDSlice, Shape
 from monarch.actor import Actor, endpoint, ProcMesh
 
 from monarch.tools import commands
