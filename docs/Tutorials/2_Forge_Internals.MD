@@ -64,7 +64,6 @@ Policy.options(
 
 ### 2. Real Service Creation
 
-Services are created using the `spawn_service` function:
 Services are created using the `.options().as_service()` pattern from the actual GRPO implementation:
 
 The service creation automatically handles:
@@ -125,32 +124,6 @@ But behind the scenes:
 - Routes message to that replica's `Policy.generate()` endpoint
 - Handles failures and retries automatically
 - Returns list[Completion] from the selected replica
-
-### 3. Different Service Types and Their Characteristics
-
-```mermaid
-graph TD
-    subgraph GPU["GPU-Intensive Services"]
-        PolicySvc["Policy Service<br/>Large model inference<br/>High GPU memory<br/>Batch optimization"]
-        TrainerSvc["Trainer Service<br/>Distributed training<br/>Gradient sync<br/>Massive compute"]
-        RefSvc["Reference Service<br/>Frozen model<br/>Baseline computation<br/>Read-only ops"]
-    end
-    
-    subgraph CPU["CPU-Intensive Services"]
-        RewardSvc["Reward Service<br/>Evaluation logic<br/>Rule-based scoring<br/>High throughput"]
-        DataSvc["Data Service<br/>Dataset streaming<br/>Preprocessing<br/>I/O optimization"]
-    end
-    
-    subgraph Memory["Memory-Intensive Services"]
-        BufferSvc["Buffer Service<br/>Experience storage<br/>Efficient sampling<br/>Persistence"]
-        MetricsSvc["Metrics Service<br/>Logging aggregation<br/>Performance tracking<br/>Analytics"]
-    end
-    
-    style PolicySvc fill:#ff9999
-    style TrainerSvc fill:#ff9999
-    style RewardSvc fill:#99ff99
-    style BufferSvc fill:#9999ff
-```
 
 ## Deep Dive: Service Communication Patterns
 
@@ -226,34 +199,7 @@ while training:
 
 **Critical insight**: This is essential for high-throughput RL where you can't wait for batches.
 
-### 4. Fire-and-Forget Operations
-
-**When to use**: Side effects that don't need responses (notifications, cache updates).
-
-```python
-# CONCEPTUAL - Fire-and-forget requires custom @endpoint implementations
-# The basic services don't have broadcast methods built-in
-# You would implement custom endpoints in your ForgeActor:
-
-class CustomPolicy(Policy):
-    @endpoint
-    async def clear_cache(self) -> None:
-        """Custom endpoint for cache clearing"""
-        self.policy_worker.clear_kv_cache()
-
-# Then use it (hypothetical):
-# await custom_policy.clear_cache.fanout()  # Clear all replica caches
-# Note: Actual cache clearing would use existing Policy methods
-```
-
-**Performance characteristics**:
-- **Latency**: Immediately returns (doesn't wait for completion)
-- **Throughput**: Network limited, but non-blocking
-- **Fault tolerance**: Fire-and-forget (you don't know if it worked)
-
-**Critical warning**: Only use for non-critical operations - you get no confirmation.
-
-### 5. Service Sessions for Stateful Operations
+### 3. Service Sessions for Stateful Operations
 
 **When to use**: When you need multiple calls to hit the same replica (like KV cache preservation).
 
