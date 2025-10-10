@@ -4,8 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from forge.env import MONARCH_HOSTMESH_V1
-
 """Remote and local resource manager for allocation and provisioning."""
 import asyncio
 import functools
@@ -22,7 +20,7 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
