@@ -75,11 +75,18 @@ sitemap_excludes = [
 ]
 sitemap_url_scheme = "{link}"
 
+# Ensure static files use relative paths
+html_static_path = ["_static"]
+
 templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
 exclude_patterns = ["tutorials/index.rst", "tutorials/template_tutorial.rst"]
+
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_js_files = ["custom.js"]
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../../src"))
