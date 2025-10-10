@@ -331,7 +331,7 @@ async def main(cfg: DictConfig):
     # with one another. Therefore we use the controller as our storage volume.
     if not MONARCH_HOSTMESH_V1.get_value():
         await ts.initialize(strategy=ts.ControllerStorageVolumes())
-        print("Torchstore successfuly initialized with controller storage strategy")
+        print("Torchstore successfully initialized with controller storage strategy")
 
     # ---- Setup services ---- #
 
@@ -372,7 +372,7 @@ async def main(cfg: DictConfig):
             mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
             strategy=ts.LocalRankStrategy(),
         )
-        print("Torchstore successfuly initialized with local rank strategy")
+        print("Torchstore successfully initialized with local rank strategy")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
