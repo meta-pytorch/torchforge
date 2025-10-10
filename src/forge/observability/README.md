@@ -1,15 +1,28 @@
 # Observability in Forge
 
-We aim to make distributed observability effortless. You can call `record_metric(key, val, reduce_type)` from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. No boilerplate required-just call, flush, and visualize. Disable with `FORGE_DISABLE_METRICS=true`.
+We aim to make distributed observability effortless. You can call `record_metric(key, val, reduce_type)` from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. You can visualize aggregated results globally, per-rank or as a stream. No boilerplate required-just call, flush, and visualize. Disable with `FORGE_DISABLE_METRICS=true`.
 
 ## 1. Your Superpowers
 
 ### 1.1 Call `record_metric` from Anywhere
 
-Simple to use, with no need to pass dictionaries around.
+Simple to use, with no need to pass dictionaries around. For example, users can simply write:
 
-Full example:
 ```python
+def my_fn():
+    record_metric(key, value, reduce)
+```
+
+Instead of:
+
+```python
+def my_fn(my_metrics):
+    my_metrics[key] = value
+    return my_metrics
+```
+
+```python
+#full example
 import asyncio
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 
@@ -57,9 +70,7 @@ import torch
 # ... Initialize logger (as shown in previous example)
 
 def my_fn():
-    a, b = torch.randn(1000, 1000, device="cuda"), torch.randn(
-        1000, 1000, device="cuda"
-    )
+    a, b = torch.randn(1000, 1000, device="cuda"), torch.randn(1000, 1000, device="cuda")
 
     t = Tracer(prefix="my_cuda_loop", track_memory=True, timer="gpu")
     t.start()
@@ -98,7 +109,7 @@ with trace(prefix="train_step", track_memory=True, timer="gpu") as t:
     loss.backward()
 
 @trace(prefix="my_reward_fn", track_memory=False, timer="cpu")
-async def reward_fn(x):  # Supports both synchronous and asynchronous functions
+async def reward_fn(x):  # Supports both sync/async functions
     return 1.0 if x > 0 else 0.0
 ```
 ## 2. Logging Modes
@@ -124,7 +135,7 @@ class MyActor(ForgeActor):
     @endpoint
     async def my_fn(self):
         rank = current_rank().rank # 0 or 1 per replica
-        record_metric("my_sum_rank_metric", rank, Reduce.SUM)
+        record_metric("my_sum_rank_metric", rank, Reduce.SUM) # <--- your metric
 
 async def main():
     # Setup logger
@@ -148,7 +159,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Output :
+Output when `"logging_mode": "global_reduce"`
 ```bash
 === [GlobalReduce] - METRICS STEP 0 ===
 my_sum_rank_metric: 4.0 # (rank_0 + rank_1) * 2 steps * 2 replicas
@@ -264,21 +275,6 @@ We have two main requirements:
 2. Metrics must be collected from all ranks.
 
 To address #1, we use a `MetricCollector` per process to store state. For example, with 10 ranks, there are 10 `MetricCollector` instances. Within each rank, `MetricCollector` is a singleton, ensuring the same object is returned after the first call. This eliminates the need to pass dictionaries between functions.
-
-For example, users can simply write:
-
-```python
-def my_fn():
-    record_metric(key, value, reduce) # Calls MetricCollector().push(key, value, reduce)
-```
-
-This is simpler than:
-
-```python
-def my_fn(my_metrics):
-    my_metrics[key] = value
-    return my_metrics
-```
 
 To address #2, we automatically spawn a `LocalFetcherActor` for each process and register it with the `GlobalLoggingActor`. This allows the `GlobalLoggingActor` to know which actors to call, and each `LocalFetcherActor` can access the local `MetricCollector`. This spawning and registration occurs in `forge.controller.provisioner.py::get_proc_mesh`.
 
