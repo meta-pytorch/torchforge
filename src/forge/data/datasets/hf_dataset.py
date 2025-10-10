@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterator
 
 import torch
 import torch.distributed as dist
@@ -37,26 +37,26 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
       - Returning an infinite iterator over the dataset
 
     Args:
-        message_transform (Optional[Transform]): Transforms raw data into a `Message`.
-        model_transform (Optional[Transform]): Prepares messages for the model,
+        message_transform (Transform | None): Transforms raw data into a `Message`.
+        model_transform (Transform | None): Prepares messages for the model,
             usually by tokenizing them.
-        output_transform (Optional[Transform]): Prepares tokenized inputs for the
+        output_transform (Transform | None): Prepares tokenized inputs for the
             recipe, often by manipulating labels (e.g., setting an ignore index).
             This transform is recipe-dependent (e.g., SFT, DPO, etc.).
-        metric_transform (Optional[MetricTransform]): Computes metrics from a
+        metric_transform (MetricTransform | None): Computes metrics from a
             sample (e.g., token count). If ``None``, a default transform is used.
             To disable standard metric tracking, set this to ``lambda x: x``.
-        shuffle_buffer_size (Optional[int]): Size of the shuffle buffer.
+        shuffle_buffer_size (int | None): Size of the shuffle buffer.
             If ``None`` or 0, no shuffling is performed.
-        weight (Optional[float]): Weight for this dataset. Defaults to 1.0.
+        weight (float | None): Weight for this dataset. Defaults to 1.0.
         seed (int): Seed for shuffling.
         num_shards_per_rank (int): The target number of shards per worker (GPU).
             The actual number of shards will be a multiple of
             ``world_size * dataloader_workers``.
-        dataset_name (Optional[str]): Name of the dataset. If ``None``, a name is
+        dataset_name (str | None): Name of the dataset. If ``None``, a name is
             generated from the ``path``, ``source``, and ``split``.
-        filter_fn (Optional[Callable]): A function to filter the dataset.
-        filter_kwargs (Optional[dict[str, Any]]): Keyword arguments for ``filter_fn``.
+        filter_fn (Callable | None): A function to filter the dataset.
+        filter_kwargs (dict[str, Any] | None): Keyword arguments for ``filter_fn``.
         **load_dataset_kwargs: Keyword arguments for the
             :func:`~datasets.load_dataset` function.
     """
@@ -64,17 +64,17 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
     def __init__(
         self,
         *,
-        message_transform: Optional[Transform] = None,
-        model_transform: Optional[Transform] = None,
-        output_transform: Optional[Transform] = None,
-        metric_transform: Optional[MetricTransform] = None,
-        shuffle_buffer_size: Optional[int] = 1000,
-        weight: Optional[float] = 1.0,
+        message_transform: Transform | None = None,
+        model_transform: Transform | None = None,
+        output_transform: Transform | None = None,
+        metric_transform: MetricTransform | None = None,
+        shuffle_buffer_size: int | None = 1000,
+        weight: float | None = 1.0,
         seed: int = 42,
         num_shards_per_rank: int = 64,
-        dataset_name: Optional[str] = None,
-        filter_fn: Optional[Callable] = None,
-        filter_kwargs: Optional[dict[str, Any]] = None,
+        dataset_name: str | None = None,
+        filter_fn: Callable | None = None,
+        filter_kwargs: dict[str, Any] | None = None,
         **load_dataset_kwargs,
     ):
         # Store configuration
@@ -135,8 +135,8 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self,
         load_dataset_kwargs: dict[str, Any],
         num_shards_per_rank: int,
-        filter_fn: Optional[Callable] = None,
-        filter_kwargs: Optional[dict[str, Any]] = None,
+        filter_fn: Callable | None = None,
+        filter_kwargs: dict[str, Any] | None = None,
     ):
         """
         One-time setup of HuggingFace dataset that handles Handles distributed sharding,

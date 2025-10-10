@@ -10,7 +10,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import asdict, dataclass, field, fields
@@ -99,6 +98,12 @@ class SamplingConfig:
         valid_args = {k: v for k, v in d.items() if k in all_fields}
         return cls(**valid_args)
 
+    def asdict(self):
+        # Use the full object instead of a Dict
+        ret = asdict(self)
+        ret["guided_decoding"] = self.guided_decoding
+        return ret
+
 
 @dataclass
 class EngineConfig(EngineArgs):
@@ -134,7 +139,6 @@ class EngineConfig(EngineArgs):
 class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
-    use_vllm_builtin_load: bool = True
     available_devices: str | None = None
     use_dcp: bool = True
     # Gets set up by setup
@@ -240,7 +244,7 @@ class Policy(PolicyInterface):
 
         self.request_id = 0
         self.policy_version = 0
-        self.requests: dict[str, tuple[None | ParentRequest, asyncio.Future]] = {}
+        self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
         # TODO: Investigate whether this can be combined with `policy.running`
         # Whether this policy is accepting requests.
@@ -253,10 +257,8 @@ class Policy(PolicyInterface):
         self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
 
         # Setup sampling params
-        override = asdict(self.sampling_config)
-        override["guided_decoding"] = self.sampling_config.guided_decoding
         self.sampling_params = get_default_sampling_params(
-            self.vllm_config, overrides=override
+            self.vllm_config, overrides=self.sampling_config.asdict()
         )
 
         # Setup processors
@@ -490,14 +492,11 @@ class Policy(PolicyInterface):
             record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
-            if self.use_vllm_builtin_load:
-                await self.policy_worker.update.call(version=policy_version)
-            else:
-                await self.policy_worker.update_DEPRECATED.call(version=policy_version)
+            await self.policy_worker.update.call(version=policy_version)
             self.policy_version = policy_version
 
             # After updating the weights, we need to reset the KV cache
-            self.scheduler.kv_cache_manager.reset_prefix_cache()
+            self.scheduler.reset_prefix_cache()
 
         # Resume accepting requests and wake up any waiting generate() calls
         async with self.request_lock:
@@ -507,16 +506,8 @@ class Policy(PolicyInterface):
         logger.info(f"Weight update completed (now v{self.policy_version})")
 
     @endpoint
-    async def update_weights_DEPRECATED(self, policy_version: int):  # noqa: N802
-        # TODO: If generating long sequences, this might be long and will block policy weight updates
-        curr_requests = [fut for _, fut in self.requests.values()]
-        if curr_requests:
-            logger.debug(f"Waiting for {len(curr_requests)} pending requests")
-            await asyncio.gather(*curr_requests)
-
-        await self.policy_worker.update_DEPRECATED.call(version=policy_version)
-        self.policy_version = policy_version
-        logger.info(f"Weight update completed (now v{self.policy_version})")
+    async def _reset_prefix_cache(self):
+        self.scheduler.reset_prefix_cache()
 
     @endpoint
     async def get_version(self) -> int:
@@ -556,6 +547,7 @@ class Policy(PolicyInterface):
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                     generator_version=self.policy_version,
+                    metadata={"num_cached_tokens": request_output.num_cached_tokens},
                 )
             )
 
@@ -636,19 +628,6 @@ class PolicyWorker(ForgeActor):
                 stored_tensor,
                 current_tensor,
             )
-
-    @endpoint
-    async def update_DEPRECATED(self, version: int):  # noqa: N802
-        """Update model weights by reading state dict from torchstore.
-        Deprecated. This uses manual sharding logic which is buggy."""
-        key = f"{self.state_dict_key}{DELIM}{version}"
-        model = self.worker.model_runner.model
-        current_state_dict = model.state_dict()
-        start = time.perf_counter()
-        await self._load_tensor_parallel_state_dict(current_state_dict, version)
-        logger.info(
-            f"Loaded state dict from {key} in {time.perf_counter() - start} seconds"
-        )
 
     @endpoint
     async def update(self, version: int):
