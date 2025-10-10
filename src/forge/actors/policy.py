@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 import sys
 import time
 from collections.abc import Mapping
@@ -63,10 +64,14 @@ from forge.types import ProcessConfig
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+hostname = socket.gethostname()
+
 
 def trace_handler(rank, p):
     p.export_chrome_trace(
-        f"/mnt/data/yuxuanh/profiler/trace_rank_{rank}_" + str(p.step_num) + ".json"
+        f"/mnt/data/yuxuanh/profiler/{hostname}_trace_rank_{rank}_"
+        + str(p.step_num)
+        + ".json"
     )
 
 
