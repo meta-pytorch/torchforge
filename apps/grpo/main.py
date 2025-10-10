@@ -349,6 +349,11 @@ async def main(cfg: DictConfig):
         ),
     )
 
+    if "steps" not in cfg.trainer.training:
+        raise ValueError("`cfg.trainer.training.steps` must be defined (can be null).")
+
+    max_steps = cfg.trainer.training.steps
+
     print("All services initialized successfully!")
 
     # ---- Core RL loops ---- #
@@ -433,7 +438,6 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
-        max_steps = cfg.trainer.training.get("steps", None)
 
         while max_steps is None or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
@@ -492,11 +496,12 @@ async def main(cfg: DictConfig):
         print("Training interrupted by user")
     finally:
         print("Shutting down...")
-
         for rollout_task in rollout_tasks:
             rollout_task.cancel()
         # graceful await all tasks, ignore cancellation noise
         await asyncio.gather(*rollout_tasks, return_exceptions=True)
+        # Give replicas time to drain and complete in-flight requests
+        await asyncio.sleep(1)
         training_task.cancel()
 
         # give mlogger time to shutdown backends, otherwise they can stay running.
