@@ -14,11 +14,7 @@ from typing import Protocol
 
 import torch
 
-from forge.env_constants import (
-    DISABLE_PERF_METRICS,
-    FORGE_DISABLE_METRICS,
-    METRIC_TIMER_USES_GPU,
-)
+from forge.env import DISABLE_PERF_METRICS, FORGE_DISABLE_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import record_metric, Reduce
 
 logger = logging.getLogger(__name__)

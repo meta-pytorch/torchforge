@@ -6,7 +6,7 @@
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Union
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
