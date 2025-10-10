@@ -83,6 +83,7 @@ class SamplingConfig:
     temperature: float = 1.0
     top_p: float = 1.0
     logprobs: int = 1
+    presence_penalty: float = 0.0
 
     def __post_init__(self):
         super().__init__()

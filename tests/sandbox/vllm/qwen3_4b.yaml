@@ -8,9 +8,10 @@ judge:
   sampling_config:
     n: 1
     guided_decoding: false
-    max_tokens: 512
+    max_tokens: 1024
     temperature: 0.0
-    top_p: 1.0
+    top_p: 0.95
+    presence_penalty: 2
 
 services:
   judge:
