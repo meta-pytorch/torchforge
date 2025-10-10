@@ -84,6 +84,14 @@ class DatasetActor(ForgeActor):
         ds = ds.shuffle()
         self._iterator = iter(ds)
 
+    @endpoint
+    async def sample(self) -> dict[str, str] | None:
+        try:
+            sample = next(self._iterator)
+            return sample
+        except StopIteration:
+            return None
+
 
 async def run(cfg: DictConfig):
     if cfg.get("provisioner", None) is not None:
@@ -112,13 +120,18 @@ async def run(cfg: DictConfig):
 
             t.step("data_loading")
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generatlee.route(prompt)
+            responses = await policy.generate.route(prompt)
             version = await policy.get_version.route()
 
             t.step("policy_generation")
 
-            print("request: ", prompt)
-            print("response: ", responses[0].text)
+            print(f"#------ request  ------#")
+            print(prompt)
+            print("#------ target   ------#")
+            print(target)
+            print("#------ response ------#")
+            print(responses[0].text)
+            print()
 
 
     rollout_task = asyncio.create_task(continuous_rollouts())
