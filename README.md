@@ -65,8 +65,8 @@ $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0
 To run SFT for Llama3 8B, run
 
 ```bash
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
-uv run forge run --nproc_per_node 2 apps/sft/main.py --config apps/sft/llama3_8b.yaml
+forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
+python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
 ```
 
 ### Citation
