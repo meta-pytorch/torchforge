@@ -65,6 +65,9 @@ jobs:
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
       - name: Run unit tests with coverage
         # TODO add all tests
-        run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+        run: |
+          echo "LD_PRELOAD=${LD_PRELOAD}"
+          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+          pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
