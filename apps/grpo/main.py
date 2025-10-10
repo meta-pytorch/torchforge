@@ -433,8 +433,9 @@ async def main(cfg: DictConfig):
     async def continuous_training():
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
+        max_steps = cfg.trainer.training.get("steps", None)
 
-        while True:
+        while max_steps is None or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
@@ -471,6 +472,10 @@ async def main(cfg: DictConfig):
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
 
+        print(
+            f"Reached training limit ({max_steps} steps). Exiting continuous_training loop."
+        )
+
     num_rollout_threads = cfg.get("rollout_threads", 1)
     num_training_threads = cfg.get("training_threads", 1)
     print(
@@ -482,14 +487,17 @@ async def main(cfg: DictConfig):
     training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(*rollout_tasks, training_task)
+        await training_task
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        for rollout_task in rollout_tasks:
-            rollout_task.cancel()
-        training_task.cancel()
     finally:
         print("Shutting down...")
+
+        for rollout_task in rollout_tasks:
+            rollout_task.cancel()
+        # graceful await all tasks, ignore cancellation noise
+        await asyncio.gather(*rollout_tasks, return_exceptions=True)
+        training_task.cancel()
 
         # give mlogger time to shutdown backends, otherwise they can stay running.
         # TODO (felipemello) find more elegant solution
