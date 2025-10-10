@@ -329,7 +329,7 @@ async def main(cfg: DictConfig):
 
     # In the host mesh v0 case, actors on remote hosts are not able to communicate
     # with one another. Therefore we use the controller as our storage volume.
-    if provisioner is None or not MONARCH_HOSTMESH_V1.get_value():
+    if not MONARCH_HOSTMESH_V1.get_value():
         await ts.initialize(strategy=ts.ControllerStorageVolumes())
         print("Torchstore successfuly initialized with controller storage strategy")
 
@@ -361,12 +361,15 @@ async def main(cfg: DictConfig):
 
     print("All services initialized successfully!")
 
-    if provisioner is not None and MONARCH_HOSTMESH_V1.get_value():
+    # In the HostMesh v1 case, we spawn a torchstore storage volume
+    # per trainer process.
+    if MONARCH_HOSTMESH_V1.get_value():
         # TODO: support multiple host meshes
+        trainer_num_procs = cfg.actors.trainer["procs"]
         trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
         trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
         await ts.initialize(
-            mesh=trainer_hosts.spawn_procs(per_host={"gpus": 8}),
+            mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
             strategy=ts.LocalRankStrategy(),
         )
         print("Torchstore successfuly initialized with local rank strategy")
