@@ -66,7 +66,7 @@ logger.setLevel(logging.INFO)
 
 def trace_handler(rank, p):
     p.export_chrome_trace(
-        "/mnt/data/yuxuanh/trace_rank_{rank}_" + str(p.step_num) + ".json"
+        f"/mnt/data/yuxuanh/profiler/trace_rank_{rank}_" + str(p.step_num) + ".json"
     )
 
 
