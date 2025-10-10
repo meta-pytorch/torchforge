@@ -1,13 +1,12 @@
 # Judge configuration
 judge:
-  engine_config:
+  engine_args:
     model: "Qwen/Qwen3-4B-Thinking-2507"
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
-  sampling_config:
+  sampling_params:
     n: 1
-    guided_decoding: false
     max_tokens: 1024
     temperature: 0.0
     top_p: 0.95

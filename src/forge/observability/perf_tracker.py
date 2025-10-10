@@ -6,7 +6,6 @@
 
 import inspect
 import logging
-import os
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -15,11 +14,7 @@ from typing import Protocol
 
 import torch
 
-from forge.env_constants import (
-    DISABLE_PERF_METRICS,
-    FORGE_DISABLE_METRICS,
-    METRIC_TIMER_USES_GPU,
-)
+from forge.env import DISABLE_PERF_METRICS, FORGE_DISABLE_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import record_metric, Reduce
 
 logger = logging.getLogger(__name__)
@@ -113,8 +108,7 @@ class Tracer:
         self.track_memory = track_memory
         self.time_with_gpu = timer == "gpu"
         self._disable = (
-            os.getenv(DISABLE_PERF_METRICS, "false").lower() == "true"
-            or os.getenv(FORGE_DISABLE_METRICS, "false").lower() == "true"
+            DISABLE_PERF_METRICS.get_value() or FORGE_DISABLE_METRICS.get_value()
         )
         self._active = False
 
@@ -132,9 +126,20 @@ class Tracer:
             raise ValueError("Tracer has already been started")
 
         # Start timing (always enabled)
-        time_with_gpu_events = (
-            os.getenv(METRIC_TIMER_USES_GPU, str(self.time_with_gpu)).lower() == "true"
-        ) and torch.cuda.is_available()
+
+        # TODO - follow up on if this env var behavior makes sense.
+        # METRIC_TIMER_USES_GPU env var overrides the timer parameter
+        metric_timer_uses_gpu = METRIC_TIMER_USES_GPU.get_value()
+        if metric_timer_uses_gpu is not None:
+            # Env var is set - convert string to bool if needed
+            if isinstance(metric_timer_uses_gpu, str):
+                use_gpu = metric_timer_uses_gpu.lower() in ("true", "1", "yes")
+            else:
+                use_gpu = bool(metric_timer_uses_gpu)
+        else:
+            # Env var not set - use the timer parameter
+            use_gpu = self.time_with_gpu
+        time_with_gpu_events = use_gpu and torch.cuda.is_available()
         self._timer = _TimerCUDA() if time_with_gpu_events else _TimerCPU()
         self._timer.start()
 

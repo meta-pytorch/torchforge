@@ -32,12 +32,12 @@ dataset:
 
 # Policy configuration
 policy:
-  engine_config:
+  engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
-  sampling_config:
+  sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0
@@ -115,7 +115,7 @@ ref_model:
 # All resource allocations
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   ref_model:

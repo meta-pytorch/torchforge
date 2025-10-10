@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import torch
-from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_GPU
+from forge.env import DISABLE_PERF_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import Reduce
 
 from forge.observability.perf_tracker import _TimerCPU, _TimerCUDA, trace, Tracer
@@ -135,7 +135,7 @@ class TestTracingModes:
         if timer == "gpu" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        monkeypatch.setenv(METRIC_TIMER_USES_GPU, str(timer == "gpu"))
+        monkeypatch.setenv(METRIC_TIMER_USES_GPU.name, str(timer == "gpu"))
 
         async def run_concurrent_tasks():
             start_time = time.perf_counter()
@@ -162,6 +162,7 @@ class TestTracingModes:
             if timer == "gpu" and torch.cuda.is_available():
                 assert isinstance(tracer._timer, _TimerCUDA), "Expected CUDA timer"
             else:
+                value = METRIC_TIMER_USES_GPU.get_value()
                 assert isinstance(tracer._timer, _TimerCPU), "Expected CPU timer"
             tracer.step("backend_check")
             tracer.stop()
@@ -364,7 +365,7 @@ class TestEnvironmentConfiguration:
         self, mode, monkeypatch, mock_record_metric_calls
     ):
         """Test DISABLE_PERF_METRICS disables all modes."""
-        monkeypatch.setenv(DISABLE_PERF_METRICS, "true")
+        monkeypatch.setenv(DISABLE_PERF_METRICS.name, "true")
 
         async def disabled_workflow():
             return await TracingModes.run_workflow(mode, f"disabled_{mode}")
@@ -390,7 +391,7 @@ class TestEnvironmentConfiguration:
         with patch("torch.cuda.is_available", return_value=True), patch(
             "forge.observability.perf_tracker.record_metric"
         ):
-            monkeypatch.setenv(METRIC_TIMER_USES_GPU, env_value)
+            monkeypatch.setenv(METRIC_TIMER_USES_GPU.name, env_value)
 
             # Test with timer="cpu" (should be overridden by env)
             tracer = Tracer("env_test", timer="cpu")
