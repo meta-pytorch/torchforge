@@ -57,15 +57,11 @@ jobs:
           python -m pip install git+https://github.com/meta-pytorch/torchstore.git
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
-      - name: Patch shared paths
-        run: |
-          export LD_PRELOAD=$CONDA/envs/test/lib/libpython3.10.so.1.0
-          export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
-          echo "LD_PRELOAD=${LD_PRELOAD}"
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
       - name: Run unit tests with coverage
         # TODO add all tests
         run: |
+          export LD_PRELOAD=$CONDA/envs/test/lib/libpython3.10.so.1.0
+          export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
           echo "LD_PRELOAD=${LD_PRELOAD}"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
