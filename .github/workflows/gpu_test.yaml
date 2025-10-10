@@ -53,8 +53,8 @@ jobs:
           python -m pip install torchmonarch --extra-index-url https://download.pytorch.org/whl/preview/forge
       - name: Install torchtitan and torchstore
         run: |
-          python -m pip install git+ssh://git@github.com/pytorch/torchtitan.git
-          python -m pip install git+ssh://git@github.com/meta-pytorch/torchstore.git
+          python -m pip install git+https://github.com/pytorch/torchtitan.git
+          python -m pip install git+https://github.com/meta-pytorch/torchstore.git
       - name: Install dependencies
         run: python -m pip install --no-build-isolation -e ".[dev]"
       - name: Patch shared paths
