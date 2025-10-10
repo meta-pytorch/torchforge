@@ -1,7 +1,7 @@
 # >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/llama3_8b.yaml
 
 policy:
-  engine_config:
+  engine_args:
     model: "meta-llama/Llama-3.1-8B-Instruct"
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
@@ -12,7 +12,7 @@ policy:
 
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 4
     with_gpus: true
 

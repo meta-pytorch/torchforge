@@ -1,7 +1,7 @@
 # >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/qwen2_5_32b.yaml
 
 policy:
-  engine_config:
+  engine_args:
     model: "Qwen/Qwen2.5-32B"
     tensor_parallel_size: 4
     pipeline_parallel_size: 1

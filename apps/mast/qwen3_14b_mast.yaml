@@ -34,7 +34,7 @@ dataset:
 
 # Policy configuration
 policy:
-  engine_config:
+  engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
@@ -129,7 +129,7 @@ ref_model:
 # All resource allocations
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 2
     with_gpus: true
     mesh_name: policy

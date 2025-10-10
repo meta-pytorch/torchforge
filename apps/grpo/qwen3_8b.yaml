@@ -28,7 +28,7 @@ dataset:
 
 # Policy configuration
 policy:
-  engine_config:
+  engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
@@ -114,7 +114,7 @@ ref_model:
 # All resource allocations
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   ref_model:

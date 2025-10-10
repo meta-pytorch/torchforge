@@ -9,7 +9,7 @@ off_by_n: 1 # Off by one by default
 
 # Policy configuration
 policy:
-  engine_config:
+  engine_args:
     model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
@@ -63,7 +63,7 @@ trainer:
 # All resource allocations
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   trainer:

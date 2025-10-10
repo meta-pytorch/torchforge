@@ -12,7 +12,7 @@ import os
 import sys
 from collections.abc import Mapping
 from copy import copy
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 
 import torch
 import torch.distributed.checkpoint as dcp
@@ -63,38 +63,8 @@ logger.setLevel(logging.INFO)
 
 
 @dataclass
-class EngineConfig(EngineArgs):
-    """
-    EngineConfig extends EngineArgs with worker-specific fields.
-    Overlapping keys in input dict will override EngineArgs defaults.
-    """
-
-    model: str = "meta-llama/Llama-3.1-8B-Instruct"
-    tensor_parallel_size: int = 1
-    pipeline_parallel_size: int = 1
-    enforce_eager: bool = False
-    enable_expert_parallel: bool = False
-
-    # Original method returns False when not run in the main thread
-    _is_v1_supported_oracle = lambda *_: True
-
-    @classmethod
-    def from_dict(cls, d: Mapping):
-        d = dict(d)
-        all_fields = [f.name for f in fields(cls)]
-        valid_args = {k: v for k, v in d.items() if k in all_fields}
-        return cls(**valid_args)
-
-    def create_vllm_config(self) -> VllmConfig:
-        """Converts the current EngineConfig into vLLM's vLLMConfig."""
-        # Note: EngineArgs.create_engine_config
-        # creates a VllmConfig
-        return self.create_engine_config(UsageContext.LLM_CLASS)
-
-
-@dataclass
 class Policy(PolicyInterface):
-    engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
+    engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     available_devices: str | None = None
     use_dcp: bool = True
@@ -111,8 +81,9 @@ class Policy(PolicyInterface):
         self._worker_procs: ProcMesh | None = None
         self.running = False
 
-        if isinstance(self.engine_config, Mapping):
-            self.engine_config = EngineConfig.from_dict(self.engine_config)
+        if isinstance(self.engine_args, Mapping):
+            self.engine_args = EngineArgs(**self.engine_args)
+            self.engine_args._is_v1_supported_oracle = lambda *_: True
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
@@ -122,7 +93,7 @@ class Policy(PolicyInterface):
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Policy"],
         *,
-        engine_config: EngineConfig | Mapping = EngineConfig(),
+        engine_args: EngineArgs | Mapping = EngineArgs(),
         sampling_params: SamplingParams | Mapping = SamplingParams(),
         available_devices: str | None = None,
         use_dcp: bool = True,
@@ -150,10 +121,12 @@ class Policy(PolicyInterface):
         policy_proc_config.with_gpus = False
         policy_proc = await get_proc_mesh(process_config=policy_proc_config)
 
-        if isinstance(engine_config, Mapping):
-            engine_config = EngineConfig.from_dict(engine_config)
+        if isinstance(engine_args, Mapping):
+            engine_args = EngineArgs(**engine_args)
+            engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
+            logger.debug(f"Resolved engine args: {engine_args}")
 
-        vllm_config = engine_config.create_vllm_config()
+        vllm_config = engine_args.create_vllm_config(UsageContext.LLM_CLASS)
         workers = worker_procs.spawn(
             "vllm_worker", PolicyWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
@@ -168,7 +141,7 @@ class Policy(PolicyInterface):
         policy = policy_proc.spawn(
             actor_name,
             cls,
-            engine_config=engine_config,
+            engine_args=engine_args,
             sampling_params=sampling_params,
             available_devices=available_devices,
             policy_worker=workers,
@@ -214,7 +187,9 @@ class Policy(PolicyInterface):
         # Guard for updating requests
         self.update_lock = asyncio.Condition()
 
-        self.vllm_config: VllmConfig = self.engine_config.create_vllm_config()
+        self.vllm_config: VllmConfig = self.engine_args.create_vllm_config(
+            UsageContext.LLM_CLASS
+        )
 
         # Setup processors
         # TODO: move all processing to the Environment

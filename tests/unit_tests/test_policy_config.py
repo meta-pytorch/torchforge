@@ -30,22 +30,23 @@ class TestPolicyConfig(unittest.TestCase):
     )
     def test_policy_default_initialization(self):
         """Policy initializes with default values."""
-        from forge.actors.policy import EngineConfig, Policy
+        from forge.actors.policy import Policy
+        from vllm.engine.arg_utils import EngineArgs
         from vllm.sampling_params import SamplingParams
 
         policy = Policy()
 
         # Default factories
-        self.assertIsInstance(policy.engine_config, EngineConfig)
+        self.assertIsInstance(policy.engine_args, EngineArgs)
         self.assertIsInstance(policy.sampling_params, SamplingParams)
         self.assertIsNone(policy.available_devices)
 
         # Worker defaults
-        self.assertEqual(policy.engine_config.model, "meta-llama/Llama-3.1-8B-Instruct")
-        self.assertEqual(policy.engine_config.tensor_parallel_size, 1)
-        self.assertEqual(policy.engine_config.pipeline_parallel_size, 1)
-        self.assertFalse(policy.engine_config.enforce_eager)
-        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+        self.assertEqual(policy.engine_args.model, "meta-llama/Llama-3.1-8B-Instruct")
+        self.assertEqual(policy.engine_args.tensor_parallel_size, 1)
+        self.assertEqual(policy.engine_args.pipeline_parallel_size, 1)
+        self.assertFalse(policy.engine_args.enforce_eager)
+        self.assertTrue(policy.engine_args._is_v1_supported_oracle())
 
         # Sampling defaults
         self.assertEqual(policy.sampling_params.n, 1)
@@ -57,8 +58,9 @@ class TestPolicyConfig(unittest.TestCase):
         reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_policy_with_dict_configs(self):
-        """Policy accepts dicts for engine_config and sampling_params, including nested dicts."""
-        from forge.actors.policy import EngineConfig, Policy
+        """Policy accepts dicts for engine_args and sampling_params, including nested dicts."""
+        from forge.actors.policy import Policy
+        from vllm.engine.arg_utils import EngineArgs
         from vllm.sampling_params import SamplingParams
 
         # Test with nested dict structure
@@ -80,20 +82,20 @@ class TestPolicyConfig(unittest.TestCase):
         }
 
         policy = Policy(
-            engine_config=engine_dict,
+            engine_args=engine_dict,
             sampling_params=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
 
-        self.assertIsInstance(policy.engine_config, EngineConfig)
+        self.assertIsInstance(policy.engine_args, EngineArgs)
         self.assertIsInstance(policy.sampling_params, SamplingParams)
 
         # Test basic fields
-        self.assertEqual(policy.engine_config.model, "test-model-6789")
-        self.assertEqual(policy.engine_config.tensor_parallel_size, 7777)
-        self.assertEqual(policy.engine_config.pipeline_parallel_size, 8888)
-        self.assertTrue(policy.engine_config.enforce_eager)
-        self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+        self.assertEqual(policy.engine_args.model, "test-model-6789")
+        self.assertEqual(policy.engine_args.tensor_parallel_size, 7777)
+        self.assertEqual(policy.engine_args.pipeline_parallel_size, 8888)
+        self.assertTrue(policy.engine_args.enforce_eager)
+        self.assertTrue(policy.engine_args._is_v1_supported_oracle())
 
         self.assertEqual(policy.sampling_params.n, 1357)
         self.assertEqual(policy.sampling_params.max_tokens, 2468)
@@ -117,7 +119,7 @@ class TestPolicyConfig(unittest.TestCase):
         from forge.actors.policy import Policy
 
         yaml_content = """
-        engine_config:
+        engine_args:
           model: "yaml-test-model-9876"
           tensor_parallel_size: 1234
           pipeline_parallel_size: 5678
@@ -139,36 +141,16 @@ class TestPolicyConfig(unittest.TestCase):
 
             policy = Policy(**config)
 
-            self.assertEqual(policy.engine_config.model, "yaml-test-model-9876")
-            self.assertEqual(policy.engine_config.tensor_parallel_size, 1234)
-            self.assertEqual(policy.engine_config.pipeline_parallel_size, 5678)
-            self.assertTrue(policy.engine_config.enforce_eager)
-            self.assertTrue(policy.engine_config._is_v1_supported_oracle())
+            self.assertEqual(policy.engine_args.model, "yaml-test-model-9876")
+            self.assertEqual(policy.engine_args.tensor_parallel_size, 1234)
+            self.assertEqual(policy.engine_args.pipeline_parallel_size, 5678)
+            self.assertTrue(policy.engine_args.enforce_eager)
+            self.assertTrue(policy.engine_args._is_v1_supported_oracle())
 
             self.assertEqual(policy.sampling_params.n, 2468)
             self.assertEqual(policy.sampling_params.max_tokens, 1357)
 
             self.assertEqual(policy.available_devices, "yaml-test-device-xyz")
-
-    @pytest.mark.skipif(
-        _import_error(),
-        reason="Import error, likely due to missing dependencies on CI.",
-    )
-    def test_engineconfig_ignores_invalid_keys(self):
-        """EngineConfig.from_dict ignores unexpected keys."""
-        from forge.actors.policy import EngineConfig
-
-        engine_config = {
-            "model": "custom-model",
-            "tensor_parallel_size": 2,
-            "invalid_key_123": "should be ignored",
-        }
-
-        config = EngineConfig.from_dict(engine_config)
-
-        self.assertEqual(config.model, "custom-model")
-        self.assertEqual(config.tensor_parallel_size, 2)
-        self.assertFalse(hasattr(config, "invalid_key_123"))
 
 
 if __name__ == "__main__":

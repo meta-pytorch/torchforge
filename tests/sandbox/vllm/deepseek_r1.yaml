@@ -2,7 +2,7 @@
 
 # NOTE - this won't work until we have proper HostMesh support
 policy:
-  engine_config:
+  engine_args:
     model: "deepseek-ai/DeepSeek-R1-0528"
     tensor_parallel_size: 16
     pipeline_parallel_size: 1

@@ -53,7 +53,7 @@ async def test_same_output():
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
-            engine_config={
+            engine_args={
                 "model": MODEL_NAME,
                 "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
                 "enforce_eager": ENFORCE_EAGER,
@@ -143,7 +143,7 @@ async def test_cache_usage():
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
-            engine_config={
+            engine_args={
                 "model": MODEL_NAME,
                 "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
                 "enforce_eager": ENFORCE_EAGER,
