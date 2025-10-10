@@ -15,10 +15,8 @@ from copy import copy
 from dataclasses import dataclass, field
 
 import torch
-import torch.distributed.checkpoint as dcp
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
@@ -50,7 +48,6 @@ from forge.actors._torchstore_utils import (
 )
 
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.interfaces import Policy as PolicyInterface
@@ -512,42 +509,6 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def execute_model(self, schedule: SchedulerOutput):
         return self.worker.execute_model(schedule)
-
-    async def _load_tensor_parallel_state_dict(
-        self, current_state_dict: dict, version: int
-    ):
-        """
-        Load full state dict from torchstore into tensor parallel model with deterministic sharding.
-        """
-        sharding = VLLMSharding(
-            self.vllm_config.parallel_config.tensor_parallel_size, self.rank
-        )
-
-        checkpoint_id = f"{self.state_dict_key}{DELIM}{version}"
-        dcp_metadata = None
-        if self.use_dcp:
-            dcp_metadata = await ts.get(checkpoint_id)
-
-        for param_name in current_state_dict.keys():
-            current_tensor = current_state_dict[param_name]
-
-            # Load the full tensor from torchstore
-            # TODO: only get the part of the tensor that is needed
-            if self.use_dcp:
-                tensor_meta = dcp_metadata.state_dict_metadata[param_name]
-                stored_tensor = torch.empty(
-                    size=tensor_meta.size, dtype=tensor_meta.properties.dtype
-                )
-                dcp.load(
-                    checkpoint_id=checkpoint_id, state_dict={param_name: stored_tensor}
-                )
-            else:
-                stored_tensor = await ts.get(f"{checkpoint_id}{DELIM}{param_name}")
-            sharding.load_from_source_to_target(
-                param_name,
-                stored_tensor,
-                current_tensor,
-            )
 
     @endpoint
     async def update(self, version: int):
