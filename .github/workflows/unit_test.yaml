@@ -28,7 +28,7 @@ jobs:
         run: |
           echo "Conda prefix: ${CONDA_PREFIX}"
           echo "Conda: $CONDA"
-          echo "Current path: ${{ env.PATH }}""
+          echo "Current path: ${{ env.PATH }}"
           conda env list
           echo "before export"
           echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
