@@ -6,7 +6,7 @@
 group_size: 2
 local_batch_size: 8 # per-device batch size
 max_req_tokens: 512
-max_res_tokens: 1024
+max_res_tokens: 512
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 
@@ -137,7 +137,7 @@ actors:
     with_gpus: false
   trainer:
     procs: 8
-    # hosts: 1
+    hosts: 1
     with_gpus: true
   replay_buffer:
     procs: 1

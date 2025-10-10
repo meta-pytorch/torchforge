@@ -256,11 +256,8 @@ class RLTrainer(ForgeActor):
         t = Tracer("rl_trainer_perf/step", timer="gpu", track_memory=True)
         t.start()
 
-        logger.info(f"[train step batch - global]: {len(inputs)}")
         self.engine.gc_handler.run(self.step)
         local_inputs = inputs[self.engine.dp_rank]
-
-        logger.info(f"[train step batch - local]: {len(local_inputs)}, {local_inputs['tokens'].shape}")
         local_targets = targets[self.engine.dp_rank]
         batch_to_device(local_inputs, self.engine.device)
         batch_to_device(local_targets, self.engine.device)
