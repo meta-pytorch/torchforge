@@ -391,7 +391,7 @@ class TestEnvironmentConfiguration:
         with patch("torch.cuda.is_available", return_value=True), patch(
             "forge.observability.perf_tracker.record_metric"
         ):
-            monkeypatch.setenv(METRIC_TIMER_USES_GPU, env_value)
+            monkeypatch.setenv(METRIC_TIMER_USES_GPU.name, env_value)
 
             # Test with timer="cpu" (should be overridden by env)
             tracer = Tracer("env_test", timer="cpu")
