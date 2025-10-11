@@ -124,6 +124,85 @@ install_system_packages() {
     fi
 }
 
+# Check to see if gh is installed, if not, it will be installed via conda-forge channel
+check_gh_install() {
+  if ! command -v gh &> /dev/null; then
+    log_warning "GitHub CLI (gh) not found. Installing via Conda..."
+    conda install gh --channel conda-forge -y
+    log_info "GitHub CLI (gh) installed successfully."
+    log_info "Please run 'gh auth login' to authenticate with GitHub."
+  else
+    log_info "GitHub CLI (gh) already installed."
+  fi
+}
+
+# Check wheels exist
+check_wheels() {
+    if [ ! -d "$WHEEL_DIR" ]; then
+        log_error "Wheels directory not found: $WHEEL_DIR"
+        exit 1
+    fi
+
+    local wheel_count=$(ls -1 "$WHEEL_DIR"/*.whl 2>/dev/null | wc -l)
+    log_info "Found $wheel_count local wheels"
+}
+
+# Download vLLM wheel from GitHub releases
+download_vllm_wheel() {
+    log_info "Downloading vLLM wheel from GitHub releases..."
+
+    # Check if gh is installed
+    if ! command -v gh &> /dev/null; then
+        log_error "GitHub CLI (gh) is required to download vLLM wheel"
+        log_info "Install it with: sudo dnf install gh"
+        log_info "Then run: gh auth login"
+        exit 1
+    fi
+
+    # Get the vLLM wheel filename from the release
+    local vllm_wheel_name
+    vllm_wheel_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPO" --json assets --jq '.assets[] | select(.name | contains("vllm")) | .name' | head -1)
+
+    if [ -z "$vllm_wheel_name" ]; then
+        log_error "Could not find vLLM wheel in release $RELEASE_TAG"
+        log_info "Make sure the vLLM wheel has been uploaded to the GitHub release"
+        exit 1
+    fi
+    for f in assets/wheels/vllm-*; do
+        [ -e "$f" ] || continue  # skip if glob didn't match
+        if [ "$(basename "$f")" != "$vllm_wheel_name" ]; then
+            log_info "Removing stale vLLM wheel: $(basename "$f")"
+            rm -f "$f"
+        fi
+    done
+
+    local local_path="$WHEEL_DIR/$vllm_wheel_name"
+
+    if [ -f "$local_path" ]; then
+        log_info "vLLM wheel already downloaded: $vllm_wheel_name"
+        return 0
+    fi
+
+    log_info "Downloading: $vllm_wheel_name"
+
+    # Save current directory and change to wheel directory
+    local original_dir=$(pwd)
+    cd "$WHEEL_DIR"
+    gh release download "$RELEASE_TAG" --repo "$GITHUB_REPO" --pattern "*vllm*"
+    local download_result=$?
+
+    # Always return to original directory
+    cd "$original_dir"
+
+    if [ $download_result -eq 0 ]; then
+        log_info "Successfully downloaded vLLM wheel"
+    else
+        log_error "Failed to download vLLM wheel"
+        exit 1
+    fi
+}
+
+
 # Parse command line arguments
 parse_args() {
     USE_SUDO=false
@@ -162,6 +241,7 @@ main() {
     echo "======================"
     echo ""
     echo "Note: Run this from the root of the forge repository"
+    echo "This script requires GitHub CLI (gh) to download large wheels"
     if [ "$USE_SUDO" = "true" ]; then
         echo "System packages will be installed via system package manager (requires sudo)"
         check_sudo
@@ -171,29 +251,23 @@ main() {
     echo ""
 
     check_conda_env
+    check_wheels
 
     # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
     conda install -y openssl
 
     install_system_packages "$USE_SUDO"
+    check_gh_install
+    download_vllm_wheel
 
     log_info "Installing PyTorch nightly..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu128
+    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
 
-    log_info "Installing torchtitan and torchstore..."
-    pip install torchtitan torchstore
-
-    # Install Monarch from wheel at download.pytorch.org
-    log_info "Downloading and installing Monarch wheel..."
-    pip install -r https://raw.githubusercontent.com/meta-pytorch/monarch/main/requirements.txt
-    pip install monarch --extra-index-url https://download.pytorch.org/whl/preview/forge
-
-    # Install vLLM from wheel at download.pytorch.org
-    log_info "Downloading and installing vLLM wheel..."
-    pip install vllm --extra-index-url https://download.pytorch.org/whl/preview/forge
+    log_info "Installing all wheels (local + downloaded)..."
+    pip install "$WHEEL_DIR"/*.whl
 
     log_info "Installing Forge from source..."
-    pip install -e ".[dev]"
+    pip install -e .
 
     # Set up environment
     log_info "Setting up environment..."
@@ -213,7 +287,7 @@ main() {
     local cuda_activation_script="${conda_env_dir}/etc/conda/activate.d/cuda_env.sh"
     cat > "$cuda_activation_script" << 'EOF'
 # CUDA environment for Forge
-export CUDA_VERSION=12.8
+export CUDA_VERSION=12.9
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}

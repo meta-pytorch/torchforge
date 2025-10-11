@@ -4,6 +4,7 @@
 # vLLM build to supplement a vLLM install from download.pytorch.org without
 # resorting to --extra-index-url https://download.pytorch.org/whl/nightly to find
 # vLLM dependencies (as this results in a ResolutionTooDeep error from pip).
+# See the file .github/workflows/gpu_test.yaml for an E2E forge installation using this approach.
 # TODO: this should be done way less hackily
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.0
