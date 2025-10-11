@@ -105,6 +105,12 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
     description="Sets the maximum frame length for Monarch's actor message delivery in bytes.",
 )
 
+OMP_NUM_THREADS = EnvVar(
+    name="OMP_NUM_THREADS",
+    default=16,  # Recommended <= # cores / # of gpus since we are using 1 gpu per process
+    description="Sets the number of OpenMP threads to use. This is used for CPU-bound operations in PyTorch.",
+)
+
 
 def all_env_vars() -> list[EnvVar]:
     """Retrieves all registered environment variable names."""
