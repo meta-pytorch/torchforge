@@ -53,7 +53,7 @@ trainer:
   lr_scheduler:
     warmup_steps: 1
   training:
-    local_local_batch_size: ${local_batch_size}
+    local_batch_size: ${local_batch_size}
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
