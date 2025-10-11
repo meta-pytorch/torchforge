@@ -36,7 +36,6 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
@@ -92,7 +91,7 @@ class Service:
 
         self._active_sessions = []
         self._id_session_map = {}
-        self._session_replica_map: Dict[str, int] = {}
+        self._session_replica_map: dict[str, int] = {}
 
         # Initialize metrics collection
         self._metrics = ServiceMetrics()
@@ -196,7 +195,7 @@ class Service:
                 )
             raise
 
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def call_all(self, function: str, *args, **kwargs) -> list:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 
@@ -622,7 +621,7 @@ class ServiceActor(Actor):
 
         self._active_sessions = []
         self._id_session_map = {}
-        self._session_replica_map: Dict[str, int] = {}
+        self._session_replica_map: dict[str, int] = {}
         self._next_replica_idx = 0  # For round-robin load balancing
 
         # Initialize metrics collection
@@ -726,7 +725,7 @@ class ServiceActor(Actor):
             raise
 
     @endpoint
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def call_all(self, function: str, *args, **kwargs) -> list:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 

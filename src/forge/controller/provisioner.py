@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Resource allocation and provisioning for both local and remote."""
+"""Remote and local resource manager for allocation and provisioning."""
 import asyncio
 import functools
 import logging
@@ -12,7 +12,6 @@ import logging
 import os
 import socket
 import uuid
-from typing import Optional
 
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -20,7 +19,7 @@ from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.env_constants import FORGE_DISABLE_METRICS
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -163,7 +162,7 @@ class Provisioner:
         num_procs: int,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: Optional[str] = None,
+        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,
@@ -220,9 +219,21 @@ class Provisioner:
                 host_mesh._host_id = self._this_host_id
 
             def bootstrap(env: dict[str, str]):
+                """Runs on process startup.
+
+                We use this to set environment variables like CUDA, etc.
+                We prefer to pass in environment variables to bootstrap,
+                but there are occasionally host-specific environments that can
+                only be set once the process is alive on remote hosts.
+
+                """
                 # bootstrap is run on all processes. We use this
                 # to set environment variables like CUDA etc.
                 import os
+
+                # vLLM requires this environment variable when spawning model servers
+                # across multiple nodes.
+                os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
 
                 for k, v in env.items():
                     os.environ[k] = v
@@ -234,19 +245,15 @@ class Provisioner:
 
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
-                env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
-                env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
-                env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
-                # Shows detailed logs for Monarch rust failures
-                env_vars["RUST_BACKTRACE"] = "1"
-            
-            env_vars_to_inherit = ["TORCHSTORE_RDMA_ENABLED"]
-            
-            for name in env_vars_to_inherit:
-                val = os.environ.get(name)
-                if val is not None:
-                    env_vars[name] = val
+                # Set the PTD world size
+                world_size = num_procs * (num_hosts or 1)
+                env_vars["WORLD_SIZE"] = str(world_size)
+                env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
+
+                # Inherit Forge-relevant environment variables from the system
+                for env_var in all_env_vars():
+                    env_vars[env_var.name] = str(env_var.get_value())
 
             procs = host_mesh.spawn_procs(
                 per_host={"gpus": num_procs},
@@ -270,7 +277,7 @@ class Provisioner:
             self._proc_host_map[procs] = host_mesh
 
         # Spawn local fetcher actor on each process and register with global logger
-        if os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true":
+        if not FORGE_DISABLE_METRICS.get_value():
             from forge.observability.metric_actors import get_or_create_metric_logger
 
             _ = await get_or_create_metric_logger(procs)
