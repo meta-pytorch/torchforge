@@ -462,7 +462,8 @@ async def main(cfg: DictConfig):
                 t.step("update_weights")
 
                 if training_step >= 2:
-                    await drop_weights(training_step - 1)
+                    # TODO: figure out why setting to training_step - 1 will trigger error
+                    await drop_weights(training_step - 2)
                     t.step("drop_weights")
 
                 t.stop()
