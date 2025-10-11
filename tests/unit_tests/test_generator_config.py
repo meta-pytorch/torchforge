@@ -30,28 +30,30 @@ class TestGeneratorConfig(unittest.TestCase):
     )
     def test_generator_default_initialization(self):
         """Generator initializes with default values."""
-        from forge.actors.generator import EngineConfig, Generator, SamplingConfig
+        from forge.actors.generator import Generator
+        from vllm.engine.arg_utils import EngineArgs
+        from vllm.sampling_params import SamplingParams
 
         generator = Generator()
 
         # Default factories
-        self.assertIsInstance(generator.engine_config, EngineConfig)
-        self.assertIsInstance(generator.sampling_config, SamplingConfig)
+        self.assertIsInstance(generator.engine_args, EngineArgs)
+        self.assertIsInstance(generator.sampling_params, SamplingParams)
         self.assertIsNone(generator.available_devices)
 
         # Worker defaults
         self.assertEqual(
-            generator.engine_config.model, "meta-llama/Llama-3.1-8B-Instruct"
+            generator.engine_args.model, "meta-llama/Llama-3.1-8B-Instruct"
         )
-        self.assertEqual(generator.engine_config.tensor_parallel_size, 1)
-        self.assertEqual(generator.engine_config.pipeline_parallel_size, 1)
-        self.assertFalse(generator.engine_config.enforce_eager)
-        self.assertTrue(generator.engine_config._is_v1_supported_oracle())
+        self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
+        self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
+        self.assertFalse(generator.engine_args.enforce_eager)
+        self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
         # Sampling defaults
-        self.assertEqual(generator.sampling_config.n, 1)
-        self.assertFalse(generator.sampling_config.guided_decoding)
-        self.assertEqual(generator.sampling_config.max_tokens, 512)
+        self.assertEqual(generator.sampling_params.n, 1)
+        self.assertFalse(generator.sampling_params.guided_decoding)
+        self.assertEqual(generator.sampling_params.max_tokens, 512)
 
     @pytest.mark.skipif(
         _import_error(),
@@ -59,7 +61,9 @@ class TestGeneratorConfig(unittest.TestCase):
     )
     def test_generator_with_dict_configs(self):
         """Generator accepts dicts for engine_config and sampling_config, including nested dicts."""
-        from forge.actors.generator import EngineConfig, Generator, SamplingConfig
+        from forge.actors.generator import Generator
+        from vllm.engine.arg_utils import EngineArgs
+        from vllm.sampling_params import SamplingParams
 
         # Test with nested dict structure
         engine_dict = {
@@ -76,30 +80,27 @@ class TestGeneratorConfig(unittest.TestCase):
 
         sampling_dict = {
             "n": 1357,
-            "guided_decoding": True,
             "max_tokens": 2468,
         }
 
         generator = Generator(
-            engine_config=engine_dict,
-            sampling_config=sampling_dict,
+            engine_args=engine_dict,
+            sampling_params=sampling_dict,
             available_devices="test-gpu-device-abcd",
         )
 
-        self.assertIsInstance(generator.engine_config, EngineConfig)
-        self.assertIsInstance(generator.sampling_config, SamplingConfig)
+        self.assertIsInstance(generator.engine_args, EngineArgs)
+        self.assertIsInstance(generator.sampling_params, SamplingParams)
 
         # Test basic fields
-        self.assertEqual(generator.engine_config.model, "test-model-6789")
-        self.assertEqual(generator.engine_config.tensor_parallel_size, 7777)
-        self.assertEqual(generator.engine_config.pipeline_parallel_size, 8888)
-        self.assertTrue(generator.engine_config.enforce_eager)
-        self.assertTrue(generator.engine_config._is_v1_supported_oracle())
+        self.assertEqual(generator.engine_args.model, "test-model-6789")
+        self.assertEqual(generator.engine_args.tensor_parallel_size, 7777)
+        self.assertEqual(generator.engine_args.pipeline_parallel_size, 8888)
+        self.assertTrue(generator.engine_args.enforce_eager)
+        self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
-        self.assertEqual(generator.sampling_config.n, 1357)
-        # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-        self.assertIsNotNone(generator.sampling_config.guided_decoding)
-        self.assertEqual(generator.sampling_config.max_tokens, 2468)
+        self.assertEqual(generator.sampling_params.n, 1357)
+        self.assertEqual(generator.sampling_params.max_tokens, 2468)
 
         # Test that engine_dict accepts and preserves nested dict structure
         # The original engine_dict should remain unchanged and accessible
@@ -120,15 +121,14 @@ class TestGeneratorConfig(unittest.TestCase):
         from forge.actors.generator import Generator
 
         yaml_content = """
-        engine_config:
+        engine_args:
           model: "yaml-test-model-9876"
           tensor_parallel_size: 1234
           pipeline_parallel_size: 5678
           enforce_eager: true
 
-        sampling_config:
+        sampling_params:
           n: 2468
-          guided_decoding: true
           max_tokens: 1357
 
         available_devices: "yaml-test-device-xyz"
@@ -142,39 +142,16 @@ class TestGeneratorConfig(unittest.TestCase):
                 config = yaml.safe_load(yaml_file)
 
             generator = Generator(**config)
+            self.assertEqual(generator.engine_args.model, "yaml-test-model-9876")
+            self.assertEqual(generator.engine_args.tensor_parallel_size, 1234)
+            self.assertEqual(generator.engine_args.pipeline_parallel_size, 5678)
+            self.assertTrue(generator.engine_args.enforce_eager)
+            self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
-            self.assertEqual(generator.engine_config.model, "yaml-test-model-9876")
-            self.assertEqual(generator.engine_config.tensor_parallel_size, 1234)
-            self.assertEqual(generator.engine_config.pipeline_parallel_size, 5678)
-            self.assertTrue(generator.engine_config.enforce_eager)
-            self.assertTrue(generator.engine_config._is_v1_supported_oracle())
-
-            self.assertEqual(generator.sampling_config.n, 2468)
-            # After __post_init__, guided_decoding becomes GuidedDecodingParams object when True
-            self.assertIsNotNone(generator.sampling_config.guided_decoding)
-            self.assertEqual(generator.sampling_config.max_tokens, 1357)
+            self.assertEqual(generator.sampling_params.n, 2468)
+            self.assertEqual(generator.sampling_params.max_tokens, 1357)
 
             self.assertEqual(generator.available_devices, "yaml-test-device-xyz")
-
-    @pytest.mark.skipif(
-        _import_error(),
-        reason="Import error, likely due to missing dependencies on CI.",
-    )
-    def test_engineconfig_ignores_invalid_keys(self):
-        """EngineConfig.from_dict ignores unexpected keys."""
-        from forge.actors.generator import EngineConfig
-
-        engine_config = {
-            "model": "custom-model",
-            "tensor_parallel_size": 2,
-            "invalid_key_123": "should be ignored",
-        }
-
-        config = EngineConfig.from_dict(engine_config)
-
-        self.assertEqual(config.model, "custom-model")
-        self.assertEqual(config.tensor_parallel_size, 2)
-        self.assertFalse(hasattr(config, "invalid_key_123"))
 
 
 if __name__ == "__main__":

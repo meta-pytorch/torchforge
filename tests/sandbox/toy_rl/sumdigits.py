@@ -427,8 +427,6 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
-    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
-    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
 
     # ---- Setup services ---- #
     print(f"{cfg.policy=}")
