@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import logging
 import math
 import os
@@ -12,7 +13,7 @@ import shutil
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
-from typing import Callable
+from typing import Callable, Iterable
 
 import torch
 import torch.distributed.checkpoint as dcp
@@ -39,11 +40,7 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-)
+from forge.actors._torchstore_utils import DcpHandle, get_dcp_whole_state_dict_key
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
@@ -91,6 +88,36 @@ def cleanup_old_weight_versions(
                     logger.debug(f"Removed old weights at {item_path}")
                 except OSError as e:
                     logger.debug(f"Error deleting {item_path}: {e}")
+
+
+async def _parallel_to_cpu(tensors: list[Tensor]):
+    num_streams = min(4, len(tensors))  # GPU typically supports 2-4 parallel copies
+    streams = [torch.cuda.Stream() for _ in range(num_streams)]
+    results = []
+
+    for i, tensor in enumerate(tensors):
+        stream = streams[i % num_streams]
+        with torch.cuda.stream(stream):
+            # Non-blocking copy happens in this stream
+            cpu_tensor = tensor.detach().to("cpu", non_blocking=True)
+            results.append(cpu_tensor)
+
+        # Yield to event loop periodically
+        if i % 10 == 0:
+            await asyncio.sleep(0)
+
+    # Wait for all streams to complete
+    for stream in streams:
+        stream.synchronize()
+
+    return results
+
+
+async def _parallel_put(kv_pairs: Iterable[tuple[str, Tensor]]):
+    keys, tensors = zip(*kv_pairs)
+    cpu_tensors = await _parallel_to_cpu(tensors)
+    coros = [ts.put(key, cpu_tensor) for key, cpu_tensor in zip(keys, cpu_tensors)]
+    await asyncio.gather(*coros)
 
 
 @dataclass
@@ -401,10 +428,7 @@ class RLTrainer(ForgeActor):
             await ts.put(key, dcp_handle)
             t.step("dcp_save")
         else:
-            for name, param in hf_state_dict.items():
-                key = get_param_key(policy_version, name)
-                # RDMA is still broken on GPU, so we need to copy to CPU
-                await ts.put(key, param.detach().cpu())
+            await _parallel_put(hf_state_dict.items())
             t.step("ts_save")
         t.stop()
         end_time = time.perf_counter()
