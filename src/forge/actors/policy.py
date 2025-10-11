@@ -19,7 +19,6 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 from monarch.actor import current_rank, endpoint, ProcMesh
-from torch.profiler import profile, ProfilerActivity, record_function
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
@@ -64,14 +63,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 hostname = socket.gethostname()
-
-
-def trace_handler(rank, p):
-    p.export_chrome_trace(
-        f"/mnt/data/yuxuanh/profiler/{hostname}_trace_rank_{rank}_"
-        + str(p.step_num)
-        + ".json"
-    )
 
 
 async def _ts_parallel_get(keys: list[str]) -> list[torch.Tensor]:
@@ -569,48 +560,38 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update(self, version: int):
         """Update model weights by reading state dict from torchstore"""
-        with profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            record_shapes=True,
-            on_trace_ready=lambda p: trace_handler(self.rank, p),
-            with_stack=True,
-            profile_memory=True,
-        ) as prof:
-            with record_function("policy_worker_perf/update"):
-                logger.info(
-                    f"[PolicyWorker::update] start updating weights to version {version}"
-                )
-                model = self.worker.model_runner.model
-                prefix = get_param_prefix(version)
-                logger.debug(f"{prefix=}")
-                matching_keys = await ts.keys(prefix)
-                logger.debug(f"{matching_keys=}")
-                dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
-                loaded_weights = set()
-                t = Tracer("policy_worker_perf/update", timer="gpu")
-                t.start()
-                # Entire state dict is stored in a single DCP handle
-                if dcp_whole_state_dict_key in matching_keys:
-                    logger.info(
-                        f"Loading {dcp_whole_state_dict_key} from DCP with handle {dcp_whole_state_dict_key}"
-                    )
-                    dcp_handle = await ts.get(dcp_whole_state_dict_key)
-                    hf_param_names = dcp_handle.param_names
-                    for name in hf_param_names:
-                        param = load_tensor_from_dcp(dcp_handle, name)
-                        loaded = model.load_weights([(name, param)])
-                        del param
-                        loaded_weights.update(loaded)
-                else:  # Load each parameter from torchstore directly without DCP
-                    hf_param_names = [extract_param_name(key) for key in matching_keys]
-                    param_keys = [
-                        get_param_key(version, name) for name in hf_param_names
-                    ]
-                    new_params = await _ts_parallel_get(param_keys)
-                    loaded = model.load_weights(zip(hf_param_names, new_params))
-                    loaded_weights.update(loaded)
-                t.stop()
-                logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
+        logger.info(
+            f"[PolicyWorker::update] start updating weights to version {version}"
+        )
+        model = self.worker.model_runner.model
+        prefix = get_param_prefix(version)
+        logger.debug(f"{prefix=}")
+        matching_keys = await ts.keys(prefix)
+        logger.debug(f"{matching_keys=}")
+        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        loaded_weights = set()
+        t = Tracer("policy_worker_perf/update", timer="gpu")
+        t.start()
+        # Entire state dict is stored in a single DCP handle
+        if dcp_whole_state_dict_key in matching_keys:
+            logger.info(
+                f"Loading {dcp_whole_state_dict_key} from DCP with handle {dcp_whole_state_dict_key}"
+            )
+            dcp_handle = await ts.get(dcp_whole_state_dict_key)
+            hf_param_names = dcp_handle.param_names
+            for name in hf_param_names:
+                param = load_tensor_from_dcp(dcp_handle, name)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
+        else:  # Load each parameter from torchstore directly without DCP
+            hf_param_names = [extract_param_name(key) for key in matching_keys]
+            param_keys = [get_param_key(version, name) for name in hf_param_names]
+            new_params = await _ts_parallel_get(param_keys)
+            loaded = model.load_weights(zip(hf_param_names, new_params))
+            loaded_weights.update(loaded)
+        t.stop()
+        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
     async def setup_kv_cache(self):
