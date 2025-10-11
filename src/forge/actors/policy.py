@@ -706,7 +706,6 @@ class PolicyWorker(ForgeActor):
                     loaded_weights.update(loaded)
                 t.stop()
                 logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
-        prof.step()
 
     @endpoint
     async def setup_kv_cache(self):
