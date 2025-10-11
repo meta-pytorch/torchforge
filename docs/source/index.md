@@ -225,9 +225,9 @@ TorchForge has been validated in real-world deployments:
 Before starting significant work, signal your intention in the issue tracker to coordinate with maintainers.
 ```
 
-
 ```{toctree}
 :maxdepth: 2
+:caption: Documentation
 
 getting_started
 concepts
