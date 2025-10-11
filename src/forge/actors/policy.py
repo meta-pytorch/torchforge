@@ -141,7 +141,9 @@ class Policy(PolicyInterface):
     engine_config: EngineConfig | Mapping = field(default_factory=EngineConfig)
     sampling_config: SamplingConfig | Mapping = field(default_factory=SamplingConfig)
     available_devices: str | None = None
-    use_dcp: bool = not TORCHSTORE_USE_RDMA.get_value()
+    use_dcp: bool = (
+        TORCHSTORE_USE_RDMA.get_value() == 0
+    )  # torchstore currently only accepts 0 or 1
     # Gets set up by setup
     sampling_params: SamplingParams | None = None
     lora_request: LoRARequest | None = None

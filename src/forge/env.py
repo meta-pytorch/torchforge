@@ -107,7 +107,7 @@ MONARCH_HOSTMESH_V1 = EnvVar(
 
 TORCHSTORE_USE_RDMA = EnvVar(
     name="TORCHSTORE_RDMA_ENABLED",
-    default=1,
+    default=0,
     description="Whether or not to use RDMA in TorchStore.",
 )
 
