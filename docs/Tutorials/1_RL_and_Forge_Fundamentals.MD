@@ -16,7 +16,7 @@ graph TD
         ReplayBuffer["Replay Buffer: stores experiences"]
         Trainer["Trainer: improves student"]
     end
-    
+
     Dataset --> Policy
     Policy --> Reward
     Policy --> Reference
@@ -24,7 +24,7 @@ graph TD
     Reference --> ReplayBuffer
     ReplayBuffer --> Trainer
     Trainer --> Policy
-    
+
     style Policy fill:#4CAF50
     style Reward fill:#FF9800
     style Trainer fill:#E91E63
@@ -47,25 +47,25 @@ graph TD
 def conceptual_rl_step():
     # 1. Get a math problem
     question = dataset.sample()  # "What is 2+2?"
-    
-    # 2. Student generates answer  
+
+    # 2. Student generates answer
     answer = policy.generate(question)  # "The answer is 4"
-    
+
     # 3. Teacher grades it
     score = reward_model.evaluate(question, answer)  # 0.95
-    
+
     # 4. Compare to original student
     baseline = reference_model.compute_logprobs(question, answer)
-    
+
     # 5. Store the experience
     experience = Episode(question, answer, score, baseline)
     replay_buffer.add(experience)
-    
+
     # 6. When enough experiences collected, improve student
     batch = replay_buffer.sample(curr_policy_version=0)
     if batch is not None:
         trainer.train_step(batch)  # Student gets better!
-        
+
 # 🔄 See complete working example below with actual Forge service calls
 ```
 
@@ -83,7 +83,7 @@ graph LR
         C5["Replay Buffer"]
         C6["Trainer"]
     end
-    
+
     subgraph Services["Forge Services (Real Classes)"]
         S1["DatasetActor"]
         S2["Policy"]
@@ -92,14 +92,14 @@ graph LR
         S5["ReplayBuffer"]
         S6["RLTrainer"]
     end
-    
+
     C1 --> S1
     C2 --> S2
     C3 --> S3
     C4 --> S4
     C5 --> S5
     C6 --> S6
-    
+
     style C2 fill:#4CAF50
     style S2 fill:#4CAF50
     style C3 fill:#FF9800
@@ -117,26 +117,26 @@ async def conceptual_forge_rl_step(services, step):
     # 1. Get a math problem - Using actual DatasetActor API
     sample = await services['dataloader'].sample.call_one()
     question, target = sample["request"], sample["target"]
-    
+
     # 2. Student generates answer - Using actual Policy API
     responses = await services['policy'].generate.route(prompt=question)
-    answer = responses[0].text  
-    
+    answer = responses[0].text
+
     # 3. Teacher grades it - Using actual RewardActor API
     score = await services['reward_actor'].evaluate_response.route(
         prompt=question, response=answer, target=target
     )
-    
+
     # 4. Compare to baseline - Using actual ReferenceModel API
     # Note: ReferenceModel.forward requires input_ids, max_req_tokens, return_logprobs
     ref_logprobs = await services['ref_model'].forward.route(
         input_ids, max_req_tokens, return_logprobs=True
     )
-    
+
     # 5. Store experience - Using actual Episode structure from apps/grpo/main.py
     episode = create_episode_from_response(responses[0], score, ref_logprobs, step)
     await services['replay_buffer'].add.call_one(episode)
-    
+
     # 6. Improve student - Using actual training pattern
     batch = await services['replay_buffer'].sample.call_one(
         curr_policy_version=step
@@ -160,23 +160,12 @@ Our simple RL loop above has complex requirements:
 
 #### Problem 1: Different Resource Needs
 
-```mermaid
-graph TD
-    subgraph Components["Each Component Needs Different Resources"]
-        Policy["Policy (Student AI): Large GPU memory, Multiple replicas"]
-        
-        Reward["Reward Model (Teacher): Moderate compute, CPU/small GPU"]
-        
-        Trainer["Trainer (Tutor): Massive GPU compute, Distributed training"]
-        
-        Dataset["Dataset (Question Bank): CPU intensive I/O, High memory bandwidth"]
-    end
-    
-    style Policy fill:#4CAF50
-    style Reward fill:#FF9800
-    style Trainer fill:#E91E63
-    style Dataset fill:#2196F3
-```
+| Component | Resource Needs | Scaling Strategy |
+|-----------|----------------|------------------|
+| **Policy** (Student AI) | Large GPU memory | Multiple replicas for throughput |
+| **Reward Heuristic** (Teacher) | Small compute | CPU or small GPU |
+| **Trainer** (Tutor) | Massive GPU compute | Distributed training |
+| **Dataset** (Question Bank) | CPU intensive I/O | High memory bandwidth |
 
 ### Problem 2: Complex Interdependencies
 
@@ -187,14 +176,14 @@ graph LR
     C["Reference: Original Student<br/>Provides baseline comparison"]
     D["Replay Buffer: Notebook<br/>Stores: question + answer + score"]
     E["Trainer: Tutor<br/>Improves student using experiences"]
-    
+
     A --> B
     A --> C
     B --> D
     C --> D
     D --> E
     E --> A
-    
+
     style A fill:#4CAF50
     style B fill:#FF9800
     style C fill:#2196F3
@@ -203,7 +192,7 @@ graph LR
 ```
 
 Each step has different:
-- **Latency requirements**: Policy inference needs low latency, training can batch
+- **Latency requirements**: Policy inference needs low latency (each episode waits), training can batch multiple episodes together
 - **Scaling patterns**: Need N policy replicas to keep trainer busy, plus different sharding strategies (tensor parallel for training vs replicated inference)
 - **Failure modes**: Any component failure cascades to halt the entire pipeline (Forge prevents this with automatic failover)
 - **Resource utilization**: GPUs for inference/training, CPUs for data processing
@@ -218,10 +207,10 @@ def naive_rl_step():
     # Policy waits idle while reward model works
     response = policy_model.generate(prompt)  # GPU busy
     reward = reward_model.evaluate(prompt, response)  # Policy GPU idle
-    
-    # Training waits for single episode  
+
+    # Training waits for single episode
     loss = compute_loss(response, reward)  # Batch size = 1, inefficient
-    
+
     # Everything stops if any component fails
     if policy_fails or reward_fails or trainer_fails:
         entire_system_stops()
@@ -233,32 +222,37 @@ Forge solves these problems by treating each RL component as an **independent, d
 
 Let's see how core RL concepts map to Forge components (you'll notice a mix of `.route()` for services and `.call_one()` for actors - we cover when to use each in Part 2):
 
+**Quick API Reference:** (covered in detail in Part 2: Service Communication Patterns)
+- `.route()` - Send request to any healthy replica in a service (load balanced)
+- `.call_one()` - Send request to a single actor instance
+- `.fanout()` - Send request to ALL replicas in a service
+
 ```python
 async def real_rl_training_step(services, step):
     """Single RL step using verified Forge APIs"""
-    
+
     # 1. Environment interaction - Using actual DatasetActor API
     sample = await services['dataloader'].sample.call_one()
     prompt, target = sample["request"], sample["target"]
-    
+
     responses = await services['policy'].generate.route(prompt)
-    
+
     # 2. Reward computation - Using actual RewardActor API
     score = await services['reward_actor'].evaluate_response.route(
         prompt=prompt, response=responses[0].text, target=target
     )
-    
+
     # 3. Get reference logprobs - Using actual ReferenceModel API
     # Note: ReferenceModel requires full input_ids tensor, not just tokens
     input_ids = torch.cat([responses[0].prompt_ids, responses[0].token_ids])
     ref_logprobs = await services['ref_model'].forward.route(
         input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True
     )
-    
+
     # 4. Experience storage - Using actual Episode pattern from GRPO
     episode = create_episode_from_response(responses[0], score, ref_logprobs, step)
     await services['replay_buffer'].add.call_one(episode)
-    
+
     # 5. Learning - Using actual trainer pattern
     batch = await services['replay_buffer'].sample.call_one(
         curr_policy_version=step
@@ -266,11 +260,11 @@ async def real_rl_training_step(services, step):
     if batch is not None:
         inputs, targets = batch  # GRPO returns (inputs, targets) tuple
         loss = await services['trainer'].train_step.call(inputs, targets)
-        
+
         # 6. Policy synchronization - Using actual weight update pattern
         await services['trainer'].push_weights.call(step + 1)
         await services['policy'].update_weights.fanout(step + 1)
-        
+
         return loss
 ```
 
@@ -286,7 +280,7 @@ answer = responses[0].text  # responses is list[Completion]
 
 Forge handles behind the scenes:
 - Routing to least loaded replica
-- GPU memory management  
+- GPU memory management
 - Batch optimization
 - Failure recovery
 - Auto-scaling based on demand
@@ -365,10 +359,16 @@ group_size = 1
     )
 ```
 
-Production scaling - multiply num_replicas for services or spawn multiple actors:
-- Policy: num_replicas=8 for high inference demand
-- RewardActor: num_replicas=16 for parallel evaluation
-- Trainer: Multiple processes for distributed training (RLTrainer handles this internally)
+**Forge Components: Services vs Actors**
+
+Forge has two types of distributed components:
+- **Services**: Multiple replicas with automatic load balancing (like Policy, RewardActor)
+- **Actors**: Single instances that handle their own internal distribution (like RLTrainer, ReplayBuffer)
+
+We cover this distinction in detail in Part 2, but for now this explains the scaling patterns:
+- Policy service: num_replicas=8 for high inference demand
+- RewardActor service: num_replicas=16 for parallel evaluation
+- RLTrainer actor: Single instance with internal distributed training
 
 
 ### Fault Tolerance
@@ -377,13 +377,13 @@ Production scaling - multiply num_replicas for services or spawn multiple actors
 responses = await policy.generate.route(prompt=question)
 answer = responses[0].text
 # -> Forge automatically routes to healthy replica
-# -> Failed replica respawns in background  
+# -> Failed replica respawns in background
 # -> No impact on training loop
 
 # If reward service fails:
 score = await reward_actor.evaluate_response.route(
     prompt=question, response=answer, target=target
-) 
+)
 ```
 
 - Retries on different replica automatically

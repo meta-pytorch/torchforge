@@ -13,23 +13,23 @@ When you call `await policy_service.generate(question)`, here's what actually ha
 ```mermaid
 graph TD
     Call["Your Code:<br/>await policy_service.generate"]
-    
+
     subgraph ServiceLayer["Service Layer"]
         Proxy["Service Proxy: Load balancing, Health checking"]
         LB["Load Balancer: Replica selection, Circuit breaker"]
     end
-    
+
     subgraph Replicas["Replica Management"]
         R1["Replica 1: GPU 0, Healthy"]
         R2["Replica 2: GPU 1, Overloaded"]
         R3["Replica 3: GPU 2, Failed"]
         R4["Replica 4: GPU 3, Healthy"]
     end
-    
+
     subgraph Compute["Actual Computation"]
         Actor["Policy Actor: vLLM engine, Model weights, KV cache"]
     end
-    
+
     Call --> Proxy
     Proxy --> LB
     LB --> R1
@@ -38,7 +38,7 @@ graph TD
     LB --> R4
     R1 --> Actor
     R4 --> Actor
-    
+
     style Call fill:#4CAF50
     style LB fill:#FF9800
     style R3 fill:#F44336
@@ -55,7 +55,7 @@ Here's the actual ServiceConfig from Forge source code:
 # Configuration pattern from apps/grpo/main.py:
 Policy.options(
     procs=1,           # Processes per replica
-    num_replicas=4,    # Number of replicas  
+    num_replicas=4,    # Number of replicas
     with_gpus=True     # Allocate GPUs
     # Other available options:
     # hosts=None   #  the number of remote hosts used per replica
@@ -69,7 +69,7 @@ Services are created using the `.options().as_service()` pattern from the actual
 The service creation automatically handles:
 - Spawning actor replicas across processes/GPUs
 - Load balancing with .route() method for services
-- Health monitoring and failure recovery  
+- Health monitoring and failure recovery
 - Message routing and serialization
 
 ```python
@@ -78,8 +78,8 @@ from forge.actors.policy import Policy
 model = "Qwen/Qwen3-1.7B"
 
 policy = await Policy.options(
-    procs=1, 
-    with_gpus=True, 
+    procs=1,
+    with_gpus=True,
     num_replicas=1
 ).as_service(
     engine_config={
@@ -158,7 +158,7 @@ Behind the scenes:
 ```python
 # Get version from all policy replicas
 current_versions = await policy.get_version.fanout()
-# Returns: [version_replica_1, version_replica_2, ...] 
+# Returns: [version_replica_1, version_replica_2, ...]
 
 # Update weights on all replicas
 await policy.update_weights.fanout(new_policy_version)
@@ -193,8 +193,8 @@ while training:
 ```
 
 **Performance characteristics**:
-- **Latency**: Process first result immediately  
-- **Throughput**: Pipeline parallelism (much higher than sequential)
+- **Latency**: Process first result immediately
+- **Throughput**: Non-blocking async operations (much higher than waiting for full batches)
 - **Fault tolerance**: Continues if some replicas fail
 
 **Critical insight**: This is essential for high-throughput RL where you can't wait for batches.
@@ -242,7 +242,7 @@ async with counter_service.session():
     print(await counter_service.increment.route())  # 1
     print(await counter_service.increment.route())  # 2
     print(await counter_service.increment.route())  # 3
-          
+
     final_value = await counter_service.get_value.route()
     print(f"Final value on this replica: {final_value}")  # 3
 
@@ -263,7 +263,7 @@ await counter_service.shutdown()
 
 The most complex challenge in distributed RL is maintaining state consistency while maximizing performance.
 
-### The KV Cache Problem  
+### The KV Cache Problem
 
 **The challenge**: Policy inference is much faster with KV cache, but cache is tied to specific conversation history.
 
@@ -278,16 +278,16 @@ async def naive_multi_turn():
 
 **The solution**: Sticky sessions ensure all calls go to same replica.
 
-```python  
+```python
 async def optimized_multi_turn():
     async with policy.session():
         # All calls guaranteed to hit same replica = cache hits
         response1 = await policy.generate.route(prompt=question1)
-        full_prompt = question1 + response1[0].text  
+        full_prompt = question1 + response1[0].text
         response2 = await policy.generate.route(prompt=full_prompt) # Cache hit!
         conversation = full_prompt + response2[0].text
         response3 = await policy.generate.route(prompt=conversation)   # Cache hit!
-        
+
     # Session ends, replica can be garbage collected or reused
 ```
 
@@ -327,11 +327,11 @@ batch = await replay_buffer.sample.call_one(
 async def real_weight_sync(trainer, policy, step):
     # Trainer pushes weights to TorchStore with version number
     await trainer.push_weights.call_one(policy_version=step + 1)
-    
-    # Policy service updates to new version from TorchStore  
+
+    # Policy service updates to new version from TorchStore
     # Use .fanout() to update ALL policy replicas
     await policy.update_weights.fanout(policy_version=step + 1)
-    
+
 # Check current policy version
 current_version = await policy.get_version.route()
 print(f"Current policy version: {current_version}")
@@ -349,29 +349,29 @@ Instead of manual coordination, Forge services handle speed mismatches automatic
 from apps.grpo.main import Episode, Group
 
 async def simple_rl_step():
-    
+
     # ===== Generate a rollout =====
     sample = await dataloader.sample.call_one()  # DatasetActor is an actor, not service
     prompt, target = sample["request"], sample["target"]  # Correct field names
-    
+
     print(f"Prompt: {prompt}")
     print(f"Target: {target}")
-    
+
     actions = await policy.generate.route(prompt=prompt)  # Policy is a service
     print(f"Policy response: {actions[0].text}")
-    
+
     # Create input tensor for reference model (requires full context)
     input_ids = torch.cat([actions[0].prompt_ids, actions[0].token_ids])
     ref_logprobs = await ref_model.forward.route(
         input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True
-    )    
+    )
     reward = await reward_actor.evaluate_response.route(  # RewardActor is a service
-        prompt=prompt, 
-        response=actions[0].text, 
+        prompt=prompt,
+        response=actions[0].text,
         target=target
     )
     print(f"Reward: {reward}")
-    
+
     # Create episode using actual GRPO Episode structure
     episode = Episode(
         episode_id="0",
@@ -382,24 +382,24 @@ async def simple_rl_step():
         response_len=512,
         target=target
     )
-    
+
     # Add response data
     episode.response = actions[0].text
     episode.request_tokens = actions[0].prompt_ids.tolist()
     episode.response_tokens = actions[0].token_ids.tolist()
     episode.ref_logprobs = ref_logprobs[0]  # Extract from batch dimension
     episode.reward = reward
-    
+
     # Compute advantages using actual ComputeAdvantages actor
     group = Group.new_group(0, 1, prompt, 0, tokenizer.pad_token_id, 512, 512, target)
     group.episodes[0] = episode
     advantages = await compute_advantages.compute.call_one(group)  # ComputeAdvantages is an actor
     episode.advantage = advantages[0]
-    print(f"Advantage: {advantages[0]}")    
+    print(f"Advantage: {advantages[0]}")
     await replay_buffer.add.call_one(episode)  # ReplayBuffer is an actor
     print("Episode stored in replay buffer")
-    
-    # ===== Train on the batch ===== 
+
+    # ===== Train on the batch =====
     batch = await replay_buffer.sample.call_one(curr_policy_version=0)
     if batch is not None:
         print("Training on batch...")
@@ -469,12 +469,12 @@ class RewardActor(ForgeActor):
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
         """Evaluate response quality using multiple reward functions"""
         total_reward = 0.0
-        
+
         for reward_fn in self.reward_functions:
             # Each reward function contributes to total score
             reward = reward_fn(prompt, response, target)
             total_reward += reward
-            
+
         # Return average reward across all functions
         return total_reward / len(self.reward_functions) if self.reward_functions else 0.0
 
@@ -490,7 +490,7 @@ target = "36"
 
 score = await reward_actor.evaluate_response.route(
     prompt=prompt,
-    response=response, 
+    response=response,
     target=target
 )
 print(f"Reward score: {score}")  # Usually around 1.0 for correct math answers
@@ -530,7 +530,7 @@ print("Initializing all services...")
     reward_actor,
 ) = await asyncio.gather(
     DatasetActor.options(procs=1).as_actor(
-        path="openai/gsm8k", revision="main", data_split="train", 
+        path="openai/gsm8k", revision="main", data_split="train",
         streaming=True, model="Qwen/Qwen3-1.7B"
     ),
     Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
@@ -559,41 +559,41 @@ print("All services initialized successfully!")
 async def production_training_loop():
     """Real training loop pattern from apps/grpo/main.py"""
     step = 0
-    
+
     while True:
-        # Data generation 
+        # Data generation
         sample = await dataloader.sample.call_one()
-        
+
         # Policy generation service call
         responses = await policy.generate.route(sample["request"])  # Correct field name
-        
+
         # Reference computation service call (requires full input tensor)
         input_ids = torch.cat([responses[0].prompt_ids, responses[0].token_ids])
         ref_logprobs = await ref_model.forward.route(
             input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True
         )
-        
-        # Reward evaluation service call 
+
+        # Reward evaluation service call
         reward = await reward_actor.evaluate_response.route(
             prompt=sample["question"],
             response=responses[0].text,
             target=sample["answer"]
         )
-        
+
         # Experience storage (using actual Episode structure)
         episode = create_episode_from_grpo_data(sample, responses[0], reward, ref_logprobs[0], step)
         await replay_buffer.add.call_one(episode)
-        
+
         # Training when ready
         batch = await replay_buffer.sample.call_one(curr_policy_version=step)
         if batch is not None:
             inputs, targets = batch  # GRPO returns (inputs, targets) tuple
             loss = await trainer.train_step.call(inputs, targets)
-            
+
             # Weight synchronization pattern
             await trainer.push_weights.call(step + 1)
             await policy.update_weights.fanout(step + 1)  # Fanout to all replicas
-            
+
             print(f"Step {step}, Loss: {loss:.4f}")
             step += 1
 
@@ -612,7 +612,7 @@ print("All services shut down successfully!")
 
 **Key observations:**
 1. **Parallelism**: Independent operations run concurrently
-2. **Load balancing**: Each `.route()` call automatically selects optimal replica  
+2. **Load balancing**: Each `.route()` call automatically selects optimal replica
 3. **Fault tolerance**: Failures automatically retry on different replicas
 4. **Resource efficiency**: CPU and GPU services scale independently
 5. **Coordination**: Services coordinate through shared state (replay buffer, weight versions)
