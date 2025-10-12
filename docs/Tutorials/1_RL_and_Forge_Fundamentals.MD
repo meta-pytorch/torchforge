@@ -204,8 +204,8 @@ graph LR
 
 Each step has different:
 - **Latency requirements**: Policy inference needs low latency, training can batch
-- **Scaling patterns**: Reward evaluation scales with response count, training with model size
-- **Failure modes**: Policy failure stops generation, reward failure affects learning quality
+- **Scaling patterns**: Need N policy replicas to keep trainer busy, plus different sharding strategies (tensor parallel for training vs replicated inference)
+- **Failure modes**: Any component failure cascades to halt the entire pipeline (Forge prevents this with automatic failover)
 - **Resource utilization**: GPUs for inference/training, CPUs for data processing
 
 ### Problem 3: The Coordination Challenge
@@ -229,9 +229,9 @@ def naive_rl_step():
 
 ## Enter Forge: RL-Native Architecture
 
-Forge solves these problems by treating each RL component as an **independent, scalable service**
+Forge solves these problems by treating each RL component as an **independent, distributed unit** - some as fault-tolerant services (like Policy inference where failures are easy to handle), others as actors (like Trainers where recovery semantics differ)
 
-Let's see how core RL concepts map to Forge services:
+Let's see how core RL concepts map to Forge components (you'll notice a mix of `.route()` for services and `.call_one()` for actors - we cover when to use each in Part 2):
 
 ```python
 async def real_rl_training_step(services, step):

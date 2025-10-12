@@ -140,7 +140,7 @@ answer = responses[0].text  # Extract text from Completion object
 
 Behind the scenes:
 1. Health check eliminates failed replicas
-2. Load balancer picks least loaded healthy replica  
+2. Load balancer picks replica (currently round robin, configurable balancers coming soon)
 3. Request routes to that specific replica
 4. Automatic retry on different replica if failure
 
@@ -302,7 +302,7 @@ async def optimized_multi_turn():
 ```python
 # Forge ReplayBuffer endpoints (verified from source code)
 # Add episodes (thread-safe by actor model)
-await replay_buffer.add.call_one(episode)  # Note: .call_one() not .choose()
+await replay_buffer.add.call_one(episode)  # .choose() would work too, but .call_one() clarifies it's a singleton actor not ActorMesh
 
 # Sample batches for training
 batch = await replay_buffer.sample.call_one(
