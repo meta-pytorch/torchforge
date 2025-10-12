@@ -39,10 +39,10 @@ graph TD
     R1 --> Actor
     R4 --> Actor
     
-    style Call fill:#99ff99
-    style LB fill:#ffcc99
-    style R3 fill:#ff9999
-    style Actor fill:#cc99ff
+    style Call fill:#4CAF50
+    style LB fill:#FF9800
+    style R3 fill:#F44336
+    style Actor fill:#9C27B0
 ```
 
 ## Service Components Deep Dive
