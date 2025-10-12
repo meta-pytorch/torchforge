@@ -13,20 +13,20 @@ graph TD
     end
 
     subgraph ForgeServices["2. Forge Service Layer"]
-        ServiceInterface["ServiceInterface<br/>• Routes .route() to replica<br/>• Handles load balancing<br/>• Manages health checks"]
-        ServiceActor["ServiceActor<br/>• Manages replica lifecycle<br/>• Monitors health<br/>• Coordinates failures"]
+        ServiceInterface["ServiceInterface: Routes requests, Load balancing, Health checks"]
+        ServiceActor["ServiceActor: Manages replicas, Monitors health, Coordinates failures"]
     end
 
     subgraph MonarchLayer["3. Monarch Actor Layer"]
-        ActorMesh["ActorMesh PolicyActor<br/>• 4 PolicyActor instances<br/>• Each on different GPU<br/>• Message passing interface"]
-        ProcMesh["ProcMesh<br/>• 4 processes<br/>• GPU topology: 0,1,2,3<br/>• Network interconnect"]
+        ActorMesh["ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing"]
+        ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
     end
 
     subgraph Hardware["4. Physical Hardware"]
-        GPU0["GPU 0<br/>PolicyActor #1<br/>vLLM Engine<br/>Model Weights"]
-        GPU1["GPU 1<br/>PolicyActor #2<br/>vLLM Engine<br/>Model Weights"]
-        GPU2["GPU 2<br/>PolicyActor #3<br/>vLLM Engine<br/>Model Weights"]
-        GPU3["GPU 3<br/>PolicyActor #4<br/>vLLM Engine<br/>Model Weights"]
+        GPU0["GPU 0: PolicyActor #1, vLLM Engine, Model Weights"]
+        GPU1["GPU 1: PolicyActor #2, vLLM Engine, Model Weights"]
+        GPU2["GPU 2: PolicyActor #3, vLLM Engine, Model Weights"]
+        GPU3["GPU 3: PolicyActor #4, vLLM Engine, Model Weights"]
     end
 
     Call --> ServiceInterface
@@ -199,10 +199,10 @@ graph TD
         end
 
         subgraph ActorMesh["ActorMesh PolicyActor"]
-            A0["PolicyActor<br/>Instance #0<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
-            A1["PolicyActor<br/>Instance #1<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
-            A2["PolicyActor<br/>Instance #2<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
-            A3["PolicyActor<br/>Instance #3<br/>model=Qwen/Qwen3-7B<br/>generation_count=0"]
+            A0["PolicyActor Instance #0: model=Qwen/Qwen3-7B"]
+            A1["PolicyActor Instance #1: model=Qwen/Qwen3-7B"]
+            A2["PolicyActor Instance #2: model=Qwen/Qwen3-7B"]
+            A3["PolicyActor Instance #3: model=Qwen/Qwen3-7B"]
         end
 
         Code --> ProcMesh
@@ -226,17 +226,17 @@ graph TD
         Client["await policy_actors.generate.METHOD(prompt)"]
 
         subgraph Methods["Different Adverbs Route Differently"]
-            Choose["choose()<br/>→ Routes to ONE actor<br/>→ Load balanced"]
-            Call["call()<br/>→ Routes to ALL actors<br/>→ Collects all results"]
-            Broadcast["broadcast()<br/>→ Routes to ALL actors<br/>→ Fire and forget"]
-            Stream["stream()<br/>→ Routes to ALL actors<br/>→ Iterator of results"]
+            Choose["choose(): Routes to ONE actor, Load balanced"]
+            Call["call(): Routes to ALL actors, Collects results"]
+            Broadcast["broadcast(): Routes to ALL actors, Fire and forget"]
+            Stream["stream(): Routes to ALL actors, Iterator of results"]
         end
 
         subgraph ActorInstances["PolicyActor Instances"]
-            A0["Actor 0<br/>GPU 0<br/>generates response"]
-            A1["Actor 1<br/>GPU 1<br/>generates response"]
-            A2["Actor 2<br/>GPU 2<br/>generates response"]
-            A3["Actor 3<br/>GPU 3<br/>generates response"]
+            A0["Actor 0: GPU 0, generates response"]
+            A1["Actor 1: GPU 1, generates response"]
+            A2["Actor 2: GPU 2, generates response"]
+            A3["Actor 3: GPU 3, generates response"]
         end
 
         Client --> Choose
@@ -276,26 +276,26 @@ graph TD
     subgraph ServiceCreation["Service Creation Process"]
         Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
 
-        ServiceActor["ServiceActor<br/>• Manages 4 replicas<br/>• Handles health checks<br/>• Routes service calls"]
+        ServiceActor["ServiceActor: Manages 4 replicas, Health checks, Routes calls"]
 
         subgraph Replicas["4 Independent Replicas"]
             subgraph R0["Replica 0"]
-                PM0["ProcMesh<br/>1 process<br/>GPU 0"]
+                PM0["ProcMesh: 1 process, GPU 0"]
                 AM0["ActorMesh<br/>1 PolicyActor"]
             end
 
             subgraph R1["Replica 1"]
-                PM1["ProcMesh<br/>1 process<br/>GPU 1"]
+                PM1["ProcMesh: 1 process, GPU 1"]
                 AM1["ActorMesh<br/>1 PolicyActor"]
             end
 
             subgraph R2["Replica 2"]
-                PM2["ProcMesh<br/>1 process<br/>GPU 2"]
+                PM2["ProcMesh: 1 process, GPU 2"]
                 AM2["ActorMesh<br/>1 PolicyActor"]
             end
 
             subgraph R3["Replica 3"]
-                PM3["ProcMesh<br/>1 process<br/>GPU 3"]
+                PM3["ProcMesh: 1 process, GPU 3"]
                 AM3["ActorMesh<br/>1 PolicyActor"]
             end
         end
@@ -325,15 +325,15 @@ graph TD
     subgraph CallFlow["Complete Call Flow"]
         UserCall["await policy_service.generate.route('What is 2+2?')"]
 
-        ServiceInterface["ServiceInterface<br/>• Receives .route() call<br/>• Routes to ServiceActor"]
+        ServiceInterface["ServiceInterface: Receives .route() call, Routes to ServiceActor"]
 
-        ServiceActor["ServiceActor<br/>• Selects healthy replica<br/>• Load balancing logic<br/>• Failure handling"]
+        ServiceActor["ServiceActor: Selects healthy replica, Load balancing, Failure handling"]
 
-        SelectedReplica["Selected Replica #2<br/>• ProcMesh with 1 process<br/>• ActorMesh with 1 PolicyActor"]
+        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor"]
 
-        PolicyActor["PolicyActor Instance<br/>• Loads model<br/>• Runs vLLM inference<br/>• Returns 'The answer is 4'"]
+        PolicyActor["PolicyActor Instance: Loads model, Runs vLLM inference"]
 
-        GPU["GPU 2<br/>• vLLM engine<br/>• Model weights<br/>• KV cache<br/>• CUDA kernels"]
+        GPU["GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels"]
 
         UserCall --> ServiceInterface
         ServiceInterface --> ServiceActor
