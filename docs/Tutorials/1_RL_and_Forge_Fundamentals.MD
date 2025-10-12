@@ -9,12 +9,12 @@ Let's start with a simple math tutoring example to understand RL concepts with t
 ```mermaid
 graph TD
     subgraph Example["Math Tutoring RL Example"]
-        Dataset["Dataset<br/>math problems<br/>'What is 2+2?'"]
-        Policy["Policy<br/>student AI<br/>generates: 'The answer is 4'"]
-        Reward["Reward Model<br/>Evaluation Exam<br/>scores: 0.95 (excellent)"]
-        Reference["Reference Model<br/>original student<br/>baseline comparison"]
-        ReplayBuffer["Replay Buffer<br/>notebook<br/>stores experiences"]
-        Trainer["Trainer<br/>tutor<br/>improves student"]
+        Dataset["Dataset: math problems"]
+        Policy["Policy: student AI"]
+        Reward["Reward Model: scores answers"]
+        Reference["Reference Model: baseline"]
+        ReplayBuffer["Replay Buffer: stores experiences"]
+        Trainer["Trainer: improves student"]
     end
     
     Dataset --> Policy
@@ -163,13 +163,13 @@ Our simple RL loop above has complex requirements:
 ```mermaid
 graph TD
     subgraph Components["Each Component Needs Different Resources"]
-        Policy["Policy (Student AI)<br/>Generates: 'The answer is 4'<br/>Needs: Large GPU memory<br/>Scaling: Multiple replicas for speed"]
+        Policy["Policy (Student AI): Large GPU memory, Multiple replicas"]
         
-        Reward["Reward Model (Teacher)<br/>Scores answers: 0.95<br/>Needs: Moderate compute<br/>Scaling: CPU or small GPU"]
+        Reward["Reward Model (Teacher): Moderate compute, CPU/small GPU"]
         
-        Trainer["Trainer (Tutor)<br/>Improves student weights<br/>Needs: Massive GPU compute<br/>Scaling: Distributed training"]
+        Trainer["Trainer (Tutor): Massive GPU compute, Distributed training"]
         
-        Dataset["Dataset (Question Bank)<br/>Provides: 'What is 2+2?'<br/>Needs: CPU intensive I/O<br/>Scaling: High memory bandwidth"]
+        Dataset["Dataset (Question Bank): CPU intensive I/O, High memory bandwidth"]
     end
     
     style Policy fill:#99ff99

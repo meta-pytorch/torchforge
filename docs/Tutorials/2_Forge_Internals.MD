@@ -15,19 +15,19 @@ graph TD
     Call["Your Code:<br/>await policy_service.generate"]
     
     subgraph ServiceLayer["Service Layer"]
-        Proxy["Service Proxy<br/>Load balancing<br/>Health checking<br/>Request routing"]
-        LB["Load Balancer<br/>Replica selection<br/>Circuit breaker<br/>Retry logic"]
+        Proxy["Service Proxy: Load balancing, Health checking"]
+        LB["Load Balancer: Replica selection, Circuit breaker"]
     end
     
     subgraph Replicas["Replica Management"]
-        R1["Replica 1<br/>GPU 0<br/>Healthy"]
-        R2["Replica 2<br/>GPU 1<br/>Overloaded"]
-        R3["Replica 3<br/>GPU 2<br/>Failed"]
-        R4["Replica 4<br/>GPU 3<br/>Healthy"]
+        R1["Replica 1: GPU 0, Healthy"]
+        R2["Replica 2: GPU 1, Overloaded"]
+        R3["Replica 3: GPU 2, Failed"]
+        R4["Replica 4: GPU 3, Healthy"]
     end
     
     subgraph Compute["Actual Computation"]
-        Actor["Policy Actor<br/>vLLM engine<br/>Model weights<br/>KV cache"]
+        Actor["Policy Actor: vLLM engine, Model weights, KV cache"]
     end
     
     Call --> Proxy
