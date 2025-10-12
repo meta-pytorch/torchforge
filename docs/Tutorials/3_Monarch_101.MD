@@ -38,10 +38,10 @@ graph TD
     ProcMesh --> GPU2
     ProcMesh --> GPU3
 
-    style Call fill:#99ff99
-    style ServiceActor fill:#ffcc99
-    style ActorMesh fill:#cc99ff
-    style ProcMesh fill:#ccccff
+    style Call fill:#4CAF50
+    style ServiceActor fill:#FF9800
+    style ActorMesh fill:#9C27B0
+    style ProcMesh fill:#2196F3
 ```
 
 ## Deep Dive: ProcMesh - The Foundation
@@ -74,14 +74,14 @@ graph TD
         P7 -.->|"Network"| P0
     end
 
-    style P0 fill:#ff9999
-    style P1 fill:#ff9999
-    style P2 fill:#ff9999
-    style P3 fill:#ff9999
-    style P4 fill:#ff9999
-    style P5 fill:#ff9999
-    style P6 fill:#ff9999
-    style P7 fill:#ff9999
+    style P0 fill:#F44336
+    style P1 fill:#F44336
+    style P2 fill:#F44336
+    style P3 fill:#F44336
+    style P4 fill:#F44336
+    style P5 fill:#F44336
+    style P6 fill:#F44336
+    style P7 fill:#F44336
 ```
 
 ### Multi-Host ProcMesh
@@ -122,9 +122,9 @@ graph TD
     H2P0 -.->|"InfiniBand"| H3P0
     H2P1 -.->|"InfiniBand"| H3P1
 
-    style PM1 fill:#ff9999
-    style PM2 fill:#99ff99
-    style PM3 fill:#99ccff
+    style PM1 fill:#F44336
+    style PM2 fill:#4CAF50
+    style PM3 fill:#2196F3
 ```
 
 ```python
@@ -212,10 +212,10 @@ graph TD
         P3 --> A3
     end
 
-    style A0 fill:#99ff99
-    style A1 fill:#99ff99
-    style A2 fill:#99ff99
-    style A3 fill:#99ff99
+    style A0 fill:#4CAF50
+    style A1 fill:#4CAF50
+    style A2 fill:#4CAF50
+    style A3 fill:#4CAF50
 ```
 
 ### Message Routing Through ActorMesh
@@ -259,10 +259,10 @@ graph TD
         Stream --> A3
     end
 
-    style Choose fill:#99ff99
-    style Call fill:#ffcc99
-    style Broadcast fill:#ff99cc
-    style Stream fill:#cc99ff
+    style Choose fill:#4CAF50
+    style Call fill:#FF9800
+    style Broadcast fill:#E91E63
+    style Stream fill:#9C27B0
 ```
 
 ## How Forge Services Use Monarch
@@ -311,11 +311,11 @@ graph TD
         PM3 --> AM3
     end
 
-    style ServiceActor fill:#ffcc99
-    style AM0 fill:#99ff99
-    style AM1 fill:#99ff99
-    style AM2 fill:#99ff99
-    style AM3 fill:#99ff99
+    style ServiceActor fill:#FF9800
+    style AM0 fill:#4CAF50
+    style AM1 fill:#4CAF50
+    style AM2 fill:#4CAF50
+    style AM3 fill:#4CAF50
 ```
 
 ### Service Call to Actor Execution
@@ -348,10 +348,10 @@ graph TD
         ServiceInterface -.->|"'The answer is 4'"| UserCall
     end
 
-    style UserCall fill:#99ff99
-    style ServiceActor fill:#ffcc99
-    style PolicyActor fill:#cc99ff
-    style GPU fill:#ffcccc
+    style UserCall fill:#4CAF50
+    style ServiceActor fill:#FF9800
+    style PolicyActor fill:#9C27B0
+    style GPU fill:#FF5722
 ```
 
 ## Multiple Services Sharing Infrastructure
@@ -400,12 +400,12 @@ graph TD
         BS --> C4
     end
 
-    style PS fill:#99ff99
-    style TS fill:#ff99cc
-    style RS fill:#ffcc99
-    style BS fill:#cc99ff
-    style GPUMesh fill:#ffe6e6
-    style CPUMesh fill:#e6f3ff
+    style PS fill:#4CAF50
+    style TS fill:#E91E63
+    style RS fill:#FF9800
+    style BS fill:#9C27B0
+    style GPUMesh fill:#FFEBEE
+    style CPUMesh fill:#E3F2FD
 ```
 
 ## Key Insights: Why This Architecture Matters

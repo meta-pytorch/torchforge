@@ -25,9 +25,9 @@ graph TD
     ReplayBuffer --> Trainer
     Trainer --> Policy
     
-    style Policy fill:#99ff99
-    style Reward fill:#ffcc99
-    style Trainer fill:#ff99cc
+    style Policy fill:#4CAF50
+    style Reward fill:#FF9800
+    style Trainer fill:#E91E63
 ```
 
 ### RL Components Defined (Forge Names)
@@ -100,10 +100,10 @@ graph LR
     C5 --> S5
     C6 --> S6
     
-    style C2 fill:#99ff99
-    style S2 fill:#99ff99
-    style C3 fill:#ffcc99
-    style S3 fill:#ffcc99
+    style C2 fill:#4CAF50
+    style S2 fill:#4CAF50
+    style C3 fill:#FF9800
+    style S3 fill:#FF9800
 ```
 
 ### RL Step with Forge Services
@@ -172,10 +172,10 @@ graph TD
         Dataset["Dataset (Question Bank): CPU intensive I/O, High memory bandwidth"]
     end
     
-    style Policy fill:#99ff99
-    style Reward fill:#ffcc99
-    style Trainer fill:#ff99cc
-    style Dataset fill:#ccccff
+    style Policy fill:#4CAF50
+    style Reward fill:#FF9800
+    style Trainer fill:#E91E63
+    style Dataset fill:#2196F3
 ```
 
 ### Problem 2: Complex Interdependencies
@@ -195,11 +195,11 @@ graph LR
     D --> E
     E --> A
     
-    style A fill:#99ff99
-    style B fill:#ffcc99
-    style C fill:#99ccff
-    style D fill:#ccff99
-    style E fill:#ff99cc
+    style A fill:#4CAF50
+    style B fill:#FF9800
+    style C fill:#2196F3
+    style D fill:#8BC34A
+    style E fill:#E91E63
 ```
 
 Each step has different:
