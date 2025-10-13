@@ -1,4 +1,4 @@
-# >>> python -m apps.sft_v2.main --config apps/sft_v2/qwen3_8b.yaml
+# >>> python -m apps.sft.main --config apps/sft/qwen3_8b.yaml
 
 
 # TODO: required by torchtitan
