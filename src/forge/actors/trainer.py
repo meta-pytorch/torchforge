@@ -46,6 +46,7 @@ from forge.actors._torchstore_utils import (
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
@@ -111,7 +112,9 @@ class RLTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = (
+        TORCHSTORE_USE_RDMA.get_value() == 0
+    )  # torchstore currently only accepts 0 or 1
     dcp_path: str = "forge_dcp_tmp"
 
     def __post_init__(self):
