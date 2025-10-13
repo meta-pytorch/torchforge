@@ -16,6 +16,23 @@ from dataclasses import dataclass, field
 
 import torch
 import torchstore as ts
+
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
+
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.env import TORCHSTORE_USE_RDMA
+from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
 from vllm.config import VllmConfig
 
@@ -40,22 +57,6 @@ from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.actors._torchstore_utils import (
-    extract_param_name,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.types import ProcessConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -88,7 +89,9 @@ class Policy(PolicyInterface):
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     available_devices: str | None = None
-    use_dcp: bool = True
+    use_dcp: bool = (
+        TORCHSTORE_USE_RDMA.get_value() == 0
+    )  # torchstore currently only accepts 0 or 1
     # Remaining variables are initialized in self.setup()
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
@@ -104,7 +107,7 @@ class Policy(PolicyInterface):
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
-            self.engine_args._is_v1_supported_oracle = lambda *_: True
+        self.engine_args._is_v1_supported_oracle = lambda *_: True
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
