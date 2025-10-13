@@ -36,10 +36,13 @@ jobs:
         run: python -m pip install --upgrade pip
       - name: Install pytorch
         shell: bash -l {0}
-        run: python -m pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/test/cu130
+        run: pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 --force-reinstall
       - name: Install monarch
         shell: bash -l {0}
         run: pip install torchmonarch
+      - name: Install torchtitan
+        shell: bash -l {0}
+        run: pip install --pre torchtitan --index-url https://download.pytorch.org/whl/nightly/cu130
       - name: Install torchforge
         shell: bash -l {0}
         env:

@@ -38,7 +38,20 @@ logger.setLevel(logging.INFO)
 @dataclass
 class ReferenceModel(ForgeActor):
     """
-    Reference model implementation for the TorchForge service.
+    A reference model actor for reinforcement learning (RL) training.
+    
+    Based on TorchTitan's engine architecture, this actor provides a frozen model that only runs forward passes without gradient computation. It is typically used to maintain algorithmic consistency in policy optimization methods such as GRPO (Group Relative Policy Optimization) or PPO (Proximal Policy Optimization), where it serves as a fixed reference point to compute KL divergence penalties against the training policy.
+    
+    The reference model is loaded from a checkpoint and runs in evaluation mode with inference_mode enabled to optimize memory and compute efficiency. 
+    
+    Attributes:
+    
+        model (Model): Model configuration (architecture, vocab size, etc.)
+        parallelism (Parallelism): Parallelism strategy configuration (TP, PP, CP, DP)
+        checkpoint (Checkpoint): Checkpoint loading configuration
+        compile (Compile): Torch compilation settings
+        comm (Comm): Communication backend configuration
+        training (Training): Training-related settings (dtype, garbage collection, etc.)
     """
 
     # Refer to titan JobConfig for enabling more ForgeEngine configuration
