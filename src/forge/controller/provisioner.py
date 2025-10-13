@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Resource allocation and provisioning for both local and remote."""
+"""Remote and local resource manager for allocation and provisioning."""
 import asyncio
 import functools
 import logging
@@ -12,20 +12,28 @@ import logging
 import os
 import socket
 import uuid
-from typing import Optional
 
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch._src.actor.shape import Extent, NDSlice, Shape
+from monarch.actor import Actor, endpoint, ProcMesh
+
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+if MONARCH_HOSTMESH_V1.get_value():
+    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+
+    logger.info("Using Monarch HostMesh v1...")
+else:
+    from monarch.actor import HostMesh, this_host
 
 
 def _get_port() -> str:
@@ -126,6 +134,7 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
         self._proc_host_map = {}
+        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
@@ -149,21 +158,45 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-        return (
-            HostMesh(
+
+        if MONARCH_HOSTMESH_V1.get_value():
+            # We are asking Monarch to allocate a single process on
+            # every host, reflected in the Extent we provide below.
+
+            # Technically, this is ["hosts", "procs"] but to reduce
+            # confusion on its relationship with procs elsewhere,
+            # we call it "no_dim".
+
+            # TODO - remove this once Monarch supports HostMesh without it.
+            host_mesh = HostMesh.allocate_nonblocking(
+                name=name,
+                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
+        else:
+            host_mesh = HostMesh(
                 Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
                 allocator=alloc,
                 alloc_constraints=alloc_constraints,
-            ),
-            server_name,
-        )
+            )
+        return host_mesh, server_name
+
+    def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns the host mesh given its associated name.
+
+        This is currently an experimental API for HostMesh v1 and
+        should not be relied on longer term.
+
+        """
+        return self._host_mesh_map[name]
 
     async def get_proc_mesh(
         self,
         num_procs: int,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: Optional[str] = None,
+        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,
@@ -220,9 +253,21 @@ class Provisioner:
                 host_mesh._host_id = self._this_host_id
 
             def bootstrap(env: dict[str, str]):
+                """Runs on process startup.
+
+                We use this to set environment variables like CUDA, etc.
+                We prefer to pass in environment variables to bootstrap,
+                but there are occasionally host-specific environments that can
+                only be set once the process is alive on remote hosts.
+
+                """
                 # bootstrap is run on all processes. We use this
                 # to set environment variables like CUDA etc.
                 import os
+
+                # vLLM requires this environment variable when spawning model servers
+                # across multiple nodes.
+                os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
 
                 for k, v in env.items():
                     os.environ[k] = v
@@ -234,17 +279,26 @@ class Provisioner:
 
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
+
+                # Set the PTD world size
+                world_size = num_procs * (num_hosts or 1)
+                env_vars["WORLD_SIZE"] = str(world_size)
                 env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
-                env_vars["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
-                env_vars["HYPERACTOR_CODE_MAX_FRAME_LENGTH"] = "1073741824"
 
-                # Shows detailed logs for Monarch rust failures
-                env_vars["RUST_BACKTRACE"] = "1"
+                # Inherit Forge-relevant environment variables from the system
+                for env_var in all_env_vars():
+                    env_vars[env_var.name] = str(env_var.get_value())
 
-            procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
-                bootstrap=functools.partial(bootstrap, env=env_vars),
-            )
+            if MONARCH_HOSTMESH_V1.get_value():
+                procs = host_mesh.spawn_procs(
+                    per_host={"procs": num_procs},
+                    setup=functools.partial(bootstrap, env=env_vars),
+                )
+            else:
+                procs = host_mesh.spawn_procs(
+                    per_host={"procs": num_procs},
+                    bootstrap=functools.partial(bootstrap, env=env_vars),
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)
@@ -253,6 +307,8 @@ class Provisioner:
             if with_gpus:
                 # Applies any launcher specific remote setup.
                 procs._gpu_ids = gpu_ids
+
+            self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
 
             # If we created a server, track so we can tear it down later.
@@ -262,8 +318,11 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local logging actor on each process and register with global logger
-        _ = await get_or_create_metric_logger(procs)
+        # Spawn local fetcher actor on each process and register with global logger
+        if not FORGE_DISABLE_METRICS.get_value():
+            from forge.observability.metric_actors import get_or_create_metric_logger
+
+            _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -284,6 +343,10 @@ class Provisioner:
         async with self._lock:
             # Deregister local logger from global logger
             if hasattr(proc_mesh, "_local_fetcher"):
+                from forge.observability.metric_actors import (
+                    get_or_create_metric_logger,
+                )
+
                 global_logger = await get_or_create_metric_logger(proc_mesh)
                 await global_logger.deregister_fetcher.call_one(proc_mesh)
 

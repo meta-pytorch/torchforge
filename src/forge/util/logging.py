@@ -6,19 +6,16 @@
 
 import logging
 from functools import lru_cache
-from typing import Optional, TypeVar
 
 from torch import distributed as dist
 
-T = TypeVar("T", bound=type)
 
-
-def get_logger(level: Optional[str] = None) -> logging.Logger:
+def get_logger(level: str | None = None) -> logging.Logger:
     """
     Get a logger with a stream handler.
 
     Args:
-        level (Optional[str]): The logging level. See https://docs.python.org/3/library/logging.html#levels for list of levels.
+        level (str | None): The logging level. See https://docs.python.org/3/library/logging.html#levels for list of levels.
 
     Example:
         >>> logger = get_logger("INFO")

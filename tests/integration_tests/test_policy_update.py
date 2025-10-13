@@ -166,7 +166,7 @@ class TestWeightSync:
         cfg = self._load_config(config_path=config_path)
 
         trainer_proc_size = cfg.actors.trainer.procs
-        policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
+        policy_tp_size = cfg.policy.engine_args.tensor_parallel_size
 
         if policy_tp_size != cfg.services.policy.procs:
             pytest.fail(

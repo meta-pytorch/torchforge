@@ -15,14 +15,18 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
-
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
+from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
+
+from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
+
+from forge.env import MONARCH_HOSTMESH_V1
 
 from forge.types import Launcher, LauncherConfig
 
@@ -110,13 +114,17 @@ class BaseLauncher:
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         pass
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         pass
 
 
 class Slurmlauncher(BaseLauncher):
     async def initialize(self) -> None:
-        pass
+        if MONARCH_HOSTMESH_V1.get_value():
+            # HostMeshV1 currently requires explicit configuration
+            # of the underlying transport from client to mesh.
+            # This can be removed in the future once this has been removed.
+            configure(default_transport=ChannelTransport.Tcp)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
@@ -148,7 +156,7 @@ class Slurmlauncher(BaseLauncher):
         server_name = f"slurm:///{server_info.name}"
         return alloc, None, server_name  # (Allocator, AllocConstraints, SeverName)
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         return
 
 
@@ -172,6 +180,12 @@ class Mastlauncher(BaseLauncher):
         self.job_name = self.cfg.job_name or self.create_job_name()
 
     async def initialize(self) -> None:
+        if MONARCH_HOSTMESH_V1.get_value():
+            # HostMeshV1 currently requires explicit configuration
+            # of the underlying transport from client to mesh.
+            # This can be removed in the future once this has been removed.
+            configure(default_transport=ChannelTransport.MetaTlsWithHostname)
+
         await self.launch_mast_job()
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
@@ -187,10 +201,9 @@ class Mastlauncher(BaseLauncher):
 
         return allocator, alloc_constraints, self.create_server_handle()
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
         await setup.mount.call(mount_dst="/mnt/wsfuse")
-        return await setup.get_info.choose()
 
     async def launch_mast_job(self):
         handle = self.create_server_handle()
@@ -299,9 +312,9 @@ class Mastlauncher(BaseLauncher):
 def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if not cfg:
         return None
-    if cfg.launcher == Launcher.SLURM.value:
+    if cfg.launcher == Launcher.SLURM:
         return Slurmlauncher()
-    elif cfg.launcher == Launcher.MAST.value:
+    elif cfg.launcher == Launcher.MAST:
         if not _MAST_AVAILABLE:
             raise ValueError(
                 "MAST imports did not succeed, cannot launch MAST jobs. Please verify your installation"

@@ -163,6 +163,10 @@ class LauncherConfig:
     services: dict[str, ServiceConfig] = field(default_factory=dict)
     actors: dict[str, ProcessConfig] = field(default_factory=dict)
 
+    def __post_init__(self):
+        if isinstance(self.launcher, str):
+            self.launcher = Launcher(self.launcher)
+
 
 @dataclass
 class ProvisionerConfig:
