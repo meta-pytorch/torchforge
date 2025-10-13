@@ -108,22 +108,54 @@ await policy.shutdown()
 
 Forge services are implemented as ServiceActors that manage collections of your ForgeActor replicas:
 
-Forge internals - What happens behind the scenes:
-1. `.as_service()` creates a `ServiceInterface`
-2. `ServiceInterface` manages N replicas of your `ForgeActor` class
-3. `ServiceInterface` handles routing between replicas
-4. You get methods like `.route()`, `.fanout()`, etc.
+When you call `.as_service()`, Forge creates a `ServiceInterface` that manages N replicas of your `ForgeActor` class and gives you methods like `.route()`, `.fanout()`, etc.
 
 ```python
-# Your code sees this:
+# Your code sees this simple interface:
 responses = await policy.generate.route(prompt=prompt)
+# But Forge handles all the complexity of replica management, load balancing, and fault tolerance
 ```
 
-But behind the scenes:
-- `ServiceInterface` selects healthy replica
-- Routes message to that replica's `Policy.generate()` endpoint
-- Handles failures and retries automatically
-- Returns list[Completion] from the selected replica
+## Communication Patterns: Quick Reference
+
+**API Summary:**
+- `.route()` - Send request to any healthy replica in a service (load balanced)
+- `.call_one()` - Send request to a single actor instance  
+- `.fanout()` - Send request to ALL replicas in a service
+
+```mermaid
+graph LR
+    subgraph Request["Your Request"]
+        Code["await service.method.ADVERB()"]
+    end
+    
+    subgraph Patterns["Communication Patterns"]
+        Route[".route()<br/>→ One healthy replica"]
+        CallOne[".call_one()<br/>→ Single actor"]
+        Fanout[".fanout()<br/>→ ALL replicas"]
+    end
+    
+    subgraph Replicas["Replicas/Actors"]
+        R1["Replica 1"]
+        R2["Replica 2"]
+        R3["Replica 3"]
+        A1["Actor"]
+    end
+    
+    Code --> Route
+    Code --> CallOne
+    Code --> Fanout
+    
+    Route --> R2
+    CallOne --> A1
+    Fanout --> R1
+    Fanout --> R2
+    Fanout --> R3
+    
+    style Route fill:#4CAF50
+    style CallOne fill:#FF9800
+    style Fanout fill:#9C27B0
+```
 
 ## Deep Dive: Service Communication Patterns
 
@@ -203,8 +235,10 @@ while training:
 
 **When to use**: When you need multiple calls to hit the same replica (like KV cache preservation).
 
+**What are sticky sessions?** A session ensures all your service calls within the `async with` block go to the same replica, instead of being load-balanced across different replicas.
+
 ```python
-# This Counter example demonstrates the session pattern
+# This Counter example demonstrates the difference between regular routing and sessions
 
 from forge.controller import ForgeActor
 from monarch.actor import endpoint
@@ -230,21 +264,36 @@ counter_service = await ForgeCounter.options(
     procs=1, num_replicas=4
 ).as_service(initial_value=0)
 
-# Test basic operations
-await counter_service.increment.route()
+# WITHOUT SESSIONS: Each .route() call goes to a different replica
+await counter_service.increment.route()  # Might go to replica 2
+await counter_service.increment.route()  # Might go to replica 1  
+await counter_service.increment.route()  # Might go to replica 3
+
 results = await counter_service.increment.fanout()  # Get from all replicas
 print(f"All replica values: {results}")
+# Output: All replica values: [1, 2, 1, 1] - Each replica has different state!
+```
 
-# STICKY SESSIONS
+The problem: each `.route()` call can go to different replicas, creating inconsistent state.
+
+```python
+# WITH SESSIONS: All calls go to the SAME replica
 print("\nUsing sticky sessions:")
-async with counter_service.session():
+async with counter_service.session():  # Creates a session that picks one replica
     await counter_service.reset.route()  # Uses .route() within session
     print(await counter_service.increment.route())  # 1
-    print(await counter_service.increment.route())  # 2
+    print(await counter_service.increment.route())  # 2  
     print(await counter_service.increment.route())  # 3
 
     final_value = await counter_service.get_value.route()
     print(f"Final value on this replica: {final_value}")  # 3
+
+# Output:
+# Using sticky sessions:
+# 1
+# 2
+# 3
+# Final value on this replica: 3
 
 # Same pattern works with Policy for multi-turn conversations:
 # async with policy.session():
