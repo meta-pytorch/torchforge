@@ -120,7 +120,7 @@ responses = await policy.generate.route(prompt=prompt)
 
 **API Summary:**
 - `.route()` - Send request to any healthy replica in a service (load balanced)
-- `.call_one()` - Send request to a single actor instance  
+- `.call_one()` - Send request to a single actor instance
 - `.fanout()` - Send request to ALL replicas in a service
 
 ```mermaid
@@ -128,30 +128,30 @@ graph LR
     subgraph Request["Your Request"]
         Code["await service.method.ADVERB()"]
     end
-    
+
     subgraph Patterns["Communication Patterns"]
         Route[".route()<br/>→ One healthy replica"]
         CallOne[".call_one()<br/>→ Single actor"]
         Fanout[".fanout()<br/>→ ALL replicas"]
     end
-    
+
     subgraph Replicas["Replicas/Actors"]
         R1["Replica 1"]
         R2["Replica 2"]
         R3["Replica 3"]
         A1["Actor"]
     end
-    
+
     Code --> Route
     Code --> CallOne
     Code --> Fanout
-    
+
     Route --> R2
     CallOne --> A1
     Fanout --> R1
     Fanout --> R2
     Fanout --> R3
-    
+
     style Route fill:#4CAF50
     style CallOne fill:#FF9800
     style Fanout fill:#9C27B0
@@ -266,7 +266,7 @@ counter_service = await ForgeCounter.options(
 
 # WITHOUT SESSIONS: Each .route() call goes to a different replica
 await counter_service.increment.route()  # Might go to replica 2
-await counter_service.increment.route()  # Might go to replica 1  
+await counter_service.increment.route()  # Might go to replica 1
 await counter_service.increment.route()  # Might go to replica 3
 
 results = await counter_service.increment.fanout()  # Get from all replicas
@@ -282,7 +282,7 @@ print("\nUsing sticky sessions:")
 async with counter_service.session():  # Creates a session that picks one replica
     await counter_service.reset.route()  # Uses .route() within session
     print(await counter_service.increment.route())  # 1
-    print(await counter_service.increment.route())  # 2  
+    print(await counter_service.increment.route())  # 2
     print(await counter_service.increment.route())  # 3
 
     final_value = await counter_service.get_value.route()
