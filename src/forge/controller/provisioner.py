@@ -498,7 +498,25 @@ async def stop_proc_mesh(proc_mesh: ProcMesh):
     return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
+async def shutdown_metric_logger():
+    """Shutdown the global metric logger and all its backends."""
+    from forge.observability.metric_actors import get_or_create_metric_logger
+
+    logger.info("Shutting down metric logger...")
+    try:
+        mlogger = await get_or_create_metric_logger()
+        await mlogger.shutdown.call_one()
+    except Exception as e:
+        logger.warning(f"Failed to shutdown metric logger: {e}")
+
+
 async def shutdown():
     logger.info("Shutting down provisioner..")
+
+    await shutdown_metric_logger()
+
     provisioner = await _get_provisioner()
-    return await provisioner.shutdown()
+    result = await provisioner.shutdown()
+
+    logger.info("Shutdown completed successfully")
+    return result
