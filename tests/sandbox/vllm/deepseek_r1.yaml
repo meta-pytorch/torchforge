@@ -2,15 +2,14 @@
 
 # NOTE - this won't work until we have proper HostMesh support
 policy:
-  engine_config:
+  engine_args:
     model: "deepseek-ai/DeepSeek-R1-0528"
     tensor_parallel_size: 16
     pipeline_parallel_size: 1
     enable_expert_parallel: true
     # enforce_eager: true
-  sampling_config:
+  sampling_params:
     n: 2
-    guided_decoding: false
     max_tokens: 512
 
 provisioner:
