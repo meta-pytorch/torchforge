@@ -120,10 +120,14 @@ class Policy(PolicyInterface):
         engine_args: EngineArgs | Mapping = EngineArgs(),
         sampling_params: SamplingParams | Mapping = SamplingParams(),
         available_devices: str | None = None,
-        use_dcp: bool = True,
+        use_dcp: bool = (
+            TORCHSTORE_USE_RDMA.get_value() == 0
+        ),  # torchstore currently only accepts 0 or 1
         **kwargs,
     ) -> "Policy":
-        """We overwrite the default Service launch method in order to setup Actors within this "coordinating" Actor.
+        """Launch the policy with its workers.
+
+        We overwrite the default Service launch method in order to setup Actors within this "coordinating" Actor.
         We first create a proc_mesh for the workers, then a proc_mesh for the policy, and then we spawn the workers
         and the policy in setup.
 
@@ -180,23 +184,6 @@ class Policy(PolicyInterface):
         policy._worker_procs = worker_procs
         await policy.setup.call()
         return policy
-
-    @classmethod
-    async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
-        cls: type["Policy"], actor: "Policy"
-    ):
-        assert (
-            actor._policy_proc is not None
-        ), "Tried to shutdown a policy that was not initialized correctly"
-        assert (
-            actor._worker_procs is not None
-        ), "Tried to shutdown a policy that was not initialized correctly"
-
-        # TODO - may want to expand stop to gracefully respond to
-        # ongoing requests.
-        await actor.stop.call()
-        await stop_proc_mesh(actor._worker_procs)
-        await stop_proc_mesh(actor._policy_proc)
 
     @endpoint
     async def setup(self):
@@ -497,6 +484,23 @@ class Policy(PolicyInterface):
                 ]
             )
         return None
+
+    @classmethod
+    async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls: type["Policy"], actor: "Policy"
+    ):
+        assert (
+            actor._policy_proc is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+        assert (
+            actor._worker_procs is not None
+        ), "Tried to shutdown a policy that was not initialized correctly"
+
+        # TODO - may want to expand stop to gracefully respond to
+        # ongoing requests.
+        await actor.stop.call()
+        await stop_proc_mesh(actor._worker_procs)
+        await stop_proc_mesh(actor._policy_proc)
 
     @endpoint
     async def _test_save_model_params(self):
