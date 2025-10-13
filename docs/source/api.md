@@ -14,7 +14,7 @@ Key Features of TorchForge include:
 
 - **Actor-Based Architecture**: TorchForge uses an actor-based system for distributed training, providing excellent scalability and fault tolerance.
 - **PyTorch Native**: Built natively on PyTorch, ensuring seamless integration with existing PyTorch workflows.
-- **Post-Training Focus**: Specifically designed for post-training techniques like RLHF, SFT, and other alignment methods.
+- **Post-Training Focus**: Specifically designed for post-training techniques like RLVR, SFT, and other alignment methods.
 - **Distributed by Design**: Supports multi-GPU and multi-node training out of the box.
 
 
