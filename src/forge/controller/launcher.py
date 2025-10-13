@@ -4,10 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""Launcher specific logic (i.e. SLURM, k8s when supported, etc.)"""
+
+import copy
 import getpass
 import os
 import subprocess
-
 import tempfile
 import uuid
 from typing import Any
@@ -48,6 +50,59 @@ JOB_NAME_KEY = "job_name"
 LAUNCHER_KEY = "launcher"
 
 
+def mount_mnt_directory(mount_dst: str) -> None:
+    """Mounts the MAST remote directory to the specified destination.
+
+    This function mounts a remote workspace directory that contains huggingface models
+    and other shared resources needed for training.
+
+    Args:
+        mount_dst: Destination path where the directory should be mounted (e.g., "/mnt/wsfuse")
+    """
+    # Sanity check of the mounted directory
+    sanity_path = os.path.join(mount_dst, "huggingface_models/")
+    if os.path.exists(sanity_path):
+        print(f"Found directory {sanity_path}; skip mounting.")
+        return
+
+    # Otherwise, mount the directory
+    if not os.path.exists(mount_dst):
+        os.makedirs(mount_dst, exist_ok=True)
+
+    # Store original LD_LIBRARY_PATH to restore after mounting
+    original_ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
+
+    try:
+        clean_env = os.environ.copy()
+        if "LD_LIBRARY_PATH" in clean_env:
+            del clean_env["LD_LIBRARY_PATH"]
+
+        subprocess.run(
+            [
+                "/packages/oil.oilfs/oilfs-wrapper",
+                "ws://ws.ai.pci0ai/genai_fair_llm",
+                mount_dst,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=clean_env,
+        )
+        print("Done mounting")
+    except subprocess.CalledProcessError as e:
+        print(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
+    finally:
+        # Restore original LD_LIBRARY_PATH
+        if original_ld_library_path:
+            os.environ["LD_LIBRARY_PATH"] = original_ld_library_path
+        elif "LD_LIBRARY_PATH" in os.environ:
+            del os.environ["LD_LIBRARY_PATH"]
+
+    assert os.path.exists(
+        sanity_path
+    ), f"Did not find directory {sanity_path}; something wrong with mounting."
+
+
 class MastSetupActor(Actor):
     @endpoint
     def mount(self, mount_dst: str):
@@ -58,53 +113,7 @@ class MastSetupActor(Actor):
         if current_rank().rank % proc_count != 0:
             # Only use one rank per host to mount the directory
             return
-        self.mount_mnt_directory(mount_dst)
-
-    def mount_mnt_directory(self, mount_dst: str) -> None:
-        # Sanity check of the mounted directory
-        sanity_path = os.path.join(mount_dst, "huggingface_models/")
-        if os.path.exists(sanity_path):
-            print(f"Found directory {sanity_path}; skip mounting.")
-            return
-
-        # Otherwise, mount the directory
-        if not os.path.exists(mount_dst):
-            os.makedirs(mount_dst, exist_ok=True)
-
-        # Store original LD_LIBRARY_PATH to restore after mounting
-        original_ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
-
-        try:
-            clean_env = os.environ.copy()
-            if "LD_LIBRARY_PATH" in clean_env:
-                del clean_env["LD_LIBRARY_PATH"]
-
-            subprocess.run(
-                [
-                    "/packages/oil.oilfs/oilfs-wrapper",
-                    "ws://ws.ai.pci0ai/genai_fair_llm",
-                    mount_dst,
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                env=clean_env,
-            )
-            print("Done mounting")
-        except subprocess.CalledProcessError as e:
-            print(
-                f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}"
-            )
-        finally:
-            # Restore original LD_LIBRARY_PATH
-            if original_ld_library_path:
-                os.environ["LD_LIBRARY_PATH"] = original_ld_library_path
-            elif "LD_LIBRARY_PATH" in os.environ:
-                del os.environ["LD_LIBRARY_PATH"]
-
-        assert os.path.exists(
-            sanity_path
-        ), f"Did not find directory {sanity_path}; something wrong with mounting."
+        mount_mnt_directory(mount_dst)
 
 
 class BaseLauncher:
@@ -160,14 +169,45 @@ class Slurmlauncher(BaseLauncher):
         return
 
 
-class Mastlauncher(BaseLauncher):
-    def __init__(self, cfg: LauncherConfig | None = None):
+class MastLauncher(BaseLauncher):
+    """Launcher for MAST (Meta's internal cluster scheduler).
+
+    This launcher supports two modes of operation:
+
+    1. Non-detached mode (detached=False):
+       - Client runs on your local machine/devserver
+       - Only worker roles (GPU hosts) are launched in MAST
+       - Client connects to workers remotely via provisioner
+
+    2. Detached mode (detached=True):
+       - Client runs entirely inside MAST as a separate role
+       - Both client role (CPU-only) and worker roles (GPU) are launched in MAST
+       - Client role executes the training script with --mode=remote
+       - Everything runs in the cluster, no client needed on local machine
+
+    Args:
+        cfg: Launcher configuration including job name, services, and actors
+        detached: If True, adds a client role to the MAST job appdef that runs
+                  the training script inside MAST. If False, only launches worker
+                  roles and expects the client to run on local machine.
+        config_file: The name of the config file that stores the experiment configuration.
+
+    """
+
+    def __init__(
+        self,
+        cfg: LauncherConfig | None = None,
+        detached: bool = False,
+        config_file: str | None = None,
+    ):
         assert cfg is not None
         self.cfg = cfg
+        self.detached = detached
         self.default_monarch_port = 26600
+        self.config_file = config_file
         self.scheduler_name = "mast_conda"
 
-        # TODO: enabe taking this from config
+        # TODO: enable taking this from config
         self.sku = "gtt_any"
         self.timeout_sec = 1 * 60 * 60  # Kill the job if idle for 1 hour
         self.user = getpass.getuser()
@@ -185,8 +225,6 @@ class Mastlauncher(BaseLauncher):
             # of the underlying transport from client to mesh.
             # This can be removed in the future once this has been removed.
             configure(default_transport=ChannelTransport.MetaTlsWithHostname)
-
-        await self.launch_mast_job()
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         allocator = MastAllocator(
@@ -262,8 +300,6 @@ class Mastlauncher(BaseLauncher):
             },
         }
 
-        print("DEFAULT ENVS: ", default_envs)
-
         packages = Packages()
         meshes = []
         # Process both services and actors configurations
@@ -300,7 +336,34 @@ class Mastlauncher(BaseLauncher):
                 role.resource.capabilities["server_sub_types"][1]  # GTT
             ]
 
+        # Add client role to run in MAST if in detached mode
+        if self.detached:
+            client_role = self._create_client_role(appdef)
+            appdef.roles.insert(0, client_role)
+
         return appdef
+
+    def _create_client_role(self, appdef: specs.AppDef) -> specs.Role:
+        # Clone an existing worker role to inherit workspace configuration
+        if not appdef.roles:
+            raise ValueError(
+                "Cannot create client role: no worker roles exist to clone from"
+            )
+
+        # Clone the first worker role
+        client_role = copy.deepcopy(appdef.roles[0])
+
+        # Override with client-specific configuration
+        client_role.name = "client"
+        client_role.entrypoint = (
+            "source $CONDA_DIR/bin/activate && python .meta/mast/main.py"
+        )
+        client_role.args = [
+            "--mode=remote",
+            "--config={self.config_file}",
+        ]
+        client_role.num_replicas = 1
+        return client_role
 
     def create_job_name(self):
         return f"{self.user}-forge-{uuid.uuid4().hex[:6]}"
@@ -319,6 +382,6 @@ def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
             raise ValueError(
                 "MAST imports did not succeed, cannot launch MAST jobs. Please verify your installation"
             )
-        return Mastlauncher(cfg)
+        return MastLauncher(cfg, detached=False)
     else:
         raise ValueError(f"Unsupported config provided, got {cfg}")
