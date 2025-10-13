@@ -13,7 +13,7 @@ It manages model serving, text generation, and weight updates for reinforcement 
 ```{eval-rst}
 .. autoclass:: Policy
    :members: generate, update_weights, get_version, stop
-   :exclude-members: __init__
+   :exclude-members: __init__, launch
    :no-inherited-members:
 ```
 

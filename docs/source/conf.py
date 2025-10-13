@@ -186,23 +186,11 @@ autodoc_inherit_docstrings = False
 autodoc_typehints = "none"
 
 
-# Suppress warnings from third-party library docstrings
-suppress_warnings = [
-    "docutils",  # Suppress docstring formatting issues from third-party libraries
-    "app.add_node",  # Suppress node warnings
-    "app.add_directive",  # Suppress directive warnings
-    "ref.class",  # Suppress missing reference warnings
-    "ref.func",  # Suppress missing function reference warnings
-    "ref.meth",  # Suppress missing method reference warnings
-]
+# Removed suppress_warnings to make the build stricter
+# All warnings will now be treated as errors when -W is passed to sphinx-build
 
-# Treat warnings as non-fatal - continue build even if there are warnings
-keep_warnings = True
-
-# Don't fail the build on warnings - important for handling third-party library docstrings
-# This is especially important when dependencies (like torchtitan) have RST formatting
-# that may not be perfect but works with Napoleon extension
-nitpicky = False  # Don't be overly strict about references
+# Be strict about references to catch broken links and references
+nitpicky = False
 
 # Napoleon settings for Google-style docstrings (from torchtitan and other dependencies)
 napoleon_google_docstring = True
