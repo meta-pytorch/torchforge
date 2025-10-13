@@ -13,15 +13,17 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
-from monarch.tools import commands
-
 from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.env_constants import FORGE_DISABLE_METRICS
 
 from forge.types import ProcessConfig, ProvisionerConfig
+
+from monarch._src.actor.actor_mesh import ActorMesh
+
+from monarch._src.actor.shape import NDSlice, Shape
+from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.tools import commands
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -307,6 +309,7 @@ class Provisioner:
 
     def register_service(self, service: "ServiceInterface") -> None:
         """Registers a service allocation for cleanup."""
+        # Import ServiceInterface here instead of at top-level to avoid circular import
         from forge.controller.service import ServiceInterface
 
         if not isinstance(service, ServiceInterface):
@@ -318,7 +321,6 @@ class Provisioner:
 
     def register_actor(self, actor: "ForgeActor") -> None:
         """Registers a single actor allocation for cleanup."""
-        from monarch._src.actor.actor_mesh import ActorMesh
 
         if not isinstance(actor, ActorMesh):
             raise TypeError(f"register_actor expected ActorMesh, got {type(actor)}")
@@ -327,6 +329,9 @@ class Provisioner:
 
     async def shutdown_all_allocations(self):
         """Gracefully shut down all tracked actors and services."""
+        logger.info(
+            f"Shutting down {len(self._registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
+        )
         # --- ServiceInterface ---
         for service in reversed(self._registered_services):
             try:

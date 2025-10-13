@@ -133,6 +133,7 @@ class ForgeActor(Actor):
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         service_interface = ServiceInterface(service, cls)
+        # Register this service with the provisioner so it can cleanly shut this down
         await register_service(service_interface)
         return service_interface
 
@@ -192,16 +193,15 @@ class ForgeActor(Actor):
         """
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(*args, **actor_kwargs)
+        # Register this actor with the provisioner so it can cleanly shut this down
         await register_actor(actor)
         return actor
 
     @classmethod
-    async def shutdown(cls, actor: "ForgeActor", quiet: bool = False):
+    async def shutdown(cls, actor: "ForgeActor"):
         """Shuts down an actor.
         This method is used by `Service` to teardown a replica.
         """
-        if not quiet:
-            logger.info(f"Shutting down actor {getattr(actor, 'name', cls.__name__)}")
         if actor._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
         await stop_proc_mesh(actor._proc_mesh)
