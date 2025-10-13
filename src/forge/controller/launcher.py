@@ -121,6 +121,9 @@ class BaseLauncher:
 class Slurmlauncher(BaseLauncher):
     async def initialize(self) -> None:
         if MONARCH_HOSTMESH_V1.get_value():
+            # HostMeshV1 currently requires explicit configuration
+            # of the underlying transport from client to mesh.
+            # This can be removed in the future once this has been removed.
             configure(default_transport=ChannelTransport.Tcp)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
@@ -178,6 +181,9 @@ class Mastlauncher(BaseLauncher):
 
     async def initialize(self) -> None:
         if MONARCH_HOSTMESH_V1.get_value():
+            # HostMeshV1 currently requires explicit configuration
+            # of the underlying transport from client to mesh.
+            # This can be removed in the future once this has been removed.
             configure(default_transport=ChannelTransport.MetaTlsWithHostname)
 
         await self.launch_mast_job()

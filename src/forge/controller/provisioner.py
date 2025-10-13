@@ -183,6 +183,12 @@ class Provisioner:
         return host_mesh, server_name
 
     def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns the host mesh given its associated name.
+
+        This is currently an experimental API for HostMesh v1 and
+        should not be relied on longer term.
+
+        """
         return self._host_mesh_map[name]
 
     async def get_proc_mesh(

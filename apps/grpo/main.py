@@ -363,6 +363,9 @@ async def main(cfg: DictConfig):
 
     # In the HostMesh v1 case, we spawn a torchstore storage volume
     # per trainer process.
+    # We initialize after service initialization because torchstore currently
+    # requires access to the underlying proc meshes in the local rank strategy.
+    # We should be able to hide this in the future.
     if MONARCH_HOSTMESH_V1.get_value():
         # TODO: support multiple host meshes
         trainer_num_procs = cfg.actors.trainer["procs"]
