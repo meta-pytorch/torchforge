@@ -28,14 +28,6 @@ It manages model serving, text generation, and weight updates for reinforcement 
    :no-inherited-members:
 ```
 
-### SamplingConfig
-
-```{eval-rst}
-.. autoclass:: SamplingConfig
-   :members:
-   :undoc-members:
-```
-
 ## PolicyWorker
 
 ```{eval-rst}
