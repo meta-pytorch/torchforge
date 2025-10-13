@@ -114,7 +114,7 @@ class BaseLauncher:
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         pass
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         pass
 
 
@@ -156,7 +156,7 @@ class Slurmlauncher(BaseLauncher):
         server_name = f"slurm:///{server_info.name}"
         return alloc, None, server_name  # (Allocator, AllocConstraints, SeverName)
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         return
 
 
@@ -201,10 +201,9 @@ class Mastlauncher(BaseLauncher):
 
         return allocator, alloc_constraints, self.create_server_handle()
 
-    async def remote_setup(self, procs: ProcMesh) -> tuple[str, int]:
+    async def remote_setup(self, procs: ProcMesh) -> None:
         setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
         await setup.mount.call(mount_dst="/mnt/wsfuse")
-        return await setup.get_info.choose()
 
     async def launch_mast_job(self):
         handle = self.create_server_handle()
