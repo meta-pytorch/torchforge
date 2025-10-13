@@ -16,5 +16,5 @@ as building blocks for complex distributed training systems.
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: logger, setup, set_env, __init__
+   :exclude-members: logger, setup, set_env, __init__, as_service
 ```

@@ -169,9 +169,9 @@ myst_enable_extensions = [
 
 autodoc_default_options = {
     "members": True,
-    "member-order": "bysource",
-    "exclude-members": "__weakref__",
+    "undoc-members": True,
     "private-members": False,
+    "inherited-members": False,
 }
 
 # Autodoc configuration for cleaner signatures
@@ -183,6 +183,7 @@ autodoc_typehints_description_target = (
 
 # Disable docstring inheritance
 autodoc_inherit_docstrings = False
+autodoc_typehints = "none"
 
 
 # Suppress warnings from third-party library docstrings
@@ -224,3 +225,14 @@ sphinx_gallery_conf = {
     "show_signature": False,
     "write_computation_times": False,
 }
+
+
+def clean_docstring_indentation(app, what, name, obj, options, lines):
+    if name and name.startswith("torchtitan."):
+        lines[:] = [line.lstrip() for line in lines]
+        if lines and lines[-1].strip():
+            lines.append("")
+
+
+def setup(app):
+    app.connect("autodoc-process-docstring", clean_docstring_indentation)

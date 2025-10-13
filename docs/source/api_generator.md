@@ -12,19 +12,8 @@ It manages model serving, text generation, and weight updates for reinforcement 
 
 ```{eval-rst}
 .. autoclass:: Policy
-   :members: launch, generate, update_weights, get_version, stop
+   :members: generate, update_weights, get_version, stop
    :exclude-members: __init__
-   :no-inherited-members:
-```
-
-## Configuration
-
-### EngineConfig
-
-```{eval-rst}
-.. autoclass:: EngineConfig
-   :members:
-   :undoc-members:
    :no-inherited-members:
 ```
 
