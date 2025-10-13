@@ -3,11 +3,10 @@
 
 # TODO: required by torchtitan
 # https://github.com/pytorch/torchtitan/blob/2f1c814da071cc8ad165d00be6f9c1a66f8e1cce/torchtitan/distributed/utils.py#L265
-
-model_name: "Qwen/Qwen3-8B"
-
 comm:
   trace_buf_size: 0
+
+model_name: "Qwen/Qwen3-8B"
 
 model:
   name: qwen3
