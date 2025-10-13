@@ -42,9 +42,7 @@ class TestGeneratorConfig(unittest.TestCase):
         self.assertIsNone(generator.available_devices)
 
         # Worker defaults
-        self.assertEqual(
-            generator.engine_args.model, "meta-llama/Llama-3.1-8B-Instruct"
-        )
+        self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
         self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
         self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
         self.assertFalse(generator.engine_args.enforce_eager)
@@ -53,7 +51,7 @@ class TestGeneratorConfig(unittest.TestCase):
         # Sampling defaults
         self.assertEqual(generator.sampling_params.n, 1)
         self.assertFalse(generator.sampling_params.guided_decoding)
-        self.assertEqual(generator.sampling_params.max_tokens, 512)
+        self.assertEqual(generator.sampling_params.max_tokens, 16)
 
     @pytest.mark.skipif(
         _import_error(),
@@ -71,11 +69,8 @@ class TestGeneratorConfig(unittest.TestCase):
             "tensor_parallel_size": 7777,
             "pipeline_parallel_size": 8888,
             "enforce_eager": True,
-            "nested_config": {
-                "gpu_memory_utilization": 0.9,
-                "max_model_len": 4096,
-                "custom_settings": {"temperature": 0.7, "top_p": 0.9},
-            },
+            "gpu_memory_utilization": 0.9,
+            "max_model_len": 4096,
         }
 
         sampling_dict = {
@@ -96,21 +91,13 @@ class TestGeneratorConfig(unittest.TestCase):
         self.assertEqual(generator.engine_args.model, "test-model-6789")
         self.assertEqual(generator.engine_args.tensor_parallel_size, 7777)
         self.assertEqual(generator.engine_args.pipeline_parallel_size, 8888)
+        self.assertEqual(generator.engine_args.gpu_memory_utilization, 0.9)
+        self.assertEqual(generator.engine_args.max_model_len, 4096)
         self.assertTrue(generator.engine_args.enforce_eager)
         self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
         self.assertEqual(generator.sampling_params.n, 1357)
         self.assertEqual(generator.sampling_params.max_tokens, 2468)
-
-        # Test that engine_dict accepts and preserves nested dict structure
-        # The original engine_dict should remain unchanged and accessible
-        self.assertIn("nested_config", engine_dict)
-        self.assertEqual(engine_dict["nested_config"]["gpu_memory_utilization"], 0.9)
-        self.assertEqual(engine_dict["nested_config"]["max_model_len"], 4096)
-        self.assertEqual(
-            engine_dict["nested_config"]["custom_settings"]["temperature"], 0.7
-        )
-        self.assertEqual(engine_dict["nested_config"]["custom_settings"]["top_p"], 0.9)
 
     @pytest.mark.skipif(
         _import_error(),

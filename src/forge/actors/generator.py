@@ -83,7 +83,7 @@ class Generator(GeneratorInterface):
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
-            self.engine_args._is_v1_supported_oracle = lambda *_: True
+        self.engine_args._is_v1_supported_oracle = lambda *_: True
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
