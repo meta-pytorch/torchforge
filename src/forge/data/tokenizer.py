@@ -8,13 +8,13 @@ import json
 from typing import Any, Optional
 
 import jinja2
+from jinja2 import StrictUndefined
+
+from tokenizers import Tokenizer
 
 from forge.data.utils import truncate
 from forge.interfaces import BaseTokenizer, ModelTokenizer
 from forge.types import Message
-from jinja2 import StrictUndefined
-
-from tokenizers import Tokenizer
 
 
 class HuggingFaceBaseTokenizer(BaseTokenizer):
