@@ -586,10 +586,14 @@ class PolicyWorker(ForgeActor):
                 loaded_weights.update(loaded)
         else:  # Load each parameter from torchstore directly without DCP
             hf_param_names = [extract_param_name(key) for key in matching_keys]
-            param_keys = [get_param_key(version, name) for name in hf_param_names]
-            new_params = await _ts_parallel_get(param_keys)
-            loaded = model.load_weights(zip(hf_param_names, new_params))
-            loaded_weights.update(loaded)
+            # We can't pass a generator since vllm load_weights is not async.
+            # Instead, we just call load_weights with one parameter at a time.
+            for name in hf_param_names:
+                param_key = get_param_key(version, name)
+                param = await ts.get(param_key)
+                loaded = model.load_weights([(name, param)])
+                del param
+                loaded_weights.update(loaded)
         t.stop()
         logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
