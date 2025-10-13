@@ -12,13 +12,9 @@ import torch.distributed as dist
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
 
-from forge.data.dataset_metrics import (
-    AggregationType,
-    DefaultTrainingMetricTransform,
-    Metric,
-    MetricTransform,
-)
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricTransform
 from forge.interfaces import Transform
+from forge.observability.metrics import Metric, Reduce
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -237,18 +233,18 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     # .map is applied lazily and the advantage would be to leverage caching.
                     sample = self._apply_transforms(sample)
 
-                    # Track the number of epochs completed for each dataset. This is
-                    # especially useful when interleaving multiple datasets, but
-                    # also necessary to track dataset-level metrics.
-                    metric_num_epochs = Metric(
-                        source=self.info.name,
-                        metric_name="num_epochs",
-                        value=self._num_epochs,
-                        agg_type=AggregationType.MAX,
-                    )
+                    # Track the number of epochs completed for each dataset.
+                    # This is especially useful when interleaving multiple datasets.
                     if "metrics" not in sample:
                         sample["metrics"] = []
-                    sample["metrics"].append(metric_num_epochs)
+
+                    sample["metrics"].append(
+                        Metric(
+                            key=f"dataset/{self.info.name}/num_epochs",
+                            value=self._num_epochs,
+                            reduction=Reduce.MAX,
+                        )
+                    )
 
                     samples_yielded += 1
                     yield sample

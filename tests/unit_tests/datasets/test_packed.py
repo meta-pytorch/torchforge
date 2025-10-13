@@ -14,7 +14,6 @@ import pytest
 import torch
 
 from forge.data.collate import collate_packed
-from forge.data.dataset_metrics import MetricsAggregator
 from forge.data.datasets import HfIterableDataset
 from forge.data.datasets.packed import (
     _SUPPORTS_FLEX_ATTENTION,
@@ -914,7 +913,7 @@ class TestPackedDataset:
         batch_size = 1
 
         # Setup dataset factory
-        def create_loader_and_aggregator():
+        def create_loader():
             dataset = dataset_factory(samples)
             packer = TextPacker(padding_idx=999, ignore_idx=-100)
             packed_dataset = PackedDataset(
@@ -931,11 +930,10 @@ class TestPackedDataset:
             loader = StatefulDataLoader(
                 packed_dataset, batch_size=batch_size, collate_fn=collate_fn
             )
-            aggregator = MetricsAggregator()
-            return loader, aggregator
+            return loader
 
-        loader1, aggregator1 = create_loader_and_aggregator()
-        loader2, aggregator2 = create_loader_and_aggregator()
+        loader1 = create_loader()
+        loader2 = create_loader()
 
         steps_before_checkpoint = 2
         steps_after_checkpoint = 2
@@ -943,11 +941,9 @@ class TestPackedDataset:
         # Generate checkpoint and resume
         result = generate_ckpt(
             loader1,
-            aggregator1,
             steps_before_checkpoint=steps_before_checkpoint,
             steps_after_checkpoint=steps_after_checkpoint,
             resume_dataloader=loader2,
-            resume_aggregator=aggregator2,
         )
 
         # Verify that checkpointing and resumption work

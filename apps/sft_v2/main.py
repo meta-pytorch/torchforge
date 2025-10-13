@@ -28,6 +28,7 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.observability import get_or_create_metric_logger, record_metric
 
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -109,9 +110,23 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         os.environ.update(env)
         logger.info("env: {}".format(env))
 
+    async def setup_metrics(self):
+        """Setup metric logger following GRPO pattern"""
+        metric_logging_cfg = self.job_config.get(
+            "metric_logging", {"console": {"logging_mode": "global_reduce"}}
+        )
+        self.mlogger = await get_or_create_metric_logger(process_name="SFTTrainer")
+        await self.mlogger.init_backends.call_one(metric_logging_cfg)
+
+    def record_batch_metrics(self, data_metrics: list):
+        """Record dataset metrics using the observability system."""
+        for metric in data_metrics:
+            record_metric(metric.key, metric.value, metric.reduction)
+
     @endpoint
     async def setup(self):
         self.train_dataloader = self.setup_data()
+        await self.setup_metrics()
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -251,13 +266,22 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         while self.current_step < self.num_training_steps:
             batch = next(dataloader)
+
+            # Record metrics from batch before moving to device
+            self.record_batch_metrics(batch.pop("metrics", []))
+
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to("cuda")  # TODO: hardcoded for now
+
             self.train_step(batch)
             # self.profiler.step()
             self.current_step += 1
+
+            # Flush metrics periodically
+            if self.current_step % 100 == 0:
+                await self.mlogger.flush.call_one(global_step=self.current_step)
 
             self.checkpointer.save(
                 curr_step=self.current_step,
@@ -270,8 +294,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     async def cleanup(self) -> None:
         if self.checkpointer:
             self.checkpointer.close()
-        if self.metric_logger:
-            self.metric_logger.close()
+        if hasattr(self, "mlogger") and self.mlogger:
+            await self.mlogger.shutdown.call_one()
 
     def __repr__(self) -> str:
         return "Trainer"

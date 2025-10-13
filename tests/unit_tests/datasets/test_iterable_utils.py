@@ -7,92 +7,91 @@
 from typing import Any, Optional
 
 import torch
-from forge.data.dataset_metrics import MetricsAggregator
-
 from torch.utils.data import DataLoader
 
 
-def collate_with_metrics(batch: list[dict[str, Any]]) -> dict[str, Any]:
-    """Simple collate that extracts metrics and pads tokens."""
-    all_metrics = []
-    clean_batch = []
+def collate_with_metrics(batch):
+    """
+    Simple collate function that preserves metrics for validation.
+    Collects metrics from all samples in the batch and aggregates them.
+
+    Uses a simple collation that doesn't enforce same sizes for lists/tokens.
+    """
+    # Collect metrics from all samples
+    batch_metrics = []
     for sample in batch:
         if "metrics" in sample:
-            all_metrics.extend(sample.pop("metrics"))
-        clean_batch.append(sample)
+            batch_metrics.extend(sample.pop("metrics"))
 
-    if not clean_batch:
-        return {"metrics": all_metrics}
+    # Simple collation that handles variable-length sequences
+    collated = {}
+    if batch:
+        for key in batch[0].keys():
+            values = [sample[key] for sample in batch]
+            if key == "tokens" or key == "labels":
+                # Keep as list of lists for variable length sequences
+                collated[key] = values
+            else:
+                # Use default collation for scalars
+                collated[key] = torch.utils.data.default_collate(values)
 
-    # Simple padding for tokens
-    ids = torch.tensor([item["id"] for item in clean_batch])
-    tokens = torch.nn.utils.rnn.pad_sequence(
-        [torch.tensor(item["tokens"]) for item in clean_batch],
-        batch_first=True,
-        padding_value=-1,  # Use -1 for padding to distinguish from valid IDs
-    )
-    collated = {
-        "id": ids,
-        "tokens": tokens,
-    }
+    # Add batch-level metrics key for downstream processing
+    if batch_metrics:
+        collated["metrics"] = batch_metrics
 
-    # Add text field for non-tensor data
-    if "text" in clean_batch[0]:
-        collated["text"] = [item["text"] for item in clean_batch]
-
-    collated["metrics"] = all_metrics
     return collated
 
 
 def generate_ckpt(
     dataloader: DataLoader,
-    aggregator: MetricsAggregator,
     steps_before_checkpoint: int,
     steps_after_checkpoint: int,
     resume_dataloader: Optional[DataLoader] = None,
-    resume_aggregator: Optional[MetricsAggregator] = None,
 ) -> dict[str, Any]:
     """
     Generates a checkpoint by running through data and saving checkpoint mid-stream.
-    Optionally, a second dataloader and aggregator can be given to resume from ckpt
+    Optionally, a second dataloader can be given to resume from checkpoint
     and run steps_after_checkpoint to match the first one.
+
+    Collects and aggregates metrics for test validation purposes.
 
     Args:
         dataloader (DataLoader): The dataloader to test
-        aggregator (MetricsAggregator): The metrics aggregator to use
         steps_before_checkpoint (int): Number of steps to run before saving checkpoint
         steps_after_checkpoint (int): Number of steps to run after checkpoint
         resume_dataloader (Optional[DataLoader]): Optional new dataloader to test resuming.
             If None, returns empty resumed_batches.
-        resume_aggregator (Optional[MetricsAggregator]): Optional new aggregator to test resuming.
-            If None, returns empty resumed_metrics.
 
     Returns:
-        dict[str, Any]: Dict with batches/metrics from both pre and post checkpoint runs.
+        dict[str, Any]: Dict with batches and aggregated metrics for validation.
     """
     iterator = iter(dataloader)
 
-    # Collect batches before and after checkpoint
+    # Collect batches and metrics before and after checkpoint
     batches = []
+    all_metrics = []  # All metrics collected during the run
+    checkpoint_metrics = []  # Metrics collected only up to checkpoint
     checkpoint_state = None
-    metrics_at_checkpoint = {}
 
     total_steps = steps_before_checkpoint + steps_after_checkpoint
 
     for idx, batch in enumerate(iterator):
         batches.append(batch)
 
-        # Process metrics
+        # Collect metrics for test validation
         if "metrics" in batch:
-            aggregator.update(batch.pop("metrics"))
+            batch_metrics = batch.pop("metrics")
+            all_metrics.extend(batch_metrics)
+
+            # If we haven't reached checkpoint yet, also add to checkpoint metrics
+            if idx < steps_before_checkpoint:
+                checkpoint_metrics.extend(batch_metrics)
 
         # Save checkpoint state after steps_before_checkpoint
         if idx == steps_before_checkpoint - 1:  # -1 because idx is 0-based
             checkpoint_state = {
                 "loader": dataloader.state_dict(),
-                "aggregator": aggregator.state_dict(),
             }
-            metrics_at_checkpoint = aggregator.get_metrics_for_logging(prefix="train")
 
         # Stop after total steps
         if idx == total_steps - 1:
@@ -102,43 +101,50 @@ def generate_ckpt(
     pre_checkpoint_batches = batches[:steps_before_checkpoint]
     post_checkpoint_batches = batches[steps_before_checkpoint:]
 
-    # Resume with new instances if provided
+    # Resume with new instance if provided
     resumed_batches = []
-    resumed_metrics = {}
+    resumed_metrics = []
 
-    if (
-        resume_dataloader is not None
-        and resume_aggregator is not None
-        and checkpoint_state is not None
-    ):
-        # Test resuming with new instances
+    if resume_dataloader is not None and checkpoint_state is not None:
+        # Test resuming with new instance
         resume_dataloader.load_state_dict(checkpoint_state["loader"])
-        resume_aggregator.load_state_dict(checkpoint_state["aggregator"])
         resume_iterator = iter(resume_dataloader)
 
         # Collect only the post-checkpoint batches when resuming
         for idx, batch in enumerate(resume_iterator):
             resumed_batches.append(batch)
 
-            # Process metrics
+            # Collect metrics from resumed batches
             if "metrics" in batch:
-                resume_aggregator.update(batch.pop("metrics"))
+                batch_metrics = batch.pop("metrics")
+                resumed_metrics.extend(batch_metrics)
 
             # Stop after steps_after_checkpoint
             if idx == steps_after_checkpoint - 1:
                 break
 
-        resumed_metrics = resume_aggregator.get_metrics_for_logging(prefix="train")
-
     return {
         # Original run
         "pre_checkpoint_batches": pre_checkpoint_batches,
         "post_checkpoint_batches": post_checkpoint_batches,
-        "metrics_at_checkpoint": metrics_at_checkpoint,
-        "final_metrics": aggregator.get_metrics_for_logging(prefix="train"),
+        "metrics_at_checkpoint": keep_last_metric(checkpoint_metrics),
+        "final_metrics": keep_last_metric(all_metrics),
         # Resumed run
         "resumed_batches": resumed_batches,
-        "resumed_metrics": resumed_metrics,
+        "resumed_metrics": keep_last_metric(resumed_metrics),
         # Internal state for loading - only if someone needs to manually load
         "_checkpoint_state": checkpoint_state,
     }
+
+
+def keep_last_metric(metrics_list: list) -> dict[str, Any]:
+    result = {}
+    for metric in metrics_list:
+        # Expect observability.Metric objects only
+        key = metric.key
+        value = metric.value
+
+        # For test purposes, just keep the last value of each metric
+        result[key] = value
+
+    return result

@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 import torch.distributed as dist
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 
-from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricsAggregator
 from forge.data.datasets import HfIterableDataset
 from torch.testing._internal.common_fsdp import FSDPTest
 
@@ -113,7 +113,7 @@ class TestHfIterableDataset:
             split="train",
             # dataset_name not provided - should auto-generate
             seed=SEED,
-            metric_transform=DefaultTrainingMetricTransform(),
+            metric_transform=None,  # Now using new observability system
             num_shards_per_rank=4,
         )
 
@@ -131,7 +131,7 @@ class TestHfIterableDataset:
             dataset_name="my_dataset",
             weight=custom_weight,
             seed=SEED,
-            metric_transform=DefaultTrainingMetricTransform(),
+            metric_transform=None,  # Now using new observability system
             num_shards_per_rank=4,
         )
 
@@ -149,17 +149,16 @@ class TestHfIterableDataset:
         the epoch metric is correct, and checkpointing works as expected.
         """
 
-        # 1. Setup Dataloaders and Aggregators for original and resumed runs
-        def create_loader_and_aggregator():
+        # 1. Setup Dataloaders for original and resumed runs
+        def create_loader():
             dataset = dataset_factory(small_dataset_file, shuffle=False)
             loader = StatefulDataLoader(
                 dataset, batch_size=BATCH_SIZE, collate_fn=collate_with_metrics
             )
-            aggregator = MetricsAggregator()
-            return loader, aggregator
+            return loader
 
-        loader1, aggregator1 = create_loader_and_aggregator()
-        loader2, aggregator2 = create_loader_and_aggregator()
+        loader1 = create_loader()
+        loader2 = create_loader()
 
         # 2. Calculate steps for the test run
         total_samples = int(SMALL_DATASET_SIZE * num_epochs)
@@ -171,11 +170,9 @@ class TestHfIterableDataset:
         # 3. Generate checkpoint and resume
         result = generate_ckpt(
             loader1,
-            aggregator1,
             steps_before_checkpoint=steps_before_checkpoint,
             steps_after_checkpoint=steps_after_checkpoint,
             resume_dataloader=loader2,
-            resume_aggregator=aggregator2,
         )
 
         # 4. Verify checkpointing and resumption
@@ -253,9 +250,7 @@ class TestHfIterableDataset:
         for sample in first_epoch_samples:
             first_epoch_metrics.extend(sample["metrics"])
         epoch_values = [
-            metric.value
-            for metric in first_epoch_metrics
-            if metric.metric_name == "epoch"
+            metric.value for metric in first_epoch_metrics if "num_epochs" in metric.key
         ]
         assert all(
             epoch_value == 0 for epoch_value in epoch_values
@@ -268,7 +263,7 @@ class TestHfIterableDataset:
         epoch_values = [
             metric.value
             for metric in second_epoch_metrics
-            if metric.metric_name == "epoch"
+            if "num_epochs" in metric.key
         ]
         assert all(
             epoch_value == 1 for epoch_value in epoch_values
@@ -314,7 +309,7 @@ class TestDistributedHfIterableDataset(FSDPTest):
             # Test multiple epoch boundaries
             for num_epochs in [0.9, 1.0, 2.5]:
 
-                def create_loader_and_aggregator():
+                def create_loader():
                     dataset = HfIterableDataset(
                         path="json",
                         data_files=str(medium_dataset_file),
@@ -322,7 +317,7 @@ class TestDistributedHfIterableDataset(FSDPTest):
                         dataset_name="epoch_test",
                         seed=SEED,
                         shuffle_buffer_size=0,  # No shuffle for determinism
-                        metric_transform=DefaultTrainingMetricTransform(),
+                        metric_transform=None,  # Now using new observability system
                         num_shards_per_rank=2,
                     )
                     loader = StatefulDataLoader(
@@ -331,10 +326,10 @@ class TestDistributedHfIterableDataset(FSDPTest):
                         collate_fn=collate_with_metrics,
                         num_workers=0,
                     )
-                    return loader, MetricsAggregator()
+                    return loader
 
-                loader1, aggregator1 = create_loader_and_aggregator()
-                loader2, aggregator2 = create_loader_and_aggregator()
+                loader1 = create_loader()
+                loader2 = create_loader()
 
                 # Calculate steps to reach desired epoch boundary
                 samples_per_rank = MEDIUM_DATASET_SIZE // dist.get_world_size()
@@ -352,11 +347,9 @@ class TestDistributedHfIterableDataset(FSDPTest):
 
                 result = generate_ckpt(
                     loader1,
-                    aggregator1,
-                    steps_before,
-                    steps_after,
+                    steps_before_checkpoint=steps_before,
+                    steps_after_checkpoint=steps_after,
                     resume_dataloader=loader2,
-                    resume_aggregator=aggregator2,
                 )
 
                 # Verify deterministic resumption - critical for distributed training
@@ -375,7 +368,7 @@ class TestDistributedHfIterableDataset(FSDPTest):
                     num_epochs - 1e-9
                 )  # -1e-9 so 1.0 epochs -> 0
                 assert (
-                    final_metrics["train_epoch_test/num_epochs"] == expected_epoch
+                    final_metrics["dataset/epoch_test/num_epochs"] == expected_epoch
                 ), f"Epoch count incorrect for {num_epochs} epochs test scenario"
 
         finally:
