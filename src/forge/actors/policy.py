@@ -35,6 +35,8 @@ from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequest
 from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.v1.engine.parallel_sampling import ParentRequest
 from vllm.v1.engine.processor import Processor
+from vllm.v1.kv_cache_interface import KVCacheConfig
+from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
@@ -195,6 +197,7 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def setup(self):
+        """Mirrors the __init__ of vLLM's LLMEngine."""
         if self.policy_worker is None:
             raise RuntimeError(
                 "Policy worker should not be None. Usually it would be attached to Policy in the ``launch`` method."
@@ -217,23 +220,20 @@ class Policy(PolicyInterface):
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
-        tokenizer = init_tokenizer_from_configs(
-            model_config=self.vllm_config.model_config,
-            scheduler_config=self.vllm_config.scheduler_config,
-            lora_config=self.vllm_config.lora_config,
-        )
+        tokenizer = init_tokenizer_from_configs(self.vllm_config.model_config)
         self.processor = Processor(
             vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
-        # Setup scheduler
-        # TODO: Add support for `log_stats`
+        # Configure KV caches
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
         self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
         self.vllm_config.cache_config.num_cpu_blocks = 0
 
+        # Setup scheduler
+        # TODO: Add support for `log_stats`
         structured_output_manager = StructuredOutputManager(self.vllm_config)
         self.scheduler = Scheduler(
             vllm_config=self.vllm_config,
@@ -258,20 +258,15 @@ class Policy(PolicyInterface):
             priority (int, optional): The priority of the request. Defaults to 0.
 
         Returns:
-            RequestOutput: vLLM class with the generated response.
+            list[Completion]: n completions from vLLM based on your prompt.
         """
         t = Tracer("policy_perf/generate", timer="gpu")
         t.start()
-
         record_metric("policy/generate/count_requests", 1, Reduce.SUM)
 
         self.request_id += 1 % sys.maxsize
-        request_id = str(self.request_id)  # implement from a counter
+        request_id = str(self.request_id)
 
-        # Wraps prompt into a dict
-        prompt_dict: dict[str, str] = convert_input(prompt=prompt)
-
-        # truncate prmpt
         tokenization_kwargs = self.tokenization_kwargs or {}
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
@@ -280,19 +275,16 @@ class Policy(PolicyInterface):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
-        t.step("prompt_truncation")
-
-        # process and tokenize prompt
         prompt_str, request = self.processor.process_inputs(
             request_id=request_id,
-            prompt=prompt_dict,
+            prompt={"prompt": prompt},
             params=self.sampling_params,
             arrival_time=None,
             lora_request=self.lora_request,
             tokenization_kwargs=tokenization_kwargs,
             trace_headers=None,
             priority=priority,
-            data_parallel_rank=None,
+            data_parallel_rank=None,  # We do not support DP
         )
         t.step("process_inputs")
 
@@ -302,15 +294,12 @@ class Policy(PolicyInterface):
         async with self.request_lock:
             await self.request_lock.wait_for(lambda: self.accepting_requests)
 
-            # Explicitly keeping the redundant logic to make it easier to pick up
-            # vllm changes
-            # TODO: Clean up before release
+            # Explicitly keeping the redundant logic to make it easier to pick up vLLM changes
             if (num_samples := self.sampling_params.n) == 1:
                 self.output_processor.add_request(request, prompt_str, None, 0)
-                request, _ = self.preprocess_add_request(request)
+                request, _ = self._preprocess_add_request(request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (None, request_fut)
-
                 self.scheduler.add_request(request)
             else:
                 parent_req = ParentRequest(request_id, self.sampling_params)
@@ -324,8 +313,7 @@ class Policy(PolicyInterface):
                     self.output_processor.add_request(
                         child_request, prompt_str, parent_req, idx
                     )
-                    child_request, _ = self.preprocess_add_request(child_request)
-
+                    child_request, _ = self._preprocess_add_request(child_request)
                     self.scheduler.add_request(child_request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (parent_req, request_fut)
@@ -333,6 +321,7 @@ class Policy(PolicyInterface):
         completions = await request_fut
         t.step("generate")
 
+        # Log some metrics
         record_metric(
             "policy/generate/count_sequences_completed",
             len(completions),
@@ -352,35 +341,33 @@ class Policy(PolicyInterface):
                 num_generated_tokens,
                 Reduce.MEAN,
             )
-
         t.stop()
-
         return completions
 
-    # Abstracted to match vllm
-    # https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
-    def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
+    def _preprocess_add_request(
+        self, request: EngineCoreRequest
+    ) -> tuple[Request, int]:
+        """https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419"""
         if request.mm_hashes is not None:
             raise NotImplementedError("Support for mm_hash is not implemented yet.")
-        request: Request = Request.from_engine_core_request(request)
-        if request.use_structured_output:
+        req = Request.from_engine_core_request(request)
+        if req.use_structured_output:
             self.scheduler.structured_output_manager.grammar_init(request)
+        return req, 0
 
-        return request, 0  # Unused Arg: Current Wave
-
-    async def run(self):
-        # TODO: add support for `iteration_stats`
+    async def run(self) -> None:
+        """Schedule, execute, and make output.
+        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276
+        """
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
-
             scheduler_output = self.scheduler.schedule()
-
             worker_outputs = await self.policy_worker.execute_model.call(
                 scheduler_output
             )
 
-            # the results of `execute_model` is gathered on the driver rank (rank 0)
+            # The results of `execute_model` are gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
@@ -389,9 +376,8 @@ class Policy(PolicyInterface):
             processed_outputs = self.output_processor.process_outputs(
                 outputs.outputs,
                 engine_core_timestamp=outputs.timestamp,
-                iteration_stats=None,
+                iteration_stats=None,  # TODO: add support for `iteration_stats`
             )
-
             for request_output in processed_outputs.request_outputs:
                 if request_output.finished:
                     completions = self._to_completions(request_output)
@@ -404,13 +390,24 @@ class Policy(PolicyInterface):
                     self.request_lock.notify_all()
 
     @endpoint
-    async def update_weights(self, policy_version: int):
+    async def update_weights(self, policy_version: int) -> None:
+        """Update weights on base model from a policy version to be found in a torchstore volume.
+
+        Args:
+            policy_version (int): Policy version from which to update. This will correspond to a key in a
+                torchstore volume.
+
+        Example:
+            >>> trainer.train_step(...)
+            >>> version += 1
+            >>> await trainer.push_weights()
+            >>> policy.update_weights(version)
+        """
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
             async with self.request_lock:
                 self.accepting_requests = False
-
                 curr_requests = [fut for _, fut in self.requests.values()]
                 if curr_requests:
                     # Record pending requests metrics
@@ -435,6 +432,7 @@ class Policy(PolicyInterface):
             record_metric("policy/update_weights/count_weight_updates", 1, Reduce.SUM)
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
+            # Call update_weights on every policy_worker
             await self.policy_worker.update.call(version=policy_version)
             self.policy_version = policy_version
 
@@ -461,18 +459,6 @@ class Policy(PolicyInterface):
     async def stop(self):
         self.running = False
 
-    @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info("[Policy] save model parameters for testing.")
-        await self.policy_worker._test_save_model_params.call()
-
-    @endpoint
-    async def _test_validate_model_params(self, validate_fn):
-        """Validate updated model params using validate_fn."""
-        logger.info("[Policy] start validating model parameters.")
-        return await self.policy_worker._test_validate_model_params.call(validate_fn)
-
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a RequestOutput to a list of Completion objects."""
         completions = []
@@ -493,23 +479,29 @@ class Policy(PolicyInterface):
                     metadata={"num_cached_tokens": request_output.num_cached_tokens},
                 )
             )
-
         return completions
 
-    def _extract_logprobs(self, one_sample: CompletionOutput) -> torch.Tensor | None:
-        """
-        Extract log probabilities from a sample, if available.
-        """
-        if one_sample.logprobs is not None:
+    def _extract_logprobs(self, sample: CompletionOutput) -> torch.Tensor | None:
+        if sample.logprobs is not None:
             return torch.tensor(
                 [
                     top_k_dict[token].logprob
-                    for token, top_k_dict in zip(
-                        one_sample.token_ids, one_sample.logprobs
-                    )
+                    for token, top_k_dict in zip(sample.token_ids, sample.logprobs)
                 ]
             )
         return None
+
+    @endpoint
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[Policy] save model parameters for testing.")
+        await self.policy_worker._test_save_model_params.call()
+
+    @endpoint
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[Policy] start validating model parameters.")
+        return await self.policy_worker._test_validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -532,30 +524,43 @@ class PolicyWorker(ForgeActor):
         os.environ["RANK"] = str(self.rank)
         self.worker = self.setup_worker()
 
+    def setup_worker(self) -> WorkerWrapperBase:
+        """Build and instantiate vLLM worker"""
+        parallel_config = self.vllm_config.parallel_config
+        set_multiprocessing_worker_envs(parallel_config)
+        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
+        distributed_init_method = get_distributed_init_method(ip, port)
+        all_kwargs = [{}] * parallel_config.world_size
+        local_rank = self.rank % torch.accelerator.device_count()
+        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
+        all_kwargs[self.rank] = {
+            "vllm_config": self.vllm_config,
+            "local_rank": local_rank,
+            "rank": self.rank,
+            "distributed_init_method": distributed_init_method,
+            "is_driver_worker": is_driver_worker,
+        }
+        worker = WorkerWrapperBase(self.vllm_config, self.rank)
+        worker.init_worker(all_kwargs)
+        worker.init_device()
+        worker.load_model()
+        return worker
+
     @endpoint
-    async def execute_model(self, schedule: SchedulerOutput):
+    async def execute_model(self, schedule: SchedulerOutput) -> ModelRunnerOutput:
         return self.worker.execute_model(schedule)
 
     @endpoint
-    async def update(self, version: int):
-        """Update model weights by reading state dict from torchstore"""
-        logger.info(
-            f"[PolicyWorker::update] start updating weights to version {version}"
-        )
+    async def update_weights(self, policy_version: int) -> None:
         model = self.worker.model_runner.model
-        prefix = get_param_prefix(version)
-        logger.debug(f"{prefix=}")
+        prefix = get_param_prefix(policy_version)
         matching_keys = await ts.keys(prefix)
-        logger.debug(f"{matching_keys=}")
-        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(policy_version)
         loaded_weights = set()
-        t = Tracer("policy_worker_perf/update", timer="gpu")
+        t = Tracer("policy_worker_perf/update_weights", timer="gpu")
         t.start()
         # Entire state dict is stored in a single DCP handle
         if dcp_whole_state_dict_key in matching_keys:
-            logger.info(
-                f"Loading {dcp_whole_state_dict_key} from DCP with handle {dcp_whole_state_dict_key}"
-            )
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
             hf_param_names = dcp_handle.param_names
             for name in hf_param_names:
@@ -568,19 +573,16 @@ class PolicyWorker(ForgeActor):
             # We can't pass a generator since vllm load_weights is not async.
             # Instead, we just call load_weights with one parameter at a time.
             for name in hf_param_names:
-                param_key = get_param_key(version, name)
+                param_key = get_param_key(policy_version, name)
                 param = await ts.get(param_key)
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
         t.stop()
-        logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 
     @endpoint
-    async def setup_kv_cache(self):
-        """Based on vllm/v1/engine/core.py:EngineCore._initialize_kv_caches
-        TODO: test that fails if vllm method updates
-        """
+    async def setup_kv_cache(self) -> KVCacheConfig:
+        """https://github.com/vllm-project/vllm/blob/5c7fe25491825b95936c011a43337c7d4fb7e472/vllm/v1/engine/core.py#L199"""
         kv_cache_spec = self.worker.get_kv_cache_spec()
         if kv_cache_spec is not None:
             available_gpu_memory = self.worker.determine_available_memory()
@@ -624,32 +626,3 @@ class PolicyWorker(ForgeActor):
         return validate_fn(
             self._test_prev_params, self.worker.model_runner.model, logger
         )
-
-    def setup_worker(self):
-        """Build and Instantiate vLLM worker"""
-        parallel_config = self.vllm_config.parallel_config
-        set_multiprocessing_worker_envs(parallel_config)
-        ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
-        distributed_init_method = get_distributed_init_method(ip, port)
-        all_kwargs = [{}] * parallel_config.world_size
-        local_rank = self.rank % torch.accelerator.device_count()
-        is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
-        all_kwargs[self.rank] = {
-            "vllm_config": self.vllm_config,
-            "local_rank": local_rank,
-            "rank": self.rank,
-            "distributed_init_method": distributed_init_method,
-            "is_driver_worker": is_driver_worker,
-        }
-        worker = WorkerWrapperBase(self.vllm_config, self.rank)
-        worker.init_worker(all_kwargs)
-        worker.init_device()
-        worker.load_model()
-        return worker
-
-
-def convert_input(prompt=None, prompt_token_ids=None) -> dict:
-    assert (prompt is None) ^ (prompt_token_ids is None)
-    if prompt is not None:
-        return {"prompt": prompt}
-    return {"prompt_token_ids": prompt_token_ids}
