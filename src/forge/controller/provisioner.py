@@ -13,8 +13,6 @@ import os
 import socket
 import uuid
 
-from typing import Any
-
 from monarch._src.actor.shape import NDSlice, Shape
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 from monarch.tools import commands
@@ -133,7 +131,8 @@ class Provisioner:
         if not self.launcher:
             logger.warning("Launcher not provided, remote allocations will not work.")
 
-        self._allocations: list[Any] = []  # all live actor/service instances
+        self._registered_actors: list["ForgeActor"] = []
+        self._registered_services: list["ServiceInterface"] = []
 
     async def initialize(self):
         """Call this after creating the instance"""
@@ -306,36 +305,49 @@ class Provisioner:
                 commands.kill(server_name)
             del self._proc_host_map[proc_mesh]
 
-    async def track_allocation(self, alloc: Any):
-        """Tracks an allocation for cleanup."""
-        self._allocations.append(alloc)
+    def register_service(self, service: "ServiceInterface") -> None:
+        """Registers a service allocation for cleanup."""
+        from forge.controller.service import ServiceInterface
+
+        if not isinstance(service, ServiceInterface):
+            raise TypeError(
+                f"register_service expected ServiceInterface, got {type(service)}"
+            )
+
+        self._registered_services.append(service)
+
+    def register_actor(self, actor: "ForgeActor") -> None:
+        """Registers a single actor allocation for cleanup."""
+        # from forge.controller.actor import ForgeActor
+        from monarch._src.actor.actor_mesh import ActorMesh
+
+        if not isinstance(actor, ActorMesh):
+            raise TypeError(f"register_actor expected ActorMesh, got {type(actor)}")
+
+        self._registered_actors.append(actor)
 
     async def shutdown_all_allocations(self):
         """Gracefully shut down all tracked actors and services."""
-        from monarch._src.actor.actor_mesh import ActorMesh
-
-        from forge.controller.actor import ForgeActor
-        from forge.controller.service import ServiceInterface
-
-        for alloc in reversed(self._allocations):
+        # --- ServiceInterface ---
+        for service in reversed(self._registered_services):
             try:
-                # --- ServiceInterface ---
-                if isinstance(alloc, ServiceInterface):
-                    await alloc.shutdown()
-
-                # --- Actor instance (ForgeActor or underlying ActorMesh) ---
-                elif isinstance(alloc, (ForgeActor, ActorMesh)):
-                    # Get the class to call shutdown on (ForgeActor or its bound class)
-                    actor_cls = getattr(alloc, "_class", None) or alloc.__class__
-                    await actor_cls.shutdown(alloc)
-
-                else:
-                    logger.warning(f"Unknown allocation type: {type(alloc)}")
+                await service.shutdown()
 
             except Exception as e:
-                logger.warning(f"Failed to shut down {alloc}: {e}")
+                logger.warning(f"Failed to shut down {service}: {e}")
 
-        self._allocations.clear()
+        # --- Actor instance (ForgeActor or underlying ActorMesh) ---
+        for actor in reversed(self._registered_actors):
+            try:
+                # Get the class to call shutdown on (ForgeActor or its bound class)
+                actor_cls = getattr(actor, "_class", None) or actor.__class__
+                await actor_cls.shutdown(actor)
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {actor}: {e}")
+
+        self._registered_actors.clear()
+        self._registered_services.clear()
 
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
@@ -406,6 +418,18 @@ async def host_mesh_from_proc(proc_mesh: ProcMesh):
     """
     provisioner = await _get_provisioner()
     return await provisioner.host_mesh_from_proc(proc_mesh)
+
+
+async def register_service(service: "ServiceInterface") -> None:
+    """Registers a service allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_service(service)
+
+
+async def register_actor(actor: "ForgeActor") -> None:
+    """Registers an actor allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_actor(actor)
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):

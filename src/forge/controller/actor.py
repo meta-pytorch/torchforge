@@ -12,7 +12,12 @@ from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.provisioner import _get_provisioner, get_proc_mesh, stop_proc_mesh
+from forge.controller.provisioner import (
+    get_proc_mesh,
+    register_actor,
+    register_service,
+    stop_proc_mesh,
+)
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -128,7 +133,7 @@ class ForgeActor(Actor):
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         service_interface = ServiceInterface(service, cls)
-        await cls.register_allocation(service_interface)
+        await register_service(service_interface)
         return service_interface
 
     @endpoint
@@ -147,16 +152,7 @@ class ForgeActor(Actor):
         pass
 
     @classmethod
-    async def register_allocation(cls, alloc: "ForgeActor | ServiceInterface") -> None:
-        """Registers an allocation (service/actor) with the provisioner."""
-        try:
-            provisioner = await _get_provisioner()
-            await provisioner.track_allocation(alloc)
-        except Exception as e:
-            logger.warning(f"Failed to register allocation {alloc}: {e}")
-
-    @classmethod
-    async def launch(cls, *args, **kwargs) -> "ForgeActor":
+    async def launch(cls, *args, **kwargs) -> "ActorMesh":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -196,7 +192,7 @@ class ForgeActor(Actor):
         """
         logger.info("Spawning single actor %s", cls.__name__)
         actor = await cls.launch(*args, **actor_kwargs)
-        await cls.register_allocation(actor)
+        await register_actor(actor)
         return actor
 
     @classmethod

@@ -476,13 +476,14 @@ async def main(cfg: DictConfig):
     print(
         f"Starting GRPO with {num_rollout_threads} rollout threads, {num_training_threads} training threads"
     )
-    rollout_tasks = [
-        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
-    ]
-    training_task = asyncio.create_task(continuous_training())
+    # rollout_tasks = [
+    #     asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+    # ]
+    # training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(*rollout_tasks, training_task)
+        # await asyncio.gather(*rollout_tasks, training_task)
+        pass
     except KeyboardInterrupt:
         print("Training interrupted by user")
         for rollout_task in rollout_tasks:
