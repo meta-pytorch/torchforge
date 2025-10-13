@@ -213,44 +213,48 @@ class Policy(PolicyInterface):
         self.request_lock = asyncio.Condition()  # Guard for accepting_requests
         self.update_lock = asyncio.Condition()  # Guard for updating requests
 
-        self.vllm_config: VllmConfig = self.engine_args.create_engine_config(
+        vllm_config: VllmConfig = self.engine_args.create_engine_config(
             UsageContext.LLM_CLASS
         )
+        self.max_model_len = vllm_config.model_config.max_model_len
 
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
-        tokenizer = init_tokenizer_from_configs(self.vllm_config.model_config)
+        tokenizer = init_tokenizer_from_configs(
+            model_config=vllm_config.model_config,
+            scheduler_config=vllm_config.scheduler_config,
+            lora_config=vllm_config.lora_config,
+        )
         self.processor = Processor(
-            vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
+            vllm_config=vllm_config, tokenizer=tokenizer, mm_registry=None
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
         # Configure KV caches
         kv_cache_configs = await self.policy_worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
-        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_config.cache_config.num_cpu_blocks = 0
+        vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        vllm_config.cache_config.num_cpu_blocks = 0
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        structured_output_manager = StructuredOutputManager(self.vllm_config)
+        structured_output_manager = StructuredOutputManager(vllm_config)
         self.scheduler = Scheduler(
-            vllm_config=self.vllm_config,
+            vllm_config=vllm_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
             include_finished_set=False,
             log_stats=None,
         )
-        self.start_processing()
+        self._start_processing()
 
-    def start_processing(self):
-        """Start the replica's processing loop if not already running."""
+    def _start_processing(self):
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
 
     @endpoint
-    async def generate(self, prompt: str, priority: int = 0) -> list[Completion]:
+    async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
@@ -271,7 +275,7 @@ class Policy(PolicyInterface):
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
-            self.vllm_config.model_config.max_model_len,
+            self.max_model_len,
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
@@ -433,7 +437,7 @@ class Policy(PolicyInterface):
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
             # Call update_weights on every policy_worker
-            await self.policy_worker.update.call(version=policy_version)
+            await self.policy_worker.update_weights.call(policy_version)
             self.policy_version = policy_version
 
             # After updating the weights, we need to reset the KV cache
@@ -460,7 +464,7 @@ class Policy(PolicyInterface):
         self.running = False
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
-        """Convert a RequestOutput to a list of Completion objects."""
+        """Convert a vLLM RequestOutput to a list of Completion objects."""
         completions = []
         original_prompt = request_output.prompt
         prompt_token_ids = request_output.prompt_token_ids
@@ -506,6 +510,13 @@ class Policy(PolicyInterface):
 
 @dataclass
 class PolicyWorker(ForgeActor):
+    """Mirrors a vLLM GPUWorker
+    https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/worker/gpu_worker.py
+
+    In general, this class should not be instantiated or called directly. Rather, the Policy controls
+    the creation and invocation of all PolicyWorkers.
+    """
+
     vllm_config: VllmConfig
     state_dict_key: str = "model_state_dict"
     # TODO: remove this later since no plumbing exists to change this value.
@@ -522,10 +533,6 @@ class PolicyWorker(ForgeActor):
     async def setup(self):
         self.rank = current_rank().rank
         os.environ["RANK"] = str(self.rank)
-        self.worker = self.setup_worker()
-
-    def setup_worker(self) -> WorkerWrapperBase:
-        """Build and instantiate vLLM worker"""
         parallel_config = self.vllm_config.parallel_config
         set_multiprocessing_worker_envs(parallel_config)
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
@@ -540,11 +547,38 @@ class PolicyWorker(ForgeActor):
             "distributed_init_method": distributed_init_method,
             "is_driver_worker": is_driver_worker,
         }
-        worker = WorkerWrapperBase(self.vllm_config, self.rank)
-        worker.init_worker(all_kwargs)
-        worker.init_device()
-        worker.load_model()
-        return worker
+        self.worker = WorkerWrapperBase(self.vllm_config, self.rank)
+        self.worker.init_worker(all_kwargs)
+        self.worker.init_device()
+        self.worker.load_model()
+
+    @endpoint
+    async def setup_kv_cache(self) -> KVCacheConfig:
+        """https://github.com/vllm-project/vllm/blob/5c7fe25491825b95936c011a43337c7d4fb7e472/vllm/v1/engine/core.py#L199"""
+        kv_cache_spec = self.worker.get_kv_cache_spec()
+        if kv_cache_spec is not None:
+            available_gpu_memory = self.worker.determine_available_memory()
+        else:
+            # Attention free models don't need memory for kv cache
+            available_gpu_memory = 0
+
+        # Get the kv cache tensor size
+        kv_cache_config = get_kv_cache_config(
+            self.vllm_config, kv_cache_spec, available_gpu_memory
+        )
+        # TODO: unify configs across TorchStore
+        # unify_kv_cache_configs(kv_cache_configs)
+        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_config.cache_config.num_cpu_blocks = 0
+
+        # Initialize kv cache and warmup the execution:
+        # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
+        kv_cache_configs = [None] * self.vllm_config.parallel_config.world_size
+        kv_cache_configs[self.rank] = kv_cache_config
+        self.worker.initialize_from_config(kv_cache_configs)
+        self.worker.compile_or_warm_up_model()
+        self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
+        return kv_cache_config
 
     @endpoint
     async def execute_model(self, schedule: SchedulerOutput) -> ModelRunnerOutput:
@@ -579,34 +613,6 @@ class PolicyWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         t.stop()
-
-    @endpoint
-    async def setup_kv_cache(self) -> KVCacheConfig:
-        """https://github.com/vllm-project/vllm/blob/5c7fe25491825b95936c011a43337c7d4fb7e472/vllm/v1/engine/core.py#L199"""
-        kv_cache_spec = self.worker.get_kv_cache_spec()
-        if kv_cache_spec is not None:
-            available_gpu_memory = self.worker.determine_available_memory()
-        else:
-            # Attention free models don't need memory for kv cache
-            available_gpu_memory = 0
-
-        # Get the kv cache tensor size
-        kv_cache_config = get_kv_cache_config(
-            self.vllm_config, kv_cache_spec, available_gpu_memory
-        )
-        # TODO: unify configs across TorchStore
-        # unify_kv_cache_configs(kv_cache_configs)
-        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        self.vllm_config.cache_config.num_cpu_blocks = 0
-
-        # Initialize kv cache and warmup the execution:
-        # from multiproc_executor.py:MultiprocExecutor.initialize_from_config
-        kv_cache_configs = [None] * self.vllm_config.parallel_config.world_size
-        kv_cache_configs[self.rank] = kv_cache_config
-        self.worker.initialize_from_config(kv_cache_configs)
-        self.worker.compile_or_warm_up_model()
-        self.worker.initialize_cache(kv_cache_config.num_blocks, 0)
-        return kv_cache_config
 
     @endpoint
     async def _test_save_model_params(self):
