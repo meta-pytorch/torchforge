@@ -15,7 +15,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from forge.env_constants import FORGE_DISABLE_METRICS
+from forge.env import FORGE_DISABLE_METRICS
 
 
 @pytest.fixture(autouse=True)
@@ -36,5 +36,5 @@ def mock_metrics_globally(monkeypatch):
             pass
     """
 
-    monkeypatch.setenv(FORGE_DISABLE_METRICS, "true")
+    monkeypatch.setenv(FORGE_DISABLE_METRICS.name, "true")
     return Mock()

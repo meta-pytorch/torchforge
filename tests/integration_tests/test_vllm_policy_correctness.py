@@ -53,7 +53,7 @@ async def test_same_output():
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
-            engine_config={
+            engine_args={
                 "model": MODEL_NAME,
                 "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
                 "enforce_eager": ENFORCE_EAGER,
@@ -61,7 +61,7 @@ async def test_same_output():
                 "gpu_memory_utilization": GPU_MEMORY_UTILIZATION,
                 "enable_prefix_caching": ENABLE_PREFIX_CACHING,
             },
-            sampling_config={
+            sampling_params={
                 "n": N_SAMPLES,
                 "max_tokens": MAX_TOKENS,
                 "temperature": TEMPERATURE,
@@ -143,7 +143,7 @@ async def test_cache_usage():
         policy = await Policy.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
-            engine_config={
+            engine_args={
                 "model": MODEL_NAME,
                 "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
                 "enforce_eager": ENFORCE_EAGER,
@@ -152,7 +152,7 @@ async def test_cache_usage():
                 "enable_prefix_caching": ENABLE_PREFIX_CACHING,
                 "block_size": 16,
             },
-            sampling_config={
+            sampling_params={
                 "n": N_SAMPLES,
                 "max_tokens": MAX_TOKENS,
                 "temperature": TEMPERATURE,
