@@ -127,7 +127,7 @@ class Policy(PolicyInterface):
     ) -> "Policy":
         """Launch the policy with its workers.
 
-        We overwrite the default Service launch method in order to setup Actors within this "coordinating" Actor.
+        We overwrite the default Service launch method in order to setup Actors (PolicyWorker) within this "coordinating" Actor.
         We first create a proc_mesh for the workers, then a proc_mesh for the policy, and then we spawn the workers
         and the policy in setup.
 
