@@ -6,12 +6,11 @@
 
 import asyncio
 import logging
-import os
 from typing import Any, Union
 
 from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
-from forge.env_constants import FORGE_DISABLE_METRICS
+from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,
@@ -108,10 +107,7 @@ async def get_or_create_metric_logger(
         )
 
     # Setup local_fetcher_actor if needed (unless disabled by environment flag)
-    if (
-        not proc_has_local_fetcher
-        and os.getenv(FORGE_DISABLE_METRICS, "false").lower() != "true"
-    ):
+    if not proc_has_local_fetcher and not FORGE_DISABLE_METRICS.get_value():
         local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger, process_name
         )
@@ -150,7 +146,7 @@ class LocalFetcherActor(Actor):
             return_state (bool): Used by GlobalLoggingActor for reduction across all ranks.
                 If False, returns empty dict, else returns the state of all metrics collected.
         Returns:
-            dict[str, dict[str, Any]]: dict of {metric_key: metric_state},
+            dict[str, dict[str, Any]]: of {metric_key: metric_state},
                 e.g., {"loss": {"reduction_type": "mean", "sum": 1.2, "count": 3}}.
         """
         collector = MetricCollector()

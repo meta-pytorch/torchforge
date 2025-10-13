@@ -3,7 +3,7 @@
 
 # Global configuration
 group_size: 8
-batch_size: 16
+local_batch_size: 16 # per-device batch size
 max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-8B"
@@ -29,13 +29,12 @@ dataset:
 
 # Policy configuration
 policy:
-  use_vllm_builtin_load: true
-  engine_config:
+  engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
-  sampling_config:
+  sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
     temperature: 1.0
@@ -44,7 +43,6 @@ policy:
 # Trainer configuration
 trainer:
   use_dcp: true
-  use_vllm_builtin_load: true
   model:
     name: qwen3
     flavor: 8B
@@ -56,7 +54,7 @@ trainer:
   lr_scheduler:
     warmup_steps: 1
   training:
-    local_batch_size: ${batch_size}
+    local_local_batch_size: ${local_batch_size}
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
@@ -85,7 +83,7 @@ trainer:
 
 # Replay buffer configuration
 replay_buffer:
-  batch_size: ${batch_size}
+  local_batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
   # This should match the dp_size of TorchTitan
   # Here it's set explicitly to 2, because we've set
@@ -117,7 +115,7 @@ ref_model:
 # All resource allocations
 services:
   policy:
-    procs: ${policy.engine_config.tensor_parallel_size}
+    procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
   ref_model:

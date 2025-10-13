@@ -51,11 +51,11 @@ def clean_metrics_environment():
     """Override the global mock_metrics_globally fixture to allow real metrics testing."""
     import os
 
-    from forge.env_constants import FORGE_DISABLE_METRICS
+    from forge.env import FORGE_DISABLE_METRICS
 
     # Set default state for tests (metrics enabled)
-    if FORGE_DISABLE_METRICS in os.environ:
-        del os.environ[FORGE_DISABLE_METRICS]
+    if FORGE_DISABLE_METRICS.name in os.environ:
+        del os.environ[FORGE_DISABLE_METRICS.name]
 
     yield
 
