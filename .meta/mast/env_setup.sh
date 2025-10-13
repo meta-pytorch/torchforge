@@ -9,6 +9,9 @@
 # setup_forge_env.sh - Setup conda environment and install forge with mounting
 set -e  # Exit on any error
 
+# Configuration
+CONDA_ENV_NAME="forge:stable"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,6 +48,7 @@ mount_workspace() {
         log_info "Creating mount directory: $mount_dir"
         sudo mkdir -p "$mount_dir" || {
             log_error "Failed to create mount directory (may need sudo privileges)"
+            log_error "You could alternatively try to unmount with `sudo umount /mnt/wsfuse`"
             return 1
         }
     fi
@@ -130,10 +134,10 @@ if [ ! -f "$CONDA_SCRIPT_PATH" ]; then
 fi
 
 log_info "Sourcing conda script: $CONDA_SCRIPT_PATH"
-source "$CONDA_SCRIPT_PATH" activate forge:e146614
+source "$CONDA_SCRIPT_PATH" activate "$CONDA_ENV_NAME"
 
 if [ $? -ne 0 ]; then
-    log_error "Failed to activate conda environment forge-e146614"
+    log_error "Failed to activate conda environment $CONDA_ENV_NAME"
     exit 1
 fi
 
@@ -191,8 +195,72 @@ fi
 
 log_info "Current directory: $(pwd)"
 
-# Step 5: Install forge package
-log_info "Step 5: Installing forge package..."
+# Step 5: Install torchtitan
+log_info "Step 5: Installing torchtitan..."
+
+# Source versions.sh to get the pinned commit
+VERSIONS_FILE="$FORGE_REPO_DIR/assets/versions.sh"
+if [ -f "$VERSIONS_FILE" ]; then
+    log_info "Sourcing version information from: $VERSIONS_FILE"
+    source "$VERSIONS_FILE"
+
+    if [ -n "$TORCHTITAN_COMMIT" ]; then
+        log_info "Installing torchtitan from commit: $TORCHTITAN_COMMIT"
+        pip uninstall -y torchtitan
+        pip install "git+https://github.com/pytorch/torchtitan.git@$TORCHTITAN_COMMIT"
+
+        if [ $? -eq 0 ]; then
+            log_info "Torchtitan installed successfully"
+        else
+            log_error "Failed to install torchtitan"
+            exit 1
+        fi
+    else
+        log_error "TORCHTITAN_COMMIT not found in versions.sh"
+        exit 1
+    fi
+else
+    log_error "versions.sh not found at: $VERSIONS_FILE"
+    log_error "Cannot proceed without version information"
+    exit 1
+fi
+
+# Step 5.5: Apply monarch torch import hack
+log_info "Step 5.5: Applying monarch torch import hack..."
+
+MONARCH_INIT="$CONDA_PREFIX/lib/python3.10/site-packages/monarch/__init__.py"
+if [ -f "$MONARCH_INIT" ]; then
+    # Check if we already applied the hack
+    if grep -q "^import torch  # Injected by forge setup" "$MONARCH_INIT"; then
+        log_info "Monarch torch import hack already applied, skipping"
+    else
+        log_info "Injecting 'import torch' into monarch/__init__.py"
+
+        # Create a backup
+        cp "$MONARCH_INIT" "$MONARCH_INIT.bak"
+
+        # Use sed to inject 'import torch' before the "# Import before monarch" comment
+        # We add it right after "from typing import TYPE_CHECKING" and before the comment
+        sed -i '/^from typing import TYPE_CHECKING$/a\
+\
+# Torch must be imported before monarch (injected by forge setup)\
+import torch  # Injected by forge setup' "$MONARCH_INIT"
+
+        if [ $? -eq 0 ]; then
+            log_info "Successfully injected torch import into monarch/__init__.py"
+        else
+            log_error "Failed to inject torch import, restoring backup"
+            mv "$MONARCH_INIT.bak" "$MONARCH_INIT"
+            exit 1
+        fi
+    fi
+else
+    log_warn "monarch/__init__.py not found at: $MONARCH_INIT"
+    log_warn "Skipping monarch torch import hack (monarch may not be installed yet)"
+fi
+
+# Step 6: Install forge package
+log_info "Step 6: Installing forge package..."
 pip install --no-deps --force-reinstall .
 if [ $? -ne 0 ]; then
     log_error "Failed to install forge package"
@@ -234,5 +302,5 @@ log_info "Mounted workspace available at: /mnt/wsfuse"
 echo ""
 log_info "Installation completed successfully!"
 echo ""
-log_info "Re-activate the conda environment to make the changes take effect:"
-log_info "conda deactivate && conda activate forge-e146614"
+log_info "Test that this is working locally with:"
+log_info "python -m apps.grpo.main --config=apps/grpo/qwen3_1_7b.yaml"

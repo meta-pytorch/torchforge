@@ -1,15 +1,15 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+# >>> python -m .meta.mast.main --config .meta/mast/qwen3_4b_mast.yaml
 
 # Global configuration
 group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-1.7B"
+model: "Qwen/Qwen3-4B"
 off_by_n: 1 # Off by one by default
 launcher: mast
-job_name: forge-qwen3-1_7b
+job_name: forge-qwen3-4b
 checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
@@ -35,8 +35,8 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
-    tensor_parallel_size: 1
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-4B-Base/snapshots/a81b894c2624d21c88a3ad737ce4f837424b7eed
+    tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
     # TODO: Had to disable this becasue vLLm wouldn't like
@@ -52,8 +52,8 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    flavor: 4B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-4B-Base/snapshots/a81b894c2624d21c88a3ad737ce4f837424b7eed
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -71,15 +71,15 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 1
+    data_parallel_shard_degree: 4
+    tensor_parallel_degree: 2
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-4B-Base/snapshots/a81b894c2624d21c88a3ad737ce4f837424b7eed
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -103,8 +103,8 @@ replay_buffer:
 ref_model:
   model:
     name: qwen3
-    flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    flavor: 4B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-4B-Base/snapshots/a81b894c2624d21c88a3ad737ce4f837424b7eed
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -119,7 +119,7 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-4B-Base/snapshots/a81b894c2624d21c88a3ad737ce4f837424b7eed
     initial_load_in_hf: true
 
 # All resource allocations
@@ -144,7 +144,7 @@ services:
 
 actors:
   dataset:
-    procs: 1
+    procs: 8
     with_gpus: false
     mesh_name: dataset
   trainer:

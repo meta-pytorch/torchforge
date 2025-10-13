@@ -1,15 +1,15 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+# >>> python -m .meta.mast.main --config .meta/mast/qwen3_14b_mast.yaml
 
 # Global configuration
 group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-8B"
+model: "Qwen/Qwen3-14B"
 off_by_n: 1 # Off by one by default
 launcher: mast
-job_name: forge-qwen3-8b
+job_name: forge-qwen3-14b
 checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
@@ -35,7 +35,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -52,8 +52,8 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 8B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    flavor: 14B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -71,21 +71,21 @@ trainer:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 4
-    tensor_parallel_degree: 2
+    data_parallel_shard_degree: 8
+    tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
   activation_checkpoint:
-    mode: selective
+    mode: full
     selective_ac_option: op
   comm:
     # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP
@@ -103,8 +103,8 @@ replay_buffer:
 ref_model:
   model:
     name: qwen3
-    flavor: 8B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    flavor: 14B
+    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -112,15 +112,19 @@ ref_model:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: 2
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-14B/snapshots/8268fe3026cb304910457689366670e803a6fd56
     initial_load_in_hf: true
+  comm:
+    # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP
+    # from oilfs if the traienr is not in the same region as in oilfs
+    init_timeout_seconds: 1200
 
 # All resource allocations
 services:
@@ -131,7 +135,7 @@ services:
     mesh_name: policy
     hosts: 1
   ref_model:
-    procs: 1
+    procs: 2
     num_replicas: 2
     with_gpus: true
     mesh_name: ref_model
