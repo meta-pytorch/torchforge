@@ -318,7 +318,6 @@ class Provisioner:
 
     def register_actor(self, actor: "ForgeActor") -> None:
         """Registers a single actor allocation for cleanup."""
-        # from forge.controller.actor import ForgeActor
         from monarch._src.actor.actor_mesh import ActorMesh
 
         if not isinstance(actor, ActorMesh):
