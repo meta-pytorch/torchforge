@@ -28,6 +28,7 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.env import MONARCH_HOSTMESH_V1
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
@@ -314,16 +315,23 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Global setups ---- #
+    provisioner = None
     if cfg.get("provisioner", None) is not None:
-        await init_provisioner(
+        provisioner = await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
-    metric_logging_cfg = cfg.get(
-        "metric_logging", {"console": {"logging_mode": "global_reduce"}}
-    )
-    mlogger = await get_or_create_metric_logger(process_name="Controller")
+    else:
+        provisioner = await init_provisioner()
+
+    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
-    await ts.initialize(strategy=ts.ControllerStorageVolumes())
+
+    # In the host mesh v0 case, actors on remote hosts are not able to communicate
+    # with one another. Therefore we use the controller as our storage volume.
+    if not MONARCH_HOSTMESH_V1.get_value():
+        await ts.initialize(strategy=ts.ControllerStorageVolumes())
+        print("Torchstore successfully initialized with controller storage strategy")
 
     # ---- Setup services ---- #
 
@@ -352,6 +360,22 @@ async def main(cfg: DictConfig):
     )
 
     print("All services initialized successfully!")
+
+    # In the HostMesh v1 case, we spawn a torchstore storage volume
+    # per trainer process.
+    # We initialize after service initialization because torchstore currently
+    # requires access to the underlying proc meshes in the local rank strategy.
+    # We should be able to hide this in the future.
+    if MONARCH_HOSTMESH_V1.get_value():
+        # TODO: support multiple host meshes
+        trainer_num_procs = cfg.actors.trainer["procs"]
+        trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
+        trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
+        await ts.initialize(
+            mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
+            strategy=ts.LocalRankStrategy(),
+        )
+        print("Torchstore successfully initialized with local rank strategy")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():

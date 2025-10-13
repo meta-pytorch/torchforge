@@ -13,18 +13,27 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch._src.actor.shape import Extent, NDSlice, Shape
+from monarch.actor import Actor, endpoint, ProcMesh
+
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+if MONARCH_HOSTMESH_V1.get_value():
+    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
+
+    logger.info("Using Monarch HostMesh v1...")
+else:
+    from monarch.actor import HostMesh, this_host
 
 
 def _get_port() -> str:
@@ -125,6 +134,7 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
         self._proc_host_map = {}
+        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
@@ -148,14 +158,38 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-        return (
-            HostMesh(
+
+        if MONARCH_HOSTMESH_V1.get_value():
+            # We are asking Monarch to allocate a single process on
+            # every host, reflected in the Extent we provide below.
+
+            # Technically, this is ["hosts", "procs"] but to reduce
+            # confusion on its relationship with procs elsewhere,
+            # we call it "no_dim".
+
+            # TODO - remove this once Monarch supports HostMesh without it.
+            host_mesh = HostMesh.allocate_nonblocking(
+                name=name,
+                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+                allocator=alloc,
+                alloc_constraints=alloc_constraints,
+            )
+        else:
+            host_mesh = HostMesh(
                 Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
                 allocator=alloc,
                 alloc_constraints=alloc_constraints,
-            ),
-            server_name,
-        )
+            )
+        return host_mesh, server_name
+
+    def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns the host mesh given its associated name.
+
+        This is currently an experimental API for HostMesh v1 and
+        should not be relied on longer term.
+
+        """
+        return self._host_mesh_map[name]
 
     async def get_proc_mesh(
         self,
@@ -255,10 +289,16 @@ class Provisioner:
                 for env_var in all_env_vars():
                     env_vars[env_var.name] = str(env_var.get_value())
 
-            procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
-                bootstrap=functools.partial(bootstrap, env=env_vars),
-            )
+            if MONARCH_HOSTMESH_V1.get_value():
+                procs = host_mesh.spawn_procs(
+                    per_host={"procs": num_procs},
+                    setup=functools.partial(bootstrap, env=env_vars),
+                )
+            else:
+                procs = host_mesh.spawn_procs(
+                    per_host={"procs": num_procs},
+                    bootstrap=functools.partial(bootstrap, env=env_vars),
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)
@@ -267,6 +307,8 @@ class Provisioner:
             if with_gpus:
                 # Applies any launcher specific remote setup.
                 procs._gpu_ids = gpu_ids
+
+            self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
 
             # If we created a server, track so we can tear it down later.

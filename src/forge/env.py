@@ -81,12 +81,6 @@ MONARCH_STDERR_LEVEL = EnvVar(
     description="Sets Monarch's stderr log level, i.e. set to 'info' or 'debug'",
 )
 
-TORCHSTORE_USE_RDMA = EnvVar(
-    name="TORCHSTORE_RDMA_ENABLED",
-    default=False,
-    description="Whether or not to use RDMA in TorchStore.",
-)
-
 RUST_BACKTRACE = EnvVar(
     name="RUST_BACKTRACE",
     default="full",
@@ -103,6 +97,18 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
     name="HYPERACTOR_CODE_MAX_FRAME_LENGTH",
     default=1073741824,
     description="Sets the maximum frame length for Monarch's actor message delivery in bytes.",
+)
+
+MONARCH_HOSTMESH_V1 = EnvVar(
+    name="MONARCH_HOSTMESH_V1",
+    default=False,
+    description="Whether or not to use Monarch's experimental hostmesh v1 APIs",
+)
+
+TORCHSTORE_USE_RDMA = EnvVar(
+    name="TORCHSTORE_RDMA_ENABLED",
+    default=0,
+    description="Whether or not to use RDMA in TorchStore.",
 )
 
 
