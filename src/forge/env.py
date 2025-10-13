@@ -100,7 +100,7 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
 )
 
 MONARCH_HOSTMESH_V1 = EnvVar(
-    name="MONARCH_HOSTMESH_V1",
+    name="MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE",
     default=False,
     description="Whether or not to use Monarch's experimental hostmesh v1 APIs",
 )

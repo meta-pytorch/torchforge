@@ -289,16 +289,10 @@ class Provisioner:
                 for env_var in all_env_vars():
                     env_vars[env_var.name] = str(env_var.get_value())
 
-            if MONARCH_HOSTMESH_V1.get_value():
-                procs = host_mesh.spawn_procs(
-                    per_host={"procs": num_procs},
-                    setup=functools.partial(bootstrap, env=env_vars),
-                )
-            else:
-                procs = host_mesh.spawn_procs(
-                    per_host={"procs": num_procs},
-                    bootstrap=functools.partial(bootstrap, env=env_vars),
-                )
+            procs = host_mesh.spawn_procs(
+                per_host={"procs": num_procs},
+                bootstrap=functools.partial(bootstrap, env=env_vars),
+            )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)
