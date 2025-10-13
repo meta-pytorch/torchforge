@@ -13,8 +13,10 @@ import os
 import socket
 import uuid
 
+from monarch._src.actor.actor_mesh import ActorMesh
+
 from monarch._src.actor.shape import Extent, NDSlice, Shape
-from monarch.actor import Actor, endpoint, ProcMesh
+from monarch.actor import Actor, endpoint
 
 from monarch.tools import commands
 
@@ -23,12 +25,6 @@ from forge.controller.launcher import BaseLauncher, get_launcher
 from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 
 from forge.types import ProcessConfig, ProvisionerConfig
-
-from monarch._src.actor.actor_mesh import ActorMesh
-
-from monarch._src.actor.shape import NDSlice, Shape
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
-from monarch.tools import commands
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
