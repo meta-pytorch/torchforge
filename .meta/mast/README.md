@@ -27,8 +27,20 @@ chmod +x .meta/mast/env_setup.sh
 
 ### 2. Submit MAST job
 
-```
-pip install --force-reinstall --no-deps . && python -m .meta.mast.main --config .meta/mast/qwen3_1_7b_mast.yaml
+Use the launch script to submit a MAST job:
+
+```bash
+# Make the launch script executable (first time only)
+chmod +x .meta/mast/launch.sh
+
+# Launch a job with your desired config
+./.meta/mast/launch.sh .meta/mast/qwen3_1_7b_mast.yaml
 ```
 
-⚠️ Important Note: `pip install --force-reinstall --no-deps .` is required every time you make a change to the local codebase. This ensures your latest changes are installed before job submission.
+The launch script will automatically:
+- Navigate to the forge root directory
+- Reinstall the forge package with your latest changes
+- Set the correct PYTHONPATH
+- Launch the MAST job with the specified config
+
+You can run it from anywhere, and it will figure out the correct paths.

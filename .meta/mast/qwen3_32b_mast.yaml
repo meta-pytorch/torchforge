@@ -1,5 +1,5 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m .meta.mast.main --config .meta/mast/qwen3_32b_mast.yaml
+# >>> ./.meta/mast/launch.sh .meta/mast/qwen3_32b_mast.yaml
 
 # Global configuration
 group_size: 8
