@@ -178,8 +178,12 @@ autodoc_default_options = {
 autodoc_preserve_defaults = True  # Preserves default values without expansion
 autodoc_typehints = "description"  # Move type hints to description instead of signature
 autodoc_typehints_description_target = (
-    "documented"  # Only add types to documented params
+    "documented_params"  # Only add types to documented params
 )
+
+# Disable docstring inheritance
+autodoc_inherit_docstrings = False
+
 
 # Suppress warnings from third-party library docstrings
 suppress_warnings = [
