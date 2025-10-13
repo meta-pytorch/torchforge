@@ -29,7 +29,7 @@ import pytest
 import torch
 import torch.distributed as dist
 
-from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricsAggregator
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 from forge.data.datasets import HfIterableDataset, InterleavedDataset
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -299,37 +299,47 @@ class TestInterleavedDataset:
             [child_interleaved, ds3], seed=SEED, dataset_name="parent"
         )
 
-        aggregator = MetricsAggregator()
+        # Collect metrics manually instead of using old MetricsAggregator
+        collected_metrics = []
 
         # Process some samples
         total_samples = 300
         for sample in islice(iter(parent_interleaved), total_samples):
-            aggregator.update(sample["metrics"])
+            if "metrics" in sample:
+                collected_metrics.extend(sample["metrics"])
 
-        metrics = aggregator.get_metrics_for_logging(prefix="train")
-
-        # Should have metrics from all three datasets, with flat keys
-        assert "train_ds1/samples_seen" in metrics
-        assert "train_ds2/samples_seen" in metrics
-        assert "train_ds3/samples_seen" in metrics
+        # Count metrics by dataset name
+        ds1_samples_seen = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds1/samples_seen" in m.key
+        )
+        ds2_samples_seen = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds2/samples_seen" in m.key
+        )
+        ds3_samples_seen = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds3/samples_seen" in m.key
+        )
 
         # All datasets should have contributed samples
-        assert metrics["train_ds1/samples_seen"] > 0
-        assert metrics["train_ds2/samples_seen"] > 0
-        assert metrics["train_ds3/samples_seen"] > 0
+        assert ds1_samples_seen > 0, "ds1 should have contributed samples"
+        assert ds2_samples_seen > 0, "ds2 should have contributed samples"
+        assert ds3_samples_seen > 0, "ds3 should have contributed samples"
 
         # Total samples should equal what we processed
         calculated_total_samples = (
-            metrics["train_ds1/samples_seen"]
-            + metrics["train_ds2/samples_seen"]
-            + metrics["train_ds3/samples_seen"]
+            ds1_samples_seen + ds2_samples_seen + ds3_samples_seen
         )
         assert calculated_total_samples == total_samples
 
         # Test that ratios are approximately correct based on nested weighting
-        ds1_ratio = metrics["train_ds1/samples_seen"] / total_samples
-        ds2_ratio = metrics["train_ds2/samples_seen"] / total_samples
-        ds3_ratio = metrics["train_ds3/samples_seen"] / total_samples
+        ds1_ratio = ds1_samples_seen / total_samples
+        ds2_ratio = ds2_samples_seen / total_samples
+        ds3_ratio = ds3_samples_seen / total_samples
 
         # Expected ratios based on nested weighting:
         # Inner weights: ds1=0.2, ds2=0.8 -> inner total=1.0
@@ -377,22 +387,18 @@ class TestInterleavedDataset:
         loader1 = StatefulDataLoader(
             interleaved1, batch_size=BATCH_SIZE, collate_fn=collate_with_metrics
         )
-        aggregator1 = MetricsAggregator()
 
         # Resumed run
         interleaved2 = create_interleaved()
         loader2 = StatefulDataLoader(
             interleaved2, batch_size=BATCH_SIZE, collate_fn=collate_with_metrics
         )
-        aggregator2 = MetricsAggregator()
 
         result = generate_ckpt(
             loader1,
-            aggregator1,
             steps_before_checkpoint=10,
             steps_after_checkpoint=20,
             resume_dataloader=loader2,
-            resume_aggregator=aggregator2,
         )
 
         orig_post_ids = [b["id"].tolist() for b in result["post_checkpoint_batches"]]
@@ -552,19 +558,17 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     num_workers=0,  # Avoid multiprocessing in distributed tests
                     collate_fn=collate_with_metrics,
                 )
-                return loader, MetricsAggregator()
+                return loader
 
             # Run checkpointing test with small number of steps
-            loader1, aggregator1 = create_dataloader(create_dataset())
-            loader2, aggregator2 = create_dataloader(create_dataset())
+            loader1 = create_dataloader(create_dataset())
+            loader2 = create_dataloader(create_dataset())
 
             result = generate_ckpt(
                 loader1,
-                aggregator1,
-                3,
-                3,  # 3 steps before, 3 steps after checkpoint
+                steps_before_checkpoint=3,
+                steps_after_checkpoint=3,
                 resume_dataloader=loader2,
-                resume_aggregator=aggregator2,
             )
 
             # Verify deterministic resumption

@@ -4,147 +4,87 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Union
+from typing import Any
 
 from forge.interfaces import Transform
+from forge.observability.metrics import Metric, Reduce
 
 
-@dataclass(frozen=True)
-class Metric:
-    source: str
-    metric_name: str
-    value: Union[int, float, str]
-    agg_type: "AggregationType"
+class MetricTransform(Transform):
+    """
+    Base class for metric transforms that collect metrics from dataset samples.
 
-
-class AggregationType(Enum):
-    """Defines how a metric's value should be aggregated by the MetricsAggregator.
-
-    Each type corresponds to a specific AggregationHandler that implements the logic
-    for initialization, updates, and distributed reduction.
+    Uses the new observability system instead of the old dataset_metrics system.
+    Metrics are collected as observability.Metric objects and will be recorded
+    in the main process using record_metric().
     """
 
-    SUM = "sum"
-    MEAN = "mean"
-    STATS = "distribution"
-    CATEGORICAL_COUNT = "categorical_count"
-    MAX = "max"
-    MIN = "min"
+    def __init__(self):
+        self.source = None
 
-
-class MetricTransform(Transform, ABC):
-    """Applied to each dataset sample to generate per-sample metrics for training tracking.
-
-    Creates Metric objects that are later aggregated by MetricsAggregator. This separation
-    of concerns ensures metrics are correctly aggregated even with multiple dataloader
-    workers and in distributed settings.
-
-    The transform must be configured with a source via set_source() before use.
-    Each call to __call__ adds metrics to the sample's "metrics" key.
-
-    Example:
-        >>> transform = DefaultTrainingMetricTransform()
-        >>> transform.set_source("alpaca")
-        >>> sample = {"tokens": [1, 2, 3]}
-        >>> result = transform(sample)
-        >>> # result["metrics"] contains list of Metric objects
-    """
-
-    def set_source(self, source: str) -> None:
-        """Called by the dataset to set the namespace for metrics.
-
-        This is used to differentiate metrics from multiple datasets, for example,
-        "alpaca/tokens_seen" vs. "slim_orca/tokens_seen".
-
-        Args:
-            source (str): Name of the dataset, used for logging and disambiguation.
-        """
+    def set_source(self, source: str):
+        """Set the source name for metrics (typically the dataset name)."""
         self.source = source
 
-    @abstractmethod
-    def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
-        """Generate metrics for a single sample.
-
-        Args:
-            sample (dict[str, Any]): The sample dictionary to generate metrics from
-
-        Returns:
-            list[Metric]: List of metrics generated for this sample
-
-        Raises:
-            NotImplementedError: If subclass does not implement this method.
-        """
-        raise NotImplementedError("Subclasses must implement _generate_metrics method")
-
     def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
-        if not hasattr(self, "source"):
-            raise RuntimeError(
-                "'transform.set_source' must be called before using the transform."
-            )
-
-        # Generate metrics for this sample
-        metrics = self._generate_metrics(sample)
-
-        # Add to existing metrics list or create new one
-        if "metrics" not in sample:
-            sample["metrics"] = []
-        sample["metrics"].extend(metrics)
+        """Transform a sample by adding metrics to it."""
         return sample
 
 
 class DefaultTrainingMetricTransform(MetricTransform):
-    """Generates common training metrics: samples seen, tokens seen, and sequence length.
+    """
+    Default metric transform that collects standard training metrics.
 
-    This transform detects the token key in a sample, checking for "tokens"
-    first and then falling back to "input_ids".
+    Collects:
+    - samples_seen: Count of samples processed (SUM reduction)
+    - tokens_seen: Count of tokens processed (SUM reduction)
+    - seq_len: Sequence length (MEAN, MAX, MIN reductions for different stats)
 
-    For details on the base class behavior, see MetricTransform.
-
-    Tracked metrics:
-      - samples_seen: Cumulative count of samples processed (SUM aggregation)
-      - tokens_seen: Cumulative sum of all tokens processed (SUM aggregation)
-      - seq_len: Distribution stats of sequence lengths (STATS aggregation)
-
-    Example:
-        >>> transform = DefaultTrainingMetricTransform()
-        >>> transform.set_source("alpaca")
-        >>>
-        >>> sample = {"tokens": [1, 2, 3, 4, 5]}  # 5 tokens
-        >>> metrics = transform._generate_metrics(sample)
-        >>> # This generates the following Metric objects:
-        >>> # [
-        >>> #   Metric(source="alpaca", metric_name="samples_seen", value=1, agg_type=AggregationType.SUM),
-        >>> #   Metric(source="alpaca", metric_name="tokens_seen", value=5, agg_type=AggregationType.SUM),
-        >>> #   Metric(source="alpaca", metric_name="seq_len", value=5, agg_type=AggregationType.STATS)
-        >>> # ]
+    Uses observability.Metric objects instead of the old system.
     """
 
-    def _generate_metrics(self, sample: dict[str, Any]) -> list[Metric]:
-        # Determine token key
-        token_key = "tokens" if "tokens" in sample else "input_ids"
-        token_len = len(sample.get(token_key, []))
+    def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
+        if "metrics" not in sample:
+            sample["metrics"] = []
 
-        # Create metrics for this sample
-        return [
+        source_name = self.source or "dataset"
+
+        # Add samples_seen metric
+        sample["metrics"].append(
             Metric(
-                source=self.source,
-                metric_name="samples_seen",
+                key=f"dataset/{source_name}/samples_seen",
                 value=1,
-                agg_type=AggregationType.SUM,
-            ),
-            Metric(
-                source=self.source,
-                metric_name="tokens_seen",
-                value=token_len,
-                agg_type=AggregationType.SUM,
-            ),
-            Metric(
-                source=self.source,
-                metric_name="seq_len",
-                value=token_len,
-                agg_type=AggregationType.STATS,
-            ),
-        ]
+                reduction=Reduce.SUM,
+            )
+        )
+
+        # Add token-based metrics if tokens are present
+        if "tokens" in sample:
+            token_count = len(sample.get("tokens", []))
+
+            sample["metrics"].extend(
+                [
+                    Metric(
+                        key=f"dataset/{source_name}/tokens_seen",
+                        value=token_count,
+                        reduction=Reduce.SUM,
+                    ),
+                    Metric(
+                        key=f"dataset/{source_name}/seq_len_mean",
+                        value=token_count,
+                        reduction=Reduce.MEAN,
+                    ),
+                    Metric(
+                        key=f"dataset/{source_name}/seq_len_max",
+                        value=token_count,
+                        reduction=Reduce.MAX,
+                    ),
+                    Metric(
+                        key=f"dataset/{source_name}/seq_len_min",
+                        value=token_count,
+                        reduction=Reduce.MIN,
+                    ),
+                ]
+            )
+
+        return sample
