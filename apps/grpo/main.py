@@ -354,11 +354,13 @@ async def main(cfg: DictConfig):
 
     print("All services initialized successfully!")
 
+    shutdown_event = asyncio.Event()
+
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
         pad_id = await dataloader.pad_token.call_one()
-        while True:
+        while not shutdown_event.is_set():
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
             sample = await dataloader.sample.call_one()
@@ -494,12 +496,20 @@ async def main(cfg: DictConfig):
         print("Training interrupted by user")
     finally:
         print("Shutting down...")
-        for rollout_task in rollout_tasks:
-            rollout_task.cancel()
-        # graceful await all tasks, ignore cancellation noise
-        await asyncio.gather(*rollout_tasks, return_exceptions=True)
-        # Give replicas time to drain and complete in-flight requests
-        await asyncio.sleep(1)
+        shutdown_event.set()
+
+        try:
+            # Give rollouts up to 5s to finish naturally
+            await asyncio.wait_for(
+                asyncio.gather(*rollout_tasks, return_exceptions=True),
+                timeout=5,
+            )
+        except asyncio.TimeoutError:
+            print("Timeout waiting for rollouts; forcing cancellation...")
+            for t in rollout_tasks:
+                t.cancel()
+            await asyncio.gather(*rollout_tasks, return_exceptions=True)
+
         training_task.cancel()
 
         # give mlogger time to shutdown backends, otherwise they can stay running.
