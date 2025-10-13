@@ -437,7 +437,7 @@ async def main(cfg: DictConfig):
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
 
-        while max_steps < 0 or training_step < max_steps:
+        while max_steps == -1 or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
