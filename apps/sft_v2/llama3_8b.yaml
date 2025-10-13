@@ -13,10 +13,12 @@
 comm:
   trace_buf_size: 0
 
+model_name: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
 model:
   name: llama3
   flavor: 8B
-  hf_assets_path: /tmp/Meta-Llama-3.1-8B-Instruct
+  hf_assets_path: hf://${model_name}
 
 processes:
   procs: 8
@@ -49,8 +51,7 @@ parallelism:
 
 checkpoint:
   enable: true
-  folder: /tmp/Meta-Llama-3.1-8B-Instruct/saved_checkpoints
-  initial_load_path:  /tmp/Meta-Llama-3.1-8B-Instruct/
+  initial_load_path: hf://${model_name}
   initial_load_in_hf: true
   last_save_in_hf: true
   interval: 500
