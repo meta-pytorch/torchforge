@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
@@ -17,7 +18,24 @@ from dataclasses import dataclass, field
 import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
+
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+)
+from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.data.sharding import VLLMSharding
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.interfaces import Policy as PolicyInterface
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
 from monarch.actor import current_rank, endpoint, ProcMesh
+from torch.profiler import profile, ProfilerActivity, record_function
 from torchstore.state_dict_utils import DELIM
 from vllm.config import VllmConfig
 
@@ -41,25 +59,15 @@ from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
 
-from forge.actors._torchstore_utils import (
-    extract_param_name,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-)
-
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.interfaces import Policy as PolicyInterface
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.types import ProcessConfig
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def trace_handler(rank, p):
+    timestamp = time.strftime("%y%m%d%H%M%S")
+    p.export_chrome_trace(
+        f"/mnt/data/yuxuanh/profiler/policy_rank_{rank}_{timestamp}.json"
+    )
 
 
 @dataclass
@@ -577,15 +585,22 @@ class PolicyWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         else:  # Load each parameter from torchstore directly without DCP
-            hf_param_names = [extract_param_name(key) for key in matching_keys]
-            # We can't pass a generator since vllm load_weights is not async.
-            # Instead, we just call load_weights with one parameter at a time.
-            for name in hf_param_names:
-                param_key = get_param_key(version, name)
-                param = await ts.get(param_key)
-                loaded = model.load_weights([(name, param)])
-                del param
-                loaded_weights.update(loaded)
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.GPU],
+                record_shapes=True,
+                on_trace_ready=lambda p: trace_handler(self.rank, p),
+                with_stack=True,
+                profile_memory=True,
+            ):
+                hf_param_names = [extract_param_name(key) for key in matching_keys]
+                # We can't pass a generator since vllm load_weights is not async.
+                # Instead, we just call load_weights with one parameter at a time.
+                for name in hf_param_names:
+                    param_key = get_param_key(version, name)
+                    param = await ts.get(param_key)
+                    loaded = model.load_weights([(name, param)])
+                    del param
+                    loaded_weights.update(loaded)
         t.stop()
         logger.debug(f"[PolicyWorker::update] Loaded weights: {loaded_weights}")
 

@@ -18,9 +18,21 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+)
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+
 from monarch.actor import current_rank, current_size, endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
+from torch.profiler import profile, ProfilerActivity, record_function
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -38,19 +50,15 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-)
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+def trace_handler(rank, p):
+    timestamp = time.strftime("%y%m%d%H%M%S")
+    p.export_chrome_trace(
+        f"/mnt/data/yuxuanh/profiler/trainer_rank_{rank}_{timestamp}.json"
+    )
 
 
 def cleanup_old_weight_versions(
@@ -334,9 +342,16 @@ class RLTrainer(ForgeActor):
             await ts.put(key, dcp_handle)
             t.step("dcp_save")
         else:
-            for name, param in hf_state_dict.items():
-                key = get_param_key(policy_version, name)
-                await ts.put(key, param)
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.GPU],
+                record_shapes=True,
+                on_trace_ready=lambda p: trace_handler(self.rank, p),
+                with_stack=True,
+                profile_memory=True,
+            ):
+                for name, param in hf_state_dict.items():
+                    key = get_param_key(policy_version, name)
+                    await ts.put(key, param.detach().cpu())
             t.step("ts_save")
         t.stop()
         end_time = time.perf_counter()
