@@ -6,7 +6,7 @@
 import os
 import sys
 import time
-from typing import Mapping, Optional, Union
+from typing import Mapping, Union
 
 from forge.interfaces import MetricLogger
 from forge.types import Scalar
@@ -115,7 +115,7 @@ class TensorBoardLogger(MetricLogger):
         from torch.utils.tensorboard import SummaryWriter
 
         self._freq = freq
-        self._writer: Optional[SummaryWriter] = None
+        self._writer: SummaryWriter | None = None
         _, rank = get_world_size_and_rank()
 
         # In case organize_logs is `True`, update log_dir to include a subdirectory for the
@@ -177,11 +177,11 @@ class WandBLogger(MetricLogger):
         freq (Union[int, Mapping[str, int]]):
             If int, all metrics will be logged at this frequency.
             If Mapping, calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
-        log_dir (Optional[str]): WandB log directory.
+        log_dir (str | None): WandB log directory.
         project (str): WandB project name. Default is `torchtune`.
-        entity (Optional[str]): WandB entity name. If you don't specify an entity,
+        entity (str | None): WandB entity name. If you don't specify an entity,
             the run will be sent to your default entity, which is usually your username.
-        group (Optional[str]): WandB group name for grouping runs together. If you don't
+        group (str | None): WandB group name for grouping runs together. If you don't
             specify a group, the run will be logged as an individual experiment.
         **kwargs: additional arguments to pass to wandb.init
 
@@ -207,8 +207,8 @@ class WandBLogger(MetricLogger):
         freq: Union[int, Mapping[str, int]],
         project: str,
         log_dir: str = "metrics_log",
-        entity: Optional[str] = None,
-        group: Optional[str] = None,
+        entity: str | None = None,
+        group: str | None = None,
         **kwargs,
     ):
         self._freq = freq

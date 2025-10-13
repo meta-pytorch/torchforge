@@ -1,22 +1,18 @@
 # >>> python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
 
 # Config for supervised full finetuning using a Llama3.1 8B Instruct model
-#
-# This config assumes that you've run the following command before launching
-# this run:
-#   export HF_HUB_DISABLE_XET=1
-#   forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
-
 
 # TODO: required by torchtitan
 # https://github.com/pytorch/torchtitan/blob/2f1c814da071cc8ad165d00be6f9c1a66f8e1cce/torchtitan/distributed/utils.py#L265
 comm:
   trace_buf_size: 0
 
+model_name: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
 model:
   name: llama3
   flavor: 8B
-  hf_assets_path: /tmp/Meta-Llama-3.1-8B-Instruct
+  hf_assets_path: hf://${model_name}
 
 processes:
   procs: 8
@@ -49,8 +45,7 @@ parallelism:
 
 checkpoint:
   enable: true
-  folder: /tmp/Meta-Llama-3.1-8B-Instruct/saved_checkpoints
-  initial_load_path:  /tmp/Meta-Llama-3.1-8B-Instruct/
+  initial_load_path: hf://${model_name}
   initial_load_in_hf: true
   last_save_in_hf: true
   interval: 500
