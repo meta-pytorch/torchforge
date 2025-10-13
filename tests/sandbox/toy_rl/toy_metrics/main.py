@@ -110,8 +110,6 @@ async def main():
         await mlogger.flush.call_one(i)
 
     # shutdown
-    await mlogger.shutdown.call_one()
-    await asyncio.sleep(2)
     await shutdown()
 
 

@@ -232,8 +232,7 @@ async def main(cfg: DictConfig):
     except KeyboardInterrupt:
         print("Training interrupted by user")
     finally:
-        print("Shutting down trainer...")
-        await mlogger.shutdown.call_one()
+        print("Shutting down...")
         await shutdown()
         print("Trainer shutdown complete.")
 

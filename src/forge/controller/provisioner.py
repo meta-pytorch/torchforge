@@ -16,7 +16,7 @@ import uuid
 from monarch._src.actor.actor_mesh import ActorMesh
 
 from monarch._src.actor.shape import Extent, NDSlice, Shape
-from monarch.actor import Actor, endpoint
+from monarch.actor import Actor, endpoint, ProcMesh
 
 from monarch.tools import commands
 
@@ -511,9 +511,10 @@ async def shutdown_metric_logger():
 
 
 async def shutdown():
-    logger.info("Shutting down provisioner..")
 
     await shutdown_metric_logger()
+
+    logger.info("Shutting down provisioner..")
 
     provisioner = await _get_provisioner()
     result = await provisioner.shutdown()
