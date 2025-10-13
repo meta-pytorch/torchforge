@@ -268,9 +268,10 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         self, messages: list[dict[str, str]], add_eos: bool = True
     ) -> str:
         # Need to set tool_calls to something for qwen chat_template
-        for message in messages:
-            if "tool_calls" not in message:
-                message["tool_calls"] = {}
+        if self.base_tokenizer.config["tokenizer_class"] == "Qwen2Tokenizer":
+            for message in messages:
+                if "tool_calls" not in message:
+                    message["tool_calls"] = {}
         rendered = self.template.render(
             messages=messages,
             tools=None,
