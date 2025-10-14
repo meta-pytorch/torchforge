@@ -18,7 +18,6 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
-from forge.observability.utils import detect_actor_name_from_call_stack
 
 if MONARCH_HOSTMESH_V1.get_value():
     from monarch._src.actor.v1.host_mesh import this_proc
@@ -85,7 +84,7 @@ async def get_or_create_metric_logger(
     """
 
     if process_name is None:
-        process_name = detect_actor_name_from_call_stack()
+        process_name = "UnknownActor"
 
     # Get or create the singleton global logger
     global _global_logger
