@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import asyncio
+import pytest
 
 from forge.actors.policy import Policy
 from vllm import SamplingParams
@@ -28,6 +28,7 @@ TOP_P = 1.0
 N_SAMPLES = 1
 
 
+@pytest.mark.asyncio
 async def test_same_output():
     """Compare outputs between vLLM and Policy service"""
     test_prompts = [
@@ -105,6 +106,7 @@ async def test_same_output():
             await policy.shutdown()
 
 
+@pytest.mark.asyncio
 async def test_cache_usage():
     """Test that KV cache usage is consistent between vLLM and Policy service.
 
@@ -240,8 +242,3 @@ async def test_cache_usage():
     finally:
         if policy is not None:
             await policy.shutdown()
-
-
-if __name__ == "__main__":
-    asyncio.run(test_same_output())
-    asyncio.run(test_cache_usage())
