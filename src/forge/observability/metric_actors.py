@@ -8,9 +8,9 @@ import asyncio
 import logging
 from typing import Any, Union
 
-from monarch.actor import Actor, endpoint, ProcMesh
+from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
 
-from forge.env import FORGE_DISABLE_METRICS 
+from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,
@@ -18,8 +18,6 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
-
-from monarch.actor import get_or_spawn_controller, this_proc
 
 
 logger = logging.getLogger(__name__)
