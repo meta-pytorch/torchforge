@@ -96,7 +96,8 @@ class TestReplayBuffer:
         )
         assert samples is not None
         assert len(samples[0]) == 2
-        assert samples[0][0] == trajectory_1
+        assert samples[0][0].policy_version > 0
+        assert samples[0][1].policy_version > 0
         assert replay_buffer._numel.call_one().get() == 2
         replay_buffer.clear.call_one().get()
 
