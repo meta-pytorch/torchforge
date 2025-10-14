@@ -28,7 +28,7 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.data_models.scored_completion import ScoredCompletion
+from forge.data_models.completion import Completion
 from forge.env import MONARCH_HOSTMESH_V1
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -48,38 +48,20 @@ class Episode:
     request_len: int
     response_len: int
     target: Any | None = None
-    completion: ScoredCompletion | None = None
+    # Processed data
+    completion: Completion | None = None
     ref_logprobs: torch.Tensor | None = None
+    reward: float | None = None
     advantage: float | None = None
-
-    @property
-    def request(self) -> str | None:
-        prompt = getattr(self.completion, "prompt", None)
-        return prompt.get_first_turn_prompt() if prompt is not None else None
 
     @property
     def policy_version(self) -> int | None:
         return getattr(self.completion, "generator_version", None)
 
     @property
-    def response(self) -> str | None:
-        return getattr(self.completion, "text", None)
-
-    @property
-    def request_tokens(self) -> torch.Tensor:
-        return getattr(self.completion, "prompt_ids", None)
-
-    @property
-    def response_tokens(self) -> torch.Tensor:
-        return getattr(self.completion, "token_ids", None)
-
-    @property
-    def reward(self) -> float:
-        return getattr(self.completion, "score", None)
-
-    @property
     def request_tensor(self) -> torch.Tensor:
-        tensor = torch.tensor(self.request_tokens, dtype=torch.long)
+        request_tokens: torch.Tensor = self.completion.prompt_ids
+        tensor = torch.tensor(request_tokens, dtype=torch.long)
         if tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
             tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
@@ -87,14 +69,17 @@ class Episode:
 
     @property
     def response_tensor(self) -> torch.Tensor:
-        tensor = torch.tensor(self.response_tokens, dtype=torch.long)
+        response_tokens: torch.Tensor = self.completion.token_ids
+        tensor = torch.tensor(response_tokens, dtype=torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
 
 
-def collate(batches: list[list[Episode]]):
+def collate(
+    batches: list[list[Episode]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     inputs = []
     targets = []
     for batch in batches:
@@ -373,7 +358,7 @@ async def main(cfg: DictConfig):
         while not shutdown_event.is_set():
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
-            sample = await dataloader.sample.call_one()
+            sample: dict[str, str] = await dataloader.sample.call_one()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -381,7 +366,7 @@ async def main(cfg: DictConfig):
             t.step("data_loading")
 
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generate.route(prompt)
+            responses: list[Completion] = await policy.generate.route(prompt)
             t.step("policy_generation")
 
             assert (
@@ -396,16 +381,16 @@ async def main(cfg: DictConfig):
                 device="cuda",
             )
             for i, response in enumerate(responses):
-                reward: float = await reward_actor.evaluate_response.route(
-                    prompt=prompt, response=response.text, target=target
-                )
                 episode = Episode(
                     episode_id=str(uuid.uuid4()),
                     pad_id=pad_id,
                     request_len=max_req_tokens,
                     response_len=max_res_tokens,
                     target=target,
-                    completion=ScoredCompletion.from_completion(response, score=reward),
+                    completion=response,
+                )
+                episode.reward = await reward_actor.evaluate_response.route(
+                    prompt=prompt, response=response.text, target=target
                 )
                 episodes.append(episode)
 
@@ -415,7 +400,7 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            ref_logprobs = await ref_model.forward.route(
+            ref_logprobs: torch.Tensor = await ref_model.forward.route(
                 input_ids, max_req_tokens, return_logprobs=True
             )
             t.step("reference_model_calculate_logprobs")
