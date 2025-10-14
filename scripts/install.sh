@@ -18,8 +18,22 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
-PYTORCH_VERSION="2.9.0.dev20250905"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+
+if [ ! -f "$VERSIONS_FILE" ]; then
+    log_error "Versions file not found: $VERSIONS_FILE"
+    exit 1
+fi
+
+source "$VERSIONS_FILE"
+
+# Validate required variables are set
+if [ -z "${PYTORCH_VERSION:-}" ]; then
+    log_error "PYTORCH_VERSION not set in $VERSIONS_FILE"
+    exit 1
+fi
+
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
 RELEASE_TAG="v0.0.0-93025"
 GITHUB_REPO="meta-pytorch/forge"
