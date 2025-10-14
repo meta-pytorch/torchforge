@@ -32,8 +32,8 @@ This is part 3 of our series. In the previous sections we learned:
 * Part 1: [RL Concepts and how they map to Forge](1_RL_and_Forge_Fundamentals)
 * Part 2: [Forge Internals](2_Forge_Internals)
 
-Now let's peel back the layers. Forge services are built on top of 
-**Monarch**, PyTorch's distributed actor framework. Understanding this 
+Now let's peel back the layers. Forge services are built on top of
+**Monarch**, PyTorch's distributed actor framework. Understanding this
 connection is crucial for optimization and debugging.
 """
 
@@ -83,8 +83,8 @@ connection is crucial for optimization and debugging.
 # Deep Dive: ProcMesh - The Foundation
 # -------------------------------------
 #
-# **ProcMesh** is Monarch's core abstraction for organizing processes 
-# across hardware. Think of it as a multi-dimensional grid that maps 
+# **ProcMesh** is Monarch's core abstraction for organizing processes
+# across hardware. Think of it as a multi-dimensional grid that maps
 # directly to your cluster topology.
 #
 # Single Host ProcMesh
@@ -175,12 +175,9 @@ connection is crucial for optimization and debugging.
 #
 # This shows the underlying actor system that powers Forge services.
 
-import asyncio
-
 # Mock imports for documentation build
 try:
-    from monarch.actor import Actor, endpoint, this_proc, Future
-    from monarch.actor import ProcMesh, this_host
+    from monarch.actor import Actor, endpoint, Future, ProcMesh, this_host, this_proc
 except ImportError:
 
     class Actor:
@@ -264,7 +261,7 @@ async def distributed_actors_example():
 # Actor Meshes: Your Code Running Distributed
 # --------------------------------------------
 #
-# **ActorMesh** is created when you spawn actors across a ProcMesh. 
+# **ActorMesh** is created when you spawn actors across a ProcMesh.
 # Each process in the ProcMesh gets one instance of your actor.
 #
 # .. mermaid::
@@ -352,7 +349,7 @@ async def distributed_actors_example():
 # How Forge Services Use Monarch
 # -------------------------------
 #
-# Now the key insight: **Forge services are ServiceActors that manage 
+# Now the key insight: **Forge services are ServiceActors that manage
 # ActorMeshes of your ForgeActor replicas**.
 #
 # The Service Creation Process
@@ -447,7 +444,7 @@ async def distributed_actors_example():
 # Multiple Services Sharing Infrastructure
 # -----------------------------------------
 #
-# In real RL systems, you have multiple services that can share or use 
+# In real RL systems, you have multiple services that can share or use
 # separate ProcMeshes:
 #
 # .. mermaid::
@@ -551,15 +548,15 @@ def demonstrate_architecture_benefits():
 # Key Takeaways
 # ~~~~~~~~~~~~~
 #
-# * **Services hide complexity**: Your RL code looks like simple async functions, 
+# * **Services hide complexity**: Your RL code looks like simple async functions,
 #   but runs on distributed clusters
-# * **Communication patterns matter**: ``.route()``, ``.fanout()``, sessions, 
+# * **Communication patterns matter**: ``.route()``, ``.fanout()``, sessions,
 #   and ``.call_one()`` each serve specific purposes
-# * **Architecture understanding helps**: Knowing the Service → Actor → Process → 
+# * **Architecture understanding helps**: Knowing the Service → Actor → Process →
 #   Hardware hierarchy helps you debug, optimize, and scale
-# * **Always verify APIs**: This guide is verified, but cross-check with source 
+# * **Always verify APIs**: This guide is verified, but cross-check with source
 #   code for latest changes
-# * **Real API patterns**: Use ``.options().as_service()`` not ``spawn_service()``, 
+# * **Real API patterns**: Use ``.options().as_service()`` not ``spawn_service()``,
 #   use ``.route()`` not ``.choose()``, etc.
 #
 # Further Reading

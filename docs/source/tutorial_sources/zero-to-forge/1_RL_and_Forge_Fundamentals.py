@@ -32,7 +32,7 @@ Part 1: RL Fundamentals - Using Forge Terminology
 # Core RL Components in Forge
 # ----------------------------
 #
-# Let's start with a simple math tutoring example to understand RL concepts 
+# Let's start with a simple math tutoring example to understand RL concepts
 # with the exact names Forge uses:
 #
 # The Toy Example: Teaching Math
@@ -108,7 +108,7 @@ def conceptual_rl_step():
 # From Concepts to Forge Services
 # --------------------------------
 #
-# Here's the key insight: **Each RL component becomes a Forge service**. 
+# Here's the key insight: **Each RL component becomes a Forge service**.
 # The toy example above maps directly to Forge:
 #
 # .. mermaid::
@@ -148,7 +148,7 @@ def conceptual_rl_step():
 # RL Step with Forge Services
 # ----------------------------
 #
-# Let's look at the example from above again, but this time we use the 
+# Let's look at the example from above again, but this time we use the
 # actual Forge API names:
 
 import asyncio
@@ -249,7 +249,7 @@ async def conceptual_forge_rl_step(services, step):
 # Enter Forge: RL-Native Architecture
 # ------------------------------------
 #
-# Forge solves these problems by treating each RL component as an 
+# Forge solves these problems by treating each RL component as an
 # **independent, distributed unit**.
 #
 # Quick API Reference (covered in detail in Part 2):
@@ -322,8 +322,8 @@ async def example_automatic_management(policy):
 # For actual imports, see apps/grpo/main.py
 try:
     from forge.actors.policy import Policy
-    from forge.actors.replay_buffer import ReplayBuffer
     from forge.actors.reference_model import ReferenceModel
+    from forge.actors.replay_buffer import ReplayBuffer
     from forge.actors.trainer import RLTrainer
     from forge.data.rewards import MathReward, ThinkingReward
 
@@ -406,7 +406,11 @@ async def setup_forge_services():
         ),
         # Trainer actor with GPU
         RLTrainer.options(procs=1, with_gpus=True).as_actor(
-            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+            model={
+                "name": "qwen3",
+                "flavor": "1.7B",
+                "hf_assets_path": f"hf://{model}",
+            },
             optimizer={"name": "AdamW", "lr": 1e-5},
             training={"local_batch_size": 2, "seq_len": 2048},
         ),
@@ -418,7 +422,11 @@ async def setup_forge_services():
         ComputeAdvantages.options(procs=1).as_actor(),
         # Reference model with GPU
         ReferenceModel.options(procs=1, with_gpus=True).as_actor(
-            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+            model={
+                "name": "qwen3",
+                "flavor": "1.7B",
+                "hf_assets_path": f"hf://{model}",
+            },
             training={"dtype": "bfloat16"},
         ),
         # Reward actor (CPU)
@@ -444,12 +452,12 @@ async def setup_forge_services():
 #
 # Forge has two types of distributed components:
 #
-# * **Services**: Multiple replicas with automatic load balancing 
+# * **Services**: Multiple replicas with automatic load balancing
 #   (like Policy, RewardActor)
-# * **Actors**: Single instances that handle their own internal 
+# * **Actors**: Single instances that handle their own internal
 #   distribution (like RLTrainer, ReplayBuffer)
 #
-# We cover this distinction in detail in Part 2, but for now this 
+# We cover this distinction in detail in Part 2, but for now this
 # explains the scaling patterns:
 #
 # * Policy service: ``num_replicas=8`` for high inference demand

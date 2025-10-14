@@ -27,10 +27,10 @@ Part 2: Peeling Back the Abstraction - What Are Services?
        * Understanding of Python async/await
        * Basic distributed systems knowledge
 
-We highly recommend reading Part 1 before this - it explains RL Concepts 
+We highly recommend reading Part 1 before this - it explains RL Concepts
 and how they land in Forge.
 
-Now that you see the power of the service abstraction, let's understand 
+Now that you see the power of the service abstraction, let's understand
 what's actually happening under the hood. Grab your chai!
 """
 
@@ -38,7 +38,7 @@ what's actually happening under the hood. Grab your chai!
 # Service Anatomy: Beyond the Interface
 # --------------------------------------
 #
-# When you call ``await policy_service.generate(question)``, here's what 
+# When you call ``await policy_service.generate(question)``, here's what
 # actually happens:
 #
 # (Don't worry, we will understand Services right in the next section!)
@@ -100,7 +100,7 @@ what's actually happening under the hood. Grab your chai!
 # 2. Real Service Creation
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Services are created using the ``.options().as_service()`` pattern 
+# Services are created using the ``.options().as_service()`` pattern
 # from the actual GRPO implementation.
 #
 # The service creation automatically handles:
@@ -152,11 +152,11 @@ async def example_service_creation():
 # 3. How Services Actually Work
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Forge services are implemented as ServiceActors that manage 
+# Forge services are implemented as ServiceActors that manage
 # collections of your ForgeActor replicas.
 #
-# When you call ``.as_service()``, Forge creates a ``ServiceInterface`` 
-# that manages N replicas of your ``ForgeActor`` class and gives you 
+# When you call ``.as_service()``, Forge creates a ``ServiceInterface``
+# that manages N replicas of your ``ForgeActor`` class and gives you
 # methods like ``.route()``, ``.fanout()``, etc.
 
 
@@ -215,14 +215,14 @@ async def service_interface_example(policy):
 # Deep Dive: Service Communication Patterns
 # ------------------------------------------
 #
-# These communication patterns ("adverbs") determine how your service 
-# calls are routed to replicas. Understanding when to use each pattern 
+# These communication patterns ("adverbs") determine how your service
+# calls are routed to replicas. Understanding when to use each pattern
 # is key to effective Forge usage.
 #
 # 1. ``.route()`` - Load Balanced Single Replica
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# **When to use**: Normal request routing where any replica can handle 
+# **When to use**: Normal request routing where any replica can handle
 # the request.
 
 
@@ -246,7 +246,7 @@ async def route_example(policy):
 # * **Throughput**: Limited by single replica capacity
 # * **Fault tolerance**: Automatic failover to other replicas
 #
-# **Critical insight**: ``.route()`` is your default choice for 
+# **Critical insight**: ``.route()`` is your default choice for
 # stateless operations in Forge services.
 
 ######################################################################
@@ -273,7 +273,7 @@ async def fanout_example(policy):
 # * **Throughput**: Network bandwidth × number of replicas
 # * **Fault tolerance**: Fails if ANY replica fails (unless configured)
 #
-# **Critical gotcha**: Don't use ``.fanout()`` for high-frequency 
+# **Critical gotcha**: Don't use ``.fanout()`` for high-frequency
 # operations - it contacts all replicas.
 
 ######################################################################
@@ -306,18 +306,18 @@ async def streaming_pattern_example(replay_buffer, trainer, step):
 # * **Throughput**: Non-blocking async operations
 # * **Fault tolerance**: Continues if some replicas fail
 #
-# **Critical insight**: Essential for high-throughput RL where 
+# **Critical insight**: Essential for high-throughput RL where
 # you can't wait for batches.
 
 ######################################################################
 # Service Sessions for Stateful Operations
 # -----------------------------------------
 #
-# **When to use**: When you need multiple calls to hit the same replica 
+# **When to use**: When you need multiple calls to hit the same replica
 # (like KV cache preservation).
 #
-# **What are sticky sessions?** A session ensures all your service calls 
-# within the ``async with`` block go to the same replica, instead of 
+# **What are sticky sessions?** A session ensures all your service calls
+# within the ``async with`` block go to the same replica, instead of
 # being load-balanced across different replicas.
 
 # Mock classes for example
@@ -396,13 +396,13 @@ async def with_sessions_example():
 # Deep Dive: State Management Reality
 # ------------------------------------
 #
-# The most complex challenge in distributed RL is maintaining state 
+# The most complex challenge in distributed RL is maintaining state
 # consistency while maximizing performance.
 #
 # The KV Cache Problem
 # ~~~~~~~~~~~~~~~~~~~~
 #
-# **The challenge**: Policy inference is much faster with KV cache, 
+# **The challenge**: Policy inference is much faster with KV cache,
 # but cache is tied to specific conversation history.
 
 
@@ -415,9 +415,7 @@ async def naive_multi_turn(policy_service):
     full_prompt = question1 + response1[0].text
     response2 = await policy_service.generate.route(prompt=full_prompt)  # Cache miss!
     conversation = full_prompt + response2[0].text
-    response3 = await policy_service.generate.route(
-        prompt=conversation
-    )  # Cache miss!
+    response3 = await policy_service.generate.route(prompt=conversation)  # Cache miss!
 
 
 async def optimized_multi_turn(policy):
@@ -434,17 +432,17 @@ async def optimized_multi_turn(policy):
     # Session ends, replica can be garbage collected or reused
 
 
-# **Performance impact**: Maintaining KV cache across turns avoids 
+# **Performance impact**: Maintaining KV cache across turns avoids
 # recomputing previous tokens.
 
 ######################################################################
 # Replay Buffer Consistency
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# **The challenge**: Multiple trainers and experience collectors 
+# **The challenge**: Multiple trainers and experience collectors
 # reading/writing concurrently.
 #
-# **Real Forge approach**: The ReplayBuffer actor handles concurrency 
+# **Real Forge approach**: The ReplayBuffer actor handles concurrency
 # internally:
 
 
@@ -466,14 +464,14 @@ async def replay_buffer_example(replay_buffer):
     # state = await replay_buffer.state_dict.call_one()  # Checkpoint
 
 
-# **Critical insight**: The actor model provides natural thread safety - 
+# **Critical insight**: The actor model provides natural thread safety -
 # each actor processes messages sequentially.
 
 ######################################################################
 # Weight Synchronization Strategy
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# **The challenge**: Trainer updates policy weights, but policy service 
+# **The challenge**: Trainer updates policy weights, but policy service
 # needs those weights.
 
 import torch
@@ -497,18 +495,24 @@ async def real_weight_sync(trainer, policy, step):
 # Deep Dive: Asynchronous Coordination Patterns
 # ----------------------------------------------
 #
-# **The real challenge**: Different services run at different speeds, 
+# **The real challenge**: Different services run at different speeds,
 # but Forge's service abstraction handles the coordination complexity.
 #
 # The Forge Approach: Let Services Handle Coordination
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Instead of manual coordination, Forge services handle speed mismatches 
+# Instead of manual coordination, Forge services handle speed mismatches
 # automatically:
 
 
 async def simple_rl_step(
-    dataloader, policy, ref_model, reward_actor, replay_buffer, compute_advantages, trainer
+    dataloader,
+    policy,
+    ref_model,
+    reward_actor,
+    replay_buffer,
+    compute_advantages,
+    trainer,
 ):
     """Simple RL step showing service coordination."""
     # ===== Generate a rollout =====
@@ -561,22 +565,15 @@ async def simple_rl_step(
 # Handling Speed Mismatches with Service Scaling
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# **The insight**: Scale services independently based on their 
+# **The insight**: Scale services independently based on their
 # bottlenecks.
 
 # Mock imports for example
 try:
-    from forge.actors.policy import Policy
     from forge.actors.trainer import RLTrainer
 except ImportError:
 
-    class Policy:
-        pass
-
     class RLTrainer:
-        pass
-
-    class RewardActor:
         pass
 
 
@@ -598,7 +595,8 @@ async def scaling_example():
     trainer = await RLTrainer.options(
         procs=1, with_gpus=True  # Fewer but GPU-heavy
     ).as_actor(  # Trainer typically uses .as_actor() not .as_service()
-        model={"name": "qwen3", "flavor": "1.7B"}, optimizer={"name": "AdamW", "lr": 1e-5}
+        model={"name": "qwen3", "flavor": "1.7B"},
+        optimizer={"name": "AdamW", "lr": 1e-5},
     )
 
 
@@ -611,8 +609,8 @@ async def scaling_example():
 # Mock imports
 try:
     from forge.controller import ForgeActor
-    from monarch.actor import endpoint
     from forge.data.rewards import MathReward, ThinkingReward
+    from monarch.actor import endpoint
 except ImportError:
 
     class ForgeActor:
@@ -647,7 +645,9 @@ class RewardActor(ForgeActor):
             total_reward += reward
 
         # Return average reward across all functions
-        return total_reward / len(self.reward_functions) if self.reward_functions else 0.0
+        return (
+            total_reward / len(self.reward_functions) if self.reward_functions else 0.0
+        )
 
 
 async def reward_service_example():
@@ -703,7 +703,9 @@ async def production_training_loop():
 
         # Reward evaluation service call
         reward = await reward_actor.evaluate_response.route(
-            prompt=sample["question"], response=responses[0].text, target=sample["answer"]
+            prompt=sample["question"],
+            response=responses[0].text,
+            target=sample["answer"],
         )
 
         # Experience storage
@@ -734,7 +736,7 @@ async def production_training_loop():
 # 4. **Resource efficiency**: CPU and GPU services scale independently
 # 5. **Coordination**: Services coordinate through shared state (replay buffer, weight versions)
 #
-# This is the power of the service abstraction - complex distributed 
+# This is the power of the service abstraction - complex distributed
 # coordination looks like simple async Python code.
 
 ######################################################################
