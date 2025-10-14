@@ -303,8 +303,6 @@ Include this output in your bug reports!
 
 ## Additional Resources
 
-- **GitHub Repository**: [github.com/meta-pytorch/forge](https://github.com/meta-pytorch/forge)
-- **Example Notebooks**: Check `demo.ipynb` in the repository root
 - **Contributing Guide**: [CONTRIBUTING.md](https://github.com/meta-pytorch/forge/blob/main/CONTRIBUTING.md)
 - **Code of Conduct**: [CODE_OF_CONDUCT.md](https://github.com/meta-pytorch/forge/blob/main/CODE_OF_CONDUCT.md)
 - **Monarch Documentation**: [meta-pytorch.org/monarch](https://meta-pytorch.org/monarch)
