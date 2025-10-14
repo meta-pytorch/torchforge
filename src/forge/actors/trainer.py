@@ -95,6 +95,26 @@ def cleanup_old_weight_versions(
 
 @dataclass
 class RLTrainer(ForgeActor):
+    """A reinforcement learning trainer actor for policy optimization training.
+
+    Built on top of TorchTitan's training engine, this actor provides a complete training
+    loop for reinforcement learning. It performs forward and backward passes with gradient
+    computation, optimization steps, and checkpoint management. Unlike the ReferenceModel
+    actor which only runs forward passes, RLTrainer actively updates the policy model
+    parameters through gradient descent.
+
+    The trainer supports the same distributed training strategies that TorchTitan does,
+    including but not limited to, tensor parallelism, data parallelism, and FSDP
+    (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel
+    for policy optimization algorithms like GRPO (Group Relative Policy Optimization),
+    where it optimizes the policy against a loss that includes KL divergence penalties
+    from the reference model.
+
+    The trainer handles:
+    - Forward and backward propagation with automatic mixed precision (AMP)
+    - Optimizer steps with learning rate scheduling
+    """
+
     job: Job = field(default_factory=Job)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
