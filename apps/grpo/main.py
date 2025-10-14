@@ -28,7 +28,6 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
-from forge.env import MONARCH_HOSTMESH_V1
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
@@ -327,7 +326,6 @@ async def main(cfg: DictConfig):
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
-
     # ---- Setup services ---- #
 
     (
@@ -549,9 +547,6 @@ async def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    # This is temporary measure, setting the correct environment variable to 
-    # enable host mesh V1 in Monarch's APIs.
-    MONARCH_HOSTMESH_V1.override_with_default()
 
     @parse
     def _main(cfg):

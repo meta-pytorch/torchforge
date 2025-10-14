@@ -13,16 +13,15 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import Extent, NDSlice, Shape
-from monarch.actor import Actor, endpoint, ProcMesh
+from monarch._src.actor.shape import Extent
+
+from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
 
 from forge.controller.launcher import BaseLauncher, get_launcher
 
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
-
-from monarch.actor import HostMesh, this_host
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
@@ -350,9 +349,6 @@ _provisioner: Provisioner | None = None
 
 
 async def init_provisioner(cfg: ProvisionerConfig | None = None):
-    # This is temporary measure, setting the correct environment variable to 
-    # enable host mesh V1 in Monarch's APIs.
-    MONARCH_HOSTMESH_V1.override_with_default()
     global _provisioner
     if not _provisioner:
         _provisioner = Provisioner(cfg)
