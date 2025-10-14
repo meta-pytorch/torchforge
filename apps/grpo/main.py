@@ -56,7 +56,7 @@ class Episode:
 
     @property
     def policy_version(self) -> int | None:
-        return getattr(self.completion, "generator_version", None)
+        return self.completion.generator_version
 
     @property
     def request_tensor(self) -> torch.Tensor:
@@ -77,9 +77,17 @@ class Episode:
         return tensor
 
 
+# Represents the group (G) of episodes in GRPO
+Group = list[Episode]
+
+
 def collate(
-    batches: list[list[Episode]],
+    batches: list[Group],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Collates a list of batches into a single batch of inputs and targets.
+    Each batch is a list of episodes, and each episode is a dict of tensors.
+    """
     inputs = []
     targets = []
     for batch in batches:
@@ -191,9 +199,9 @@ class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
     @endpoint
-    async def compute(self, episodes: list[Episode]) -> list[float]:
+    async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
-        rewards = torch.tensor([[e.reward for e in episodes]])
+        rewards = torch.tensor([[e.reward for e in group]])
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
         advantages = (rewards - mean) / (std + 1e-4)
@@ -358,7 +366,7 @@ async def main(cfg: DictConfig):
         while not shutdown_event.is_set():
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
-            sample: dict[str, str] = await dataloader.sample.call_one()
+            sample = await dataloader.sample.call_one()
             if sample is None:
                 print("Dataloader is empty, exiting continuous rollout")
                 return
@@ -369,12 +377,8 @@ async def main(cfg: DictConfig):
             responses: list[Completion] = await policy.generate.route(prompt)
             t.step("policy_generation")
 
-            assert (
-                len(responses) > 0
-            ), "Sanity check: Responses should NEVER return empty"
-
             # Construct episodes and calculate rewards
-            episodes: list[Episode] = []
+            episodes = []
             input_ids = torch.ones(
                 (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
@@ -400,7 +404,7 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            ref_logprobs: torch.Tensor = await ref_model.forward.route(
+            ref_logprobs = await ref_model.forward.route(
                 input_ids, max_req_tokens, return_logprobs=True
             )
             t.step("reference_model_calculate_logprobs")
@@ -408,7 +412,6 @@ async def main(cfg: DictConfig):
             for i, episode in enumerate(episodes):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logprobs, input_ids
-            t.step("gc_ref_logprobs")
 
             # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.call_one(episodes)
