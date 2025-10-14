@@ -533,15 +533,6 @@ async def main(cfg: DictConfig):
         training_task.cancel()
     finally:
         print("Shutting down...")
-        await asyncio.gather(
-            DatasetActor.shutdown(dataloader),
-            policy.shutdown(),
-            Trainer.shutdown(trainer),
-            ReplayBuffer.shutdown(replay_buffer),
-            reward_actor.shutdown(),
-        )
-        # TODO - add a global shutdown that implicitly shuts down all services
-        # and remote allocations
         await shutdown()
 
 
