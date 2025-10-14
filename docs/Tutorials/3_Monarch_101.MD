@@ -58,7 +58,7 @@ procs = this_host().spawn_procs(per_host={"gpus": 8})
 
 # Creates:
 # Process 0 → GPU 0
-# Process 1 → GPU 1  
+# Process 1 → GPU 1
 # Process 2 → GPU 2
 # Process 3 → GPU 3
 # Process 4 → GPU 4
@@ -76,13 +76,13 @@ The beauty: you don't manage individual processes or GPU assignments - ProcMesh 
 ```python
 # Same simple API works across hosts:
 cluster_procs = spawn_cluster_procs(
-    hosts=["host1", "host2", "host3"], 
+    hosts=["host1", "host2", "host3"],
     per_host={"gpus": 4}
 )
 
 # Automatically creates:
 # Host 1: Processes 0-3  → GPUs 0-3
-# Host 2: Processes 4-7  → GPUs 0-3  
+# Host 2: Processes 4-7  → GPUs 0-3
 # Host 3: Processes 8-11 → GPUs 0-3
 
 # Your code stays the same whether it's 1 host or 100 hosts
@@ -155,7 +155,7 @@ await procs.stop()
 **ActorMesh** is created when you spawn actors across a ProcMesh. Key points:
 
 - **One actor instance per process**: `mesh.spawn("policy", PolicyActor)` creates one PolicyActor in each process
-- **Same constructor arguments**: All instances get the same initialization parameters  
+- **Same constructor arguments**: All instances get the same initialization parameters
 - **Independent state**: Each actor instance maintains its own state and memory
 - **Message routing**: You can send messages to one actor or all actors using different methods
 
