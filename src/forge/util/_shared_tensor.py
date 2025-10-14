@@ -16,7 +16,7 @@ import torch
 class SharedTensor:
     """Wrapper class for tensors backed my shared memory"""
 
-    def __init__(self, tensor=None, handle=None):
+    def __init__(self, *, tensor=None, handle=None):
         if tensor is not None:
             self._create_from_tensor(tensor)
         elif handle is not None:
@@ -87,65 +87,65 @@ class SharedTensor:
     def _create_empty(self, shape, dtype):
         """Initialize with empty tensor in shared memory"""
         # Store metadata
-        self.shape = tuple(shape) if not isinstance(shape, tuple) else shape
-        self.dtype = dtype
-        self.dtype_str = str(dtype)
+        self._shape = tuple(shape) if not isinstance(shape, tuple) else shape
+        self._dtype = dtype
+        self._dtype_str = str(dtype)
 
         # Calculate size
         element_size = torch.tensor([], dtype=dtype).element_size()
-        total_elements = int(np.prod(self.shape))
+        total_elements = int(np.prod(self._shape))
         byte_size = total_elements * element_size
 
         # Create shared memory (uninitialized - fast!)
         shm_name = f"shared_tensor_{uuid.uuid4().hex}"
-        self.shm = shared_memory.SharedMemory(
+        self._shm = shared_memory.SharedMemory(
             create=True, size=byte_size, name=shm_name
         )
-        self.shm_name = shm_name
+        self._shm_name = shm_name
 
     def _create_from_tensor(self, tensor):
         """Initialize from an existing tensor"""
         tensor = tensor.contiguous()
 
         # Store metadata
-        self.shape = tuple(tensor.shape)
-        self.dtype = tensor.dtype
-        self.dtype_str = str(tensor.dtype)
+        self._shape = tuple(tensor.shape)
+        self._dtype = tensor.dtype
+        self._dtype_str = str(tensor.dtype)
 
         # Create shared memory
         byte_size = tensor.numel() * tensor.element_size()
         shm_name = f"shared_tensor_{uuid.uuid4().hex}"
 
-        self.shm = shared_memory.SharedMemory(
+        self._shm = shared_memory.SharedMemory(
             create=True, size=byte_size, name=shm_name
         )
-        self.shm_name = shm_name
+        self._shm_name = shm_name
 
         # Copy data as raw bytes
         raw_bytes = tensor.view(torch.uint8).view(-1).cpu().contiguous().numpy()
-        self.shm.buf[:byte_size] = raw_bytes
+        self._shm.buf[:byte_size] = raw_bytes
 
     def _create_from_handle(self, handle):
         """Initialize from a handle"""
-        self.shm_name = handle["shm_name"]
-        self.shape = handle["shape"]
-        self.dtype_str = handle["dtype"]
-        self.dtype = self._parse_dtype(self.dtype_str)
+        self._shm_name = handle["shm_name"]
+        self._shape = handle["shape"]
+        self._dtype_str = handle["dtype"]
+        self._dtype = self._parse_dtype(self._dtype_str)
 
         # Attach to existing shared memory
-        self.shm = shared_memory.SharedMemory(name=self.shm_name)
+        self._shm = shared_memory.SharedMemory(name=self._shm_name)
 
     def _create_tensor_view(self):
         """Create tensor view of shared memory."""
-        element_size = torch.tensor([], dtype=self.dtype).element_size()
-        total_elements = int(np.prod(self.shape))
+        element_size = torch.tensor([], dtype=self._dtype).element_size()
+        total_elements = int(np.prod(self._shape))
         byte_size = total_elements * element_size
 
         # Create numpy array that shares the buffer
-        np_array = np.ndarray(shape=(byte_size,), dtype=np.uint8, buffer=self.shm.buf)
+        np_array = np.ndarray(shape=(byte_size,), dtype=np.uint8, buffer=self._shm.buf)
         # Create torch tensor from numpy (shares memory)
         uint8_tensor = torch.from_numpy(np_array)
-        tensor = uint8_tensor.view(self.dtype).reshape(self.shape)
+        tensor = uint8_tensor.view(self._dtype).reshape(self._shape)
 
         # Keep both the np array and the SharedTensor object alive
         tensor._forge_shared_tensor = self
@@ -160,7 +160,11 @@ class SharedTensor:
 
     def get_handle(self):
         """Get picklable handle"""
-        return {"shm_name": self.shm_name, "shape": self.shape, "dtype": self.dtype_str}
+        return {
+            "shm_name": self._shm_name,
+            "shape": self._shape,
+            "dtype": self._dtype_str,
+        }
 
     @functools.cached_property
     def tensor(self):
@@ -175,22 +179,22 @@ class SharedTensor:
         Args:
             source_tensor: Source tensor to copy from
         """
-        if source_tensor.shape != self.shape:
-            raise ValueError(f"Shape mismatch: {source_tensor.shape} vs {self.shape}")
+        if source_tensor.shape != self._shape:
+            raise ValueError(f"Shape mismatch: {source_tensor.shape} vs {self._shape}")
         # Copy data
         self.tensor.copy_(source_tensor)
 
     def clone(self):
         """Create a new SharedTensor with copied data"""
-        new_shared = SharedTensor.empty(self.shape, self.dtype)
+        new_shared = SharedTensor.empty(self._shape, self._dtype)
         new_shared.tensor.copy_(self.tensor)
         return new_shared
 
     def cleanup(self):
         """Clean up shared memory"""
         try:
-            self.shm.close()
-            self.shm.unlink()
+            self._shm.close()
+            self._shm.unlink()
         except Exception:
             pass
 
@@ -198,9 +202,9 @@ class SharedTensor:
         """Cleanup on deletion"""
         if hasattr(self, "shm"):
             try:
-                self.shm.close()
+                self._shm.close()
             except Exception:
                 pass
 
     def __repr__(self):
-        return f"SharedTensor(shape={self.shape}, dtype={self.dtype}, shm_name={self.shm_name})"
+        return f"SharedTensor(shape={self._shape}, dtype={self._dtype}, shm_name={self._shm_name})"

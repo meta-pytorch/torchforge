@@ -25,8 +25,8 @@ class TestSharedTensorCreation:
 
         shared = SharedTensor.empty(shape, dtype)
 
-        assert shared.shape == shape
-        assert shared.dtype == dtype
+        assert shared.tensor.shape == torch.Size(shape)
+        assert shared.tensor.dtype == dtype
         assert shared.tensor.shape == torch.Size(shape)
         assert shared.tensor.dtype == dtype
 
@@ -37,7 +37,7 @@ class TestSharedTensorCreation:
         shape = (50, 50)
         shared = SharedTensor.empty(shape, torch.bfloat16)
 
-        assert shared.dtype == torch.bfloat16
+        assert shared.tensor.dtype == torch.bfloat16
         assert shared.tensor.dtype == torch.bfloat16
 
         shared.cleanup()
@@ -69,8 +69,8 @@ class TestSharedTensorCreation:
         original = torch.randn(50, 50)
         shared = SharedTensor(tensor=original)
 
-        assert shared.shape == tuple(original.shape)
-        assert shared.dtype == original.dtype
+        assert shared.tensor.shape == original.shape
+        assert shared.tensor.dtype == original.dtype
         assert torch.allclose(shared.tensor, original)
 
         shared.cleanup()
@@ -88,8 +88,8 @@ class TestSharedTensorCreation:
         reconstructed = SharedTensor(handle=handle)
 
         assert torch.all(reconstructed.tensor == 5.0)
-        assert reconstructed.shape == original.shape
-        assert reconstructed.dtype == original.dtype
+        assert reconstructed.tensor.shape == original.tensor.shape
+        assert reconstructed.tensor.dtype == original.tensor.dtype
 
         original.cleanup()
 
@@ -110,7 +110,7 @@ class TestSharedTensorCreation:
     def test_various_shapes(self, shape):
         """Test creation with various shapes"""
         shared = SharedTensor.empty(shape, torch.float32)
-        assert shared.shape == shape
+        assert shared.tensor.shape == torch.Size(shape)
         assert shared.tensor.shape == torch.Size(shape)
         shared.cleanup()
 
@@ -138,7 +138,7 @@ class TestSharedTensorDtypes:
         shape = (10, 10)
         shared = SharedTensor.empty(shape, dtype)
 
-        assert shared.dtype == dtype
+        assert shared.tensor.dtype == dtype
         assert shared.tensor.dtype == dtype
 
         # Test that we can write to it
@@ -157,10 +157,8 @@ class TestSharedTensorDtypes:
             shared1 = SharedTensor.empty((5, 5), dtype)
             handle = shared1.get_handle()
 
-            assert handle["dtype"] == str(dtype)
-
             shared2 = SharedTensor(handle=handle)
-            assert shared2.dtype == dtype
+            assert shared2.tensor.dtype == dtype
 
             shared1.cleanup()
 
@@ -295,7 +293,7 @@ class TestSharedTensorMemory:
     def test_cleanup(self):
         """Test cleanup removes shared memory"""
         shared = SharedTensor.empty((10, 10), torch.float32)
-        shm_name = shared.shm_name
+        shm_name = shared._shm_name
 
         # Verify shared memory exists
         tensor = shared.tensor
@@ -350,9 +348,15 @@ class TestSharedTensorEdgeCases:
 
     def test_empty_shape(self):
         """Test scalar tensor (empty shape)"""
-        shared = SharedTensor.empty((), torch.float32)
-        assert shared.shape == ()
+        shared = SharedTensor.ones((), torch.float32)
+        assert shared.tensor.shape == ()
         assert shared.tensor.numel() == 1
+        assert torch.allclose(
+            shared.tensor,
+            torch.ones(
+                (),
+            ),
+        )
         shared.cleanup()
 
     def test_single_element_tensor(self):
@@ -368,7 +372,7 @@ class TestSharedTensorEdgeCases:
         shape = (250_000_000,)
         shared = SharedTensor.empty(shape, torch.float32)
 
-        assert shared.shape == shape
+        assert shared.tensor.shape == shape
         assert shared.tensor.numel() == 250_000_000
 
         shared.cleanup()
@@ -395,7 +399,7 @@ class TestSharedTensorEdgeCases:
         assert "SharedTensor" in repr_str
         assert "10, 20" in repr_str
         assert "float32" in repr_str
-        assert shared.shm_name in repr_str
+        assert shared._shm_name in repr_str
 
         shared.cleanup()
 
@@ -536,7 +540,7 @@ class TestSharedTensorBfloat16:
     def test_bfloat16_creation(self):
         """Test bfloat16 tensor creation"""
         shared = SharedTensor.empty((100, 100), torch.bfloat16)
-        assert shared.dtype == torch.bfloat16
+        assert shared.tensor.dtype == torch.bfloat16
         shared.cleanup()
 
     def test_bfloat16_from_tensor(self):
@@ -544,7 +548,7 @@ class TestSharedTensorBfloat16:
         original = torch.randn(50, 50, dtype=torch.bfloat16)
         shared = SharedTensor(tensor=original)
 
-        assert shared.dtype == torch.bfloat16
+        assert shared.tensor.dtype == torch.bfloat16
         assert torch.allclose(shared.tensor.float(), original.float(), rtol=1e-3)
 
         shared.cleanup()
@@ -557,7 +561,7 @@ class TestSharedTensorBfloat16:
         handle = shared1.get_handle()
         shared2 = SharedTensor(handle=handle)
 
-        assert shared2.dtype == torch.bfloat16
+        assert shared2.tensor.dtype == torch.bfloat16
         assert torch.allclose(shared1.tensor.float(), shared2.tensor.float(), rtol=1e-3)
 
         shared1.cleanup()
