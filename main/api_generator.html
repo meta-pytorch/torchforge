@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-10-14T21:39:35+00:00" />
+    <meta property="article:modified_time" content="2025-10-14T22:24:47+00:00" />
     <title>Generator &#8212; torchforge 0.1 documentation</title>
   
   
@@ -725,12 +725,12 @@ document.write(`
 <p>The Generator (Policy) is the core inference engine in TorchForge,
 built on top of <a class="reference external" href="https://docs.vllm.ai/en/latest/">vLLM</a>.
 It manages model serving, text generation, and weight updates for reinforcement learning workflows.</p>
-<section id="policy">
-<h2>Policy<a class="headerlink" href="#policy" title="Link to this heading">#</a></h2>
+<section id="id1">
+<h2>Generator<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
 <dl class="py class">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.policy.</span></span><span class="sig-name descname"><span class="pre">Policy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine_args=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampling_params=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_devices=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_dcp=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_request=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenization_kwargs=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_worker=None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/policy.html#Policy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.policy.Policy" title="Link to this definition">#</a></dt>
-<dd><p>Instance of a vLLM-based Policy.</p>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.generator.</span></span><span class="sig-name descname"><span class="pre">Generator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine_args=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampling_params=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_devices=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_dcp=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_request=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenization_kwargs=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator_worker=None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/generator.html#Generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator" title="Link to this definition">#</a></dt>
+<dd><p>Instance of a vLLM-based Generator.</p>
 <p>This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
 main difference is that all communications are controlled here via Monarch’s proc meshes.</p>
 <dl class="field-list simple">
@@ -744,44 +744,49 @@ main difference is that all communications are controlled here via Monarch’s p
 </dd>
 </dl>
 <p>Example:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">policy</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Policy</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">generator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Generator</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">engine_args</span><span class="o">=</span><span class="n">EngineArgs</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="n">sampling_params</span><span class="o">=</span><span class="n">SamplingParams</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">&quot;Tell me a joke&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">generator</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">&quot;Tell me a joke&quot;</span><span class="p">)</span>
 <span class="go">Completion(prompt=&quot;Tell me a joke&quot;, text=&quot;A: Why did the chicken cross the road? B: To get to the other side.&quot;,</span>
 <span class="go">token_ids=[...], logprobs=[...])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">generator</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </pre></div>
 </div>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.available_devices">
-<span class="sig-name descname"><span class="pre">available_devices</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.policy.Policy.available_devices" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.available_devices">
+<span class="sig-name descname"><span class="pre">available_devices</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.generator.Generator.available_devices" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.engine_args">
-<span class="sig-name descname"><span class="pre">engine_args</span></span><a class="headerlink" href="#forge.actors.policy.Policy.engine_args" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.engine_args">
+<span class="sig-name descname"><span class="pre">engine_args</span></span><a class="headerlink" href="#forge.actors.generator.Generator.engine_args" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.generate">
-<span class="sig-name descname"><span class="pre">generate</span></span><a class="headerlink" href="#forge.actors.policy.Policy.generate" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.generate">
+<span class="sig-name descname"><span class="pre">generate</span></span><a class="headerlink" href="#forge.actors.generator.Generator.generate" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.lora_request">
-<span class="sig-name descname"><span class="pre">lora_request</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.policy.Policy.lora_request" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.generator_worker">
+<span class="sig-name descname"><span class="pre">generator_worker</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.generator.Generator.generator_worker" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.policy_worker">
-<span class="sig-name descname"><span class="pre">policy_worker</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.policy.Policy.policy_worker" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.get_version">
+<span class="sig-name descname"><span class="pre">get_version</span></span><a class="headerlink" href="#forge.actors.generator.Generator.get_version" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.lora_request">
+<span class="sig-name descname"><span class="pre">lora_request</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.generator.Generator.lora_request" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.run">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/policy.html#Policy.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.policy.Policy.run" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.run">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/generator.html#Generator.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator.run" title="Link to this definition">#</a></dt>
 <dd><p>Schedule, execute, and make output.
 <a class="github reference external" href="https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276">vllm-project/vllm</a></p>
 <dl class="field-list simple">
@@ -792,86 +797,86 @@ main difference is that all communications are controlled here via Monarch’s p
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.sampling_params">
-<span class="sig-name descname"><span class="pre">sampling_params</span></span><a class="headerlink" href="#forge.actors.policy.Policy.sampling_params" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.sampling_params">
+<span class="sig-name descname"><span class="pre">sampling_params</span></span><a class="headerlink" href="#forge.actors.generator.Generator.sampling_params" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.setup">
-<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.policy.Policy.setup" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.generator.Generator.setup" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.shutdown">
-<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/policy.html#Policy.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.policy.Policy.shutdown" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.shutdown">
+<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/generator.html#Generator.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator.shutdown" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.stop">
-<span class="sig-name descname"><span class="pre">stop</span></span><a class="headerlink" href="#forge.actors.policy.Policy.stop" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.stop">
+<span class="sig-name descname"><span class="pre">stop</span></span><a class="headerlink" href="#forge.actors.generator.Generator.stop" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.tokenization_kwargs">
-<span class="sig-name descname"><span class="pre">tokenization_kwargs</span></span><a class="headerlink" href="#forge.actors.policy.Policy.tokenization_kwargs" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.tokenization_kwargs">
+<span class="sig-name descname"><span class="pre">tokenization_kwargs</span></span><a class="headerlink" href="#forge.actors.generator.Generator.tokenization_kwargs" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.update_weights">
-<span class="sig-name descname"><span class="pre">update_weights</span></span><a class="headerlink" href="#forge.actors.policy.Policy.update_weights" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.update_weights">
+<span class="sig-name descname"><span class="pre">update_weights</span></span><a class="headerlink" href="#forge.actors.generator.Generator.update_weights" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.Policy.use_dcp">
-<span class="sig-name descname"><span class="pre">use_dcp</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.policy.Policy.use_dcp" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.use_dcp">
+<span class="sig-name descname"><span class="pre">use_dcp</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.generator.Generator.use_dcp" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 </section>
-<section id="policyworker">
-<h2>PolicyWorker<a class="headerlink" href="#policyworker" title="Link to this heading">#</a></h2>
+<section id="generatorworker">
+<h2>GeneratorWorker<a class="headerlink" href="#generatorworker" title="Link to this heading">#</a></h2>
 <dl class="py class">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.policy.</span></span><span class="sig-name descname"><span class="pre">PolicyWorker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vllm_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_dict_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'model_state_dict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_dcp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/policy.html#PolicyWorker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.policy.PolicyWorker" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.generator.</span></span><span class="sig-name descname"><span class="pre">GeneratorWorker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vllm_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_dict_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'model_state_dict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_dcp</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/generator.html#GeneratorWorker"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.GeneratorWorker" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="api_actors.html#forge.controller.actor.ForgeActor" title="forge.controller.actor.ForgeActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForgeActor</span></code></a></p>
 <p>Mirrors a vLLM GPUWorker
 <a class="github reference external" href="https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/worker/gpu_worker.py">vllm-project/vllm</a></p>
-<p>In general, this class should not be instantiated or called directly. Rather, the Policy controls
-the creation and invocation of all PolicyWorkers.</p>
+<p>In general, this class should not be instantiated or called directly. Rather, the Generator controls
+the creation and invocation of all GeneratorWorker.</p>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.execute_model">
-<span class="sig-name descname"><span class="pre">execute_model</span></span><a class="headerlink" href="#forge.actors.policy.PolicyWorker.execute_model" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.execute_model">
+<span class="sig-name descname"><span class="pre">execute_model</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.execute_model" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.setup">
-<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.policy.PolicyWorker.setup" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.setup" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.setup_kv_cache">
-<span class="sig-name descname"><span class="pre">setup_kv_cache</span></span><a class="headerlink" href="#forge.actors.policy.PolicyWorker.setup_kv_cache" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.setup_kv_cache">
+<span class="sig-name descname"><span class="pre">setup_kv_cache</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.setup_kv_cache" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.state_dict_key">
-<span class="sig-name descname"><span class="pre">state_dict_key</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'model_state_dict'</span></em><a class="headerlink" href="#forge.actors.policy.PolicyWorker.state_dict_key" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.state_dict_key">
+<span class="sig-name descname"><span class="pre">state_dict_key</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'model_state_dict'</span></em><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.state_dict_key" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.update_weights">
-<span class="sig-name descname"><span class="pre">update_weights</span></span><a class="headerlink" href="#forge.actors.policy.PolicyWorker.update_weights" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.update_weights">
+<span class="sig-name descname"><span class="pre">update_weights</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.update_weights" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.use_dcp">
-<span class="sig-name descname"><span class="pre">use_dcp</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.policy.PolicyWorker.use_dcp" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.use_dcp">
+<span class="sig-name descname"><span class="pre">use_dcp</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.use_dcp" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.policy.PolicyWorker.vllm_config">
-<span class="sig-name descname"><span class="pre">vllm_config</span></span><a class="headerlink" href="#forge.actors.policy.PolicyWorker.vllm_config" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.vllm_config">
+<span class="sig-name descname"><span class="pre">vllm_config</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.vllm_config" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -996,34 +1001,35 @@ the creation and invocation of all PolicyWorkers.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy">Policy</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy"><code class="docutils literal notranslate"><span class="pre">Policy</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.available_devices"><code class="docutils literal notranslate"><span class="pre">Policy.available_devices</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.engine_args"><code class="docutils literal notranslate"><span class="pre">Policy.engine_args</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.generate"><code class="docutils literal notranslate"><span class="pre">Policy.generate</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.lora_request"><code class="docutils literal notranslate"><span class="pre">Policy.lora_request</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.policy_worker"><code class="docutils literal notranslate"><span class="pre">Policy.policy_worker</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.run"><code class="docutils literal notranslate"><span class="pre">Policy.run()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.sampling_params"><code class="docutils literal notranslate"><span class="pre">Policy.sampling_params</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.setup"><code class="docutils literal notranslate"><span class="pre">Policy.setup</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.shutdown"><code class="docutils literal notranslate"><span class="pre">Policy.shutdown()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.stop"><code class="docutils literal notranslate"><span class="pre">Policy.stop</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.tokenization_kwargs"><code class="docutils literal notranslate"><span class="pre">Policy.tokenization_kwargs</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.update_weights"><code class="docutils literal notranslate"><span class="pre">Policy.update_weights</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.Policy.use_dcp"><code class="docutils literal notranslate"><span class="pre">Policy.use_dcp</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Generator</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator"><code class="docutils literal notranslate"><span class="pre">Generator</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.available_devices"><code class="docutils literal notranslate"><span class="pre">Generator.available_devices</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.engine_args"><code class="docutils literal notranslate"><span class="pre">Generator.engine_args</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.generate"><code class="docutils literal notranslate"><span class="pre">Generator.generate</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.generator_worker"><code class="docutils literal notranslate"><span class="pre">Generator.generator_worker</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.get_version"><code class="docutils literal notranslate"><span class="pre">Generator.get_version</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.lora_request"><code class="docutils literal notranslate"><span class="pre">Generator.lora_request</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.run"><code class="docutils literal notranslate"><span class="pre">Generator.run()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.sampling_params"><code class="docutils literal notranslate"><span class="pre">Generator.sampling_params</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.setup"><code class="docutils literal notranslate"><span class="pre">Generator.setup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.shutdown"><code class="docutils literal notranslate"><span class="pre">Generator.shutdown()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.stop"><code class="docutils literal notranslate"><span class="pre">Generator.stop</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.tokenization_kwargs"><code class="docutils literal notranslate"><span class="pre">Generator.tokenization_kwargs</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.update_weights"><code class="docutils literal notranslate"><span class="pre">Generator.update_weights</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.use_dcp"><code class="docutils literal notranslate"><span class="pre">Generator.use_dcp</span></code></a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policyworker">PolicyWorker</a><ul class="visible nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker"><code class="docutils literal notranslate"><span class="pre">PolicyWorker</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.execute_model"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.execute_model</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.setup"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.setup</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.setup_kv_cache"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.setup_kv_cache</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.state_dict_key"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.state_dict_key</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.update_weights"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.update_weights</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.use_dcp"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.use_dcp</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.policy.PolicyWorker.vllm_config"><code class="docutils literal notranslate"><span class="pre">PolicyWorker.vllm_config</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generatorworker">GeneratorWorker</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.execute_model"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.execute_model</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.setup"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.setup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.setup_kv_cache"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.setup_kv_cache</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.state_dict_key"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.state_dict_key</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.update_weights"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.update_weights</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.use_dcp"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.use_dcp</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.vllm_config"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.vllm_config</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1162,7 +1168,7 @@ the creation and invocation of all PolicyWorkers.</p>
        "headline": "Generator",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api_generator.html",
-       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Policy# class forge.actors.policy.Policy(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, available_devices=None, use_dcp=True, lora_request=None, tokenization_kwargs=\u003cfactory\u003e, policy_worker=None)[source]# Instance of a vLLM-based Policy. This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The main difference is that all communications are controlled here via Monarch\u2019s proc meshes. Parameters: engine_args (EngineArgs) \u2013 The engine arguments to use for the vLLM engine. sampling_params (SamplingParams) \u2013 The sampling parameters to use for the vLLM engine. available_devices (str) \u2013 The available devices to use for the vLLM engine. use_dcp (bool) \u2013 Whether to use DCP for NFS-based weight sync. Example: \u003e\u003e\u003e policy = await Policy.options(procs=1, num_replicas=1, with_gpus=True).as_service( ... engine_args=EngineArgs(...), ... sampling_params=SamplingParams(...), ... ) \u003e\u003e\u003e await policy.generate(\"Tell me a joke\") Completion(prompt=\"Tell me a joke\", text=\"A: Why did the chicken cross the road? B: To get to the other side.\", token_ids=[...], logprobs=[...]) \u003e\u003e\u003e await policy.shutdown() available_devices = None# engine_args# generate# lora_request = None# policy_worker = None# async run()[source]# Schedule, execute, and make output. vllm-project/vllm Return type: None sampling_params# setup# async classmethod shutdown(actor)[source]# stop# tokenization_kwargs# update_weights# use_dcp = True# PolicyWorker# class forge.actors.policy.PolicyWorker(vllm_config, state_dict_key=\u0027model_state_dict\u0027, use_dcp=True)[source]# Bases: ForgeActor Mirrors a vLLM GPUWorker vllm-project/vllm In general, this class should not be instantiated or called directly. Rather, the Policy controls the creation and invocation of all PolicyWorkers. execute_model# setup# setup_kv_cache# state_dict_key = \u0027model_state_dict\u0027# update_weights# use_dcp = True# vllm_config#",
+       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Generator# class forge.actors.generator.Generator(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, available_devices=None, use_dcp=True, lora_request=None, tokenization_kwargs=\u003cfactory\u003e, generator_worker=None)[source]# Instance of a vLLM-based Generator. This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The main difference is that all communications are controlled here via Monarch\u2019s proc meshes. Parameters: engine_args (EngineArgs) \u2013 The engine arguments to use for the vLLM engine. sampling_params (SamplingParams) \u2013 The sampling parameters to use for the vLLM engine. available_devices (str) \u2013 The available devices to use for the vLLM engine. use_dcp (bool) \u2013 Whether to use DCP for NFS-based weight sync. Example: \u003e\u003e\u003e generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service( ... engine_args=EngineArgs(...), ... sampling_params=SamplingParams(...), ... ) \u003e\u003e\u003e await generator.generate(\"Tell me a joke\") Completion(prompt=\"Tell me a joke\", text=\"A: Why did the chicken cross the road? B: To get to the other side.\", token_ids=[...], logprobs=[...]) \u003e\u003e\u003e await generator.shutdown() available_devices = None# engine_args# generate# generator_worker = None# get_version# lora_request = None# async run()[source]# Schedule, execute, and make output. vllm-project/vllm Return type: None sampling_params# setup# async classmethod shutdown(actor)[source]# stop# tokenization_kwargs# update_weights# use_dcp = True# GeneratorWorker# class forge.actors.generator.GeneratorWorker(vllm_config, state_dict_key=\u0027model_state_dict\u0027, use_dcp=True)[source]# Bases: ForgeActor Mirrors a vLLM GPUWorker vllm-project/vllm In general, this class should not be instantiated or called directly. Rather, the Generator controls the creation and invocation of all GeneratorWorker. execute_model# setup# setup_kv_cache# state_dict_key = \u0027model_state_dict\u0027# update_weights# use_dcp = True# vllm_config#",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

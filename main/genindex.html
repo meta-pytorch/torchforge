@@ -686,7 +686,7 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.async_mode">async_mode (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.available_devices">available_devices (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.available_devices">available_devices (forge.actors.generator.Generator attribute)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -790,13 +790,13 @@ document.write(`
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.engine_args">engine_args (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.engine_args">engine_args (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Optimizer.eps">eps (torchtitan.config.job_config.Optimizer attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.exclude_from_loading">exclude_from_loading (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.execute_model">execute_model (forge.actors.policy.PolicyWorker attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.execute_model">execute_model (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.expert_parallel_degree">expert_parallel_degree (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
@@ -834,13 +834,21 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.gc_freq">gc_freq (torchtitan.config.job_config.Training attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.generate">generate (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.generate">generate (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator">Generator (class in forge.actors.generator)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.generator_worker">generator_worker (forge.actors.generator.Generator attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker">GeneratorWorker (class in forge.actors.generator)</a>
+</li>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics">get_metrics() (forge.controller.service.service.Service method)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics_summary">get_metrics_summary() (forge.controller.service.service.Service method)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.get_version">get_version (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.global_batch_size">global_batch_size (torchtitan.config.job_config.Training attribute)</a>
 </li>
@@ -912,7 +920,7 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.local_batch_size">local_batch_size (torchtitan.config.job_config.Training attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.lora_request">lora_request (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.lora_request">lora_request (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.loss">loss() (forge.actors.trainer.RLTrainer method)</a>
 </li>
@@ -1000,21 +1008,15 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_layers_per_stage">pipeline_parallel_layers_per_stage (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size">pipeline_parallel_microbatch_size (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule">pipeline_parallel_schedule (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv">pipeline_parallel_schedule_csv (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_split_points">pipeline_parallel_split_points (torchtitan.config.job_config.Parallelism attribute)</a>
-</li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy">Policy (class in forge.actors.policy)</a>
-</li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.policy_worker">policy_worker (forge.actors.policy.Policy attribute)</a>
-</li>
-      <li><a href="api_generator.html#forge.actors.policy.PolicyWorker">PolicyWorker (class in forge.actors.policy)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.print_after_conversion">print_after_conversion (torchtitan.config.job_config.Model attribute)</a>
 </li>
@@ -1044,7 +1046,7 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer">RLTrainer (class in forge.actors.trainer)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.run">run() (forge.actors.policy.Policy method)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.run">run() (forge.actors.generator.Generator method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -1052,7 +1054,7 @@ document.write(`
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.sampling_params">sampling_params (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.sampling_params">sampling_params (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.seed">seed (torchtitan.config.job_config.Training attribute)</a>
 </li>
@@ -1060,10 +1062,10 @@ document.write(`
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service">Service (class in forge.controller.service.service)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.setup">setup (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.setup">setup (forge.actors.generator.Generator attribute)</a>
 
       <ul>
-        <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.setup">(forge.actors.policy.PolicyWorker attribute)</a>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.setup">(forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
         <li><a href="api_model.html#forge.actors.reference_model.ReferenceModel.setup">(forge.actors.reference_model.ReferenceModel attribute)</a>
 </li>
@@ -1072,9 +1074,9 @@ document.write(`
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.setup_kv_cache">setup_kv_cache (forge.actors.policy.PolicyWorker attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.setup_kv_cache">setup_kv_cache (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.shutdown">shutdown() (forge.actors.policy.Policy class method)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.shutdown">shutdown() (forge.actors.generator.Generator class method)</a>
 
       <ul>
         <li><a href="api_actors.html#forge.controller.actor.ForgeActor.shutdown">(forge.controller.actor.ForgeActor class method)</a>
@@ -1082,7 +1084,7 @@ document.write(`
       </ul></li>
       <li><a href="api_service.html#forge.controller.service.service.Service.start_session">start_session() (forge.controller.service.service.Service method)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.state_dict_key">state_dict_key (forge.actors.policy.PolicyWorker attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.state_dict_key">state_dict_key (forge.actors.generator.GeneratorWorker attribute)</a>
 
       <ul>
         <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.state_dict_key">(forge.actors.trainer.RLTrainer attribute)</a>
@@ -1090,7 +1092,7 @@ document.write(`
       </ul></li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.steps">steps (torchtitan.config.job_config.Training attribute)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.stop">stop (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.stop">stop (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.stop">stop() (forge.controller.service.service.Service method)</a>
 </li>
@@ -1104,7 +1106,7 @@ document.write(`
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.terminate_session">terminate_session() (forge.controller.service.service.Service method)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.tokenization_kwargs">tokenization_kwargs (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.tokenization_kwargs">tokenization_kwargs (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.tokenizer_path">tokenizer_path (torchtitan.config.job_config.Model attribute)</a>
 </li>
@@ -1126,18 +1128,18 @@ document.write(`
 <h2 id="U">U</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.update_weights">update_weights (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.update_weights">update_weights (forge.actors.generator.Generator attribute)</a>
 
       <ul>
-        <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.update_weights">(forge.actors.policy.PolicyWorker attribute)</a>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.update_weights">(forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.Policy.use_dcp">use_dcp (forge.actors.policy.Policy attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.use_dcp">use_dcp (forge.actors.generator.Generator attribute)</a>
 
       <ul>
-        <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.use_dcp">(forge.actors.policy.PolicyWorker attribute)</a>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.use_dcp">(forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
         <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.use_dcp">(forge.actors.trainer.RLTrainer attribute)</a>
 </li>
@@ -1148,7 +1150,7 @@ document.write(`
 <h2 id="V">V</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.policy.PolicyWorker.vllm_config">vllm_config (forge.actors.policy.PolicyWorker attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.vllm_config">vllm_config (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
   </ul></td>
 </tr></table>
