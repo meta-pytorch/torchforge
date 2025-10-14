@@ -246,6 +246,16 @@ class Policy(PolicyInterface):
 
     @endpoint
     async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
+        """Endpoint version of _generate
+
+        This is an anti-pattern wrapper to enable calling endpoints annotated functions
+        within an actor. This is a temporary solution
+
+        Issue in Monarch: https://github.com/meta-pytorch/monarch/issues/1455
+        """
+        return await self._generate(prompt, priority)
+
+    async def _generate(self, prompt: str, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:

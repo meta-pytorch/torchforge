@@ -1,0 +1,19 @@
+# Judge configuration
+judge:
+  engine_args:
+    model: "Qwen/Qwen3-4B-Thinking-2507"
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: false
+  sampling_params:
+    n: 1
+    max_tokens: 1024
+    temperature: 0.0
+    top_p: 0.95
+    presence_penalty: 2
+
+services:
+  judge:
+      procs: ${judge.engine_args.tensor_parallel_size}
+      num_replicas: 1
+      with_gpus: true
