@@ -460,7 +460,7 @@ class Policy(PolicyInterface):
             t = Tracer("policy_perf/_waiting_for_fetch_weights")
             t.start()
             fetched_weights = await fetch_task
-            t.end()
+            t.stop()
             await self.policy_worker.update_weights.call(
                 shared_memory_state_dict=fetched_weigths
             )
