@@ -211,7 +211,7 @@ class MastLauncher(BaseLauncher):
         self.sku = "gtt_any"
         self.timeout_sec = 1 * 60 * 60  # Kill the job if idle for 1 hour
         self.user = getpass.getuser()
-        self.work_dir = f"/data/users/{self.user}"
+        self.work_dir = f"/home/{self.user}"
         self.edittable_workspaces = ["forge"]
         self.remote_work_dir = "/packages/monarch_default_workspace/workspace/"
         self.editable_workspace_paths = [
@@ -355,14 +355,21 @@ class MastLauncher(BaseLauncher):
 
         # Override with client-specific configuration
         client_role.name = "client"
-        client_role.entrypoint = (
-            "source $CONDA_DIR/bin/activate && python .meta/mast/main.py"
-        )
-        client_role.args = [
+        # Use the bootstrap script as entrypoint
+        client_role.entrypoint = "workspace/forge/.meta/mast/client_bootstrap.sh"
+
+        # Build args for the client role (passed to the bootstrap script)
+        # These args will be passed to client_bootstrap.sh which forwards them to main.py
+        args = [
             "--mode=remote",
-            "--config={self.config_file}",
+            "--config",
+            self.config_file,
+            "--job-name",
+            self.job_name,
         ]
+        client_role.args = args
         client_role.num_replicas = 1
+
         return client_role
 
     def create_job_name(self):
