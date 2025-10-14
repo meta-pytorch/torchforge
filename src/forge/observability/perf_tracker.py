@@ -3,20 +3,21 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+
 import inspect
 import logging
-import os
 import threading
 import time
-
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
-from typing import List, Optional, Protocol, Tuple
+from typing import Protocol
 
 import torch
 
-from forge.env_constants import DISABLE_PERF_METRICS, METRIC_TIMER_USES_CUDA
-from forge.observability.metrics import record_metric, ReductionType
+from forge.env import DISABLE_PERF_METRICS, FORGE_DISABLE_METRICS, METRIC_TIMER_USES_GPU
+from forge.observability.metrics import record_metric, Reduce
+
+logger = logging.getLogger(__name__)
 
 # Thread-local memory tracking state
 _local = threading.local()
@@ -44,7 +45,6 @@ def _warn_nested_memory_tracking(prefix: str) -> None:
 
 """
 
-
 class Tracer:
 ==========
 """
@@ -62,16 +62,15 @@ class Tracer:
     Supports reuse: after calling stop(), you may call start() again to begin a new timing session.
 
     Local env flag DISABLE_PERF_METRICS can be used to skip all timing operations.
-    Local env flag METRIC_TIMER_USES_CUDA can be used to set CUDA timing.
+    Local env flag METRIC_TIMER_USES_GPU can be used to set CUDA timing.
 
     Args:
         prefix (str): Prefix for metric names, e.g. "my_prefix" -> "{my_prefix}/{step_name}/duration_avg_s".
-        track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        time_with_gpu (bool): Sets CUDA timing if True and CUDA is available.
+        timer (str): Timing backend; "cpu" (default) or "gpu".
 
     Example:
-        tracer = Tracer("my_prefix", track_memory=True)
+        tracer = Tracer("my_prefix", track_memory=True, timer="gpu")
         tracer.start()  # Memory tracking starts here
         time.sleep(0.1)  # Work for step "a"
         tracer.step("my_step_a")  # Only affects timing
@@ -99,19 +98,22 @@ class Tracer:
     def __init__(
         self,
         prefix: str,
-        track_time: bool = True,
         track_memory: bool = False,
-        time_with_gpu: bool = False,
+        timer: str = "cpu",  # "cpu" or "gpu"
     ):
+        if timer not in ("cpu", "gpu"):
+            raise ValueError('timer must be "cpu" or "gpu"')
+
         self.prefix = prefix
-        self.track_time = track_time
         self.track_memory = track_memory
-        self.time_with_gpu = time_with_gpu
-        self._disable = os.getenv(DISABLE_PERF_METRICS, "false") == "true"
+        self.time_with_gpu = timer == "gpu"
+        self._disable = (
+            DISABLE_PERF_METRICS.get_value() or FORGE_DISABLE_METRICS.get_value()
+        )
         self._active = False
 
         # Timing state
-        self._timer: Optional[_TimerProtocol] = None
+        self._timer: _TimerProtocol | None = None
 
         # Memory tracking state
         self._memory_started = False
@@ -123,17 +125,25 @@ class Tracer:
         if self._active:
             raise ValueError("Tracer has already been started")
 
-        self._active = True
+        # Start timing (always enabled)
 
-        # Start timing
-        if self.track_time:
-            time_with_gpu_events = (
-                os.getenv(METRIC_TIMER_USES_CUDA, str(self.time_with_gpu)).lower()
-                == "true"
-            ) and torch.cuda.is_available()
-            use_cpu = not time_with_gpu_events
-            self._timer = _TimerCPU() if use_cpu else _TimerCUDA()
-            self._timer.start()
+        # TODO - follow up on if this env var behavior makes sense.
+        # METRIC_TIMER_USES_GPU env var overrides the timer parameter
+        metric_timer_uses_gpu = METRIC_TIMER_USES_GPU.get_value()
+        if metric_timer_uses_gpu is not None:
+            # Env var is set - convert string to bool if needed
+            if isinstance(metric_timer_uses_gpu, str):
+                use_gpu = metric_timer_uses_gpu.lower() in ("true", "1", "yes")
+            else:
+                use_gpu = bool(metric_timer_uses_gpu)
+        else:
+            # Env var not set - use the timer parameter
+            use_gpu = self.time_with_gpu
+        time_with_gpu_events = use_gpu and torch.cuda.is_available()
+        self._timer = _TimerCUDA() if time_with_gpu_events else _TimerCPU()
+        self._timer.start()
+
+        self._active = True
 
         # Start memory tracking
         if self.track_memory:
@@ -145,8 +155,7 @@ class Tracer:
             return
         if not self._active:
             raise ValueError("Tracer must be started before calling step")
-        if self._timer:
-            self._timer.step(step_name)
+        self._timer.step(step_name)  # pyre-ignore
 
     def stop(self) -> None:
         if self._disable:
@@ -155,10 +164,9 @@ class Tracer:
             raise ValueError("Tracer must be started before calling stop")
 
         # Stop timing
-        if self._timer:
-            self._timer.step("end")  # dropped from steps, included in total
-            self._record_timing_metrics()
-            self._timer = None
+        durations, stop_step_ms = self._timer.get_all_durations()  # pyre-ignore
+        self._record_timing_metrics(durations, stop_step_ms)
+        self._timer = None
 
         # Stop memory tracking
         if self._memory_started:
@@ -190,33 +198,25 @@ class Tracer:
         delta = (end_mem - self._start_mem) / 1024**3
         peak_mem = torch.cuda.max_memory_allocated() / 1024**3
         record_metric(
-            f"{self.prefix}/memory_delta_end_start_avg_gb", delta, ReductionType.MEAN
+            f"{self.prefix}/memory_delta_end_start_avg_gb", delta, Reduce.MEAN
         )
-        record_metric(f"{self.prefix}/memory_peak_max_gb", peak_mem, ReductionType.MAX)
+        record_metric(f"{self.prefix}/memory_peak_max_gb", peak_mem, Reduce.MAX)
         _set_memory_active(False)
         torch.cuda.reset_max_memory_allocated()
         self._memory_started = False
 
-    def _record_timing_metrics(self) -> None:
-        durations = self._timer.get_all_durations()
-
-        # Total: sum all recorded durations (full timeline including end)
-        total_ms = sum(d_ms for name, d_ms in durations)
+    def _record_timing_metrics(
+        self, durations: list[tuple[str, float]], stop_step_ms: float
+    ) -> None:
+        total_ms = sum(d_ms for _, d_ms in durations) + stop_step_ms
         total_s = total_ms / 1000.0
-        record_metric(
-            f"{self.prefix}/total_duration_avg_s", total_s, ReductionType.MEAN
-        )
-        record_metric(f"{self.prefix}/total_duration_max_s", total_s, ReductionType.MAX)
+        record_metric(f"{self.prefix}/total_duration_avg_s", total_s, Reduce.MEAN)
+        record_metric(f"{self.prefix}/total_duration_max_s", total_s, Reduce.MAX)
 
-        # Steps: record each individually (drop last "end")
-        for name, d_ms in durations[:-1]:
+        for name, d_ms in durations:
             d_s = d_ms / 1000.0
-            record_metric(
-                f"{self.prefix}/{name}/duration_avg_s", d_s, ReductionType.MEAN
-            )
-            record_metric(
-                f"{self.prefix}/{name}/duration_max_s", d_s, ReductionType.MAX
-            )
+            record_metric(f"{self.prefix}/{name}/duration_avg_s", d_s, Reduce.MEAN)
+            record_metric(f"{self.prefix}/{name}/duration_max_s", d_s, Reduce.MAX)
 
 
 class _TimerProtocol(Protocol):
@@ -226,7 +226,7 @@ class _TimerProtocol(Protocol):
     def step(self, name: str) -> None:
         ...
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
         ...
 
 
@@ -236,8 +236,8 @@ class _TimerCPU(_TimerProtocol):
     """
 
     def __init__(self) -> None:
-        self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[float] = None
+        self._durations: list[tuple[str, float]] = []
+        self._chain_start: float | None = None
 
     def start(self) -> None:
         # Reset state for reuse
@@ -252,24 +252,38 @@ class _TimerCPU(_TimerProtocol):
         self._durations.append((name, delta_ms))
         self._chain_start = now
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
-        return self._durations[:]
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
+        """Retrieve list of (step_name, duration) tuples and last step duration
+        between tracer.stop and the last step (or start if none)."""
+        stop_step_ms = 0.0
+        if self._chain_start is not None:
+            now = time.perf_counter()
+            stop_step_ms = (now - self._chain_start) * 1000
+        return self._durations[:], stop_step_ms
 
 
 class _TimerCUDA(_TimerProtocol):
     """CUDA timing backend with non-blocking events and futures.
     Uses a thread pool to poll CUDA events asynchronously without blocking the main thread.
+
+    Example:
+        timer = _TimerCUDA()
+        timer.start()
+        # torch.mm(a, b)  # ~100ms GPU
+        timer.step("matmul")
+        # torch.mm(c, d)  # ~200ms
+        durs_steps, stop_step_ms = timer.get_all_durations()  # ([( "matmul", 100 )], 200)
     """
 
     def __init__(self, max_workers: int = 2) -> None:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available for timing")
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self._futures: List[
-            Tuple[str, Future[float], int]
+        self._futures: list[
+            tuple[str, Future[float], int]
         ] = []  # (name, future, submission_index)
-        self._durations: List[Tuple[str, float]] = []
-        self._chain_start: Optional[torch.cuda.Event] = None
+        self._durations: list[tuple[str, float]] = []
+        self._chain_start: torch.cuda.Event | None = None
 
     def start(self) -> None:
         """Call before any steps. Clear state for reuse; record initial event on current stream."""
@@ -287,7 +301,6 @@ class _TimerCUDA(_TimerProtocol):
         Args:
             name: Label for this segment's duration
         """
-        # Submit polling future; chain to next event.
         if self._chain_start is None:
             raise ValueError("Timer must be started before calling step")
 
@@ -295,66 +308,63 @@ class _TimerCUDA(_TimerProtocol):
         end_event = torch.cuda.Event(enable_timing=True)
         end_event.record(stream)
 
-        def _compute_elapsed(start_event, end_event):
-            # Poll with backoff: starts fast (1ms), grows to cap (50ms) for mixed workloads.
-            sleep_time = 0.001  # Start at 1ms
-            while not end_event.query():
-                time.sleep(sleep_time)
-                sleep_time = min(sleep_time * 1.5, 0.05)  # Backoff, cap at 50ms
-            return start_event.elapsed_time(end_event)
-
-        future = self._executor.submit(_compute_elapsed, self._chain_start, end_event)
+        future = self._executor.submit(self._poll_elapsed, self._chain_start, end_event)
         index = len(self._futures)
         self._futures.append((name, future, index))
-
-        if len(self._futures) >= 20:  # clean up every 20 to avoid memory leak
+        if len(self._futures) >= 5:  # clean up every 5
             self._collect_completed_futures()
 
         self._chain_start = end_event
 
-    def _collect_completed_futures(self) -> None:
+    def _poll_elapsed(
+        self, start_event: torch.cuda.Event, end_event: torch.cuda.Event
+    ) -> float:
+        """Compute elapsed time after polling with backoff."""
+        # Poll until ready
+        sleep_time = 0.001  # Start at 1ms
+        while not end_event.query():
+            time.sleep(sleep_time)
+            sleep_time = min(sleep_time * 1.5, 0.05)  # Backoff, cap at 50ms
+        return start_event.elapsed_time(end_event)
+
+    def _collect_completed_futures(self, wait_till_done: bool = False) -> None:
         """Drain done futures to avoid memory leak; update durations in submission order."""
-        completed = []
         still_pending = []
         for name, future, idx in self._futures:
-            if future.done():
-                try:
-                    dur = future.result()
-                    completed.append((idx, name, dur))
-                except Exception as e:
-                    raise RuntimeError(f"Timing failed for {name}: {e}") from e
+            if future.done() or wait_till_done:
+                dur = future.result()
+                self._durations.append((name, dur))
             else:
                 still_pending.append((name, future, idx))
 
-        # Sort completed by submission index to preserve order
-        completed.sort(key=lambda x: x[0])
-        for _, name, dur in completed:
-            self._durations.append((name, dur))
-
         self._futures = still_pending
 
-    def get_all_durations(self) -> List[Tuple[str, float]]:
-        """Retrieve list of (name, duration) tuples in submission order after waiting for background polls to finish."""
-        # Wait and collect if pendings; return durations.
-        self._collect_completed_futures()
-        completed = []
-        for name, future, idx in self._futures:
-            try:
-                dur = future.result()
-                completed.append((idx, name, dur))
-            except Exception as e:
-                raise RuntimeError(f"Timing failed for {name}: {e}") from e
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
+        """Retrieve list of (step_name, duration) tuples and last step duration
+        between tracer.stop and the last step (or start if none). Order of tuples is random.
+        """
+        # Final timing since last step (or start) until this function is called
+        stop_step = f"_stop_step_{id(self)}"
+        self.step(stop_step)
 
-        # Sort by submission index to preserve order
-        completed.sort(key=lambda x: x[0])
-        for _, name, dur in completed:
-            self._durations.append((name, dur))
-
+        # Wait on remaining futures
+        self._collect_completed_futures(wait_till_done=True)
         self._futures.clear()
-        return self._durations[:]
+
+        # Extract stop_step_ms
+        stop_step_ms = 0.0
+        durations = [
+            (name, duration) for name, duration in self._durations if name != stop_step
+        ]
+        for name, duration in self._durations:
+            if name == stop_step:
+                stop_step_ms = duration
+                break
+
+        return durations, stop_step_ms
 
     def __del__(self) -> None:
-        # Fallback cleanup in finalizer; ignores errors to avoid shutdown noise.
+        # Fallback cleanup in finalizer
         try:
             self._executor.shutdown(wait=True)
         except Exception:
@@ -370,9 +380,8 @@ Memory+timer as decorator / ctx manager
 
 def trace(
     prefix: str,
-    track_time: bool = True,
     track_memory: bool = False,
-    time_with_gpu: bool = False,
+    timer: str = "cpu",  # "cpu" or "gpu"
 ):
     """
     Dual-purpose: Decorator or context manager for performance tracking.
@@ -383,27 +392,28 @@ def trace(
 
     Args:
         prefix (str): Prefix for metric names
-        track_time (bool): Whether to track execution time. Defaults to True.
         track_memory (bool): Whether to track CUDA memory usage. Defaults to False.
-        time_with_gpu (bool): Whether to use CUDA events for timing. Defaults to False.
+        timer (str): Timing backend; "cpu" (default) or "gpu" (requires CUDA).
 
     Decorator Examples:
-        @trace("my_prefix", track_time=True, track_memory=True)
+        @trace("my_prefix", track_memory=True, timer="gpu")
         async def my_async_func():
             pass
 
-        @trace("my_prefix", track_time=True, track_memory=True)
+        @trace("my_prefix", track_memory=True, timer="gpu")
         def my_sync_func():
             pass
 
     Context Manager Example:
-        with trace("my_block", track_time=True, track_memory=True) as tracer:
+        with trace("my_block", track_memory=True, timer="gpu") as tracer:
             tracer.step("fwd")  # Optional: mark steps
             await some_task()
             tracer.step("bwd")  # Optional
             some_other_task()
             # tracer.stop() called automatically on exit
     """
+    if timer not in ("cpu", "gpu"):
+        raise ValueError('timer must be "cpu" or "gpu"')
 
     class _Dual:
         def __call__(self, func):
@@ -412,7 +422,7 @@ def trace(
 
                 @wraps(func)
                 async def async_wrapper(*args, **kwargs):
-                    tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+                    tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
                     tracer.start()
                     try:
                         return await func(*args, **kwargs)
@@ -424,7 +434,7 @@ def trace(
 
                 @wraps(func)
                 def sync_wrapper(*args, **kwargs):
-                    tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+                    tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
                     tracer.start()
                     try:
                         return func(*args, **kwargs)
@@ -435,7 +445,7 @@ def trace(
 
         def __enter__(self):
             """Context manager mode: Return Tracer for steps"""
-            self._tracer = Tracer(prefix, track_time, track_memory, time_with_gpu)
+            self._tracer = Tracer(prefix, track_memory=track_memory, timer=timer)
             self._tracer.start()
             return self._tracer
 

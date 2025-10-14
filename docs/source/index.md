@@ -231,10 +231,8 @@ Before starting significant work, signal your intention in the issue tracker to 
 
 getting_started
 concepts
-usage
 tutorials
 api
-faq
 ```
 
 ## Indices

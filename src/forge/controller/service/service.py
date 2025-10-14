@@ -36,7 +36,6 @@ import asyncio
 import logging
 import pprint
 import uuid
-from typing import Dict, List
 
 from monarch.actor import Actor, endpoint
 
@@ -68,13 +67,6 @@ class Service:
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(
@@ -92,7 +84,7 @@ class Service:
 
         self._active_sessions = []
         self._id_session_map = {}
-        self._session_replica_map: Dict[str, int] = {}
+        self._session_replica_map: dict[str, int] = {}
 
         # Initialize metrics collection
         self._metrics = ServiceMetrics()
@@ -196,7 +188,7 @@ class Service:
                 )
             raise
 
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def call_all(self, function: str, *args, **kwargs) -> list:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 
@@ -486,6 +478,10 @@ class Service:
         )
 
     async def stop(self):
+        """
+        Stops the service and all managed replicas.
+        This method should be called when the service is no longer needed.
+        """
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
         self._shutdown_requested = True
@@ -605,12 +601,6 @@ class ServiceActor(Actor):
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):
@@ -622,7 +612,7 @@ class ServiceActor(Actor):
 
         self._active_sessions = []
         self._id_session_map = {}
-        self._session_replica_map: Dict[str, int] = {}
+        self._session_replica_map: dict[str, int] = {}
         self._next_replica_idx = 0  # For round-robin load balancing
 
         # Initialize metrics collection
@@ -726,7 +716,7 @@ class ServiceActor(Actor):
             raise
 
     @endpoint
-    async def call_all(self, function: str, *args, **kwargs) -> List:
+    async def call_all(self, function: str, *args, **kwargs) -> list:
         """
         Broadcasts a function call to all healthy replicas and returns results as a list.
 

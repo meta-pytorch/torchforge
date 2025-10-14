@@ -12,7 +12,7 @@ from typing import Any, Type, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.proc_mesh import get_proc_mesh, stop_proc_mesh
+from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -22,10 +22,36 @@ T = TypeVar("T", bound="ForgeActor")
 
 
 class ForgeActor(Actor):
+    """
+    Base class for Forge actors with configurable resource attributes.
+
+    The initialization sets up logging configuration with rank/size information and
+    initializes the actor's process mesh reference. The rank and size are automatically
+    determined from the current execution context.
+
+    Args:
+        *args: Variable length argument list passed to the parent Actor class.
+        **kwargs: Arbitrary keyword arguments passed to the parent Actor class.
+    """
+
     procs: int = 1
+    """Number of processes to use for this actor. Defaults to 1."""
+
     hosts: int | None = None
+    """Number of hosts to distribute the actor across. If None, uses as many
+    hosts as needed to accommodate the requested processes. Defaults to None."""
+
     with_gpus: bool = False
+    """Whether to allocate GPU resources for this actor. Defaults to False."""
+
     num_replicas: int = 1
+    """Number of replicas to create when spawning as a service.
+    Only applies when using as_service(). Defaults to 1."""
+
+    mesh_name: str | None = None
+    """Optional name for the process mesh used by this actor.
+    If None, a default name will be generated. Defaults to None."""
+
     _extra_config: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):
@@ -58,6 +84,7 @@ class ForgeActor(Actor):
         hosts: int | None = None,
         with_gpus: bool = False,
         num_replicas: int = 1,
+        mesh_name: str | None = None,
         **kwargs,
     ) -> Type[T]:
         """
@@ -67,23 +94,35 @@ class ForgeActor(Actor):
         `.as_actor()` or `.as_service()`. Each call creates a separate subclass, so
         multiple different configurations can coexist without interfering with each other.
 
-        ---- Usage Examples ----
+        Examples:
 
-        # Pre-configure a service with multiple replicas
-        service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
-        await service.shutdown()
+        * Pre-configure a service with multiple replicas:
 
-        # Default usage without calling options
-        service = await MyForgeActor.as_service(...)
-        await service.shutdown()
+          .. code-block:: python
 
-        # Pre-configure a single actor
-        actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
-        await actor.shutdown()
+             service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...)
+             await service.shutdown()
 
-        # Default usage without calling options
-        actor = await MyForgeActor.as_actor(...)
-        await actor.shutdown()
+        * Default usage without calling options:
+
+          .. code-block:: python
+
+             service = await MyForgeActor.as_service(...)
+             await service.shutdown()
+
+        * Pre-configure a single actor
+
+          .. code-block:: python
+
+             actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...)
+             await actor.shutdown()
+
+        * Default usage without calling options
+
+          .. code-block:: python
+
+             actor = await MyForgeActor.as_actor(...)
+             await actor.shutdown()
         """
 
         attrs = {
@@ -91,6 +130,7 @@ class ForgeActor(Actor):
             "hosts": hosts,
             "with_gpus": with_gpus,
             "num_replicas": num_replicas,
+            "mesh_name": mesh_name,
             "_extra_config": kwargs,
         }
 
@@ -116,11 +156,12 @@ class ForgeActor(Actor):
             "hosts": cls.hosts,
             "with_gpus": cls.with_gpus,
             "num_replicas": cls.num_replicas,
+            "mesh_name": cls.mesh_name,
             **cls._extra_config,  # all extra fields
         }
         cfg = ServiceConfig(**cfg_kwargs)
 
-        logger.info("Spawning Service Actor for %s", cls.__name__)
+        logger.info("Spawning Service for %s", cls.__name__)
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         return ServiceInterface(service, cls)
@@ -139,28 +180,6 @@ class ForgeActor(Actor):
 
         """
         pass
-
-    @endpoint
-    async def set_env(self, addr: str, port: str):
-        """A temporary workaround to set master addr/port.
-
-        TODO - issues/144. This should be done in proc_mesh creation.
-        The ideal path:
-        - Create a host mesh
-        - Grab a host from host mesh, from proc 0 spawn an actor that
-          gets addr/port
-        - Spawn procs on the HostMesh with addr/port, setting the
-          addr/port in bootstrap.
-
-        We can't currently do this because HostMesh only supports single
-        proc_mesh creation at the moment. This will be possible once
-        we have "proper HostMesh support".
-
-        """
-        import os
-
-        os.environ["MASTER_ADDR"] = addr
-        os.environ["MASTER_PORT"] = port
 
     @classmethod
     async def launch(cls, *args, **kwargs) -> "ForgeActor":
@@ -181,17 +200,14 @@ class ForgeActor(Actor):
             procs=cls.procs,
             hosts=cls.hosts,
             with_gpus=cls.with_gpus,
+            mesh_name=cls.mesh_name,
         )
 
         proc_mesh = await get_proc_mesh(process_config=cfg)
 
         actor_name = kwargs.pop("name", cls.__name__)
-        actor = await proc_mesh.spawn(actor_name, cls, *args, **kwargs)
+        actor = proc_mesh.spawn(actor_name, cls, *args, **kwargs)
         actor._proc_mesh = proc_mesh
-
-        if hasattr(proc_mesh, "_hostname") and hasattr(proc_mesh, "_port"):
-            host, port = proc_mesh._hostname, proc_mesh._port
-            await actor.set_env.call(addr=host, port=port)
         await actor.setup.call()
         return actor
 

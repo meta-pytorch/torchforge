@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 #!/bin/bash
 set -euo pipefail
 
@@ -8,12 +14,39 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Source version configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+
+if [ ! -f "$VERSIONS_FILE" ]; then
+    echo -e "${RED}[ERROR]${NC} Versions file not found: $VERSIONS_FILE"
+    exit 1
+fi
+
+source "$VERSIONS_FILE"
+
+# Validate required variables are set
+validate_versions() {
+    local missing_vars=()
+
+    [ -z "${PYTORCH_VERSION:-}" ] && missing_vars+=("PYTORCH_VERSION")
+    [ -z "${VLLM_BRANCH:-}" ] && missing_vars+=("VLLM_BRANCH")
+    [ -z "${MONARCH_COMMIT:-}" ] && missing_vars+=("MONARCH_COMMIT")
+    [ -z "${TORCHTITAN_COMMIT:-}" ] && missing_vars+=("TORCHTITAN_COMMIT")
+    [ -z "${TORCHSTORE_COMMIT:-}" ] && missing_vars+=("TORCHSTORE_COMMIT")
+
+    if [ ${#missing_vars[@]} -gt 0 ]; then
+        echo -e "${RED}[ERROR]${NC} Missing required variables in $VERSIONS_FILE:"
+        for var in "${missing_vars[@]}"; do
+            echo "  - $var"
+        done
+        exit 1
+    fi
+}
+
+validate_versions
+
 # Configuration
-PYTORCH_VERSION="2.9.0.dev20250905"
-VLLM_BRANCH="v0.10.0"
-MONARCH_COMMIT="ce078ddbbac6b6f3682afd763d8d96dad8092a91"
-TORCHTITAN_COMMIT="a3104201ba3a0fa19e9c3cc5ba748b0398551410"
-TORCHSTORE_COMMIT="16a3518607c489781cef0416988827017a87022b"
 BUILD_DIR="$HOME/forge-build"
 WHEEL_DIR="$(pwd)/assets/wheels"
 
@@ -21,28 +54,16 @@ WHEEL_DIR="$(pwd)/assets/wheels"
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-log_step() { echo -e "${BLUE}[$1/$2]${NC} $3"; }
-
-# Track current step for recovery
-CURRENT_STEP=0
-TOTAL_STEPS=8
+log_step() { echo -e "${BLUE}[STEP]${NC} $1"; }
 
 # Function to handle step failures
 handle_failure() {
     local step_name="$1"
-    local step_num="$2"
-    local exit_code="$3"
-    local retry_cmd="$4"
+    local exit_code="$2"
 
-    log_error "Step $step_num failed: $step_name"
+    log_error "Step failed: $step_name"
     log_error "Exit code: $exit_code"
     log_error "Working directory: $(pwd)"
-    echo ""
-    log_info "To retry this step manually:"
-    echo "  $retry_cmd"
-    echo ""
-    log_info "Or to resume from step $step_num:"
-    echo "  $0 --resume-from=$step_num"
     echo ""
     exit $exit_code
 }
@@ -144,36 +165,67 @@ EOF
 }
 
 # Parse command line arguments
-RESUME_FROM=1
+BUILD_TARGETS=()
+
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --resume-from=*)
-            RESUME_FROM="${1#*=}"
+        vllm|monarch|torchtitan|torchstore)
+            BUILD_TARGETS+=("$1")
             shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [TARGETS...]"
+            echo ""
+            echo "Build wheels for Forge dependencies."
+            echo ""
+            echo "Targets (default: all):"
+            echo "  vllm              Build vLLM wheel"
+            echo "  monarch           Build Monarch wheel"
+            echo "  torchtitan        Build torchtitan wheel"
+            echo "  torchstore        Build torchstore wheel"
+            echo ""
+            echo "Examples:"
+            echo "  $0                      # Build all wheels"
+            echo "  $0 vllm                 # Build only vLLM"
+            echo "  $0 monarch torchtitan   # Build Monarch and torchtitan"
+            exit 0
             ;;
         *)
             log_error "Unknown argument: $1"
+            log_info "Use --help to see available options"
             exit 1
             ;;
     esac
 done
 
+# If no targets specified, build all
+if [ ${#BUILD_TARGETS[@]} -eq 0 ]; then
+    BUILD_TARGETS=("vllm" "monarch" "torchtitan" "torchstore")
+    log_info "No targets specified, building all wheels"
+else
+    log_info "Building wheels: ${BUILD_TARGETS[*]}"
+fi
+
+# Helper function to check if a target should be built
+should_build() {
+    local target="$1"
+    for t in "${BUILD_TARGETS[@]}"; do
+        if [ "$t" == "$target" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Step execution wrapper
 run_step() {
-    local step_num="$1"
-    local step_name="$2"
-    local step_function="$3"
+    local step_name="$1"
+    local step_function="$2"
 
-    if [ "$step_num" -lt "$RESUME_FROM" ]; then
-        log_info "Skipping step $step_num: $step_name (resuming from step $RESUME_FROM)"
-        return 0
-    fi
-
-    CURRENT_STEP=$step_num
-    log_step "$step_num" "$TOTAL_STEPS" "$step_name"
+    log_step "$step_name"
 
     if ! $step_function; then
-        handle_failure "$step_name" "$step_num" "$?" "Run step $step_num manually"
+        handle_failure "$step_name" "$?"
     fi
 }
 
@@ -190,6 +242,7 @@ step2_cuda_packages() {
 
 # Step 3: Build vLLM wheel
 step3_vllm() {
+    log_info "Building vLLM from branch: $VLLM_BRANCH (from $VERSIONS_FILE)"
     cd "$BUILD_DIR"
     if [ -d "vllm" ]; then
         log_warn "vLLM directory exists, removing..."
@@ -223,6 +276,7 @@ step4_rust_setup() {
 
 # Step 5: Build Monarch wheel
 step5_monarch() {
+    log_info "Building Monarch from commit: $MONARCH_COMMIT (from $VERSIONS_FILE)"
     cd "$BUILD_DIR"
     if [ -d "monarch" ]; then
         log_warn "Monarch directory exists, removing..."
@@ -239,6 +293,7 @@ step5_monarch() {
 
 # Step 6: Build torchtitan wheel
 step6_torchtitan() {
+    log_info "Building torchtitan from commit: $TORCHTITAN_COMMIT (from $VERSIONS_FILE)"
     cd "$BUILD_DIR"
     if [ -d "torchtitan" ]; then
         log_warn "torchtitan directory exists, removing..."
@@ -254,6 +309,7 @@ step6_torchtitan() {
 
 # Step 7: Build torchstore wheel
 step7_torchstore() {
+    log_info "Building torchstore from commit: $TORCHSTORE_COMMIT (from $VERSIONS_FILE)"
     cd "$BUILD_DIR"
     if [ -d "torchstore" ]; then
         log_warn "torchstore directory exists, removing..."
@@ -292,28 +348,35 @@ main() {
     echo "==================="
     echo ""
 
-    if [ "$RESUME_FROM" -gt 1 ]; then
-        log_info "Resuming from step $RESUME_FROM..."
-        # Source CUDA env if resuming
-        if [ -f ~/.forge_cuda_env ]; then
-            source ~/.forge_cuda_env
-        fi
-        # Source Rust env if resuming
-        if [ -f ~/.cargo/env ]; then
-            source ~/.cargo/env
-        fi
-    else
-        validate_environment
-        setup_build_dir
+    validate_environment
+    setup_build_dir
+
+    # PyTorch is needed for all builds
+    run_step "Installing PyTorch nightly" step1_pytorch
+
+    # CUDA packages are needed for vLLM and Monarch
+    if should_build "vllm" || should_build "monarch"; then
+        run_step "Installing CUDA packages and setting environment" step2_cuda_packages
     fi
 
-    run_step 1 "Installing PyTorch nightly" step1_pytorch
-    run_step 2 "Installing CUDA packages and setting environment" step2_cuda_packages
-    run_step 3 "Building vLLM wheel" step3_vllm
-    run_step 4 "Setting up Rust toolchain and additional packages" step4_rust_setup
-    run_step 5 "Building Monarch wheel" step5_monarch
-    run_step 6 "Building torchtitan wheel" step6_torchtitan
-    run_step 7 "Building torchstore wheel" step7_torchstore
+    # Build requested wheels
+    if should_build "vllm"; then
+        run_step "Building vLLM wheel" step3_vllm
+    fi
+
+    # Rust setup is needed for Monarch
+    if should_build "monarch"; then
+        run_step "Setting up Rust toolchain and additional packages" step4_rust_setup
+        run_step "Building Monarch wheel" step5_monarch
+    fi
+
+    if should_build "torchtitan"; then
+        run_step "Building torchtitan wheel" step6_torchtitan
+    fi
+
+    if should_build "torchstore"; then
+        run_step "Building torchstore wheel" step7_torchstore
+    fi
 
     verify_installation
 
@@ -327,21 +390,14 @@ main() {
     log_info "  conda activate forge"
     log_info "  pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129"
     log_info "  pip install $WHEEL_DIR/*.whl"
-    log_info "  source ~/.forge_cuda_env"
+    if should_build "vllm" || should_build "monarch"; then
+        log_info "  source ~/.forge_cuda_env"
+    fi
     log_info ""
     log_info "Build artifacts are in: $BUILD_DIR"
     log_info "You can remove them with: rm -rf $BUILD_DIR"
 }
 
-# Set trap for cleanup on failure
-cleanup() {
-    if [ $? -ne 0 ] && [ $CURRENT_STEP -gt 0 ]; then
-        echo ""
-        log_error "Setup failed at step $CURRENT_STEP"
-        log_info "You can resume with: $0 --resume-from=$CURRENT_STEP"
-    fi
-}
-trap cleanup EXIT
 
 # Run main function
 main "$@"

@@ -9,9 +9,8 @@ import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from monarch.actor import ActorError
 
@@ -81,7 +80,7 @@ class ServiceRequest:
 
     """
 
-    session_id: Optional[str]
+    session_id: str | None
     function: str
     args: tuple
     kwargs: dict
@@ -107,7 +106,7 @@ class Replica:
     actor_kwargs: dict
 
     # The Actor that this replica is running
-    actor: Optional[ForgeActor] = None
+    actor: ForgeActor | None = None
 
     # Async queue for incoming requests
     request_queue: asyncio.Queue[ServiceRequest] = field(default_factory=asyncio.Queue)
@@ -127,10 +126,10 @@ class Replica:
     return_first_rank_result: bool = False
 
     # Recovery-related state
-    _recovery_task: Optional[asyncio.Task] = None
+    _recovery_task: asyncio.Task | None = None
 
     # Run task is the replica's event loop
-    _run_task: Optional[asyncio.Task] = None
+    _run_task: asyncio.Task | None = None
 
     # Metrics tracking
     metrics: ReplicaMetrics = field(default_factory=ReplicaMetrics)
@@ -159,9 +158,17 @@ class Replica:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
 
-            self.actor = await self.actor_def.options(
-                **asdict(self.proc_config)
-            ).as_actor(*self.actor_args, **self.actor_kwargs)
+            # If a Mesh name was specified, incorporate this info.
+            if self.proc_config.mesh_name:
+                mesh_name_with_replica = f"{self.proc_config.mesh_name}_{self.idx}"
+                self.proc_config.mesh_name = mesh_name_with_replica
+                if hasattr(self.actor_def, "mesh_name"):
+                    self.actor_def.mesh_name = mesh_name_with_replica
+
+            self.actor = await self.actor_def.launch(
+                *self.actor_args,
+                **self.actor_kwargs,
+            )
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()

@@ -12,7 +12,7 @@ import pytest
 
 import torch
 import torchstore as ts
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import resolve_hf_hub_paths
@@ -165,8 +165,8 @@ class TestWeightSync:
         use_dcp_override = request.config.getoption("--use_dcp")
         cfg = self._load_config(config_path=config_path)
 
-        trainer_proc_size = cfg.services.trainer.procs
-        policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
+        trainer_proc_size = cfg.actors.trainer.procs
+        policy_tp_size = cfg.policy.engine_args.tensor_parallel_size
 
         if policy_tp_size != cfg.services.policy.procs:
             pytest.fail(
@@ -188,9 +188,6 @@ class TestWeightSync:
         services_policy_cfg = cfg.services.policy
         services_policy_cfg.num_replicas = 1
 
-        services_trainer_cfg = cfg.services.trainer
-        services_trainer_cfg.num_replicas = 1
-
         trainer_cfg = cfg.trainer
         trainer_cfg.checkpoint = {
             "enable": True,
@@ -206,10 +203,8 @@ class TestWeightSync:
             trainer_cfg["dcp_path"] = tmpdir
             policy, rl_trainer = await asyncio.gather(
                 *[
-                    Policy.options(**services_policy_cfg).as_service(**cfg.policy),
-                    MockRLTrainer.options(**services_trainer_cfg).as_service(
-                        **trainer_cfg
-                    ),
+                    Generator.options(**services_policy_cfg).as_service(**cfg.policy),
+                    MockRLTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
                 ]
             )
 
@@ -217,10 +212,10 @@ class TestWeightSync:
             v0 = uuid.uuid4().int
             v1 = v0 + 1
 
-            await rl_trainer.push_weights.fanout(policy_version=v0)
+            await rl_trainer.push_weights.call(policy_version=v0)
             # Setting everything to zero
-            await rl_trainer.zero_out_model_states.fanout()
-            await rl_trainer.push_weights.fanout(policy_version=v1)
+            await rl_trainer.zero_out_model_states.call()
+            await rl_trainer.push_weights.call(policy_version=v1)
             await policy._test_save_model_params.fanout()
 
             # Sanity check that before update all the tests pass
@@ -229,7 +224,7 @@ class TestWeightSync:
                 for _, e in errs.items():
                     assert not e, f"Validation failed with exception: {e}"
 
-            await policy.update_weights.fanout(policy_version=v1)
+            await policy.update_weights.fanout(version=v1)
             all_errs = await policy._test_validate_model_params.fanout(
                 validate_fn_all_zeros
             )
@@ -238,7 +233,7 @@ class TestWeightSync:
                     assert not e, f"Validation failed with exception: {e}"
 
             # Reloading v0, getting back original weights
-            await policy.update_weights.fanout(policy_version=v0)
+            await policy.update_weights.fanout(version=v0)
             all_errs = await policy._test_validate_model_params.fanout(validate_fn)
             for errs in all_errs:
                 for _, e in errs.items():

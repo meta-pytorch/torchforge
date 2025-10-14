@@ -18,10 +18,24 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
-PYTORCH_VERSION="2.9.0.dev20250905"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+
+if [ ! -f "$VERSIONS_FILE" ]; then
+    log_error "Versions file not found: $VERSIONS_FILE"
+    exit 1
+fi
+
+source "$VERSIONS_FILE"
+
+# Validate required variables are set
+if [ -z "${PYTORCH_VERSION:-}" ]; then
+    log_error "PYTORCH_VERSION not set in $VERSIONS_FILE"
+    exit 1
+fi
+
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0-92025"
+RELEASE_TAG="v0.0.0-93025"
 GITHUB_REPO="meta-pytorch/forge"
 
 # Check conda environment
@@ -294,6 +308,9 @@ export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
+
+# Temporary measure until this environment variable is removed
+export MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE=1
 
 # Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
 if [ -n "${LD_LIBRARY_PATH:-}" ]; then

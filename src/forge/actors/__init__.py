@@ -4,14 +4,20 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-__all__ = ["Policy", "PolicyRouter", "RLTrainer", "ReplayBuffer", "TitanRefModel"]
+__all__ = [
+    "Generator" "PolicyRouter",
+    "RLTrainer",
+    "ReplayBuffer",
+    "TitanRefModel",
+    "SandboxedPythonCoder",
+]
 
 
 def __getattr__(name):
-    if name == "Policy":
-        from .policy import Policy
+    if name == "Generator":
+        from .policy import Generator
 
-        return Policy
+        return Generator
     elif name == "PolicyRouter":
         from .policy import PolicyRouter
 
@@ -28,5 +34,9 @@ def __getattr__(name):
         from .reference_model import ReferenceModel
 
         return ReferenceModel
+    elif name == "SandboxedPythonCoder":
+        from .coder import SandboxedPythonCoder
+
+        return SandboxedPythonCoder
     else:
         raise AttributeError(f"module {__name__} has no attribute {name}")

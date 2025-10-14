@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any
 
 import torch
 
@@ -29,10 +29,13 @@ class Completion:
     token_ids: torch.Tensor
 
     # the log probabilities of the target tokens
-    logprobs: Optional[torch.Tensor] = None
+    logprobs: torch.Tensor | None = None
 
     # the reason for stopping the generation
     stop_reason: str | None = None
 
     # the version identifier of the model when the generation was performed
     generator_version: int | None = None
+
+    # extra information that might be useful for debugging
+    metadata: dict[str, Any] | None = None

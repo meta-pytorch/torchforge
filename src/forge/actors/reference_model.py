@@ -18,6 +18,7 @@ from torch.distributed.tensor import DTensor
 
 from torchtitan.config.job_config import (
     Checkpoint,
+    Comm,
     Compile,
     Model,
     Parallelism,
@@ -27,6 +28,9 @@ from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
 from forge.controller import ForgeActor
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.util.ops import compute_logprobs
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -34,11 +38,40 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class ReferenceModel(ForgeActor):
+    """
+    A reference model actor for reinforcement learning (RL) training.
+
+    Based on TorchTitan's engine architecture, this actor provides a
+    frozen model that only runs forward passes without gradient
+    computation. It is typically used to maintain algorithmic
+    consistency in policy optimization methods such as GRPO
+    (Group Relative Policy Optimization) or PPO (Proximal Policy
+    Optimization), where it serves as a fixed reference point to
+    compute KL divergence penalties against the training policy.
+
+    The reference model is loaded from a checkpoint and runs in
+    evaluation mode with inference_mode enabled to optimize memory and
+    compute efficiency.
+
+    Attributes:
+
+        model (Model): Model configuration (architecture, vocab size,
+        etc.)
+        parallelism (Parallelism): Parallelism strategy configuration
+        (TP, PP, CP, DP)
+        checkpoint (Checkpoint): Checkpoint loading configuration
+        compile (Compile): Torch compilation settings
+        comm (Comm): Communication backend configuration
+        training (Training): Training-related settings (dtype, garbage
+        collection, etc.)
+    """
+
     # Refer to titan JobConfig for enabling more ForgeEngine configuration
     model: Model = field(default_factory=Model)
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     compile: Compile = field(default_factory=Compile)
+    comm: Comm = field(default_factory=Comm)
     training: Training = field(
         default_factory=Training
     )  # Needed in order to set attrs like dtype, garbage collection freq, etc.
@@ -88,9 +121,40 @@ class ReferenceModel(ForgeActor):
         self.model.eval()
 
     @endpoint
-    async def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    async def forward(
+        self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool
+    ) -> torch.Tensor:
+        """
+        Args:
+            input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
+            max_req_tokens (int): maximum request length.
+            return_logprobs (bool): whether to return og probabilities instead of raw logits.
+
+            return_logprobs flag significantly impacts the amount of data transferred to the caller:
+            - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
+              This includes the full vocabulary distribution for each token position.
+
+            - When True: Returns log probabilities with shape [group_size, req_length].
+              This only includes probabilities for the request tokens, significantly reducing memory
+              usage and transfer overhead.
+        """
+        # Record reference model metrics
+        record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
+        record_metric(
+            "reference_perf/forward/avg_sequence_length",
+            input_ids.shape[1],
+            Reduce.MEAN,
+        )
+
+        t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
+        t.start()
         self.engine.gc_handler.run(self.step)
+        t.step("garbage_collection")
+
+        model_parts = self.engine.model_parts
+        parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
+        t.step("to_device")
         # optional_context_parallel_ctx = (
         #     dist_utils.create_context_parallel_ctx(
         #         cp_mesh=parallel_dims.world_mesh["cp"],
@@ -114,4 +178,13 @@ class ReferenceModel(ForgeActor):
         self.step += 1
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
-        return logits
+        t.step("forward")
+
+        if not return_logprobs:
+            t.stop()
+            return logits
+        else:
+            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+            t.step("compute_logprobs")
+            t.stop()
+            return logprobs
