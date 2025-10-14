@@ -417,8 +417,10 @@ class TestMetricActorDisabling:
         if hasattr(procs, "_local_fetcher"):
             delattr(procs, "_local_fetcher")
 
-        # Test functionality
-        global_logger = await get_or_create_metric_logger(proc_mesh=procs)
+        # Test functionality - pass explicit process_name since test bypasses provisioner
+        global_logger = await get_or_create_metric_logger(
+            proc_mesh=procs, process_name="TestProcess"
+        )
 
         # Get results to check
         proc_has_fetcher = hasattr(procs, "_local_fetcher")

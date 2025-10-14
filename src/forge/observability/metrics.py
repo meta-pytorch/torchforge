@@ -15,7 +15,7 @@ from typing import Any
 import pytz
 from monarch.actor import current_rank
 
-from forge.observability.utils import get_actor_name_with_rank
+from forge.observability.utils import get_proc_name_with_rank
 from forge.util.logging import log_once
 
 logger = logging.getLogger(__name__)
@@ -418,7 +418,7 @@ class MetricCollector:
         """
         if self._is_initialized:
             logger.debug(
-                f"Rank {get_actor_name_with_rank(self.process_name)}: MetricCollector already initialized"
+                f"{get_proc_name_with_rank(self.process_name)}: MetricCollector already initialized"
             )
             return
         self.process_name = process_name
@@ -513,7 +513,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank(self.process_name)}: No metrics to flush for global_step {global_step}"
+                f"Collector for {get_proc_name_with_rank(self.process_name)}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -538,7 +538,7 @@ class MetricCollector:
         """Shutdown logger_backends if initialized."""
         if not self._is_initialized:
             logger.debug(
-                f"Collector for rank {get_actor_name_with_rank(self.process_name)} not initialized. Skipping shutdown"
+                f"Collector for rank {get_proc_name_with_rank(self.process_name)} not initialized. Skipping shutdown"
             )
             return
 
@@ -609,7 +609,7 @@ class ConsoleBackend(LoggerBackend):
         primary_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
     ) -> None:
-        self.prefix = get_actor_name_with_rank(actor_name=process_name)
+        self.prefix = get_proc_name_with_rank(proc_name=process_name)
 
     async def log(self, metrics: list[Metric], global_step: int) -> None:
         metrics_str = "\n".join(
@@ -663,7 +663,7 @@ class WandbBackend(LoggerBackend):
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        self.name = get_actor_name_with_rank(actor_name=process_name)
+        self.name = get_proc_name_with_rank(proc_name=process_name)
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:

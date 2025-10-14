@@ -27,7 +27,7 @@ from .metrics import (
     WandbBackend,
 )
 from .perf_tracker import trace, Tracer
-from .utils import get_actor_name_with_rank
+from .utils import get_proc_name_with_rank
 
 __all__ = [
     # Main API functions
@@ -44,7 +44,7 @@ __all__ = [
     # Enums
     "Reduce",
     # Utility functions
-    "get_actor_name_with_rank",
+    "get_proc_name_with_rank",
     # Actor classes
     "GlobalLoggingActor",
     "LocalFetcherActor",

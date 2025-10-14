@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, Union
 
-from monarch.actor import Actor, endpoint, ProcMesh
+from monarch.actor import Actor, context, endpoint, ProcMesh
 
 from forge.env import FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 from forge.observability.metrics import (
@@ -97,7 +97,8 @@ async def get_or_create_metric_logger(
 
     # Auto-detect process_name from proc mesh if not provided
     if process_name is None:
-        process_name = proc._mesh_name
+        ctx = context()
+        process_name = ctx.actor_instance.actor_id.actor_name
 
     # Check current state for consistency
     proc_has_local_fetcher = hasattr(proc, "_local_fetcher")

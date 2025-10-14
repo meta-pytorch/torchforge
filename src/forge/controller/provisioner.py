@@ -304,7 +304,6 @@ class Provisioner:
 
             self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
-            procs._mesh_name = mesh_name
 
             # If we created a server, track so we can tear it down later.
             if server_name:
