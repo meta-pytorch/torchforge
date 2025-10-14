@@ -50,85 +50,50 @@ graph TD
 
 ### Single Host ProcMesh
 
-```mermaid
-graph TD
-    subgraph Host["Single Host (8 GPUs)"]
-        subgraph ProcMesh["ProcMesh: per_host={'gpus': 8}"]
-            P0["Process 0<br/>GPU 0"]
-            P1["Process 1<br/>GPU 1"]
-            P2["Process 2<br/>GPU 2"]
-            P3["Process 3<br/>GPU 3"]
-            P4["Process 4<br/>GPU 4"]
-            P5["Process 5<br/>GPU 5"]
-            P6["Process 6<br/>GPU 6"]
-            P7["Process 7<br/>GPU 7"]
-        end
+**Key insight**: ProcMesh creates one process per GPU, automatically handling the process-to-hardware mapping.
 
-        P0 -.->|"Network"| P1
-        P1 -.->|"Network"| P2
-        P2 -.->|"Network"| P3
-        P3 -.->|"Network"| P4
-        P4 -.->|"Network"| P5
-        P5 -.->|"Network"| P6
-        P6 -.->|"Network"| P7
-        P7 -.->|"Network"| P0
-    end
+```python
+# This simple call:
+procs = this_host().spawn_procs(per_host={"gpus": 8})
 
-    style P0 fill:#F44336
-    style P1 fill:#F44336
-    style P2 fill:#F44336
-    style P3 fill:#F44336
-    style P4 fill:#F44336
-    style P5 fill:#F44336
-    style P6 fill:#F44336
-    style P7 fill:#F44336
+# Creates:
+# Process 0 → GPU 0
+# Process 1 → GPU 1  
+# Process 2 → GPU 2
+# Process 3 → GPU 3
+# Process 4 → GPU 4
+# Process 5 → GPU 5
+# Process 6 → GPU 6
+# Process 7 → GPU 7
 ```
+
+The beauty: you don't manage individual processes or GPU assignments - ProcMesh handles the topology for you.
 
 ### Multi-Host ProcMesh
 
-```mermaid
-graph TD
-    subgraph Cluster["Multi-Host Cluster"]
-        subgraph Host1["Host 1"]
-            subgraph PM1["ProcMesh Segment 1"]
-                H1P0["Process 0<br/>GPU 0"]
-                H1P1["Process 1<br/>GPU 1"]
-                H1P2["Process 2<br/>GPU 2"]
-                H1P3["Process 3<br/>GPU 3"]
-            end
-        end
+**Key insight**: ProcMesh seamlessly scales across multiple hosts with continuous process numbering.
 
-        subgraph Host2["Host 2"]
-            subgraph PM2["ProcMesh Segment 2"]
-                H2P0["Process 4<br/>GPU 0"]
-                H2P1["Process 5<br/>GPU 1"]
-                H2P2["Process 6<br/>GPU 2"]
-                H2P3["Process 7<br/>GPU 3"]
-            end
-        end
+```python
+# Same simple API works across hosts:
+cluster_procs = spawn_cluster_procs(
+    hosts=["host1", "host2", "host3"], 
+    per_host={"gpus": 4}
+)
 
-        subgraph Host3["Host 3"]
-            subgraph PM3["ProcMesh Segment 3"]
-                H3P0["Process 8<br/>GPU 0"]
-                H3P1["Process 9<br/>GPU 1"]
-                H3P2["Process 10<br/>GPU 2"]
-                H3P3["Process 11<br/>GPU 3"]
-            end
-        end
-    end
+# Automatically creates:
+# Host 1: Processes 0-3  → GPUs 0-3
+# Host 2: Processes 4-7  → GPUs 0-3  
+# Host 3: Processes 8-11 → GPUs 0-3
 
-    H1P0 -.->|"InfiniBand"| H2P0
-    H1P1 -.->|"InfiniBand"| H2P1
-    H2P0 -.->|"InfiniBand"| H3P0
-    H2P1 -.->|"InfiniBand"| H3P1
-
-    style PM1 fill:#F44336
-    style PM2 fill:#4CAF50
-    style PM3 fill:#2196F3
+# Your code stays the same whether it's 1 host or 100 hosts
+actors = cluster_procs.spawn("my_actor", MyActor)
 ```
+
+**The power**: Scale from single host to cluster without changing your actor code - ProcMesh handles all the complexity.
 
 ```python
 # This shows the underlying actor system that powers Forge services
+# NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps!
 
 from monarch.actor import Actor, endpoint, this_proc, Future
 from monarch.actor import ProcMesh, this_host
@@ -165,104 +130,42 @@ await counters.increment.call()
 # STEP 6: Different message patterns
 # call_one() - single actor
 value = await counters.get_value.call_one()
-print(f"One counter: {value}")
+print(f"One counter: {value}")  # Output: One counter: 1
 
 # choose() - random single actor (actors only, not services)
 value = await counters.get_value.choose()
-print(f"Random counter: {value}")
+print(f"Random counter: {value}")  # Output: Random counter: 1
 
 # call() - all actors, collect results
 values = await counters.get_value.call()
-print(f"All counters: {values}")
+print(f"All counters: {values}")  # Output: All counters: [1, 1, 1, 1, 1, 1, 1, 1]
 
 # broadcast() - fire and forget
-await counters.increment.broadcast()
+await counters.increment.broadcast()  # No return value - just sends to all actors
 
 # Cleanup
 await procs.stop()
+
+# Remember: This raw Monarch code is for understanding how Forge works internally.
+# In your Forge applications, use ForgeActor, .as_service(), .as_actor() instead!
 ```
 
 ## Actor Meshes: Your Code Running Distributed
 
-**ActorMesh** is created when you spawn actors across a ProcMesh. Each process in the ProcMesh gets one instance of your actor.
+**ActorMesh** is created when you spawn actors across a ProcMesh. Key points:
 
-```mermaid
-graph TD
-    subgraph Creation["Actor Creation Process"]
-        Code["mesh.spawn('policy', PolicyActor, model='Qwen/Qwen3-7B')"]
+- **One actor instance per process**: `mesh.spawn("policy", PolicyActor)` creates one PolicyActor in each process
+- **Same constructor arguments**: All instances get the same initialization parameters  
+- **Independent state**: Each actor instance maintains its own state and memory
+- **Message routing**: You can send messages to one actor or all actors using different methods
 
-        subgraph ProcMesh["ProcMesh (4 processes)"]
-            P0["Process 0<br/>GPU 0"]
-            P1["Process 1<br/>GPU 1"]
-            P2["Process 2<br/>GPU 2"]
-            P3["Process 3<br/>GPU 3"]
-        end
+```python
+# Simple example:
+procs = spawn_procs(per_host={"gpus": 4})  # 4 processes
+policy_actors = procs.spawn("policy", PolicyActor, model="Qwen/Qwen3-7B")
 
-        subgraph ActorMesh["ActorMesh PolicyActor"]
-            A0["PolicyActor Instance #0: model=Qwen/Qwen3-7B"]
-            A1["PolicyActor Instance #1: model=Qwen/Qwen3-7B"]
-            A2["PolicyActor Instance #2: model=Qwen/Qwen3-7B"]
-            A3["PolicyActor Instance #3: model=Qwen/Qwen3-7B"]
-        end
-
-        Code --> ProcMesh
-        P0 --> A0
-        P1 --> A1
-        P2 --> A2
-        P3 --> A3
-    end
-
-    style A0 fill:#4CAF50
-    style A1 fill:#4CAF50
-    style A2 fill:#4CAF50
-    style A3 fill:#4CAF50
-```
-
-### Message Routing Through ActorMesh
-
-```mermaid
-graph TD
-    subgraph MessageFlow["Message Flow Patterns"]
-        Client["await policy_actors.generate.METHOD(prompt)"]
-
-        subgraph Methods["Different Adverbs Route Differently"]
-            Choose["choose(): Routes to ONE actor, Load balanced"]
-            Call["call(): Routes to ALL actors, Collects results"]
-            Broadcast["broadcast(): Routes to ALL actors, Fire and forget"]
-            Stream["stream(): Routes to ALL actors, Iterator of results"]
-        end
-
-        subgraph ActorInstances["PolicyActor Instances"]
-            A0["Actor 0: GPU 0, generates response"]
-            A1["Actor 1: GPU 1, generates response"]
-            A2["Actor 2: GPU 2, generates response"]
-            A3["Actor 3: GPU 3, generates response"]
-        end
-
-        Client --> Choose
-        Client --> Call
-        Client --> Broadcast
-        Client --> Stream
-
-        Choose -.->|"Load balanced"| A1
-        Call --> A0
-        Call --> A1
-        Call --> A2
-        Call --> A3
-        Broadcast --> A0
-        Broadcast --> A1
-        Broadcast --> A2
-        Broadcast --> A3
-        Stream --> A0
-        Stream --> A1
-        Stream --> A2
-        Stream --> A3
-    end
-
-    style Choose fill:#4CAF50
-    style Call fill:#FF9800
-    style Broadcast fill:#E91E63
-    style Stream fill:#9C27B0
+# Now you have 4 PolicyActor instances, one per GPU
+# All initialized with the same model parameter
 ```
 
 ## How Forge Services Use Monarch
