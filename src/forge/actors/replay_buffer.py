@@ -29,7 +29,7 @@ class BufferEntry:
 
 def default_evict(buffer, policy_version, max_samples=None, max_age=None):
     """Default buffer eviction policy"""
-    indices = [] 
+    indices = []
     for i, entry in enumerate(buffer):
         if max_age and policy_version - entry.data.policy_version > max_age:
             continue
@@ -75,7 +75,9 @@ class ReplayBuffer(ForgeActor):
 
     @endpoint
     @trace("buffer_perf/sample", track_memory=False)
-    async def sample(self, curr_policy_version: int) -> tuple[tuple[Any, ...], ...] | None:
+    async def sample(
+        self, curr_policy_version: int
+    ) -> tuple[tuple[Any, ...], ...] | None:
         """Sample from the replay buffer.
 
         Args:
@@ -91,7 +93,7 @@ class ReplayBuffer(ForgeActor):
 
         # Evict episodes
         self._evict(curr_policy_version)
-        
+
         # Calculate metrics
         if len(self.buffer) > 0:
             record_metric(
@@ -107,7 +109,9 @@ class ReplayBuffer(ForgeActor):
             )
 
         # TODO: prefetch samples in advance
-        sampled_indices = self.sample_policy(self.buffer, total_samples, self.sampler, curr_policy_version)
+        sampled_indices = self.sample_policy(
+            self.buffer, total_samples, self.sampler, curr_policy_version
+        )
         if sampled_indices is None:
             return None
         sampled_episodes = []
@@ -133,10 +137,14 @@ class ReplayBuffer(ForgeActor):
         """
         self._evict(curr_policy_version)
 
-
     def _evict(self, curr_policy_version):
         buffer_len_before_evict = len(self.buffer)
-        indices = self.eviction_policy(self.buffer, curr_policy_version, self.max_resample_count + 1, self.max_policy_age)
+        indices = self.eviction_policy(
+            self.buffer,
+            curr_policy_version,
+            self.max_resample_count + 1,
+            self.max_policy_age,
+        )
         self.buffer = deque(self._collect(indices))
 
         # Record evict metrics
@@ -154,17 +162,14 @@ class ReplayBuffer(ForgeActor):
                 max(policy_age),
                 Reduce.MAX,
             )
-    
+
         evicted_count = buffer_len_before_evict - len(self.buffer)
-        record_metric(
-            "buffer/evict/sum_episodes_evicted", evicted_count, Reduce.SUM
-        )
-    
+        record_metric("buffer/evict/sum_episodes_evicted", evicted_count, Reduce.SUM)
+
         logger.debug(
             f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
             f"{evicted_count} episodes expired, {len(self.buffer)} episodes left"
         )
-
 
     def _collect(self, indices: list[int]):
         """Efficiently traverse deque and collect elements at each requested index"""
@@ -175,21 +180,21 @@ class ReplayBuffer(ForgeActor):
         # Normalize indices and store with their original order
         indexed = [(pos, idx % n) for pos, idx in enumerate(indices)]
         indexed.sort(key=itemgetter(1))
-    
+
         result = [None] * len(indices)
         rotations = 0  # logical current index
         total_rotation = 0  # total net rotation applied
-    
+
         for orig_pos, idx in indexed:
             move = idx - rotations
             self.buffer.rotate(-move)
             total_rotation += move
             rotations = idx
             result[orig_pos] = self.buffer[0]
-    
+
         # Restore original deque orientation
         self.buffer.rotate(total_rotation)
-    
+
         return result
 
     @endpoint
@@ -219,5 +224,3 @@ class ReplayBuffer(ForgeActor):
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.buffer = state_dict["buffer"]
         random.setstate(state_dict["rng_state"])
-
-
