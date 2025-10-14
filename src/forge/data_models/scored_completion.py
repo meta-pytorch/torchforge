@@ -10,10 +10,15 @@ from forge.data_models.completion import Completion
 
 
 @dataclass
-class ScoredCompletion:
+class ScoredCompletion(Completion):
     """A completion with an associated score (from a reward model or human)."""
 
-    completion: Completion
-    score: float  # akin to reward
+    score: float | None = None  # akin to reward
 
     # TODO: add more fields as needed.
+
+    @classmethod
+    def from_completion(
+        cls, completion: Completion, score: float
+    ) -> "ScoredCompletion":
+        return cls(**asdict(completion), score=score)

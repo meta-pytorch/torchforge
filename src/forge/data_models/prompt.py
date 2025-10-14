@@ -40,6 +40,15 @@ class Prompt:
             messages=messages,
         )
 
+    def get_first_turn_prompt(self) -> str:
+        """Returns the string prompt of the first turn."""
+        if len(self.messages) == 0:
+            raise ValueError("No messages in prompt.")
+        elif len(self.messages[0].chunks) == 0:
+            raise ValueError("No chunks in first message.")
+
+        return self.messages[0].chunks[0]
+
 
 def prompt_to_messages(
     prompt: str, system_instruction: str | None = None

@@ -341,8 +341,9 @@ class Policy(PolicyInterface):
     def _preprocess_add_request(
         self, request: EngineCoreRequest
     ) -> tuple[Request, int]:
-        """ (forge/issues/332) Will require attention when we bump vllm versions
-         https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419"""
+        """(forge/issues/332) Will require attention when we bump vllm versions
+        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
+        """
         if request.mm_hashes is not None:
             raise NotImplementedError("Support for mm_hash is not implemented yet.")
         req = Request.from_engine_core_request(request)
@@ -444,11 +445,6 @@ class Policy(PolicyInterface):
     @endpoint
     async def _reset_prefix_cache(self):
         self.scheduler.reset_prefix_cache()
-
-    @endpoint
-    async def get_version(self) -> int:
-        """Get the current policy version."""
-        return self.policy_version
 
     @endpoint
     async def stop(self):

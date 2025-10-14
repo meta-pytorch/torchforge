@@ -28,6 +28,7 @@ from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
+from forge.data_models.scored_completion import ScoredCompletion
 from forge.env import MONARCH_HOSTMESH_V1
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -42,24 +43,42 @@ from vllm.transformers_utils.tokenizer import get_tokenizer
 
 @dataclass
 class Episode:
-    # TODO: add adtional layer for multi-turn
     episode_id: str
-    request: str
-    policy_version: int
     pad_id: int
     request_len: int
     response_len: int
     target: Any | None = None
-    # processed data
-    response: str | None = None
-    request_tokens: list[int] | None = None
-    response_tokens: list[int] | None = None
+    completion: ScoredCompletion | None = None
     ref_logprobs: torch.Tensor | None = None
-    reward: float | None = None
     advantage: float | None = None
 
     @property
-    def request_tensor(self):
+    def request(self) -> str | None:
+        prompt = getattr(self.completion, "prompt", None)
+        return prompt.get_first_turn_prompt() if prompt is not None else None
+
+    @property
+    def policy_version(self) -> int | None:
+        return getattr(self.completion, "generator_version", None)
+
+    @property
+    def response(self) -> str | None:
+        return getattr(self.completion, "text", None)
+
+    @property
+    def request_tokens(self) -> torch.Tensor:
+        return getattr(self.completion, "prompt_ids", None)
+
+    @property
+    def response_tokens(self) -> torch.Tensor:
+        return getattr(self.completion, "token_ids", None)
+
+    @property
+    def reward(self) -> float:
+        return getattr(self.completion, "score", None)
+
+    @property
+    def request_tensor(self) -> torch.Tensor:
         tensor = torch.tensor(self.request_tokens, dtype=torch.long)
         if tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
@@ -67,45 +86,12 @@ class Episode:
         return tensor
 
     @property
-    def response_tensor(self):
+    def response_tensor(self) -> torch.Tensor:
         tensor = torch.tensor(self.response_tokens, dtype=torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
-
-
-@dataclass
-class Group:
-    group_id: str
-    episodes: list[Episode]
-
-    @classmethod
-    def new_group(
-        cls,
-        group_id: int,
-        group_size: int,
-        request: str,
-        policy_version: int,
-        pad_id: int,
-        request_len: int,
-        response_len: int,
-        target: Any = None,
-    ):
-        episodes = []
-        for _ in range(group_size):
-            episodes.append(
-                Episode(
-                    episode_id=str(uuid.uuid4()),
-                    request=request,
-                    policy_version=policy_version,
-                    pad_id=pad_id,
-                    request_len=request_len,
-                    response_len=response_len,
-                    target=target,
-                )
-            )
-        return cls(str(group_id), episodes)
 
 
 def collate(batches: list[list[Episode]]):
@@ -220,9 +206,9 @@ class ComputeAdvantages(ForgeActor):
     """Compute advantages for GRPO using reward signals."""
 
     @endpoint
-    async def compute(self, group: Group) -> list[float]:
+    async def compute(self, episodes: list[Episode]) -> list[float]:
         # TODO: add batch processing
-        rewards = torch.tensor([[e.reward for e in group.episodes]])
+        rewards = torch.tensor([[e.reward for e in episodes]])
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
         advantages = (rewards - mean) / (std + 1e-4)
@@ -396,43 +382,36 @@ async def main(cfg: DictConfig):
 
             prompt, target = sample["request"], sample["target"]
             responses = await policy.generate.route(prompt)
-            # TODO: this shall be part of the responses metadata instead of a separate call
-            version = await policy.get_version.route()
-
             t.step("policy_generation")
 
             assert (
                 len(responses) > 0
             ), "Sanity check: Responses should NEVER return empty"
-            assert (
-                version := responses[0].generator_version
-            ) is not None, "Response must indicate a version"
-            group = Group.new_group(
-                group_id=rollout_count,
-                group_size=group_size,
-                request=prompt,
-                policy_version=version,
-                pad_id=pad_id,
-                request_len=max_req_tokens,
-                response_len=max_res_tokens,
-                target=target,
-            )
 
+            # Construct episodes and calculate rewards
+            episodes: list[Episode] = []
             input_ids = torch.ones(
                 (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
                 device="cuda",
             )
-            # Populate episode info and calculate rewards
-            for i, (episode, response) in enumerate(zip(group.episodes, responses)):
-                episode.request_tokens = response.prompt_ids
-                episode.response_tokens = response.token_ids
-                episode.response = response.text
-                input_ids[i, :max_req_tokens] = episode.request_tensor
-                input_ids[i, max_req_tokens:] = episode.response_tensor
-                episode.reward = await reward_actor.evaluate_response.route(
+            for i, response in enumerate(responses):
+                reward: float = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
+                episode = Episode(
+                    episode_id=str(uuid.uuid4()),
+                    pad_id=pad_id,
+                    request_len=max_req_tokens,
+                    response_len=max_res_tokens,
+                    target=target,
+                    completion=ScoredCompletion.from_completion(response, score=reward),
+                )
+                episodes.append(episode)
+
+                # Build input_ids for reference logprobs
+                input_ids[i, :max_req_tokens] = episode.request_tensor
+                input_ids[i, max_req_tokens:] = episode.response_tensor
 
             t.step("reward_evaluation")
 
@@ -441,14 +420,14 @@ async def main(cfg: DictConfig):
             )
             t.step("reference_model_calculate_logprobs")
 
-            for i, episode in enumerate(group.episodes):
+            for i, episode in enumerate(episodes):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logprobs, input_ids
-            t.step("compute_logprobs")
+            t.step("gc_ref_logprobs")
 
             # Calculate advantages and add to replay buffer
-            advantages = await compute_advantages.compute.call_one(group)
-            for episode, advantage in zip(group.episodes, advantages):
+            advantages = await compute_advantages.compute.call_one(episodes)
+            for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
 
