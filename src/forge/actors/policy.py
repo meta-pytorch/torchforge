@@ -456,11 +456,6 @@ class Policy(PolicyInterface):
         self.scheduler.reset_prefix_cache()
 
     @endpoint
-    async def get_version(self) -> int:
-        """Get the current policy version."""
-        return self.policy_version
-
-    @endpoint
     async def stop(self):
         self.running = False
 
