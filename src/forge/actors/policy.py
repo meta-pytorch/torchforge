@@ -422,11 +422,9 @@ class Policy(PolicyInterface):
             >>> await trainer.push_weights()
             >>> policy.update_weights(version)
         """
-        # Create a new thread because fetch is alloc heavy and blocking on CPU
-        # (however alloc doesn't acquire the GIL)
-        fetch_task = asyncio.create_task(
-            asyncio.to_thread(self._fetch_weights, policy_version)
-        )
+        # TODO: currently the alloc in ts.get will block the event loop unfortunately
+        # potentially we need to change torchstore
+        fetch_task = asyncio.create_task(self._fetch_weights(policy_version))
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
