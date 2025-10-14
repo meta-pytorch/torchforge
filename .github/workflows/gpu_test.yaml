@@ -61,5 +61,10 @@ jobs:
           export LD_PRELOAD=$CONDA/envs/test/lib/libpython3.10.so.1.0
           export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
           pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+      - name: Run integration tests
+        run: |
+          export LD_PRELOAD=$CONDA/envs/test/lib/libpython3.10.so.1.0
+          export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
+          python -m tests.integration_tests.test_vllm_policy_correctness
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
