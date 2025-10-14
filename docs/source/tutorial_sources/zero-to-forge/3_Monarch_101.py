@@ -1,0 +1,572 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""
+Part 3: The Forge-Monarch Connection
+=====================================
+
+**Author:** `Sanyam Bhutani <https://github.com/init27>`_
+
+.. grid:: 2
+
+    .. grid-item-card:: :octicon:`mortar-board;1em;` What you will learn
+       :class-card: card-prerequisites
+
+       * How Forge services are built on Monarch
+       * Understanding ProcMesh and ActorMesh
+       * The complete hierarchy from service to silicon
+       * Message routing patterns in distributed actors
+
+    .. grid-item-card:: :octicon:`list-unordered;1em;` Prerequisites
+       :class-card: card-prerequisites
+
+       * Complete :doc:`1_RL_and_Forge_Fundamentals`
+       * Complete :doc:`2_Forge_Internals`
+       * Understanding of distributed systems
+
+This is part 3 of our series. In the previous sections we learned:
+
+* Part 1: [RL Concepts and how they map to Forge](1_RL_and_Forge_Fundamentals)
+* Part 2: [Forge Internals](2_Forge_Internals)
+
+Now let's peel back the layers. Forge services are built on top of 
+**Monarch**, PyTorch's distributed actor framework. Understanding this 
+connection is crucial for optimization and debugging.
+"""
+
+######################################################################
+# The Complete Hierarchy: Service to Silicon
+# -------------------------------------------
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph YourCode["1. Your RL Code"]
+#             Call["await policy_service.generate.route('What is 2+2?')"]
+#         end
+#
+#         subgraph ForgeServices["2. Forge Service Layer"]
+#             ServiceInterface["ServiceInterface: Routes requests, Load balancing, Health checks"]
+#             ServiceActor["ServiceActor: Manages replicas, Monitors health, Coordinates failures"]
+#         end
+#
+#         subgraph MonarchLayer["3. Monarch Actor Layer"]
+#             ActorMesh["ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing"]
+#             ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
+#         end
+#
+#         subgraph Hardware["4. Physical Hardware"]
+#             GPU0["GPU 0: PolicyActor #1, vLLM Engine, Model Weights"]
+#             GPU1["GPU 1: PolicyActor #2, vLLM Engine, Model Weights"]
+#             GPU2["GPU 2: PolicyActor #3, vLLM Engine, Model Weights"]
+#             GPU3["GPU 3: PolicyActor #4, vLLM Engine, Model Weights"]
+#         end
+#
+#         Call --> ServiceInterface
+#         ServiceInterface --> ServiceActor
+#         ServiceActor --> ActorMesh
+#         ActorMesh --> ProcMesh
+#         ProcMesh --> GPU0
+#         ProcMesh --> GPU1
+#         ProcMesh --> GPU2
+#         ProcMesh --> GPU3
+#
+#         style Call fill:#4CAF50
+#         style ServiceActor fill:#FF9800
+#         style ActorMesh fill:#9C27B0
+#         style ProcMesh fill:#2196F3
+
+######################################################################
+# Deep Dive: ProcMesh - The Foundation
+# -------------------------------------
+#
+# **ProcMesh** is Monarch's core abstraction for organizing processes 
+# across hardware. Think of it as a multi-dimensional grid that maps 
+# directly to your cluster topology.
+#
+# Single Host ProcMesh
+# ~~~~~~~~~~~~~~~~~~~~
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph Host["Single Host (8 GPUs)"]
+#             subgraph ProcMesh["ProcMesh: per_host={'gpus': 8}"]
+#                 P0["Process 0<br/>GPU 0"]
+#                 P1["Process 1<br/>GPU 1"]
+#                 P2["Process 2<br/>GPU 2"]
+#                 P3["Process 3<br/>GPU 3"]
+#                 P4["Process 4<br/>GPU 4"]
+#                 P5["Process 5<br/>GPU 5"]
+#                 P6["Process 6<br/>GPU 6"]
+#                 P7["Process 7<br/>GPU 7"]
+#             end
+#
+#             P0 -.->|"Network"| P1
+#             P1 -.->|"Network"| P2
+#             P2 -.->|"Network"| P3
+#             P3 -.->|"Network"| P4
+#             P4 -.->|"Network"| P5
+#             P5 -.->|"Network"| P6
+#             P6 -.->|"Network"| P7
+#             P7 -.->|"Network"| P0
+#         end
+#
+#         style P0 fill:#F44336
+#         style P1 fill:#F44336
+#         style P2 fill:#F44336
+#         style P3 fill:#F44336
+#         style P4 fill:#F44336
+#         style P5 fill:#F44336
+#         style P6 fill:#F44336
+#         style P7 fill:#F44336
+
+######################################################################
+# Multi-Host ProcMesh
+# ~~~~~~~~~~~~~~~~~~~
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph Cluster["Multi-Host Cluster"]
+#             subgraph Host1["Host 1"]
+#                 subgraph PM1["ProcMesh Segment 1"]
+#                     H1P0["Process 0<br/>GPU 0"]
+#                     H1P1["Process 1<br/>GPU 1"]
+#                     H1P2["Process 2<br/>GPU 2"]
+#                     H1P3["Process 3<br/>GPU 3"]
+#                 end
+#             end
+#
+#             subgraph Host2["Host 2"]
+#                 subgraph PM2["ProcMesh Segment 2"]
+#                     H2P0["Process 4<br/>GPU 0"]
+#                     H2P1["Process 5<br/>GPU 1"]
+#                     H2P2["Process 6<br/>GPU 2"]
+#                     H2P3["Process 7<br/>GPU 3"]
+#                 end
+#             end
+#
+#             subgraph Host3["Host 3"]
+#                 subgraph PM3["ProcMesh Segment 3"]
+#                     H3P0["Process 8<br/>GPU 0"]
+#                     H3P1["Process 9<br/>GPU 1"]
+#                     H3P2["Process 10<br/>GPU 2"]
+#                     H3P3["Process 11<br/>GPU 3"]
+#                 end
+#             end
+#         end
+#
+#         H1P0 -.->|"InfiniBand"| H2P0
+#         H1P1 -.->|"InfiniBand"| H2P1
+#         H2P0 -.->|"InfiniBand"| H3P0
+#         H2P1 -.->|"InfiniBand"| H3P1
+#
+#         style PM1 fill:#F44336
+#         style PM2 fill:#4CAF50
+#         style PM3 fill:#2196F3
+
+######################################################################
+# Monarch Actor System Basics
+# ----------------------------
+#
+# This shows the underlying actor system that powers Forge services.
+
+import asyncio
+
+# Mock imports for documentation build
+try:
+    from monarch.actor import Actor, endpoint, this_proc, Future
+    from monarch.actor import ProcMesh, this_host
+except ImportError:
+
+    class Actor:
+        pass
+
+    def endpoint(func):
+        return func
+
+    class Future:
+        pass
+
+    class ProcMesh:
+        pass
+
+    def this_proc():
+        return None
+
+    def this_host():
+        return None
+
+
+# STEP 1: Define a basic actor
+class Counter(Actor):
+    """Basic counter actor example."""
+
+    def __init__(self, initial_value: int):
+        self.value = initial_value
+
+    @endpoint
+    def increment(self) -> None:
+        """Increment the counter."""
+        self.value += 1
+
+    @endpoint
+    def get_value(self) -> int:
+        """Get current counter value."""
+        return self.value
+
+
+async def basic_actor_example():
+    """Example of using Monarch actors."""
+    # STEP 2: Single actor in local process
+    counter = this_proc().spawn("counter", Counter, initial_value=0)
+
+    # STEP 3: Send messages
+    fut = counter.get_value.call_one()
+    value = await fut
+    print(f"Counter value: {value}")  # 0
+
+
+async def distributed_actors_example():
+    """Example of actors across multiple processes."""
+    # STEP 4: Multiple actors across processes
+    procs = this_host().spawn_procs(per_host={"gpus": 8})
+    counters = procs.spawn("counters", Counter, 0)
+
+    # STEP 5: Broadcast to all actors
+    await counters.increment.call()
+
+    # STEP 6: Different message patterns
+    # call_one() - single actor
+    value = await counters.get_value.call_one()
+    print(f"One counter: {value}")
+
+    # choose() - random single actor (actors only, not services)
+    value = await counters.get_value.choose()
+    print(f"Random counter: {value}")
+
+    # call() - all actors, collect results
+    values = await counters.get_value.call()
+    print(f"All counters: {values}")
+
+    # broadcast() - fire and forget
+    await counters.increment.broadcast()
+
+    # Cleanup
+    await procs.stop()
+
+
+######################################################################
+# Actor Meshes: Your Code Running Distributed
+# --------------------------------------------
+#
+# **ActorMesh** is created when you spawn actors across a ProcMesh. 
+# Each process in the ProcMesh gets one instance of your actor.
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph Creation["Actor Creation Process"]
+#             Code["mesh.spawn('policy', PolicyActor, model='Qwen/Qwen3-7B')"]
+#
+#             subgraph ProcMesh["ProcMesh (4 processes)"]
+#                 P0["Process 0<br/>GPU 0"]
+#                 P1["Process 1<br/>GPU 1"]
+#                 P2["Process 2<br/>GPU 2"]
+#                 P3["Process 3<br/>GPU 3"]
+#             end
+#
+#             subgraph ActorMesh["ActorMesh PolicyActor"]
+#                 A0["PolicyActor Instance #0: model=Qwen/Qwen3-7B"]
+#                 A1["PolicyActor Instance #1: model=Qwen/Qwen3-7B"]
+#                 A2["PolicyActor Instance #2: model=Qwen/Qwen3-7B"]
+#                 A3["PolicyActor Instance #3: model=Qwen/Qwen3-7B"]
+#             end
+#
+#             Code --> ProcMesh
+#             P0 --> A0
+#             P1 --> A1
+#             P2 --> A2
+#             P3 --> A3
+#         end
+#
+#         style A0 fill:#4CAF50
+#         style A1 fill:#4CAF50
+#         style A2 fill:#4CAF50
+#         style A3 fill:#4CAF50
+
+######################################################################
+# Message Routing Through ActorMesh
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph MessageFlow["Message Flow Patterns"]
+#             Client["await policy_actors.generate.METHOD(prompt)"]
+#
+#             subgraph Methods["Different Adverbs Route Differently"]
+#                 Choose["choose(): Routes to ONE actor, Load balanced"]
+#                 Call["call(): Routes to ALL actors, Collects results"]
+#                 Broadcast["broadcast(): Routes to ALL actors, Fire and forget"]
+#                 Stream["stream(): Routes to ALL actors, Iterator of results"]
+#             end
+#
+#             subgraph ActorInstances["PolicyActor Instances"]
+#                 A0["Actor 0: GPU 0, generates response"]
+#                 A1["Actor 1: GPU 1, generates response"]
+#                 A2["Actor 2: GPU 2, generates response"]
+#                 A3["Actor 3: GPU 3, generates response"]
+#             end
+#
+#             Client --> Choose
+#             Client --> Call
+#             Client --> Broadcast
+#             Client --> Stream
+#
+#             Choose -.->|"Load balanced"| A1
+#             Call --> A0
+#             Call --> A1
+#             Call --> A2
+#             Call --> A3
+#             Broadcast --> A0
+#             Broadcast --> A1
+#             Broadcast --> A2
+#             Broadcast --> A3
+#             Stream --> A0
+#             Stream --> A1
+#             Stream --> A2
+#             Stream --> A3
+#         end
+#
+#         style Choose fill:#4CAF50
+#         style Call fill:#FF9800
+#         style Broadcast fill:#E91E63
+#         style Stream fill:#9C27B0
+
+######################################################################
+# How Forge Services Use Monarch
+# -------------------------------
+#
+# Now the key insight: **Forge services are ServiceActors that manage 
+# ActorMeshes of your ForgeActor replicas**.
+#
+# The Service Creation Process
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph ServiceCreation["Service Creation Process"]
+#             Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
+#
+#             ServiceActor["ServiceActor: Manages 4 replicas, Health checks, Routes calls"]
+#
+#             subgraph Replicas["4 Independent Replicas"]
+#                 subgraph R0["Replica 0"]
+#                     PM0["ProcMesh: 1 process, GPU 0"]
+#                     AM0["ActorMesh<br/>1 PolicyActor"]
+#                 end
+#
+#                 subgraph R1["Replica 1"]
+#                     PM1["ProcMesh: 1 process, GPU 1"]
+#                     AM1["ActorMesh<br/>1 PolicyActor"]
+#                 end
+#
+#                 subgraph R2["Replica 2"]
+#                     PM2["ProcMesh: 1 process, GPU 2"]
+#                     AM2["ActorMesh<br/>1 PolicyActor"]
+#                 end
+#
+#                 subgraph R3["Replica 3"]
+#                     PM3["ProcMesh: 1 process, GPU 3"]
+#                     AM3["ActorMesh<br/>1 PolicyActor"]
+#                 end
+#             end
+#
+#             Call --> ServiceActor
+#             ServiceActor --> R0
+#             ServiceActor --> R1
+#             ServiceActor --> R2
+#             ServiceActor --> R3
+#             PM0 --> AM0
+#             PM1 --> AM1
+#             PM2 --> AM2
+#             PM3 --> AM3
+#         end
+#
+#         style ServiceActor fill:#FF9800
+#         style AM0 fill:#4CAF50
+#         style AM1 fill:#4CAF50
+#         style AM2 fill:#4CAF50
+#         style AM3 fill:#4CAF50
+
+######################################################################
+# Service Call to Actor Execution
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph CallFlow["Complete Call Flow"]
+#             UserCall["await policy_service.generate.route('What is 2+2?')"]
+#
+#             ServiceInterface["ServiceInterface: Receives .route() call, Routes to ServiceActor"]
+#
+#             ServiceActor["ServiceActor: Selects healthy replica, Load balancing, Failure handling"]
+#
+#             SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor"]
+#
+#             PolicyActor["PolicyActor Instance: Loads model, Runs vLLM inference"]
+#
+#             GPU["GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels"]
+#
+#             UserCall --> ServiceInterface
+#             ServiceInterface --> ServiceActor
+#             ServiceActor --> SelectedReplica
+#             SelectedReplica --> PolicyActor
+#             PolicyActor --> GPU
+#
+#             GPU -.->|"Response"| PolicyActor
+#             PolicyActor -.->|"Response"| SelectedReplica
+#             SelectedReplica -.->|"Response"| ServiceActor
+#             ServiceActor -.->|"Response"| ServiceInterface
+#             ServiceInterface -.->|"'The answer is 4'"| UserCall
+#         end
+#
+#         style UserCall fill:#4CAF50
+#         style ServiceActor fill:#FF9800
+#         style PolicyActor fill:#9C27B0
+#         style GPU fill:#FF5722
+
+######################################################################
+# Multiple Services Sharing Infrastructure
+# -----------------------------------------
+#
+# In real RL systems, you have multiple services that can share or use 
+# separate ProcMeshes:
+#
+# .. mermaid::
+#
+#     graph TD
+#         subgraph Cluster["RL Training Cluster"]
+#             subgraph Services["Forge Services"]
+#                 PS["Policy Service<br/>4 GPU replicas"]
+#                 TS["Trainer Service<br/>2 GPU replicas"]
+#                 RS["Reward Service<br/>4 CPU replicas"]
+#                 BS["Buffer Service<br/>1 CPU replica"]
+#             end
+#
+#             subgraph MonarchInfra["Monarch Infrastructure"]
+#                 subgraph GPUMesh["GPU ProcMesh (6 processes)"]
+#                     G0["Process 0<br/>GPU 0"]
+#                     G1["Process 1<br/>GPU 1"]
+#                     G2["Process 2<br/>GPU 2"]
+#                     G3["Process 3<br/>GPU 3"]
+#                     G4["Process 4<br/>GPU 4"]
+#                     G5["Process 5<br/>GPU 5"]
+#                 end
+#
+#                 subgraph CPUMesh["CPU ProcMesh (5 processes)"]
+#                     C0["Process 0<br/>CPU"]
+#                     C1["Process 1<br/>CPU"]
+#                     C2["Process 2<br/>CPU"]
+#                     C3["Process 3<br/>CPU"]
+#                     C4["Process 4<br/>CPU"]
+#                 end
+#             end
+#
+#             PS --> G0
+#             PS --> G1
+#             PS --> G2
+#             PS --> G3
+#             TS --> G4
+#             TS --> G5
+#             RS --> C0
+#             RS --> C1
+#             RS --> C2
+#             RS --> C3
+#             BS --> C4
+#         end
+#
+#         style PS fill:#4CAF50
+#         style TS fill:#E91E63
+#         style RS fill:#FF9800
+#         style BS fill:#9C27B0
+#         style GPUMesh fill:#FFEBEE
+#         style CPUMesh fill:#E3F2FD
+
+######################################################################
+# Key Insights: Why This Architecture Matters
+# --------------------------------------------
+#
+# 1. **Process Isolation**: Each actor runs in its own process - failures don't cascade
+# 2. **Location Transparency**: Actors can be local or remote with identical APIs
+# 3. **Structured Distribution**: ProcMesh maps directly to hardware topology
+# 4. **Message Passing**: No shared memory means no race conditions or locks
+# 5. **Service Abstraction**: Forge hides Monarch complexity while preserving power
+#
+# Understanding this hierarchy helps you:
+#
+# * **Debug performance issues**: Is the bottleneck at service, actor, or hardware level?
+# * **Optimize resource usage**: How many replicas per service? GPU vs CPU processes?
+# * **Handle failures gracefully**: Which layer failed and how to recover?
+# * **Scale effectively**: Where to add resources for maximum impact?
+
+
+def demonstrate_architecture_benefits():
+    """Example showing why the architecture matters."""
+    # Process Isolation: Failures don't cascade
+    # If one PolicyActor crashes, others continue serving
+
+    # Location Transparency: Same API whether local or remote
+    # await policy.generate.route(prompt)  # Works same everywhere
+
+    # Structured Distribution: ProcMesh maps to hardware
+    # per_host={"gpus": 8} creates 8 processes, 1 per GPU
+
+    # Message Passing: No locks needed
+    # Each actor processes messages sequentially, naturally thread-safe
+
+    # Service Abstraction: Simple interface, powerful backend
+    # await service.method.route() hides all distribution complexity
+    pass
+
+
+######################################################################
+# Conclusion
+# ----------
+#
+# What You've Learned
+# ~~~~~~~~~~~~~~~~~~~
+#
+# 1. **RL Fundamentals**: How RL concepts map to Forge services with real examples
+# 2. **Service Abstraction**: How to use Forge services effectively
+# 3. **Monarch Foundation**: How Forge services connect to distributed actors and hardware
+#
+# Key Takeaways
+# ~~~~~~~~~~~~~
+#
+# * **Services hide complexity**: Your RL code looks like simple async functions, 
+#   but runs on distributed clusters
+# * **Communication patterns matter**: ``.route()``, ``.fanout()``, sessions, 
+#   and ``.call_one()`` each serve specific purposes
+# * **Architecture understanding helps**: Knowing the Service → Actor → Process → 
+#   Hardware hierarchy helps you debug, optimize, and scale
+# * **Always verify APIs**: This guide is verified, but cross-check with source 
+#   code for latest changes
+# * **Real API patterns**: Use ``.options().as_service()`` not ``spawn_service()``, 
+#   use ``.route()`` not ``.choose()``, etc.
+#
+# Further Reading
+# ---------------
+#
+# * Review :doc:`1_RL_and_Forge_Fundamentals` for RL concepts
+# * Review :doc:`2_Forge_Internals` for service patterns
+# * Check the `Forge source code <https://github.com/meta-pytorch/forge>`_
+# * Explore the `GRPO application <https://github.com/meta-pytorch/forge/tree/main/apps/grpo>`_
+# * Read about `Monarch <https://github.com/pytorch/monarch>`_ for deeper understanding

@@ -15,6 +15,7 @@ import os
 import sys
 
 import pytorch_sphinx_theme2
+from sphinx_gallery.sorting import ExplicitOrder, FileNameSortKey
 
 # Add the source directory to Python path so modules can be imported
 sys.path.insert(0, os.path.abspath("../../src/forge"))
@@ -82,7 +83,12 @@ templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
-exclude_patterns = ["tutorials/index.rst", "tutorials/template_tutorial.rst"]
+exclude_patterns = [
+    "tutorials/index.rst",
+    "tutorials/template_tutorial.rst",
+    "tutorials/**/index.rst",
+    "tutorial_sources/**/README.md",
+]
 
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
@@ -204,7 +210,7 @@ napoleon_use_ivar = True
 sphinx_gallery_conf = {
     "examples_dirs": "tutorial_sources",  # Path to examples directory
     "gallery_dirs": "tutorials",  # Path to generate gallery
-    "filename_pattern": ".*",  # Include all files
+    "filename_pattern": ".*",  # Match all Python files
     "download_all_examples": False,
     "first_notebook_cell": "%matplotlib inline",
     "plot_gallery": "True",
@@ -212,6 +218,8 @@ sphinx_gallery_conf = {
     "backreferences_dir": None,
     "show_signature": False,
     "write_computation_times": False,
+    "subsection_order": ExplicitOrder(["tutorial_sources/zero-to-forge"]),
+    "within_subsection_order": FileNameSortKey,
 }
 
 
