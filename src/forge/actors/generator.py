@@ -459,10 +459,10 @@ class Generator(GeneratorInterface):
             t.start()
             fetched_weights = await fetch_task
             t.stop()
-            await self.worker.update_weights.call(
+            await self.generator_worker.update_weights.call(
                 shared_memory_state_dict=fetched_weights
             )
-            self.version = version
+            self.generator_version = version
             for _, handle in fetched_weights.items():
                 handle.to_shared_tensor().drop()
 
