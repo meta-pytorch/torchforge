@@ -1,7 +1,6 @@
 name: Build pinned vLLM against PyTorch nightly and upload
 
 on:
-  pull_request:
   push:
     branches:
       - nightly
