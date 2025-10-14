@@ -12,7 +12,7 @@ import torch.distributed as dist
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
 
-from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricTransform
+from forge.data.metric_transform import DefaultDatasetMetricTransform, MetricTransform
 from forge.interfaces import Transform
 from forge.observability.metrics import Metric, Reduce
 
@@ -82,7 +82,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._weight = weight if weight is not None else 1.0
 
         # Create default transform if not provided
-        self._metric_transform = metric_transform or DefaultTrainingMetricTransform()
+        self._metric_transform = metric_transform or DefaultDatasetMetricTransform()
 
         # Auto-generate dataset name if not provided
         if dataset_name is None:

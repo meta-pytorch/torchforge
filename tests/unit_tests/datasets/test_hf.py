@@ -25,9 +25,9 @@ from pathlib import Path
 
 import pytest
 import torch.distributed as dist
-from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 
 from forge.data.datasets import HfIterableDataset
+from forge.data.metric_transform import DefaultDatasetMetricTransform
 from torch.testing._internal.common_fsdp import FSDPTest
 
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -93,7 +93,7 @@ def dataset_factory():
             dataset_name=dataset_name,
             seed=SEED,
             shuffle_buffer_size=10 if shuffle else 0,
-            metric_transform=DefaultTrainingMetricTransform(),
+            metric_transform=DefaultDatasetMetricTransform(),
             num_shards_per_rank=2,
             **kwargs,
         )
