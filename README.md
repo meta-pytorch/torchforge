@@ -1,5 +1,7 @@
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> Forge
 
+[![Unit Tests](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml/badge.svg)](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml)
+[![GPU Tests](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml/badge.svg)](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml)
 
 #### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
 
