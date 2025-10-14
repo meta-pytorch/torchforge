@@ -396,6 +396,7 @@ class MetricCollector:
         self.rank = current_rank().rank
         self.logger_backends: list[LoggerBackend] = []
         self._is_initialized = False
+        self.process_name: str | None = None
 
     async def init_backends(
         self,
@@ -417,9 +418,10 @@ class MetricCollector:
         """
         if self._is_initialized:
             logger.debug(
-                f"Rank {get_actor_name_with_rank()}: MetricCollector already initialized"
+                f"Rank {get_actor_name_with_rank(self.process_name)}: MetricCollector already initialized"
             )
             return
+        self.process_name = process_name
         self.global_step = global_step
 
         # instantiate local backends if any
@@ -511,7 +513,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
+                f"Collector rank {get_actor_name_with_rank(self.process_name)}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -536,7 +538,7 @@ class MetricCollector:
         """Shutdown logger_backends if initialized."""
         if not self._is_initialized:
             logger.debug(
-                f"Collector for rank {get_actor_name_with_rank()} not initialized. Skipping shutdown"
+                f"Collector for rank {get_actor_name_with_rank(self.process_name)} not initialized. Skipping shutdown"
             )
             return
 
