@@ -13,6 +13,7 @@ import sys
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
+from typing import Optional
 
 import torch
 import torchstore as ts
@@ -57,6 +58,7 @@ from forge.interfaces import Policy as PolicyInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
+from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -343,7 +345,8 @@ class Policy(PolicyInterface):
         self, request: EngineCoreRequest
     ) -> tuple[Request, int]:
         """(forge/issues/332) Will require attention when we bump vllm versions
-        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419"""
+        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
+        """
         if request.mm_hashes is not None:
             raise NotImplementedError("Support for mm_hash is not implemented yet.")
         req = Request.from_engine_core_request(request)
@@ -399,6 +402,11 @@ class Policy(PolicyInterface):
             >>> await trainer.push_weights()
             >>> policy.update_weights(version)
         """
+        # Create a new thread because fetch is alloc heavy and blocking on CPU
+        # (however alloc doesn't acquire the GIL)
+        fetch_task = asyncio.create_task(
+            asyncio.to_thread(self._fetch_weights, policy_version)
+        )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -429,7 +437,13 @@ class Policy(PolicyInterface):
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
             # Call update_weights on every policy_worker
-            await self.policy_worker.update_weights.call(policy_version)
+            t = Tracer("policy_perf/_waiting_for_fetch_weights")
+            t.start()
+            fetched_weights = await fetch_task
+            t.end()
+            await self.policy_worker.update_weights.call(
+                shared_memory_state_dict=fetched_weigths
+            )
             self.policy_version = policy_version
 
             # After updating the weights, we need to reset the KV cache
@@ -593,9 +607,50 @@ class PolicyWorker(ForgeActor):
     async def execute_model(self, schedule: SchedulerOutput) -> ModelRunnerOutput:
         return self.worker.execute_model(schedule)
 
+    async def _fetch_weights(
+        self, policy_version: int
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("policy_perf/_fetch_weights")
+        t.start()
+        prefix = get_param_prefix(policy_version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        shared_memory_state_dict = {}
+        for name in hf_param_names:
+            param_key = get_param_key(policy_version, name)
+            param = await ts.get(param_key)
+            # TODO: preallocate in the shared memory once we have plumbing in torchstore.
+            shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
+        t.stop()
+        return shared_memory_state_dict
+
     @endpoint
-    async def update_weights(self, policy_version: int) -> None:
+    async def update_weights(
+        self,
+        policy_version: Optional[int],
+        *,
+        shared_memory_state_dict: Optional[dict[str, SharedTensorHandle]] = None,
+    ) -> None:
         model = self.worker.model_runner.model
+        if shared_memory_state_dict is not None:
+            logger.info("[PolicyWorker] update weights from shared memory.")
+            t = Tracer(
+                "policy_worker_perf/update_weights_from_shared_memory", timer="gpu"
+            )
+            t.start()
+            for name, param_handle in shared_memory_state_dict.items():
+                param = SharedTensor(handle=param_handle).tensor
+                loaded = model.load_weights([(name, param)])
+                loaded_weights = set(loaded)
+            t.stop()
+            return
+        if policy_version is None:
+            raise ValueError(
+                "policy_version must be provided if not using shared_memory_state_dict"
+            )
         prefix = get_param_prefix(policy_version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(policy_version)
