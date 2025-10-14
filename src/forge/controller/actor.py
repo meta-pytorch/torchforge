@@ -8,9 +8,12 @@ import logging
 
 import math
 import sys
-from typing import Any, Type, TypeVar
+from typing import Any, Type, TYPE_CHECKING, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
+
+if TYPE_CHECKING:
+    from monarch._src.actor.actor_mesh import ActorMesh
 
 from forge.controller.provisioner import (
     get_proc_mesh,
