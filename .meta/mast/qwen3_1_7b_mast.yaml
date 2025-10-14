@@ -6,7 +6,7 @@ group_size: 8
 batch_size: 16
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-1.7B"
+model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
 off_by_n: 1 # Off by one by default
 launcher: mast
 job_name: forge-qwen3-1_7b
@@ -26,7 +26,7 @@ metric_logging:
 
 # Dataset configuration
 dataset:
-  path: "openai/gsm8k"
+  path: /mnt/wsfuse/huggingface_models/datasets--openai--gsm8k/snapshots/e53f048856ff4f594e959d75785d2c2d37b678ee
   revision: "main"
   data_split: "train"
   streaming: true

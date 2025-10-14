@@ -88,13 +88,6 @@ def mount_mnt_directory(mount_dst: str) -> None:
             env=clean_env,
         )
         print("Done mounting")
-        subprocess.run(
-            ["ls /mnt/wsfuse/huggingface_models"],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=clean_env,
-        )
     except subprocess.CalledProcessError as e:
         print(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
     finally:
@@ -307,6 +300,7 @@ class MastLauncher(BaseLauncher):
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
+                "HF_HOME": "/mnt/wsfuse/huggingface_models",
             },
         }
 
