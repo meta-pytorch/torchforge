@@ -464,7 +464,7 @@ class Policy(PolicyInterface):
             )
             self.policy_version = policy_version
             for _, handle in fetched_weights.items():
-                SharedTensor(handle=handle).cleanup()
+                handle.to_shared_tensor().drop()
 
             # After updating the weights, we need to reset the KV cache
             self.scheduler.reset_prefix_cache()
@@ -643,7 +643,7 @@ class PolicyWorker(ForgeActor):
             t.start()
             loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
-                param = SharedTensor(handle=param_handle).tensor
+                param = param_handle.to_shared_tensor().tensor
                 loaded = model.load_weights([(name, param)])
                 loaded_weights.update(loaded)
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")

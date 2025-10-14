@@ -30,7 +30,7 @@ class TestSharedTensorCreation:
         assert shared.tensor.shape == torch.Size(shape)
         assert shared.tensor.dtype == dtype
 
-        shared.cleanup()
+        shared.drop()
 
     def test_empty_with_bfloat16(self):
         """Test creating empty bfloat16 tensor"""
@@ -40,7 +40,7 @@ class TestSharedTensorCreation:
         assert shared.tensor.dtype == torch.bfloat16
         assert shared.tensor.dtype == torch.bfloat16
 
-        shared.cleanup()
+        shared.drop()
 
     def test_zeros_creation(self):
         """Test creating zero-initialized tensor"""
@@ -51,7 +51,7 @@ class TestSharedTensorCreation:
         assert torch.all(tensor == 0)
         assert tensor.sum().item() == 0.0
 
-        shared.cleanup()
+        shared.drop()
 
     def test_ones_creation(self):
         """Test creating ones-initialized tensor"""
@@ -62,7 +62,7 @@ class TestSharedTensorCreation:
         assert torch.all(tensor == 1)
         assert tensor.sum().item() == 200.0
 
-        shared.cleanup()
+        shared.drop()
 
     def test_from_tensor_creation(self):
         """Test creating from existing tensor"""
@@ -73,7 +73,7 @@ class TestSharedTensorCreation:
         assert shared.tensor.dtype == original.dtype
         assert torch.allclose(shared.tensor, original)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_from_handle_creation(self):
         """Test creating from handle"""
@@ -91,7 +91,7 @@ class TestSharedTensorCreation:
         assert reconstructed.tensor.shape == original.tensor.shape
         assert reconstructed.tensor.dtype == original.tensor.dtype
 
-        original.cleanup()
+        original.drop()
 
     def test_creation_requires_argument(self):
         """Test that creation without arguments raises error"""
@@ -112,7 +112,7 @@ class TestSharedTensorCreation:
         shared = SharedTensor.empty(shape, torch.float32)
         assert shared.tensor.shape == torch.Size(shape)
         assert shared.tensor.shape == torch.Size(shape)
-        shared.cleanup()
+        shared.drop()
 
 
 class TestSharedTensorDtypes:
@@ -149,7 +149,7 @@ class TestSharedTensorDtypes:
         else:
             shared.tensor.fill_(3.14)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_dtype_conversion_in_handle(self):
         """Test dtype is preserved through handle"""
@@ -160,7 +160,7 @@ class TestSharedTensorDtypes:
             shared2 = SharedTensor(handle=handle)
             assert shared2.tensor.dtype == dtype
 
-            shared1.cleanup()
+            shared1.drop()
 
 
 class TestSharedTensorOperations:
@@ -174,7 +174,7 @@ class TestSharedTensorOperations:
         shared.copy_from(source)
 
         assert torch.allclose(shared.tensor, source)
-        shared.cleanup()
+        shared.drop()
 
     def test_copy_from_shape_mismatch(self):
         """Test copy_from raises error on shape mismatch"""
@@ -184,7 +184,7 @@ class TestSharedTensorOperations:
         with pytest.raises(ValueError, match="Shape mismatch"):
             shared.copy_from(source)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_clone(self):
         """Test cloning creates independent copy"""
@@ -201,8 +201,8 @@ class TestSharedTensorOperations:
         assert torch.all(cloned.tensor == 5.0)
         assert torch.all(original.tensor == 10.0)
 
-        original.cleanup()
-        cloned.cleanup()
+        original.drop()
+        cloned.drop()
 
     def test_tensor_modifications(self):
         """Test that modifications to tensor are reflected"""
@@ -217,7 +217,7 @@ class TestSharedTensorOperations:
         assert tensor2[0, 0].item() == 99.0
         assert torch.all(tensor2[5:, :] == 42.0)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_inplace_operations(self):
         """Test in-place operations work"""
@@ -232,7 +232,7 @@ class TestSharedTensorOperations:
 
         assert abs(new_mean - (mean + 5.0)) < 0.1
 
-        shared.cleanup()
+        shared.drop()
 
 
 class TestSharedTensorSerialization:
@@ -249,7 +249,7 @@ class TestSharedTensorSerialization:
 
         assert unpickled_handle == handle
 
-        shared.cleanup()
+        shared.drop()
 
     def test_handle_small_size(self):
         """Test that handle is small (efficient for RPC)"""
@@ -261,7 +261,7 @@ class TestSharedTensorSerialization:
         # Handle should be < 1KB even for huge tensors
         assert len(pickled) < 1024
 
-        shared.cleanup()
+        shared.drop()
 
     def test_data_integrity_after_pickle(self):
         """Test data is preserved through handle pickling"""
@@ -281,14 +281,14 @@ class TestSharedTensorSerialization:
         # Verify data is same
         assert torch.allclose(shared2.tensor.float(), original_data.float(), rtol=1e-3)
 
-        shared1.cleanup()
+        shared1.drop()
 
 
 class TestSharedTensorMemory:
     """Test memory management and cleanup"""
 
-    def test_cleanup(self):
-        """Test cleanup removes shared memory"""
+    def test_drop(self):
+        """Test drop removes shared memory"""
         shared = SharedTensor.empty((10, 10), torch.float32)
         shm_name = shared._shm_name
 
@@ -296,8 +296,8 @@ class TestSharedTensorMemory:
         tensor = shared.tensor
         tensor.fill_(5.0)
 
-        # Cleanup
-        shared.cleanup()
+        # Drop shared memory
+        shared.drop()
 
         # Trying to attach should fail
         from multiprocessing import shared_memory
@@ -321,7 +321,7 @@ class TestSharedTensorMemory:
         # Verify tensor1 sees the change
         assert torch.all(tensor1 == 10.0)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_handle_reconstruction_shares_memory(self):
         """Test that handle reconstruction shares same memory"""
@@ -337,7 +337,7 @@ class TestSharedTensorMemory:
         # Verify shared1 sees the change
         assert torch.all(shared1.tensor == 14.0)
 
-        shared1.cleanup()
+        shared1.drop()
 
 
 class TestSharedTensorEdgeCases:
@@ -354,14 +354,14 @@ class TestSharedTensorEdgeCases:
                 (),
             ),
         )
-        shared.cleanup()
+        shared.drop()
 
     def test_single_element_tensor(self):
         """Test 1-element tensor"""
         shared = SharedTensor.empty((1,), torch.float32)
         shared.tensor.fill_(42.0)
         assert shared.tensor.item() == 42.0
-        shared.cleanup()
+        shared.drop()
 
     def test_large_tensor(self):
         """Test large tensor (1GB)"""
@@ -372,7 +372,7 @@ class TestSharedTensorEdgeCases:
         assert shared.tensor.shape == shape
         assert shared.tensor.numel() == 250_000_000
 
-        shared.cleanup()
+        shared.drop()
 
     def test_non_contiguous_tensor_conversion(self):
         """Test that non-contiguous tensors are handled"""
@@ -386,7 +386,7 @@ class TestSharedTensorEdgeCases:
         # Result should match
         assert torch.allclose(shared.tensor, original)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_repr(self):
         """Test string representation"""
@@ -398,7 +398,7 @@ class TestSharedTensorEdgeCases:
         assert "float32" in repr_str
         assert shared._shm_name in repr_str
 
-        shared.cleanup()
+        shared.drop()
 
 
 class TestSharedTensorMultiprocess:
@@ -429,7 +429,7 @@ class TestSharedTensorMultiprocess:
 
         assert abs(result - expected) < 1e-5
 
-        shared.cleanup()
+        shared.drop()
 
     def test_multiprocess_write(self):
         """Test writing to shared tensor from another process"""
@@ -452,7 +452,7 @@ class TestSharedTensorMultiprocess:
         # Verify in main process
         assert torch.all(shared.tensor == 42.0)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_multiprocess_bidirectional(self):
         """Test bidirectional communication"""
@@ -485,8 +485,8 @@ class TestSharedTensorMultiprocess:
             output_shared.tensor, expected
         ), "output: {}, expected: {}".format(output_shared.tensor, expected)
 
-        input_shared.cleanup()
-        output_shared.cleanup()
+        input_shared.drop()
+        output_shared.drop()
 
 
 class TestSharedTensorPerformance:
@@ -500,7 +500,7 @@ class TestSharedTensorPerformance:
         start = time.time()
         for _ in range(10):
             shared = SharedTensor.empty(shape, torch.float32)
-            shared.cleanup()
+            shared.drop()
         empty_time = time.time() - start
 
         # Time from_tensor creation
@@ -508,7 +508,7 @@ class TestSharedTensorPerformance:
         for _ in range(10):
             tensor = torch.randn(shape)
             shared = SharedTensor(tensor=tensor)
-            shared.cleanup()
+            shared.drop()
         from_tensor_time = time.time() - start
 
         # empty() should be faster (no data copying)
@@ -528,7 +528,118 @@ class TestSharedTensorPerformance:
         # Should be able to do 1000 round trips in < 0.1 seconds
         assert elapsed < 0.1
 
-        shared.cleanup()
+        shared.drop()
+
+
+class TestSharedTensorHandleToSharedTensor:
+    """Test SharedTensorHandle.to_shared_tensor() method"""
+
+    def test_to_shared_tensor_basic(self):
+        """Test basic creation of SharedTensor from handle using to_shared_tensor method"""
+        original = SharedTensor.empty((10, 10), torch.float32)
+        original.tensor.fill_(7.0)
+
+        handle = original.get_handle()
+        reconstructed = handle.to_shared_tensor()
+
+        assert torch.all(reconstructed.tensor == 7.0)
+        assert reconstructed.tensor.shape == original.tensor.shape
+        assert reconstructed.tensor.dtype == original.tensor.dtype
+
+        original.drop()
+
+    def test_to_shared_tensor_preserves_data(self):
+        """Test that to_shared_tensor preserves original data"""
+        original = SharedTensor.empty((20, 30), torch.float32)
+        original.tensor.normal_(0, 1)
+        original_data = original.tensor.clone()
+
+        handle = original.get_handle()
+        reconstructed = handle.to_shared_tensor()
+
+        assert torch.allclose(reconstructed.tensor, original_data)
+
+        original.drop()
+
+    def test_to_shared_tensor_shares_memory(self):
+        """Test that to_shared_tensor shares memory with original"""
+        original = SharedTensor.empty((15, 15), torch.float32)
+        original.tensor.fill_(5.0)
+
+        handle = original.get_handle()
+        reconstructed = handle.to_shared_tensor()
+
+        reconstructed.tensor.fill_(10.0)
+
+        assert torch.all(original.tensor == 10.0)
+
+        original.drop()
+
+    def test_to_shared_tensor_with_various_dtypes(self):
+        """Test to_shared_tensor works with different data types"""
+        for dtype in [torch.float32, torch.float64, torch.bfloat16, torch.int32]:
+            original = SharedTensor.empty((5, 5), dtype)
+            if (
+                dtype == torch.bfloat16
+                or dtype == torch.float32
+                or dtype == torch.float64
+            ):
+                original.tensor.normal_(0, 1)
+            else:
+                original.tensor.fill_(42)
+
+            handle = original.get_handle()
+            reconstructed = handle.to_shared_tensor()
+
+            assert reconstructed.tensor.dtype == dtype
+            if dtype == torch.bfloat16:
+                assert torch.allclose(
+                    reconstructed.tensor.float(), original.tensor.float(), rtol=1e-3
+                )
+            else:
+                assert torch.allclose(reconstructed.tensor, original.tensor)
+
+            original.drop()
+
+    def test_to_shared_tensor_multiprocess(self):
+        """Test to_shared_tensor in multiprocess scenario"""
+
+        def worker_process(handle, result_queue):
+            shared = handle.to_shared_tensor()
+            result_queue.put(shared.tensor.sum().item())
+
+        original = SharedTensor.empty((50, 50), torch.float32)
+        original.tensor.fill_(3.0)
+
+        handle = original.get_handle()
+        result_queue = Queue()
+
+        p = Process(target=worker_process, args=(handle, result_queue))
+        p.start()
+        p.join()
+
+        result = result_queue.get()
+        expected = 3.0 * 50 * 50
+
+        assert abs(result - expected) < 1e-5
+
+        original.drop()
+
+    def test_to_shared_tensor_equivalent_to_constructor(self):
+        """Test that handle.to_shared_tensor() is equivalent to SharedTensor(handle=handle)"""
+        original = SharedTensor.empty((25, 25), torch.float32)
+        original.tensor.normal_(0, 1)
+
+        handle = original.get_handle()
+
+        via_method = handle.to_shared_tensor()
+        via_constructor = SharedTensor(handle=handle)
+
+        assert torch.allclose(via_method.tensor, via_constructor.tensor)
+        assert via_method.tensor.shape == via_constructor.tensor.shape
+        assert via_method.tensor.dtype == via_constructor.tensor.dtype
+
+        original.drop()
 
 
 class TestSharedTensorBfloat16:
@@ -538,7 +649,7 @@ class TestSharedTensorBfloat16:
         """Test bfloat16 tensor creation"""
         shared = SharedTensor.empty((100, 100), torch.bfloat16)
         assert shared.tensor.dtype == torch.bfloat16
-        shared.cleanup()
+        shared.drop()
 
     def test_bfloat16_from_tensor(self):
         """Test creating shared tensor from bfloat16 tensor"""
@@ -548,7 +659,7 @@ class TestSharedTensorBfloat16:
         assert shared.tensor.dtype == torch.bfloat16
         assert torch.allclose(shared.tensor.float(), original.float(), rtol=1e-3)
 
-        shared.cleanup()
+        shared.drop()
 
     def test_bfloat16_handle_preservation(self):
         """Test bfloat16 dtype preserved through handle"""
@@ -561,7 +672,7 @@ class TestSharedTensorBfloat16:
         assert shared2.tensor.dtype == torch.bfloat16
         assert torch.allclose(shared1.tensor.float(), shared2.tensor.float(), rtol=1e-3)
 
-        shared1.cleanup()
+        shared1.drop()
 
     def test_bfloat16_operations(self):
         """Test operations on bfloat16 tensors"""
@@ -574,7 +685,7 @@ class TestSharedTensorBfloat16:
         # Mean should be close to 0
         assert abs(mean) < 0.1
 
-        shared.cleanup()
+        shared.drop()
 
 
 if __name__ == "__main__":

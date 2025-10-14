@@ -4,6 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import functools
 import uuid
 from dataclasses import dataclass
@@ -19,6 +21,15 @@ class SharedTensorHandle:
     shm_name: str
     shape: Tuple[int, ...]
     dtype: str
+
+    def to_shared_tensor(self) -> SharedTensor:
+        """
+        Create a SharedTensor from this handle.
+
+        Returns:
+            SharedTensor instance attached to the shared memory referenced by this handle
+        """
+        return SharedTensor(handle=self)
 
 
 class SharedTensor:
@@ -203,8 +214,18 @@ class SharedTensor:
         new_shared.tensor.copy_(self.tensor)
         return new_shared
 
-    def cleanup(self):
-        """Clean up shared memory"""
+    def drop(self):
+        """
+        Release and unlink the shared memory.
+
+        This method closes the shared memory handle and removes the shared memory
+        segment from the system. After calling this method, the shared memory
+        will no longer be accessible by any process.
+
+        Note:
+            This should be called when the shared tensor is no longer needed.
+            Failing to call this method may result in shared memory leaks.
+        """
         try:
             self._shm.close()
             self._shm.unlink()
