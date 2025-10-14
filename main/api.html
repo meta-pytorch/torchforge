@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-09-24T21:11:02+00:00" />
+    <meta property="article:modified_time" content="2025-10-14T16:25:25+00:00" />
     <title>API Reference &#8212; torchforge 0.1 documentation</title>
   
   
@@ -36,6 +36,7 @@
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=a8c4d769" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
@@ -47,15 +48,16 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api';</script>
+    <script src="_static/custom.js?v=b1073d4a"></script>
     <link rel="canonical" href="https://meta-pytorch.org/forge/main/api.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Core Interfaces" href="api_core.html" />
+    <link rel="next" title="ForgeActor" href="api_actors.html" />
     <link rel="prev" title="Tutorials" href="tutorials.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Sep 24, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -205,7 +207,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Sep 24, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 
   </head>
 
@@ -314,13 +316,6 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
@@ -330,13 +325,6 @@
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="#">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="faq.html">
-    FAQ
   </a>
 </li>
 
@@ -484,13 +472,6 @@ document.write(`
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
@@ -500,13 +481,6 @@ document.write(`
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="#">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="faq.html">
-    FAQ
   </a>
 </li>
 
@@ -614,13 +588,11 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="api_core.html">Core Interfaces</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_actors.html">Actors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_data.html">Data Management</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_losses.html">Losses</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_envs.html">Environments</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_controller.html">Controller</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_util.html">Utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_actors.html">ForgeActor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_service.html">Service</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_generator.html">Generator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_trainer.html">Trainer</a></li>
 </ul>
 </div>
 </nav></div>
@@ -741,30 +713,34 @@ document.write(`
                   
   <section id="api-reference">
 <h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h1>
-<p>This section provides comprehensive API documentation for TorchForge modules and classes.</p>
-<p>TorchForge is organized into several key modules, each providing specialized functionality for post-training generative AI models:</p>
-<section id="module-overview">
-<h2>Module Overview<a class="headerlink" href="#module-overview" title="Link to this heading">#</a></h2>
-<p><strong>Core Components</strong></p>
+<p>This section provides comprehensive API documentation for TorchForge.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>TorchForge is a PyTorch native platform for post-training generative AI models,
+designed to streamline reinforcement learning workflows for large language
+models. The platform leverages PyTorch’s distributed computing capabilities
+and is built on top of <a class="reference external" href="https://meta-pytorch.org/monarch/">Monarch</a>,
+making extensive use of actors for distributed computation and fault tolerance.</p>
+<p>Key Features of TorchForge include:</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="api_core.html"><span class="std std-doc">Interfaces &amp; Types</span></a> - Core interfaces and type definitions</p></li>
-<li><p><a class="reference internal" href="api_actors.html"><span class="std std-doc">Actors</span></a> - Model training and inference components</p></li>
-<li><p><a class="reference internal" href="api_controller.html"><span class="std std-doc">Controller</span></a> - Distributed training orchestration and resource management</p></li>
+<li><p><strong>Actor-Based Architecture</strong>: TorchForge uses an actor-based system for distributed training, providing excellent scalability and fault tolerance.</p></li>
+<li><p><strong>PyTorch Native</strong>: Built natively on PyTorch, ensuring seamless integration with existing PyTorch workflows.</p></li>
+<li><p><strong>Post-Training Focus</strong>: Specifically designed for post-training techniques like RLVR, SFT, and other alignment methods.</p></li>
+<li><p><strong>Distributed by Design</strong>: Supports multi-GPU and multi-node training out of the box.</p></li>
 </ul>
-<p><strong>Data Management</strong></p>
-<ul class="simple">
-<li><p><a class="reference internal" href="api_data.html"><span class="std std-doc">Data</span></a> - Data handling utilities, datasets, and data models</p></li>
-</ul>
-<p><strong>Training Components</strong></p>
-<ul class="simple">
-<li><p><a class="reference internal" href="api_losses.html"><span class="std std-doc">Losses</span></a> - Loss functions for reinforcement learning and supervised fine-tuning</p></li>
-<li><p><a class="reference internal" href="api_envs.html"><span class="std std-doc">Environments</span></a> - Training and inference environments</p></li>
-</ul>
-<p><strong>Tools &amp; Utilities</strong></p>
-<ul class="simple">
-<li><p><a class="reference internal" href="api_util.html"><span class="std std-doc">Utilities</span></a> - General utility functions and helpers</p></li>
-</ul>
+<p>For most use cases, you’ll interact with the high-level service
+interfaces, which handle the complexity of actor coordination and
+distributed training automatically.</p>
+<p>For advanced users who need fine-grained control, the individual actor
+APIs provide direct access to the underlying distributed components.</p>
 <div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api_actors.html">ForgeActor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_service.html">Service</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_generator.html">Generator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_trainer.html">Trainer</a></li>
+</ul>
 </div>
 </section>
 </section>
@@ -821,11 +797,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="api_core.html"
+       href="api_actors.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Core Interfaces</p>
+        <p class="prev-next-title">ForgeActor</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -860,11 +836,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="api_core.html"
+       href="api_actors.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Core Interfaces</p>
+        <p class="prev-next-title">ForgeActor</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -886,7 +862,7 @@ document.write(`
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-overview">Module Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 </ul>
   </nav></div>
     
@@ -1021,7 +997,7 @@ document.write(`
        "headline": "API Reference",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api.html",
-       "articleBody": "API Reference# This section provides comprehensive API documentation for TorchForge modules and classes. TorchForge is organized into several key modules, each providing specialized functionality for post-training generative AI models: Module Overview# Core Components Interfaces \u0026 Types - Core interfaces and type definitions Actors - Model training and inference components Controller - Distributed training orchestration and resource management Data Management Data - Data handling utilities, datasets, and data models Training Components Losses - Loss functions for reinforcement learning and supervised fine-tuning Environments - Training and inference environments Tools \u0026 Utilities Utilities - General utility functions and helpers",
+       "articleBody": "API Reference# This section provides comprehensive API documentation for TorchForge. Overview# TorchForge is a PyTorch native platform for post-training generative AI models, designed to streamline reinforcement learning workflows for large language models. The platform leverages PyTorch\u2019s distributed computing capabilities and is built on top of Monarch, making extensive use of actors for distributed computation and fault tolerance. Key Features of TorchForge include: Actor-Based Architecture: TorchForge uses an actor-based system for distributed training, providing excellent scalability and fault tolerance. PyTorch Native: Built natively on PyTorch, ensuring seamless integration with existing PyTorch workflows. Post-Training Focus: Specifically designed for post-training techniques like RLVR, SFT, and other alignment methods. Distributed by Design: Supports multi-GPU and multi-node training out of the box. For most use cases, you\u2019ll interact with the high-level service interfaces, which handle the complexity of actor coordination and distributed training automatically. For advanced users who need fine-grained control, the individual actor APIs provide direct access to the underlying distributed components. ForgeActor Service Generator Model Trainer",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

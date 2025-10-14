@@ -2,12 +2,14 @@
 <!DOCTYPE html>
 
 
-<html lang="en" data-content_root="../../../" >
+<html lang="en" data-content_root="./" >
 
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>forge.data_models.prompt &#8212; torchforge 0.1 documentation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <meta property="article:modified_time" content="2025-10-14T16:25:25+00:00" />
+    <title>Model &#8212; torchforge 0.1 documentation</title>
   
   
   
@@ -17,48 +19,45 @@
   </script>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
 
   
-  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
 
-    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=047068a3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=a8c4d769" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
-    <script src="../../../_static/doctools.js?v=888ff710"></script>
-    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
-    <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-    <script type="module">
-import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
-window.addEventListener("load", () => mermaid.run());
-</script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/forge/data_models/prompt';</script>
-    <link rel="canonical" href="https://meta-pytorch.org/forge/main/_modules/forge/data_models/prompt.html" />
-    <link rel="index" title="Index" href="../../../genindex.html" />
-    <link rel="search" title="Search" href="../../../search.html" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api_model';</script>
+    <script src="_static/custom.js?v=b1073d4a"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/api_model.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Trainer" href="api_trainer.html" />
+    <link rel="prev" title="Generator" href="api_generator.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -103,13 +102,13 @@ window.addEventListener("load", () => mermaid.run());
   }
 </style>
 
-<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
-<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="stylesheet" type="text/css" href="_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="_static/js/theme.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
-<meta property="og:image" content="../../../_static/img/pytorch_seo.png" />
-<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta property="og:image" content="_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="_static/webfonts/all.min.css" crossorigin="anonymous">
 <meta http-equiv="Content-Security-Policy"
   content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
 <meta name="pytorch_project" content="">
@@ -208,6 +207,7 @@ window.addEventListener("load", () => mermaid.run());
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 
   </head>
 
@@ -243,7 +243,7 @@ window.addEventListener("load", () => mermaid.run());
     <div class="search-button__overlay"></div>
     <div class="search-button__search-container">
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -280,7 +280,7 @@ window.addEventListener("load", () => mermaid.run());
     
   
 
-<a class="navbar-brand logo" href="../../../index.html">
+<a class="navbar-brand logo" href="index.html">
   
   
   
@@ -302,43 +302,29 @@ window.addEventListener("load", () => mermaid.run());
   <ul class="bd-navbar-elements navbar-nav">
     
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../getting_started.html">
+  <a class="nav-link nav-internal" href="getting_started.html">
     Get Started
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../concepts.html">
+  <a class="nav-link nav-internal" href="concepts.html">
     Concepts
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../tutorials.html">
+  <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
 </li>
 
 
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../api.html">
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../faq.html">
-    FAQ
   </a>
 </li>
 
@@ -354,7 +340,7 @@ window.addEventListener("load", () => mermaid.run());
         <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -442,6 +428,10 @@ document.write(`
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -452,9 +442,7 @@ document.write(`
       
       
       
-        
-      
-      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+      <div class="bd-sidebar-primary bd-sidebar">
         
 
   
@@ -470,43 +458,29 @@ document.write(`
   <ul class="bd-navbar-elements navbar-nav">
     
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../getting_started.html">
+  <a class="nav-link nav-internal" href="getting_started.html">
     Get Started
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../concepts.html">
+  <a class="nav-link nav-internal" href="concepts.html">
     Concepts
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../tutorials.html">
+  <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
 </li>
 
 
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../api.html">
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../faq.html">
-    FAQ
   </a>
 </li>
 
@@ -523,7 +497,7 @@ document.write(`
           <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -608,6 +582,22 @@ document.write(`
     
   </div>
   
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api_actors.html">ForgeActor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_service.html">Service</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_generator.html">Generator</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_trainer.html">Trainer</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
   </div>
@@ -636,14 +626,14 @@ document.write(`
   <ul class="bd-breadcrumbs">
     
     <li class="breadcrumb-item breadcrumb-home">
-      <a href="../../../index.html" class="nav-link" aria-label="Home">
+      <a href="index.html" class="nav-link" aria-label="Home">
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
     
-    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    <li class="breadcrumb-item"><a href="api.html" class="nav-link">API Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">forge.data_m...</li>
+    <li class="breadcrumb-item active" aria-current="page">Model</li>
   </ul>
 </nav>
 </div>
@@ -685,13 +675,13 @@ document.write(`
     <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <link itemprop="item" href="../../index.html">
-        <meta itemprop="name" content="Module code">
+        <link itemprop="item" href="api.html">
+        <meta itemprop="name" content="API Reference">
         <meta itemprop="position" content="1">
       </div>
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <meta itemprop="name" content="forge.data_models.prompt">
+        <meta itemprop="name" content="Model">
         <meta itemprop="position" content="2">
       </div>
     </div>
@@ -699,24 +689,24 @@ document.write(`
     
     
     <div class="pytorch-call-to-action-links">
-      <div id="tutorial-type">_modules/forge/data_models/prompt</div>
+      <div id="tutorial-type">api_model</div>
       <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
         <div id="google-colab-link">
-          <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+          <img class="call-to-action-img" src="_static/img/pytorch-colab.svg" />
           <div class="call-to-action-desktop-view">Run in Google Colab</div>
           <div class="call-to-action-mobile-view">Colab</div>
         </div>
       </a>
       <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
         <div id="download-notebook-link">
-          <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+          <img class="call-to-action-notebook-img" src="_static/img/pytorch-download.svg" />
           <div class="call-to-action-desktop-view">Download Notebook</div>
           <div class="call-to-action-mobile-view">Notebook</div>
         </div>
       </a>
       <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
         <div id="github-view-link">
-          <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+          <img class="call-to-action-img" src="_static/img/pytorch-github.svg" />
           <div class="call-to-action-desktop-view">View on GitHub</div>
           <div class="call-to-action-mobile-view">GitHub</div>
         </div>
@@ -730,87 +720,98 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for forge.data_models.prompt</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
-<span class="c1"># All rights reserved.</span>
-<span class="c1">#</span>
-<span class="c1"># This source code is licensed under the BSD-style license found in the</span>
-<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+  <section id="model">
+<h1>Model<a class="headerlink" href="#model" title="Link to this heading">#</a></h1>
+<p>The <a class="reference internal" href="#forge.actors.reference_model.ReferenceModel" title="forge.actors.reference_model.ReferenceModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">forge.actors.reference_model.ReferenceModel</span></code></a> provides a frozen
+copy of the policy model used for computing advantages in reinforcement
+learning. It performs inference on input sequences and returns logits or
+log probabilities for computing KL divergence and other RL metrics.</p>
+<section id="referencemodel">
+<h2>ReferenceModel<a class="headerlink" href="#referencemodel" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.reference_model.</span></span><span class="sig-name descname"><span class="pre">ReferenceModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parallelism=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comm=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training=&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/reference_model.html#ReferenceModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="api_actors.html#forge.controller.actor.ForgeActor" title="forge.controller.actor.ForgeActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForgeActor</span></code></a></p>
+<p>A reference model actor for reinforcement learning (RL) training.</p>
+<p>Based on TorchTitan’s engine architecture, this actor provides a
+frozen model that only runs forward passes without gradient
+computation. It is typically used to maintain algorithmic
+consistency in policy optimization methods such as GRPO
+(Group Relative Policy Optimization) or PPO (Proximal Policy
+Optimization), where it serves as a fixed reference point to
+compute KL divergence penalties against the training policy.</p>
+<p>The reference model is loaded from a checkpoint and runs in
+evaluation mode with inference_mode enabled to optimize memory and
+compute efficiency.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<a class="reference internal" href="api_trainer.html#torchtitan.config.job_config.Model" title="torchtitan.config.job_config.Model"><em>Model</em></a>) – Model configuration (architecture, vocab size,</p></li>
+<li><p><strong>etc.</strong><strong>)</strong> (<em>collection</em><em>,</em>) – </p></li>
+<li><p><strong>parallelism</strong> (<a class="reference internal" href="api_trainer.html#torchtitan.config.job_config.Parallelism" title="torchtitan.config.job_config.Parallelism"><em>Parallelism</em></a>) – Parallelism strategy configuration</p></li>
+<li><p><strong>DP</strong><strong>)</strong> (<em>(</em><em>TP</em><em>, </em><em>PP</em><em>, </em><em>CP</em><em>,</em>) – </p></li>
+<li><p><strong>checkpoint</strong> (<a class="reference internal" href="api_trainer.html#torchtitan.config.job_config.Checkpoint" title="torchtitan.config.job_config.Checkpoint"><em>Checkpoint</em></a>) – Checkpoint loading configuration</p></li>
+<li><p><strong>compile</strong> (<em>Compile</em>) – Torch compilation settings</p></li>
+<li><p><strong>comm</strong> (<em>Comm</em>) – Communication backend configuration</p></li>
+<li><p><strong>training</strong> (<a class="reference internal" href="api_trainer.html#torchtitan.config.job_config.Training" title="torchtitan.config.job_config.Training"><em>Training</em></a>) – Training-related settings (dtype, garbage</p></li>
+<li><p><strong>etc.</strong><strong>)</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.checkpoint">
+<span class="sig-name descname"><span class="pre">checkpoint</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.checkpoint" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.comm">
+<span class="sig-name descname"><span class="pre">comm</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.comm" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.compile">
+<span class="sig-name descname"><span class="pre">compile</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.compile" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
-<div class="viewcode-block" id="Role">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.Role">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">Role</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">SYSTEM</span> <span class="o">=</span> <span class="s2">&quot;system&quot;</span>
-    <span class="n">USER</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
-    <span class="n">ASSISTANT</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span>
-    <span class="n">NONE</span> <span class="o">=</span> <span class="s2">&quot;none&quot;</span></div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.forward" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.model">
+<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.model" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.parallelism">
+<span class="sig-name descname"><span class="pre">parallelism</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.parallelism" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
-<div class="viewcode-block" id="Message">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.Message">[docs]</a>
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Message</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A single message in a conversation.&quot;&quot;&quot;</span>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.setup" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
-    <span class="n">chunks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-    <span class="n">role</span><span class="p">:</span> <span class="n">Role</span></div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.reference_model.ReferenceModel.training">
+<span class="sig-name descname"><span class="pre">training</span></span><a class="headerlink" href="#forge.actors.reference_model.ReferenceModel.training" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
 
+</dd></dl>
 
+<p>The ReferenceModel uses a subset of TorchTitan’s configuration system:</p>
+<ul class="simple">
+<li><p><strong>model</strong>: Model architecture settings (Model dataclass)</p></li>
+<li><p><strong>parallelism</strong>: Parallelism configuration for distributed inference (Parallelism dataclass)</p></li>
+<li><p><strong>checkpoint</strong>: Checkpoint loading settings (Checkpoint dataclass)</p></li>
+<li><p><strong>compile</strong>: Model compilation settings (Compile dataclass)</p></li>
+<li><p><strong>training</strong>: Training configuration for dtype and other settings (Training dataclass)</p></li>
+</ul>
+<p>For detailed configuration options, refer to the <a class="reference external" href="https://github.com/pytorch/torchtitan">TorchTitan documentation</a>.</p>
+</section>
+</section>
 
-<div class="viewcode-block" id="Prompt">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.Prompt">[docs]</a>
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Prompt</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A multi-turn prompt (conversation history).&quot;&quot;&quot;</span>
-
-    <span class="c1"># Multi-turn messages, each turn is a message.</span>
-    <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Message</span><span class="p">]</span>
-
-<div class="viewcode-block" id="Prompt.from_prompt">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.Prompt.from_prompt">[docs]</a>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">from_prompt</span><span class="p">(</span>
-        <span class="bp">cls</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system_instruction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Prompt&quot;</span><span class="p">:</span>
-        <span class="n">messages</span> <span class="o">=</span> <span class="n">prompt_to_messages</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">system_instruction</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">Prompt</span><span class="p">(</span>
-            <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
-        <span class="p">)</span></div>
-</div>
-
-
-
-<div class="viewcode-block" id="prompt_to_messages">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.prompt_to_messages">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">prompt_to_messages</span><span class="p">(</span>
-    <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system_instruction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a prompt to a sequence of messages.&quot;&quot;&quot;</span>
-    <span class="n">messages</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">if</span> <span class="n">system_instruction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Message</span><span class="p">(</span><span class="n">chunks</span><span class="o">=</span><span class="p">[</span><span class="n">system_instruction</span><span class="p">],</span> <span class="n">role</span><span class="o">=</span><span class="n">Role</span><span class="o">.</span><span class="n">SYSTEM</span><span class="p">))</span>
-    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-        <span class="n">Message</span><span class="p">(</span><span class="n">chunks</span><span class="o">=</span><span class="p">[</span><span class="n">prompt</span><span class="p">],</span> <span class="n">role</span><span class="o">=</span><span class="n">Role</span><span class="o">.</span><span class="n">USER</span><span class="p">),</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">messages</span></div>
-
-
-
-<div class="viewcode-block" id="to_prompt">
-<a class="viewcode-back" href="../../../api_data.html#forge.data_models.prompt.to_prompt">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">to_prompt</span><span class="p">(</span><span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system_instruction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Prompt</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts a prompt to a sequence of messages.&quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">Prompt</span><span class="p">(</span>
-        <span class="n">messages</span><span class="o">=</span><span class="n">prompt_to_messages</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">system_instruction</span><span class="p">),</span>
-    <span class="p">)</span></div>
-
-</pre></div>
 
                 </article>
               
@@ -853,6 +854,24 @@ document.write(`
 </div>
 
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="api_generator.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Generator</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="api_trainer.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Trainer</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
 
 <div class="footer-info">
@@ -874,12 +893,89 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="api_generator.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Generator</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="api_trainer.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Trainer</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               
             </div>
             
             
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#referencemodel">ReferenceModel</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel"><code class="docutils literal notranslate"><span class="pre">ReferenceModel</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.checkpoint"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.checkpoint</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.comm"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.comm</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.compile"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.compile</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.forward"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.forward</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.model"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.model</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.parallelism"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.parallelism</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.setup"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.setup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.reference_model.ReferenceModel.training"><code class="docutils literal notranslate"><span class="pre">ReferenceModel.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/meta-pytorch/forge/edit/main/docs/source/api_model.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="_sources/api_model.md.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+</div>
+</div>
               
             
           </div>
@@ -892,8 +988,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
 
   
 
@@ -940,7 +1036,7 @@ document.write(`
 <div class="cookie-banner-wrapper">
   <div class="container">
     <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../../../_static/img/pytorch-x.svg">
+    <img class="close-button" src="_static/img/pytorch-x.svg">
   </div>
 </div>
   
@@ -977,20 +1073,20 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "forge.data_models.prompt",
-       "headline": "forge.data_models.prompt",
+       "name": "Model",
+       "headline": "Model",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
-       "url": "/_modules/forge/data_models/prompt.html",
-       "articleBody": "Source code for forge.data_models.prompt # Copyright (c) Meta Platforms, Inc. and affiliates. # All rights reserved. # # This source code is licensed under the BSD-style license found in the # LICENSE file in the root directory of this source tree. from collections.abc import Sequence from dataclasses import dataclass from enum import Enum [docs] class Role(Enum): SYSTEM = \"system\" USER = \"user\" ASSISTANT = \"assistant\" NONE = \"none\" [docs] @dataclass class Message: \"\"\"A single message in a conversation.\"\"\" chunks: Sequence[str] role: Role [docs] @dataclass class Prompt: \"\"\"A multi-turn prompt (conversation history).\"\"\" # Multi-turn messages, each turn is a message. messages: Sequence[Message] [docs] @classmethod def from_prompt( cls, prompt: str, system_instruction: str | None = None ) -\u003e \"Prompt\": messages = prompt_to_messages(prompt, system_instruction) return Prompt( messages=messages, ) [docs] def prompt_to_messages( prompt: str, system_instruction: str | None = None ) -\u003e Sequence[Message]: \"\"\"Convert a prompt to a sequence of messages.\"\"\" messages = [] if system_instruction is not None: messages.append(Message(chunks=[system_instruction], role=Role.SYSTEM)) messages.append( Message(chunks=[prompt], role=Role.USER), ) return messages [docs] def to_prompt(prompt: str, system_instruction: str | None = None) -\u003e Prompt: \"\"\"Converts a prompt to a sequence of messages.\"\"\" return Prompt( messages=prompt_to_messages(prompt, system_instruction), )",
+       "url": "/api_model.html",
+       "articleBody": "Model# The forge.actors.reference_model.ReferenceModel provides a frozen copy of the policy model used for computing advantages in reinforcement learning. It performs inference on input sequences and returns logits or log probabilities for computing KL divergence and other RL metrics. ReferenceModel# class forge.actors.reference_model.ReferenceModel(model=\u003cfactory\u003e, parallelism=\u003cfactory\u003e, checkpoint=\u003cfactory\u003e, compile=\u003cfactory\u003e, comm=\u003cfactory\u003e, training=\u003cfactory\u003e)[source]# Bases: ForgeActor A reference model actor for reinforcement learning (RL) training. Based on TorchTitan\u2019s engine architecture, this actor provides a frozen model that only runs forward passes without gradient computation. It is typically used to maintain algorithmic consistency in policy optimization methods such as GRPO (Group Relative Policy Optimization) or PPO (Proximal Policy Optimization), where it serves as a fixed reference point to compute KL divergence penalties against the training policy. The reference model is loaded from a checkpoint and runs in evaluation mode with inference_mode enabled to optimize memory and compute efficiency. Variables: model (Model) \u2013 Model configuration (architecture, vocab size, etc.) (collection,) \u2013 parallelism (Parallelism) \u2013 Parallelism strategy configuration DP) ((TP, PP, CP,) \u2013 checkpoint (Checkpoint) \u2013 Checkpoint loading configuration compile (Compile) \u2013 Torch compilation settings comm (Comm) \u2013 Communication backend configuration training (Training) \u2013 Training-related settings (dtype, garbage etc.) \u2013 checkpoint# comm# compile# forward# model# parallelism# setup# training# The ReferenceModel uses a subset of TorchTitan\u2019s configuration system: model: Model architecture settings (Model dataclass) parallelism: Parallelism configuration for distributed inference (Parallelism dataclass) checkpoint: Checkpoint loading settings (Checkpoint dataclass) compile: Model compilation settings (Compile dataclass) training: Training configuration for dtype and other settings (Training dataclass) For detailed configuration options, refer to the TorchTitan documentation.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
          "url": "https://pytorch.org"
        },
-       "image": "../../../_static/img/pytorch_seo.png",
+       "image": "_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/_modules/forge/data_models/prompt.html"
+         "@id": "/api_model.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"

@@ -34,6 +34,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a8c4d769" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
@@ -53,6 +54,7 @@ import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.es
 window.addEventListener("load", () => mermaid.run());
 </script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/index';</script>
+    <script src="../_static/custom.js?v=b1073d4a"></script>
     <link rel="canonical" href="https://meta-pytorch.org/forge/main/_modules/index.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -316,13 +318,6 @@ window.addEventListener("load", () => mermaid.run());
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="../tutorials.html">
     Tutorials
   </a>
@@ -332,13 +327,6 @@ window.addEventListener("load", () => mermaid.run());
 <li class="nav-item ">
   <a class="nav-link nav-internal" href="../api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../faq.html">
-    FAQ
   </a>
 </li>
 
@@ -484,13 +472,6 @@ document.write(`
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="../tutorials.html">
     Tutorials
   </a>
@@ -500,13 +481,6 @@ document.write(`
 <li class="nav-item ">
   <a class="nav-link nav-internal" href="../api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="../faq.html">
-    FAQ
   </a>
 </li>
 
@@ -722,9 +696,12 @@ document.write(`
                 <article class="bd-article">
                   
   <h1>All modules for which code is available</h1>
-<ul><li><a href="forge/data_models/prompt.html">forge.data_models.prompt</a></li>
-<li><a href="forge/util/distributed.html">forge.util.distributed</a></li>
-<li><a href="forge/util/logging.html">forge.util.logging</a></li>
+<ul><li><a href="forge/actors/policy.html">forge.actors.policy</a></li>
+<li><a href="forge/actors/reference_model.html">forge.actors.reference_model</a></li>
+<li><a href="forge/actors/trainer.html">forge.actors.trainer</a></li>
+<li><a href="forge/controller/actor.html">forge.controller.actor</a></li>
+<li><a href="forge/controller/service/service.html">forge.controller.service.service</a></li>
+<li><a href="torchtitan/config/job_config.html">torchtitan.config.job_config</a></li>
 </ul>
 
                 </article>
@@ -896,7 +873,7 @@ document.write(`
        "headline": "Overview: module code",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/_modules/index.html",
-       "articleBody": "All modules for which code is available forge.data_models.prompt forge.util.distributed forge.util.logging",
+       "articleBody": "All modules for which code is available forge.actors.policy forge.actors.reference_model forge.actors.trainer forge.controller.actor forge.controller.service.service torchtitan.config.job_config",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

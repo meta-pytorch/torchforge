@@ -1,0 +1,1872 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <meta property="article:modified_time" content="2025-10-14T16:25:25+00:00" />
+    <title>Trainer &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=a8c4d769" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api_trainer';</script>
+    <script src="_static/custom.js?v=b1073d4a"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/api_trainer.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Model" href="api_model.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/forge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/forge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api_actors.html">ForgeActor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_service.html">Service</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_generator.html">Generator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_model.html">Model</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Trainer</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="api.html" class="nav-link">API Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Trainer</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="api.html">
+        <meta itemprop="name" content="API Reference">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="Trainer">
+        <meta itemprop="position" content="2">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">api_trainer</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="trainer">
+<h1>Trainer<a class="headerlink" href="#trainer" title="Link to this heading">#</a></h1>
+<p>The Trainer manages model training in TorchForge, built on top of TorchTitan.
+It handles forward/backward passes, weight updates, and checkpoint management for reinforcement learning workflows.</p>
+<section id="rltrainer">
+<h2>RLTrainer<a class="headerlink" href="#rltrainer" title="Link to this heading">#</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.trainer.</span></span><span class="sig-name descname"><span class="pre">RLTrainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_scheduler=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">training=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parallelism=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activation_checkpoint=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compile=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantize=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comm=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_estimation=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss=&lt;function</span> <span class="pre">RLTrainer.&lt;lambda&gt;&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_dict_key='model_state_dict'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_dcp=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dcp_path='forge_dcp_tmp'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/trainer.html#RLTrainer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.trainer.RLTrainer" title="Link to this definition">#</a></dt>
+<dd><p>A reinforcement learning trainer actor for policy optimization training.</p>
+<p>Built on top of TorchTitan’s training engine, this actor provides a complete training
+loop for reinforcement learning. It performs forward and backward passes with gradient
+computation, optimization steps, and checkpoint management. Unlike the ReferenceModel
+actor which only runs forward passes, RLTrainer actively updates the policy model
+parameters through gradient descent.</p>
+<p>The trainer supports the same distributed training strategies that TorchTitan does,
+including but not limited to, tensor parallelism, data parallelism, and FSDP
+(Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel
+for policy optimization algorithms like GRPO (Group Relative Policy Optimization),
+where it optimizes the policy against a loss that includes KL divergence penalties
+from the reference model.</p>
+<p>The trainer handles:
+- Forward and backward propagation with automatic mixed precision (AMP)
+- Optimizer steps with learning rate scheduling</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.activation_checkpoint">
+<span class="sig-name descname"><span class="pre">activation_checkpoint</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.activation_checkpoint" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.checkpoint">
+<span class="sig-name descname"><span class="pre">checkpoint</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.checkpoint" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.cleanup">
+<span class="sig-name descname"><span class="pre">cleanup</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.cleanup" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.comm">
+<span class="sig-name descname"><span class="pre">comm</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.comm" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.compile">
+<span class="sig-name descname"><span class="pre">compile</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.compile" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.dcp_path">
+<span class="sig-name descname"><span class="pre">dcp_path</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'forge_dcp_tmp'</span></em><a class="headerlink" href="#forge.actors.trainer.RLTrainer.dcp_path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.forward_backward">
+<span class="sig-name descname"><span class="pre">forward_backward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/trainer.html#RLTrainer.forward_backward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.trainer.RLTrainer.forward_backward" title="Link to this definition">#</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.job">
+<span class="sig-name descname"><span class="pre">job</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.job" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.loss">
+<span class="sig-name descname"><span class="pre">loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">targets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.loss" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.lr_scheduler">
+<span class="sig-name descname"><span class="pre">lr_scheduler</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.lr_scheduler" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.memory_estimation">
+<span class="sig-name descname"><span class="pre">memory_estimation</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.memory_estimation" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.model">
+<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.model" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.optimizer">
+<span class="sig-name descname"><span class="pre">optimizer</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.optimizer" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.parallelism">
+<span class="sig-name descname"><span class="pre">parallelism</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.parallelism" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.push_weights">
+<span class="sig-name descname"><span class="pre">push_weights</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.push_weights" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.quantize">
+<span class="sig-name descname"><span class="pre">quantize</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.quantize" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.setup" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.state_dict_key">
+<span class="sig-name descname"><span class="pre">state_dict_key</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'model_state_dict'</span></em><a class="headerlink" href="#forge.actors.trainer.RLTrainer.state_dict_key" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.train_step">
+<span class="sig-name descname"><span class="pre">train_step</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.train_step" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.training">
+<span class="sig-name descname"><span class="pre">training</span></span><a class="headerlink" href="#forge.actors.trainer.RLTrainer.training" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.trainer.RLTrainer.use_dcp">
+<span class="sig-name descname"><span class="pre">use_dcp</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.trainer.RLTrainer.use_dcp" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">#</a></h2>
+<p>The RLTrainer uses TorchTitan’s configuration system with the following components:</p>
+<section id="job-configuration">
+<h3>Job Configuration<a class="headerlink" href="#job-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Job">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dump_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'./torchtitan/outputs'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'default</span> <span class="pre">job'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">print_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Job"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Job" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Job.config_file">
+<span class="sig-name descname"><span class="pre">config_file</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Job.config_file" title="Link to this definition">#</a></dt>
+<dd><p>Job config file</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Job.description">
+<span class="sig-name descname"><span class="pre">description</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'default</span> <span class="pre">job'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Job.description" title="Link to this definition">#</a></dt>
+<dd><p>Description of the job</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Job.dump_folder">
+<span class="sig-name descname"><span class="pre">dump_folder</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'./torchtitan/outputs'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Job.dump_folder" title="Link to this definition">#</a></dt>
+<dd><p>Folder to dump job outputs</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Job.print_args">
+<span class="sig-name descname"><span class="pre">print_args</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Job.print_args" title="Link to this definition">#</a></dt>
+<dd><p>Print the args to terminal</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="model-configuration">
+<h3>Model Configuration<a class="headerlink" href="#model-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name='llama3'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flavor='debugmodel'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hf_assets_path='./tests/assets/tokenizer'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer_path=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">converters=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">print_after_conversion=False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Model" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.converters">
+<span class="sig-name descname"><span class="pre">converters</span></span><a class="headerlink" href="#torchtitan.config.job_config.Model.converters" title="Link to this definition">#</a></dt>
+<dd><p>Comma separated list of converters to apply to the model.
+For instance, the <cite>float8</cite> converter swaps <cite>torch.nn.Linear</cite>
+with <cite>Float8Linear</cite>. This feature requires you to install ‘torchao’
+which can be found here: <a class="github reference external" href="https://github.com/pytorch/ao">pytorch/ao</a></p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.flavor">
+<span class="sig-name descname"><span class="pre">flavor</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'debugmodel'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Model.flavor" title="Link to this definition">#</a></dt>
+<dd><p>Which model config to train</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.hf_assets_path">
+<span class="sig-name descname"><span class="pre">hf_assets_path</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'./tests/assets/tokenizer'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Model.hf_assets_path" title="Link to this definition">#</a></dt>
+<dd><p>Path to HF assets folder. This folder contains local copies of Hugging Face assets,
+including model weights in .safetensors format, the model.safetensor.index.json file
+(fqn to file mapping), the config.json file, generation_config.json, and tokenizer files.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'llama3'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Model.name" title="Link to this definition">#</a></dt>
+<dd><p>Which model to train</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.print_after_conversion">
+<span class="sig-name descname"><span class="pre">print_after_conversion</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Model.print_after_conversion" title="Link to this definition">#</a></dt>
+<dd><p>If true, model definition will be printed to stdout after all model
+converters have been applied.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Model.tokenizer_path">
+<span class="sig-name descname"><span class="pre">tokenizer_path</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Model.tokenizer_path" title="Link to this definition">#</a></dt>
+<dd><p>Use hf_assets_path instead.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>DEPRECATED</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="optimizer-configuration">
+<h3>Optimizer Configuration<a class="headerlink" href="#optimizer-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Optimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'AdamW'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0008</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.9</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.95</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">implementation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'fused'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">early_step_in_backward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Optimizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Optimizer" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.beta1">
+<span class="sig-name descname"><span class="pre">beta1</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.9</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.beta1" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.beta2">
+<span class="sig-name descname"><span class="pre">beta2</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.95</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.beta2" title="Link to this definition">#</a></dt>
+<dd><p>Exponential moving average hyperparameters to use</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.early_step_in_backward">
+<span class="sig-name descname"><span class="pre">early_step_in_backward</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.early_step_in_backward" title="Link to this definition">#</a></dt>
+<dd><p>Whether to apply optimizer in the backward. Caution, optimizer_in_backward
+is not compatible with gradients clipping, users should not call
+register_post_accumulate_grad_hook after the optimizer is built.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.eps">
+<span class="sig-name descname"><span class="pre">eps</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1e-08</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.eps" title="Link to this definition">#</a></dt>
+<dd><p>Epsilon value to use</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.implementation">
+<span class="sig-name descname"><span class="pre">implementation</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'fused'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.implementation" title="Link to this definition">#</a></dt>
+<dd><p>Specify which optimizer implementation to use:
+- ‘fused’: Use fused implementation (CUDA only) for best performance.
+- ‘foreach’: Use some horizontal fusion of tensors for better performance.
+- ‘for-loop’: Use the default implementation for the optimizer (slowest).
+- more info: <a class="reference external" href="https://pytorch.org/docs/stable/optim.html">https://pytorch.org/docs/stable/optim.html</a></p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.lr">
+<span class="sig-name descname"><span class="pre">lr</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0008</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.lr" title="Link to this definition">#</a></dt>
+<dd><p>Learning rate to use</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'AdamW'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.name" title="Link to this definition">#</a></dt>
+<dd><p>Optimizer to use</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Optimizer.weight_decay">
+<span class="sig-name descname"><span class="pre">weight_decay</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Optimizer.weight_decay" title="Link to this definition">#</a></dt>
+<dd><p>Weight decay to use</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="training-configuration">
+<h3>Training Configuration<a class="headerlink" href="#training-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Training</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'c4_test'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">global_batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seq_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2048</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_norm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_cpu_offload</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'float32'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mixed_precision_param</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'bfloat16'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mixed_precision_reduce</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'float32'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gc_freq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gc_debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deterministic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Training"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Training" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.dataset">
+<span class="sig-name descname"><span class="pre">dataset</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'c4_test'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.dataset" title="Link to this definition">#</a></dt>
+<dd><p>Dataset to use</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.dataset_path">
+<span class="sig-name descname"><span class="pre">dataset_path</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.dataset_path" title="Link to this definition">#</a></dt>
+<dd><p>Path to the dataset in the file system. If provided, data will be
+loaded from this path instead of downloaded.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.deterministic">
+<span class="sig-name descname"><span class="pre">deterministic</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.deterministic" title="Link to this definition">#</a></dt>
+<dd><p>Use deterministic algorithms wherever possible, may be slower</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.dtype">
+<span class="sig-name descname"><span class="pre">dtype</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'float32'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.dtype" title="Link to this definition">#</a></dt>
+<dd><p>torch dtype for training. In contrast to mixed precision training, setting training_dtype=bfloat16 will
+put all parameters, gradients, and optimizer states in bfloat16, without an extra copy of fp32 weights.
+In the case of full bf16 training, RoPE calculations and logits will still be in fp32.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.enable_cpu_offload">
+<span class="sig-name descname"><span class="pre">enable_cpu_offload</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.enable_cpu_offload" title="Link to this definition">#</a></dt>
+<dd><p>Whether to apply CPU offloading of parameters, gradients, and optimizer states in FSDP</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.gc_debug">
+<span class="sig-name descname"><span class="pre">gc_debug</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.gc_debug" title="Link to this definition">#</a></dt>
+<dd><p>Enable GC debugging mode. This will perform gc.collect() at every step to
+detect if there is a reference cycle that includes a CUDA Tensor.
+Note that you may want to lower the training steps to avoid generating too
+many temporary files.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.gc_freq">
+<span class="sig-name descname"><span class="pre">gc_freq</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">50</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.gc_freq" title="Link to this definition">#</a></dt>
+<dd><p>Python garbage control scheduling interval, in steps</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.global_batch_size">
+<span class="sig-name descname"><span class="pre">global_batch_size</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">-1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.global_batch_size" title="Link to this definition">#</a></dt>
+<dd><p>Global batch size (defaults to <cite>training.local_batch_size * data-parallel degree</cite>)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.local_batch_size">
+<span class="sig-name descname"><span class="pre">local_batch_size</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.local_batch_size" title="Link to this definition">#</a></dt>
+<dd><p>Local batch size (i.e., per-device batch size)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.max_norm">
+<span class="sig-name descname"><span class="pre">max_norm</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.max_norm" title="Link to this definition">#</a></dt>
+<dd><p>Max norm for gradient clipping</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.mixed_precision_param">
+<span class="sig-name descname"><span class="pre">mixed_precision_param</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'bfloat16'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.mixed_precision_param" title="Link to this definition">#</a></dt>
+<dd><p>torch dtype to use for parameters when applying mixed precision via fully_shard or torch.autocast.
+This feature takes effect via fully_shard when data_parallel_shard_degree &gt; 1 or
+context_parallel_degree &gt; 1; it takes effect via torch.autocast when data_replicate_degree &gt;= 1
+and no other parallelism is enabled, i.e. under DDP or single-device training.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.mixed_precision_reduce">
+<span class="sig-name descname"><span class="pre">mixed_precision_reduce</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'float32'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.mixed_precision_reduce" title="Link to this definition">#</a></dt>
+<dd><p>torch dtype to use for reductions when applying mixed precision via FSDP.
+This feature only takes effect when data_parallel_shard_degree &gt; 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.seed" title="Link to this definition">#</a></dt>
+<dd><p>Choose the base RNG seed used for training</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.seq_len">
+<span class="sig-name descname"><span class="pre">seq_len</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2048</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.seq_len" title="Link to this definition">#</a></dt>
+<dd><p>Sequence length</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Training.steps">
+<span class="sig-name descname"><span class="pre">steps</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10000</span></em><a class="headerlink" href="#torchtitan.config.job_config.Training.steps" title="Link to this definition">#</a></dt>
+<dd><p>How many train steps to run</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="parallelism-configuration">
+<h3>Parallelism Configuration<a class="headerlink" href="#parallelism-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Parallelism</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_parallel_replicate_degree=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_compiled_autograd=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_parallel_shard_degree=-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fsdp_reshard_after_forward='default'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor_parallel_degree=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disable_loss_parallel=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_async_tensor_parallel=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_degree=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_split_points=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_fqns_per_model_part=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_first_stage_less_layers=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_last_stage_less_layers=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_layers_per_stage=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_schedule='1F1B'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_schedule_csv=''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pipeline_parallel_microbatch_size=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context_parallel_degree=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context_parallel_rotate_method='allgather'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expert_parallel_degree=1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expert_tensor_parallel_degree=1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Parallelism"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Parallelism" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.context_parallel_degree">
+<span class="sig-name descname"><span class="pre">context_parallel_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.context_parallel_degree" title="Link to this definition">#</a></dt>
+<dd><p>Context parallelism degree. 1 means disabled.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.context_parallel_rotate_method">
+<span class="sig-name descname"><span class="pre">context_parallel_rotate_method</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'allgather'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.context_parallel_rotate_method" title="Link to this definition">#</a></dt>
+<dd><p>The collective to use in context parallel SDPA for kv shards exchange.
+- ‘allgather’ means to all-gather all kv shards on ranks after the first sub-SDPA computation,
+- ‘alltoall’ means to all-to-all shuffle the kv shards.
+The default value is ‘allgather’.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.data_parallel_replicate_degree">
+<span class="sig-name descname"><span class="pre">data_parallel_replicate_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.data_parallel_replicate_degree" title="Link to this definition">#</a></dt>
+<dd><p>The <cite>data_parallel_replicate_degree</cite> argument specifies the degree of
+data parallelism for weight replication. When this value is greater
+than 1, weights will be replicated across <cite>data_parallel_replicate_degree</cite>
+ranks. If <cite>data_parallel_shard_degree</cite> is also greater than 1, the parallelism
+method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the
+parallelism method used is DDP (Distributed Data Parallelism).
+1 means disabled.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.data_parallel_shard_degree">
+<span class="sig-name descname"><span class="pre">data_parallel_shard_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">-1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.data_parallel_shard_degree" title="Link to this definition">#</a></dt>
+<dd><p>The <cite>data_parallel_shard_degree</cite> argument specifies the degree of data
+parallelism for weight sharding. When this value is greater than 1, weights
+will be sharded across <cite>data_parallel_shard_degree</cite> ranks. If
+<cite>data_parallel_replicate_degree</cite> is also greater than 1, the parallelism
+method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the
+parallelism method used is FSDP (Fully Sharded Data Parallelism).
+-1 means leftover ranks will be used (After DP_REPLICATE/SP/PP). Note that
+only <cite>data_parallel_shard_degree</cite> can be negative. 1 means disabled.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.disable_loss_parallel">
+<span class="sig-name descname"><span class="pre">disable_loss_parallel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.disable_loss_parallel" title="Link to this definition">#</a></dt>
+<dd><p>Whether to apply loss parallel when sequence parallel is enabled</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.enable_async_tensor_parallel">
+<span class="sig-name descname"><span class="pre">enable_async_tensor_parallel</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.enable_async_tensor_parallel" title="Link to this definition">#</a></dt>
+<dd><p>Whether to apply async tensor parallel (currently only effective when compile is enabled)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.enable_compiled_autograd">
+<span class="sig-name descname"><span class="pre">enable_compiled_autograd</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.enable_compiled_autograd" title="Link to this definition">#</a></dt>
+<dd><p>Enable CompiledAutograd to compile the backward.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.expert_parallel_degree">
+<span class="sig-name descname"><span class="pre">expert_parallel_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.expert_parallel_degree" title="Link to this definition">#</a></dt>
+<dd><p>Expert parallelism degree. 1 means disabled. No effect for non-MoE models.
+Currently, it is supported with the following constraints:
+- when etp = tp:
+- cp &lt;= ep &lt;= dp_shard * cp
+- ep % cp == 0
+- dp_shard * cp % ep == 0
+- when etp = 1:
+- cp * tp &lt;= ep &lt;= dp_shard * cp * tp
+- ep % (cp * tp) == 0
+- dp_shard * cp * tp % ep == 0
+Note that this is still an experimental feature. Some constraints will be
+relaxed soon when we have more flexible DeviceMesh support.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.expert_tensor_parallel_degree">
+<span class="sig-name descname"><span class="pre">expert_tensor_parallel_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.expert_tensor_parallel_degree" title="Link to this definition">#</a></dt>
+<dd><p>Expert tensor parallelism degree. 1 means disabled. No effect for non-MoE models, or when ep = 1.
+With this option, the tensor parallel degree on routed experts can be different from that on other params.
+Currently, we only support either
+- [partial dp -&gt; ep] etp = tp
+- [partial dp + all tp -&gt; ep] etp = 1
+Note that this is still an experimental feature.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.fsdp_reshard_after_forward">
+<span class="sig-name descname"><span class="pre">fsdp_reshard_after_forward</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'default'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.fsdp_reshard_after_forward" title="Link to this definition">#</a></dt>
+<dd><p><cite>reshard_after_forward</cite> specifies the policy for applying <cite>reshard_after_forward</cite>
+within an FSDP setup. <cite>reshard_after_forward</cite> controls parameter behavior after forward,
+trading off memory and communication. See torch’s <cite>fully_shard</cite> API for more documentation
+on <cite>reshard_after_forward</cite>.
+The supported policies include “default”, “always” and “never”:
+- “default” applies default resharding behavior, implementing “smart defaults” for known optimal
+scenarios.
+- “always” will enable <cite>reshard_after_forward</cite> for all forward passes.
+- “never” will disable <cite>reshard_after_forward</cite> for all forward passes.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.module_fqns_per_model_part">
+<span class="sig-name descname"><span class="pre">module_fqns_per_model_part</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.module_fqns_per_model_part" title="Link to this definition">#</a></dt>
+<dd><p>Specify a list of lists containing the FQNs (Fully Qualified Names) of modules for each model chunk.
+Each inner list represents one model chunk and contains the module names that belong to that chunk.
+e.g. [[‘tok_embeddings’, ‘layers.0’], [‘layers.1’, ‘layers.2’], [‘layers.3’, ‘layers.4’]]
+will create 3 chunks: the first containing tok_embeddings and layers.0,
+the second containing layers.1 and layers.2, and the third containing layers.3 and layers.4.
+This provides more explicit control over which modules belong to each chunk compared to split points.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_degree">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_degree" title="Link to this definition">#</a></dt>
+<dd><p>Pipeline Parallelism degree, or number of ranks. 1 means disabled.
+If using looped schedules, this still specifies the number of physical ranks, not the number
+of stages. Stages per rank are inferred from split points degree, and schedule.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_first_stage_less_layers">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_first_stage_less_layers</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_first_stage_less_layers" title="Link to this definition">#</a></dt>
+<dd><p>The number of layers to reduce in the first stage of pipeline parallelism. This is because
+the first stage has the extra overhead of the embedding layer, which is not present in the other stages.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_last_stage_less_layers">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_last_stage_less_layers</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_last_stage_less_layers" title="Link to this definition">#</a></dt>
+<dd><p>The number of layers to reduce in the last stage of pipeline parallelism. This is because
+the last stage has the extra overhead of the output layer, which is not present in the other stages.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_layers_per_stage">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_layers_per_stage</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_layers_per_stage" title="Link to this definition">#</a></dt>
+<dd><p>The number of layers per (virtual) pipeline stage. If specified, the module_fqns_per_model_part will be
+calculated from the number of layers and pipeline_parallel_degree. If not specified, the
+layers per stage will be inferred from the model, schedule, and pipeline_parallel_degree.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_microbatch_size</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size" title="Link to this definition">#</a></dt>
+<dd><p>The size of each pipeline parallel microbatch (default 1).
+This value is used to compute the total number of microbatches by dividing local_batch_size with
+pipeline_parallel_microbatch_size.
+The global training batch size must be evenly divisible by pipeline_parallel_microbatch_size.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_schedule</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'1F1B'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule" title="Link to this definition">#</a></dt>
+<dd><p>Specify the Pipeline Parallel schedule to use. The supported schedules are:
+<a class="github reference external" href="https://github.com/pytorch/pytorch/blob/de4c2a3b4e89d96334dc678d1c3f2ae51a6630a0/torch/distributed/pipelining/schedules.py#L2161">pytorch/pytorch</a>.
+The schedule must be compatible with the split points and stages_per_rank.
+Looped schedules (e.g. Interleaved1F1B) require specifying pipeline_parallel_degree = number of ranks,
+and split_points = number of stages - 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_schedule_csv</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv" title="Link to this definition">#</a></dt>
+<dd><p>Specify the path to the pipeline parallel schedule csv file to use.
+The pipeline_parallel_schedule argument must be either
+PipelineScheduleSingle, PipelineScheduleMulti, or _PipelineScheduleRuntime.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.pipeline_parallel_split_points">
+<span class="sig-name descname"><span class="pre">pipeline_parallel_split_points</span></span><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_split_points" title="Link to this definition">#</a></dt>
+<dd><p>Use module_fqns_per_model_part instead.
+Specify comma-separated names of modules to use as the beginning of a split point.
+e.g. “layers.0,layers.2” will cause the model to be split into 3 stages,
+the first containing all the layers up to layers.0,
+the second containing layers.0 and up to layers.2,
+the third containing layers.2 and all the remaining layers.
+Note: fully-automated splitting may be enabled in the future,
+but currently the split points must be specified manually.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>DEPRECATED</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Parallelism.tensor_parallel_degree">
+<span class="sig-name descname"><span class="pre">tensor_parallel_degree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Parallelism.tensor_parallel_degree" title="Link to this definition">#</a></dt>
+<dd><p>Tensor Parallelism degree. 1 means disabled.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="checkpoint-configuration">
+<h3>Checkpoint Configuration<a class="headerlink" href="#checkpoint-configuration" title="Link to this heading">#</a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchtitan.config.job_config.</span></span><span class="sig-name descname"><span class="pre">Checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">folder='checkpoint'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval=500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_load_path=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_load_model_only=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_load_in_hf=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_save_model_only=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_save_in_hf=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">export_dtype='float32'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">async_mode='disabled'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_latest_k=10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_step=-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_from_loading=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enable_first_step_checkpoint=False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create_seed_checkpoint=False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/torchtitan/config/job_config.html#Checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint" title="Link to this definition">#</a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.async_mode">
+<span class="sig-name descname"><span class="pre">async_mode</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'disabled'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.async_mode" title="Link to this definition">#</a></dt>
+<dd><p>Which async checkpoint mode to use. Currently there are 3 different modes.
+- “disabled”: synchronized checkpointing will be used.
+- “async”: torch.distributed.checkpoint.async_save will be used.
+- “async_with_pinned_mem”: this option utilizes a dedicated pinned memory space and creates a
+separate process for faster GPU-&gt;CPU transfer performance and eliminating GIL contention.
+The cost is increased CPU memory usage. If insufficient CPU memory is available, performance
+may degrade due to memory paging. For most users, “async” should suffice as the performance
+overhead is typically small (on the order of tens of seconds) compared to checkpointing
+frequency. This mode can be employed to pursue near-zero checkpointing times
+(e.g., &lt; 1 second) given appropriate hardware support such as ample CPU memory and fast PCIe.</p>
+<p>“disabled” is the default mode.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.create_seed_checkpoint">
+<span class="sig-name descname"><span class="pre">create_seed_checkpoint</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.create_seed_checkpoint" title="Link to this definition">#</a></dt>
+<dd><p>Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint.
+Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1.
+Could be implemented as a separate script, but this way shares more code.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.enable">
+<span class="sig-name descname"><span class="pre">enable</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.enable" title="Link to this definition">#</a></dt>
+<dd><p>Whether to enable checkpoint</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.enable_first_step_checkpoint">
+<span class="sig-name descname"><span class="pre">enable_first_step_checkpoint</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.enable_first_step_checkpoint" title="Link to this definition">#</a></dt>
+<dd><p>Enable the checkpoint save at first step. This will save a checkpoint immediately
+after the first step to ensure checkpointing functions correctly. This is useful
+when running on a new cluster or storage to verify checkpointing without waiting
+for many steps or checkpointing too frequently. The default value is False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.exclude_from_loading">
+<span class="sig-name descname"><span class="pre">exclude_from_loading</span></span><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.exclude_from_loading" title="Link to this definition">#</a></dt>
+<dd><p>Exclude specific keys from being loaded from the checkpoint.
+Provide a comma-separated list of keys to exclude, e.g. ‘optimizer,lr_scheduler,dataloader’.
+This will load the model only, excluding the specified keys.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.export_dtype">
+<span class="sig-name descname"><span class="pre">export_dtype</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'float32'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.export_dtype" title="Link to this definition">#</a></dt>
+<dd><p>Converts to the specified precision when training completes and last_save_model_only=true.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.folder">
+<span class="sig-name descname"><span class="pre">folder</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'checkpoint'</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.folder" title="Link to this definition">#</a></dt>
+<dd><p>The folder to store the checkpoints.
+When enable is set to true, checkpoints will be in {–job.dump_folder}/{–checkpoint.folder}.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.initial_load_in_hf">
+<span class="sig-name descname"><span class="pre">initial_load_in_hf</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.initial_load_in_hf" title="Link to this definition">#</a></dt>
+<dd><p>Enable the use of HuggingFace’s safetensors format for checkpointing. The option
+is only used when <cite>initial_load_path</cite> is specified. This will load checkpoints
+in HF’s model definition and safetensors format instead of the default torchtitan
+model definition and DCP format, after necessary model state dict transformation.
+<cite>initial_load_model_only</cite> must be true because safetensors doesn’t support saving
+non-tensors. The default value is False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.initial_load_model_only">
+<span class="sig-name descname"><span class="pre">initial_load_model_only</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.initial_load_model_only" title="Link to this definition">#</a></dt>
+<dd><p>This option specifies if only the model should be loaded during the initial
+checkpoint load. The option is only used when <cite>initial_load_path</cite> is specified.
+If False, the checkpoint at <cite>initial_load_path</cite> is treated as a standard training
+checkpoint, including optimizer, lr scheduler, training states, etc.
+The default setting for this option is True. Note that you will have to use
+<cite>–checkpoint.no_initial_load_model_only</cite> to override the default setting.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.initial_load_path">
+<span class="sig-name descname"><span class="pre">initial_load_path</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.initial_load_path" title="Link to this definition">#</a></dt>
+<dd><p>This option specifies the path to the initial checkpoint to load, which is
+particularly useful for resuming training from a previous run with a
+different output path or when loading a checkpoint from a pre-trained model.
+If the checkpoint folder for the current run is not empty,
+located at {–job.dump_folder}/{–checkpoint.folder}, this option will be ignored.
+This feature allows users to load an initial checkpoint from a different folder and
+continue training, saving new checkpoints to the specified folder without affecting
+the existing ones.</p>
+<p>Note that the path should contain the full path to the checkpoint folder,
+including the step number, if any; for example,
+“//pre_train/checkpoints/llama3/llama3_8b/step_10000”.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.interval">
+<span class="sig-name descname"><span class="pre">interval</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">500</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.interval" title="Link to this definition">#</a></dt>
+<dd><p>Checkpointing interval in steps.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.keep_latest_k">
+<span class="sig-name descname"><span class="pre">keep_latest_k</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.keep_latest_k" title="Link to this definition">#</a></dt>
+<dd><p>Keeps only the latest k checkpoints, and purging older ones. If 0, keep all checkpoints.
+K cannot be 1 as the last one may be in the process of being saved. As a result,
+the metadata of the last one may not be ready yet. The default value is 10 to avoid
+filling up the disk.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.last_save_in_hf">
+<span class="sig-name descname"><span class="pre">last_save_in_hf</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.last_save_in_hf" title="Link to this definition">#</a></dt>
+<dd><p>Enable the use of Hugging Face’s safetensors format for checkpointing. This will save the
+final checkpoints in safetensors format instead of the default DCP format, after necessary
+model state dict transformation. There will be a performance cost in using this as we need
+to consolidate the sharded tensors to full tensors as a separate step.
+last_save_model_only must be true because safetensors doesn’t support saving
+non-tensors. On load, this argument isn’t needed as we will detect whether the loaded
+checkpoint is in safetensors format or not. The default value is False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.last_save_model_only">
+<span class="sig-name descname"><span class="pre">last_save_model_only</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.last_save_model_only" title="Link to this definition">#</a></dt>
+<dd><p>When last_save_model_only=True, only the model will be saved at the end of training,
+the last save.  With this, checkpoints can be loaded using <cite>torch.load(…, weights_only=True)</cite>
+after conversion.  When last_save_model_only=False, the full checkpoint will be saved.
+A full checkpoint includes model, optimizer and train_state, which can be used to resume training.
+The default value is True.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchtitan.config.job_config.Checkpoint.load_step">
+<span class="sig-name descname"><span class="pre">load_step</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">-1</span></em><a class="headerlink" href="#torchtitan.config.job_config.Checkpoint.load_step" title="Link to this definition">#</a></dt>
+<dd><p>Load the checkpoint at the specified step. If -1, load the latest checkpoint.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="api_model.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Model</p>
+      </div>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="api_model.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Model</p>
+      </div>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rltrainer">RLTrainer</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer"><code class="docutils literal notranslate"><span class="pre">RLTrainer</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.activation_checkpoint"><code class="docutils literal notranslate"><span class="pre">RLTrainer.activation_checkpoint</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.checkpoint"><code class="docutils literal notranslate"><span class="pre">RLTrainer.checkpoint</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.cleanup"><code class="docutils literal notranslate"><span class="pre">RLTrainer.cleanup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.comm"><code class="docutils literal notranslate"><span class="pre">RLTrainer.comm</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.compile"><code class="docutils literal notranslate"><span class="pre">RLTrainer.compile</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.dcp_path"><code class="docutils literal notranslate"><span class="pre">RLTrainer.dcp_path</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.forward_backward"><code class="docutils literal notranslate"><span class="pre">RLTrainer.forward_backward()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.job"><code class="docutils literal notranslate"><span class="pre">RLTrainer.job</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.loss"><code class="docutils literal notranslate"><span class="pre">RLTrainer.loss()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.lr_scheduler"><code class="docutils literal notranslate"><span class="pre">RLTrainer.lr_scheduler</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.memory_estimation"><code class="docutils literal notranslate"><span class="pre">RLTrainer.memory_estimation</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.model"><code class="docutils literal notranslate"><span class="pre">RLTrainer.model</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.optimizer"><code class="docutils literal notranslate"><span class="pre">RLTrainer.optimizer</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.parallelism"><code class="docutils literal notranslate"><span class="pre">RLTrainer.parallelism</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.push_weights"><code class="docutils literal notranslate"><span class="pre">RLTrainer.push_weights</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.quantize"><code class="docutils literal notranslate"><span class="pre">RLTrainer.quantize</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.setup"><code class="docutils literal notranslate"><span class="pre">RLTrainer.setup</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.state_dict_key"><code class="docutils literal notranslate"><span class="pre">RLTrainer.state_dict_key</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.train_step"><code class="docutils literal notranslate"><span class="pre">RLTrainer.train_step</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.training"><code class="docutils literal notranslate"><span class="pre">RLTrainer.training</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.trainer.RLTrainer.use_dcp"><code class="docutils literal notranslate"><span class="pre">RLTrainer.use_dcp</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#job-configuration">Job Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Job"><code class="docutils literal notranslate"><span class="pre">Job</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Job.config_file"><code class="docutils literal notranslate"><span class="pre">Job.config_file</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Job.description"><code class="docutils literal notranslate"><span class="pre">Job.description</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Job.dump_folder"><code class="docutils literal notranslate"><span class="pre">Job.dump_folder</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Job.print_args"><code class="docutils literal notranslate"><span class="pre">Job.print_args</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-configuration">Model Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model"><code class="docutils literal notranslate"><span class="pre">Model</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.converters"><code class="docutils literal notranslate"><span class="pre">Model.converters</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.flavor"><code class="docutils literal notranslate"><span class="pre">Model.flavor</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.hf_assets_path"><code class="docutils literal notranslate"><span class="pre">Model.hf_assets_path</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.name"><code class="docutils literal notranslate"><span class="pre">Model.name</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.print_after_conversion"><code class="docutils literal notranslate"><span class="pre">Model.print_after_conversion</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Model.tokenizer_path"><code class="docutils literal notranslate"><span class="pre">Model.tokenizer_path</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#optimizer-configuration">Optimizer Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer"><code class="docutils literal notranslate"><span class="pre">Optimizer</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.beta1"><code class="docutils literal notranslate"><span class="pre">Optimizer.beta1</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.beta2"><code class="docutils literal notranslate"><span class="pre">Optimizer.beta2</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.early_step_in_backward"><code class="docutils literal notranslate"><span class="pre">Optimizer.early_step_in_backward</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.eps"><code class="docutils literal notranslate"><span class="pre">Optimizer.eps</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.implementation"><code class="docutils literal notranslate"><span class="pre">Optimizer.implementation</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.lr"><code class="docutils literal notranslate"><span class="pre">Optimizer.lr</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.name"><code class="docutils literal notranslate"><span class="pre">Optimizer.name</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Optimizer.weight_decay"><code class="docutils literal notranslate"><span class="pre">Optimizer.weight_decay</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#training-configuration">Training Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training"><code class="docutils literal notranslate"><span class="pre">Training</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.dataset"><code class="docutils literal notranslate"><span class="pre">Training.dataset</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.dataset_path"><code class="docutils literal notranslate"><span class="pre">Training.dataset_path</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.deterministic"><code class="docutils literal notranslate"><span class="pre">Training.deterministic</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.dtype"><code class="docutils literal notranslate"><span class="pre">Training.dtype</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.enable_cpu_offload"><code class="docutils literal notranslate"><span class="pre">Training.enable_cpu_offload</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.gc_debug"><code class="docutils literal notranslate"><span class="pre">Training.gc_debug</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.gc_freq"><code class="docutils literal notranslate"><span class="pre">Training.gc_freq</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.global_batch_size"><code class="docutils literal notranslate"><span class="pre">Training.global_batch_size</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.local_batch_size"><code class="docutils literal notranslate"><span class="pre">Training.local_batch_size</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.max_norm"><code class="docutils literal notranslate"><span class="pre">Training.max_norm</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.mixed_precision_param"><code class="docutils literal notranslate"><span class="pre">Training.mixed_precision_param</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.mixed_precision_reduce"><code class="docutils literal notranslate"><span class="pre">Training.mixed_precision_reduce</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.seed"><code class="docutils literal notranslate"><span class="pre">Training.seed</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.seq_len"><code class="docutils literal notranslate"><span class="pre">Training.seq_len</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Training.steps"><code class="docutils literal notranslate"><span class="pre">Training.steps</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parallelism-configuration">Parallelism Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism"><code class="docutils literal notranslate"><span class="pre">Parallelism</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.context_parallel_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.context_parallel_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.context_parallel_rotate_method"><code class="docutils literal notranslate"><span class="pre">Parallelism.context_parallel_rotate_method</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.data_parallel_replicate_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.data_parallel_replicate_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.data_parallel_shard_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.data_parallel_shard_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.disable_loss_parallel"><code class="docutils literal notranslate"><span class="pre">Parallelism.disable_loss_parallel</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.enable_async_tensor_parallel"><code class="docutils literal notranslate"><span class="pre">Parallelism.enable_async_tensor_parallel</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.enable_compiled_autograd"><code class="docutils literal notranslate"><span class="pre">Parallelism.enable_compiled_autograd</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.expert_parallel_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.expert_parallel_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.expert_tensor_parallel_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.expert_tensor_parallel_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.fsdp_reshard_after_forward"><code class="docutils literal notranslate"><span class="pre">Parallelism.fsdp_reshard_after_forward</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.module_fqns_per_model_part"><code class="docutils literal notranslate"><span class="pre">Parallelism.module_fqns_per_model_part</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_degree</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_first_stage_less_layers"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_first_stage_less_layers</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_last_stage_less_layers"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_last_stage_less_layers</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_layers_per_stage"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_layers_per_stage</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_microbatch_size</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_schedule</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_schedule_csv</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.pipeline_parallel_split_points"><code class="docutils literal notranslate"><span class="pre">Parallelism.pipeline_parallel_split_points</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Parallelism.tensor_parallel_degree"><code class="docutils literal notranslate"><span class="pre">Parallelism.tensor_parallel_degree</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#checkpoint-configuration">Checkpoint Configuration</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint"><code class="docutils literal notranslate"><span class="pre">Checkpoint</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.async_mode"><code class="docutils literal notranslate"><span class="pre">Checkpoint.async_mode</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.create_seed_checkpoint"><code class="docutils literal notranslate"><span class="pre">Checkpoint.create_seed_checkpoint</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.enable"><code class="docutils literal notranslate"><span class="pre">Checkpoint.enable</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.enable_first_step_checkpoint"><code class="docutils literal notranslate"><span class="pre">Checkpoint.enable_first_step_checkpoint</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.exclude_from_loading"><code class="docutils literal notranslate"><span class="pre">Checkpoint.exclude_from_loading</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.export_dtype"><code class="docutils literal notranslate"><span class="pre">Checkpoint.export_dtype</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.folder"><code class="docutils literal notranslate"><span class="pre">Checkpoint.folder</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.initial_load_in_hf"><code class="docutils literal notranslate"><span class="pre">Checkpoint.initial_load_in_hf</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.initial_load_model_only"><code class="docutils literal notranslate"><span class="pre">Checkpoint.initial_load_model_only</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.initial_load_path"><code class="docutils literal notranslate"><span class="pre">Checkpoint.initial_load_path</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.interval"><code class="docutils literal notranslate"><span class="pre">Checkpoint.interval</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.keep_latest_k"><code class="docutils literal notranslate"><span class="pre">Checkpoint.keep_latest_k</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.last_save_in_hf"><code class="docutils literal notranslate"><span class="pre">Checkpoint.last_save_in_hf</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.last_save_model_only"><code class="docutils literal notranslate"><span class="pre">Checkpoint.last_save_model_only</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#torchtitan.config.job_config.Checkpoint.load_step"><code class="docutils literal notranslate"><span class="pre">Checkpoint.load_step</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/meta-pytorch/forge/edit/main/docs/source/api_trainer.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="_sources/api_trainer.md.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Trainer",
+       "headline": "Trainer",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/api_trainer.html",
+       "articleBody": "Trainer# The Trainer manages model training in TorchForge, built on top of TorchTitan. It handles forward/backward passes, weight updates, and checkpoint management for reinforcement learning workflows. RLTrainer# class forge.actors.trainer.RLTrainer(job=\u003cfactory\u003e, model=\u003cfactory\u003e, optimizer=\u003cfactory\u003e, lr_scheduler=\u003cfactory\u003e, training=\u003cfactory\u003e, parallelism=\u003cfactory\u003e, checkpoint=\u003cfactory\u003e, activation_checkpoint=\u003cfactory\u003e, compile=\u003cfactory\u003e, quantize=\u003cfactory\u003e, comm=\u003cfactory\u003e, memory_estimation=\u003cfactory\u003e, loss=\u003cfunction RLTrainer.\u003clambda\u003e\u003e, state_dict_key=\u0027model_state_dict\u0027, use_dcp=True, dcp_path=\u0027forge_dcp_tmp\u0027)[source]# A reinforcement learning trainer actor for policy optimization training. Built on top of TorchTitan\u2019s training engine, this actor provides a complete training loop for reinforcement learning. It performs forward and backward passes with gradient computation, optimization steps, and checkpoint management. Unlike the ReferenceModel actor which only runs forward passes, RLTrainer actively updates the policy model parameters through gradient descent. The trainer supports the same distributed training strategies that TorchTitan does, including but not limited to, tensor parallelism, data parallelism, and FSDP (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel for policy optimization algorithms like GRPO (Group Relative Policy Optimization), where it optimizes the policy against a loss that includes KL divergence penalties from the reference model. The trainer handles: - Forward and backward propagation with automatic mixed precision (AMP) - Optimizer steps with learning rate scheduling activation_checkpoint# checkpoint# cleanup# comm# compile# dcp_path = \u0027forge_dcp_tmp\u0027# forward_backward(inputs, targets)[source]# Return type: Tensor job# loss(**targets)# lr_scheduler# memory_estimation# model# optimizer# parallelism# push_weights# quantize# setup# state_dict_key = \u0027model_state_dict\u0027# train_step# training# use_dcp = True# Configuration# The RLTrainer uses TorchTitan\u2019s configuration system with the following components: Job Configuration# class torchtitan.config.job_config.Job(config_file=None, dump_folder=\u0027./torchtitan/outputs\u0027, description=\u0027default job\u0027, print_args=False)[source]# config_file = None# Job config file description = \u0027default job\u0027# Description of the job dump_folder = \u0027./torchtitan/outputs\u0027# Folder to dump job outputs print_args = False# Print the args to terminal Model Configuration# class torchtitan.config.job_config.Model(name=\u0027llama3\u0027, flavor=\u0027debugmodel\u0027, hf_assets_path=\u0027./tests/assets/tokenizer\u0027, tokenizer_path=None, converters=\u003cfactory\u003e, print_after_conversion=False)[source]# converters# Comma separated list of converters to apply to the model. For instance, the float8 converter swaps torch.nn.Linear with Float8Linear. This feature requires you to install \u2018torchao\u2019 which can be found here: pytorch/ao flavor = \u0027debugmodel\u0027# Which model config to train hf_assets_path = \u0027./tests/assets/tokenizer\u0027# Path to HF assets folder. This folder contains local copies of Hugging Face assets, including model weights in .safetensors format, the model.safetensor.index.json file (fqn to file mapping), the config.json file, generation_config.json, and tokenizer files. name = \u0027llama3\u0027# Which model to train print_after_conversion = False# If true, model definition will be printed to stdout after all model converters have been applied. tokenizer_path = None# Use hf_assets_path instead. Type: DEPRECATED Optimizer Configuration# class torchtitan.config.job_config.Optimizer(name=\u0027AdamW\u0027, lr=0.0008, beta1=0.9, beta2=0.95, eps=1e-08, weight_decay=0.1, implementation=\u0027fused\u0027, early_step_in_backward=False)[source]# beta1 = 0.9# beta2 = 0.95# Exponential moving average hyperparameters to use early_step_in_backward = False# Whether to apply optimizer in the backward. Caution, optimizer_in_backward is not compatible with gradients clipping, users should not call register_post_accumulate_grad_hook after the optimizer is built. eps = 1e-08# Epsilon value to use implementation = \u0027fused\u0027# Specify which optimizer implementation to use: - \u2018fused\u2019: Use fused implementation (CUDA only) for best performance. - \u2018foreach\u2019: Use some horizontal fusion of tensors for better performance. - \u2018for-loop\u2019: Use the default implementation for the optimizer (slowest). - more info: https://pytorch.org/docs/stable/optim.html lr = 0.0008# Learning rate to use name = \u0027AdamW\u0027# Optimizer to use weight_decay = 0.1# Weight decay to use Training Configuration# class torchtitan.config.job_config.Training(dataset=\u0027c4_test\u0027, dataset_path=None, local_batch_size=8, global_batch_size=-1, seq_len=2048, max_norm=1.0, steps=10000, enable_cpu_offload=False, dtype=\u0027float32\u0027, mixed_precision_param=\u0027bfloat16\u0027, mixed_precision_reduce=\u0027float32\u0027, gc_freq=50, gc_debug=False, seed=None, deterministic=False)[source]# dataset = \u0027c4_test\u0027# Dataset to use dataset_path = None# Path to the dataset in the file system. If provided, data will be loaded from this path instead of downloaded. deterministic = False# Use deterministic algorithms wherever possible, may be slower dtype = \u0027float32\u0027# torch dtype for training. In contrast to mixed precision training, setting training_dtype=bfloat16 will put all parameters, gradients, and optimizer states in bfloat16, without an extra copy of fp32 weights. In the case of full bf16 training, RoPE calculations and logits will still be in fp32. enable_cpu_offload = False# Whether to apply CPU offloading of parameters, gradients, and optimizer states in FSDP gc_debug = False# Enable GC debugging mode. This will perform gc.collect() at every step to detect if there is a reference cycle that includes a CUDA Tensor. Note that you may want to lower the training steps to avoid generating too many temporary files. gc_freq = 50# Python garbage control scheduling interval, in steps global_batch_size = -1# Global batch size (defaults to training.local_batch_size * data-parallel degree) local_batch_size = 8# Local batch size (i.e., per-device batch size) max_norm = 1.0# Max norm for gradient clipping mixed_precision_param = \u0027bfloat16\u0027# torch dtype to use for parameters when applying mixed precision via fully_shard or torch.autocast. This feature takes effect via fully_shard when data_parallel_shard_degree \u003e 1 or context_parallel_degree \u003e 1; it takes effect via torch.autocast when data_replicate_degree \u003e= 1 and no other parallelism is enabled, i.e. under DDP or single-device training. mixed_precision_reduce = \u0027float32\u0027# torch dtype to use for reductions when applying mixed precision via FSDP. This feature only takes effect when data_parallel_shard_degree \u003e 1 seed = None# Choose the base RNG seed used for training seq_len = 2048# Sequence length steps = 10000# How many train steps to run Parallelism Configuration# class torchtitan.config.job_config.Parallelism(data_parallel_replicate_degree=1, enable_compiled_autograd=False, data_parallel_shard_degree=-1, fsdp_reshard_after_forward=\u0027default\u0027, tensor_parallel_degree=1, disable_loss_parallel=False, enable_async_tensor_parallel=False, pipeline_parallel_degree=1, pipeline_parallel_split_points=\u003cfactory\u003e, module_fqns_per_model_part=None, pipeline_parallel_first_stage_less_layers=1, pipeline_parallel_last_stage_less_layers=1, pipeline_parallel_layers_per_stage=None, pipeline_parallel_schedule=\u00271F1B\u0027, pipeline_parallel_schedule_csv=\u0027\u0027, pipeline_parallel_microbatch_size=1, context_parallel_degree=1, context_parallel_rotate_method=\u0027allgather\u0027, expert_parallel_degree=1, expert_tensor_parallel_degree=1)[source]# context_parallel_degree = 1# Context parallelism degree. 1 means disabled. context_parallel_rotate_method = \u0027allgather\u0027# The collective to use in context parallel SDPA for kv shards exchange. - \u2018allgather\u2019 means to all-gather all kv shards on ranks after the first sub-SDPA computation, - \u2018alltoall\u2019 means to all-to-all shuffle the kv shards. The default value is \u2018allgather\u2019. data_parallel_replicate_degree = 1# The data_parallel_replicate_degree argument specifies the degree of data parallelism for weight replication. When this value is greater than 1, weights will be replicated across data_parallel_replicate_degree ranks. If data_parallel_shard_degree is also greater than 1, the parallelism method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the parallelism method used is DDP (Distributed Data Parallelism). 1 means disabled. data_parallel_shard_degree = -1# The data_parallel_shard_degree argument specifies the degree of data parallelism for weight sharding. When this value is greater than 1, weights will be sharded across data_parallel_shard_degree ranks. If data_parallel_replicate_degree is also greater than 1, the parallelism method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the parallelism method used is FSDP (Fully Sharded Data Parallelism). -1 means leftover ranks will be used (After DP_REPLICATE/SP/PP). Note that only data_parallel_shard_degree can be negative. 1 means disabled. disable_loss_parallel = False# Whether to apply loss parallel when sequence parallel is enabled enable_async_tensor_parallel = False# Whether to apply async tensor parallel (currently only effective when compile is enabled) enable_compiled_autograd = False# Enable CompiledAutograd to compile the backward. expert_parallel_degree = 1# Expert parallelism degree. 1 means disabled. No effect for non-MoE models. Currently, it is supported with the following constraints: - when etp = tp: - cp \u003c= ep \u003c= dp_shard * cp - ep % cp == 0 - dp_shard * cp % ep == 0 - when etp = 1: - cp * tp \u003c= ep \u003c= dp_shard * cp * tp - ep % (cp * tp) == 0 - dp_shard * cp * tp % ep == 0 Note that this is still an experimental feature. Some constraints will be relaxed soon when we have more flexible DeviceMesh support. expert_tensor_parallel_degree = 1# Expert tensor parallelism degree. 1 means disabled. No effect for non-MoE models, or when ep = 1. With this option, the tensor parallel degree on routed experts can be different from that on other params. Currently, we only support either - [partial dp -\u003e ep] etp = tp - [partial dp + all tp -\u003e ep] etp = 1 Note that this is still an experimental feature. fsdp_reshard_after_forward = \u0027default\u0027# reshard_after_forward specifies the policy for applying reshard_after_forward within an FSDP setup. reshard_after_forward controls parameter behavior after forward, trading off memory and communication. See torch\u2019s fully_shard API for more documentation on reshard_after_forward. The supported policies include \u201cdefault\u201d, \u201calways\u201d and \u201cnever\u201d: - \u201cdefault\u201d applies default resharding behavior, implementing \u201csmart defaults\u201d for known optimal scenarios. - \u201calways\u201d will enable reshard_after_forward for all forward passes. - \u201cnever\u201d will disable reshard_after_forward for all forward passes. module_fqns_per_model_part = None# Specify a list of lists containing the FQNs (Fully Qualified Names) of modules for each model chunk. Each inner list represents one model chunk and contains the module names that belong to that chunk. e.g. [[\u2018tok_embeddings\u2019, \u2018layers.0\u2019], [\u2018layers.1\u2019, \u2018layers.2\u2019], [\u2018layers.3\u2019, \u2018layers.4\u2019]] will create 3 chunks: the first containing tok_embeddings and layers.0, the second containing layers.1 and layers.2, and the third containing layers.3 and layers.4. This provides more explicit control over which modules belong to each chunk compared to split points. pipeline_parallel_degree = 1# Pipeline Parallelism degree, or number of ranks. 1 means disabled. If using looped schedules, this still specifies the number of physical ranks, not the number of stages. Stages per rank are inferred from split points degree, and schedule. pipeline_parallel_first_stage_less_layers = 1# The number of layers to reduce in the first stage of pipeline parallelism. This is because the first stage has the extra overhead of the embedding layer, which is not present in the other stages. pipeline_parallel_last_stage_less_layers = 1# The number of layers to reduce in the last stage of pipeline parallelism. This is because the last stage has the extra overhead of the output layer, which is not present in the other stages. pipeline_parallel_layers_per_stage = None# The number of layers per (virtual) pipeline stage. If specified, the module_fqns_per_model_part will be calculated from the number of layers and pipeline_parallel_degree. If not specified, the layers per stage will be inferred from the model, schedule, and pipeline_parallel_degree. pipeline_parallel_microbatch_size = 1# The size of each pipeline parallel microbatch (default 1). This value is used to compute the total number of microbatches by dividing local_batch_size with pipeline_parallel_microbatch_size. The global training batch size must be evenly divisible by pipeline_parallel_microbatch_size. pipeline_parallel_schedule = \u00271F1B\u0027# Specify the Pipeline Parallel schedule to use. The supported schedules are: pytorch/pytorch. The schedule must be compatible with the split points and stages_per_rank. Looped schedules (e.g. Interleaved1F1B) require specifying pipeline_parallel_degree = number of ranks, and split_points = number of stages - 1 pipeline_parallel_schedule_csv = \u0027\u0027# Specify the path to the pipeline parallel schedule csv file to use. The pipeline_parallel_schedule argument must be either PipelineScheduleSingle, PipelineScheduleMulti, or _PipelineScheduleRuntime. pipeline_parallel_split_points# Use module_fqns_per_model_part instead. Specify comma-separated names of modules to use as the beginning of a split point. e.g. \u201clayers.0,layers.2\u201d will cause the model to be split into 3 stages, the first containing all the layers up to layers.0, the second containing layers.0 and up to layers.2, the third containing layers.2 and all the remaining layers. Note: fully-automated splitting may be enabled in the future, but currently the split points must be specified manually. Type: DEPRECATED tensor_parallel_degree = 1# Tensor Parallelism degree. 1 means disabled. Checkpoint Configuration# class torchtitan.config.job_config.Checkpoint(enable=False, folder=\u0027checkpoint\u0027, interval=500, initial_load_path=None, initial_load_model_only=True, initial_load_in_hf=False, last_save_model_only=True, last_save_in_hf=False, export_dtype=\u0027float32\u0027, async_mode=\u0027disabled\u0027, keep_latest_k=10, load_step=-1, exclude_from_loading=\u003cfactory\u003e, enable_first_step_checkpoint=False, create_seed_checkpoint=False)[source]# async_mode = \u0027disabled\u0027# Which async checkpoint mode to use. Currently there are 3 different modes. - \u201cdisabled\u201d: synchronized checkpointing will be used. - \u201casync\u201d: torch.distributed.checkpoint.async_save will be used. - \u201casync_with_pinned_mem\u201d: this option utilizes a dedicated pinned memory space and creates a separate process for faster GPU-\u003eCPU transfer performance and eliminating GIL contention. The cost is increased CPU memory usage. If insufficient CPU memory is available, performance may degrade due to memory paging. For most users, \u201casync\u201d should suffice as the performance overhead is typically small (on the order of tens of seconds) compared to checkpointing frequency. This mode can be employed to pursue near-zero checkpointing times (e.g., \u003c 1 second) given appropriate hardware support such as ample CPU memory and fast PCIe. \u201cdisabled\u201d is the default mode. create_seed_checkpoint = False# Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint. Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1. Could be implemented as a separate script, but this way shares more code. enable = False# Whether to enable checkpoint enable_first_step_checkpoint = False# Enable the checkpoint save at first step. This will save a checkpoint immediately after the first step to ensure checkpointing functions correctly. This is useful when running on a new cluster or storage to verify checkpointing without waiting for many steps or checkpointing too frequently. The default value is False. exclude_from_loading# Exclude specific keys from being loaded from the checkpoint. Provide a comma-separated list of keys to exclude, e.g. \u2018optimizer,lr_scheduler,dataloader\u2019. This will load the model only, excluding the specified keys. export_dtype = \u0027float32\u0027# Converts to the specified precision when training completes and last_save_model_only=true. folder = \u0027checkpoint\u0027# The folder to store the checkpoints. When enable is set to true, checkpoints will be in {\u2013job.dump_folder}/{\u2013checkpoint.folder}. initial_load_in_hf = False# Enable the use of HuggingFace\u2019s safetensors format for checkpointing. The option is only used when initial_load_path is specified. This will load checkpoints in HF\u2019s model definition and safetensors format instead of the default torchtitan model definition and DCP format, after necessary model state dict transformation. initial_load_model_only must be true because safetensors doesn\u2019t support saving non-tensors. The default value is False. initial_load_model_only = True# This option specifies if only the model should be loaded during the initial checkpoint load. The option is only used when initial_load_path is specified. If False, the checkpoint at initial_load_path is treated as a standard training checkpoint, including optimizer, lr scheduler, training states, etc. The default setting for this option is True. Note that you will have to use \u2013checkpoint.no_initial_load_model_only to override the default setting. initial_load_path = None# This option specifies the path to the initial checkpoint to load, which is particularly useful for resuming training from a previous run with a different output path or when loading a checkpoint from a pre-trained model. If the checkpoint folder for the current run is not empty, located at {\u2013job.dump_folder}/{\u2013checkpoint.folder}, this option will be ignored. This feature allows users to load an initial checkpoint from a different folder and continue training, saving new checkpoints to the specified folder without affecting the existing ones. Note that the path should contain the full path to the checkpoint folder, including the step number, if any; for example, \u201c//pre_train/checkpoints/llama3/llama3_8b/step_10000\u201d. interval = 500# Checkpointing interval in steps. keep_latest_k = 10# Keeps only the latest k checkpoints, and purging older ones. If 0, keep all checkpoints. K cannot be 1 as the last one may be in the process of being saved. As a result, the metadata of the last one may not be ready yet. The default value is 10 to avoid filling up the disk. last_save_in_hf = False# Enable the use of Hugging Face\u2019s safetensors format for checkpointing. This will save the final checkpoints in safetensors format instead of the default DCP format, after necessary model state dict transformation. There will be a performance cost in using this as we need to consolidate the sharded tensors to full tensors as a separate step. last_save_model_only must be true because safetensors doesn\u2019t support saving non-tensors. On load, this argument isn\u2019t needed as we will detect whether the loaded checkpoint is in safetensors format or not. The default value is False. last_save_model_only = True# When last_save_model_only=True, only the model will be saved at the end of training, the last save. With this, checkpoints can be loaded using torch.load(\u2026, weights_only=True) after conversion. When last_save_model_only=False, the full checkpoint will be saved. A full checkpoint includes model, optimizer and train_state, which can be used to resume training. The default value is True. load_step = -1# Load the checkpoint at the specified step. If -1, load the latest checkpoint.",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/api_trainer.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

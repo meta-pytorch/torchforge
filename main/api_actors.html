@@ -8,8 +8,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-09-24T21:11:02+00:00" />
-    <title>Actors &#8212; torchforge 0.1 documentation</title>
+    <meta property="article:modified_time" content="2025-10-14T16:25:25+00:00" />
+    <title>ForgeActor &#8212; torchforge 0.1 documentation</title>
   
   
   
@@ -36,6 +36,7 @@
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=a8c4d769" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
@@ -47,15 +48,16 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api_actors';</script>
+    <script src="_static/custom.js?v=b1073d4a"></script>
     <link rel="canonical" href="https://meta-pytorch.org/forge/main/api_actors.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Data Management" href="api_data.html" />
-    <link rel="prev" title="Core Interfaces" href="api_core.html" />
+    <link rel="next" title="Service" href="api_service.html" />
+    <link rel="prev" title="API Reference" href="api.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Sep 24, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -205,7 +207,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Sep 24, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 14, 2025"/>
 
   </head>
 
@@ -314,13 +316,6 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
@@ -330,13 +325,6 @@
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="faq.html">
-    FAQ
   </a>
 </li>
 
@@ -484,13 +472,6 @@ document.write(`
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="usage.html">
-    Usage
-  </a>
-</li>
-
-
-<li class="nav-item ">
   <a class="nav-link nav-internal" href="tutorials.html">
     Tutorials
   </a>
@@ -500,13 +481,6 @@ document.write(`
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="api.html">
     API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="faq.html">
-    FAQ
   </a>
 </li>
 
@@ -614,13 +588,11 @@ document.write(`
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="api_core.html">Core Interfaces</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Actors</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_data.html">Data Management</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_losses.html">Losses</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_envs.html">Environments</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_controller.html">Controller</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api_util.html">Utilities</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">ForgeActor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_service.html">Service</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_generator.html">Generator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_trainer.html">Trainer</a></li>
 </ul>
 </div>
 </nav></div>
@@ -661,7 +633,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="api.html" class="nav-link">API Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">Actors</li>
+    <li class="breadcrumb-item active" aria-current="page">ForgeActor</li>
   </ul>
 </nav>
 </div>
@@ -709,7 +681,7 @@ document.write(`
       </div>
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <meta itemprop="name" content="Actors">
+        <meta itemprop="name" content="ForgeActor">
         <meta itemprop="position" content="2">
       </div>
     </div>
@@ -748,25 +720,138 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="actors">
-<h1>Actors<a class="headerlink" href="#actors" title="Link to this heading">#</a></h1>
-<p>The actors module contains the core components for model training and inference in TorchForge. This includes policy actors, reference models, replay buffers, and trainers.</p>
-<section id="policy-actor">
-<h2>Policy Actor<a class="headerlink" href="#policy-actor" title="Link to this heading">#</a></h2>
-<p>The policy actor is responsible for model inference and policy interactions during training.</p>
-</section>
-<section id="reference-model">
-<h2>Reference Model<a class="headerlink" href="#reference-model" title="Link to this heading">#</a></h2>
-<p>The reference model provides baseline comparisons for reinforcement learning algorithms.</p>
-</section>
-<section id="replay-buffer">
-<h2>Replay Buffer<a class="headerlink" href="#replay-buffer" title="Link to this heading">#</a></h2>
-<p>The replay buffer manages storage and sampling of training experiences.</p>
-</section>
-<section id="trainer">
-<h2>Trainer<a class="headerlink" href="#trainer" title="Link to this heading">#</a></h2>
-<p>The trainer orchestrates the training process and implements training algorithms.</p>
-</section>
+  <section id="forgeactor">
+<h1>ForgeActor<a class="headerlink" href="#forgeactor" title="Link to this heading">#</a></h1>
+<p>The actors module contains the core components for model training
+and inference in TorchForge. These pre-built actors provide essential
+functionality for reinforcement learning workflows and can be used
+as building blocks for complex distributed training systems.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.controller.actor.</span></span><span class="sig-name descname"><span class="pre">ForgeActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/controller/actor.html#ForgeActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.controller.actor.ForgeActor" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Actor</span></code></p>
+<p>Base class for Forge actors with configurable resource attributes.</p>
+<p>The initialization sets up logging configuration with rank/size information and
+initializes the actor’s process mesh reference. The rank and size are automatically
+determined from the current execution context.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*args</strong> – Variable length argument list passed to the parent Actor class.</p></li>
+<li><p><strong>**kwargs</strong> – Arbitrary keyword arguments passed to the parent Actor class.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.as_actor">
+<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">as_actor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">actor_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/controller/actor.html#ForgeActor.as_actor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.controller.actor.ForgeActor.as_actor" title="Link to this definition">#</a></dt>
+<dd><p>Spawns a single actor using the configuration stored in <cite>.options()</cite>, or defaults.</p>
+<p>The configuration values stored in the subclass returned by <cite>.options()</cite> (like
+<cite>procs</cite>) are used to construct a ProcessConfig instance.
+If no configuration was stored, defaults to a single process with no GPU.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">TypeVar</span></code>(<code class="docutils literal notranslate"><span class="pre">T</span></code>, bound= ForgeActor)</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.hosts">
+<span class="sig-name descname"><span class="pre">hosts</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.controller.actor.ForgeActor.hosts" title="Link to this definition">#</a></dt>
+<dd><p>Number of hosts to distribute the actor across. If None, uses as many
+hosts as needed to accommodate the requested processes. Defaults to None.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.launch">
+<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">launch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/controller/actor.html#ForgeActor.launch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.controller.actor.ForgeActor.launch" title="Link to this definition">#</a></dt>
+<dd><p>Provisions and deploys a new actor.</p>
+<p>This method is used by <cite>Service</cite> to provision a new replica.</p>
+<p>We implement it this way because special actors like inference servers
+may be composed of multiple actors spawned across multiple processes.
+This allows you to specify how your actor gets launched together.</p>
+<p>This implementation is basic, assuming that we’re spawning
+a homogeneous set of actors on a single proc mesh.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#forge.controller.actor.ForgeActor" title="forge.controller.actor.ForgeActor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ForgeActor</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.mesh_name">
+<span class="sig-name descname"><span class="pre">mesh_name</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.controller.actor.ForgeActor.mesh_name" title="Link to this definition">#</a></dt>
+<dd><p>Optional name for the process mesh used by this actor.
+If None, a default name will be generated. Defaults to None.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.num_replicas">
+<span class="sig-name descname"><span class="pre">num_replicas</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#forge.controller.actor.ForgeActor.num_replicas" title="Link to this definition">#</a></dt>
+<dd><p>Number of replicas to create when spawning as a service.
+Only applies when using as_service(). Defaults to 1.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.options">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">options</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hosts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_gpus</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_replicas</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/controller/actor.html#ForgeActor.options"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.controller.actor.ForgeActor.options" title="Link to this definition">#</a></dt>
+<dd><p>Returns a version of ForgeActor with configured resource attributes.</p>
+<p>This method allows you to pre-configure an actor class before spawning it with
+<cite>.as_actor()</cite> or <cite>.as_service()</cite>. Each call creates a separate subclass, so
+multiple different configurations can coexist without interfering with each other.</p>
+<p>Examples:
+:rtype: <span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">Type</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">TypeVar</span></code>(<code class="docutils literal notranslate"><span class="pre">T</span></code>, bound= ForgeActor)]</span></p>
+<ul>
+<li><p>Pre-configure a service with multiple replicas:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">service</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MyForgeActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">num_replicas</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">procs</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</li>
+<li><p>Default usage without calling options:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">service</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MyForgeActor</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">service</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</li>
+<li><p>Pre-configure a single actor</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">actor</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MyForgeActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">hosts</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">actor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</li>
+<li><p>Default usage without calling options</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">actor</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MyForgeActor</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">actor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.procs">
+<span class="sig-name descname"><span class="pre">procs</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#forge.controller.actor.ForgeActor.procs" title="Link to this definition">#</a></dt>
+<dd><p>Number of processes to use for this actor. Defaults to 1.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.shutdown">
+<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/controller/actor.html#ForgeActor.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.controller.actor.ForgeActor.shutdown" title="Link to this definition">#</a></dt>
+<dd><p>Shuts down an actor.
+This method is used by <cite>Service</cite> to teardown a replica.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.controller.actor.ForgeActor.with_gpus">
+<span class="sig-name descname"><span class="pre">with_gpus</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#forge.controller.actor.ForgeActor.with_gpus" title="Link to this definition">#</a></dt>
+<dd><p>Whether to allocate GPU resources for this actor. Defaults to False.</p>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 
@@ -812,20 +897,20 @@ document.write(`
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="api_core.html"
+       href="api.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Core Interfaces</p>
+        <p class="prev-next-title">API Reference</p>
       </div>
     </a>
     <a class="right-next"
-       href="api_data.html"
+       href="api_service.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Data Management</p>
+        <p class="prev-next-title">Service</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -851,20 +936,20 @@ document.write(`
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="api_core.html"
+       href="api.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Core Interfaces</p>
+        <p class="prev-next-title">API Reference</p>
       </div>
     </a>
     <a class="right-next"
-       href="api_data.html"
+       href="api_service.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Data Management</p>
+        <p class="prev-next-title">Service</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -886,10 +971,18 @@ document.write(`
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy-actor">Policy Actor</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference-model">Reference Model</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#replay-buffer">Replay Buffer</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trainer">Trainer</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor"><code class="docutils literal notranslate"><span class="pre">ForgeActor</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.as_actor"><code class="docutils literal notranslate"><span class="pre">ForgeActor.as_actor()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.hosts"><code class="docutils literal notranslate"><span class="pre">ForgeActor.hosts</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.launch"><code class="docutils literal notranslate"><span class="pre">ForgeActor.launch()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.mesh_name"><code class="docutils literal notranslate"><span class="pre">ForgeActor.mesh_name</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.num_replicas"><code class="docutils literal notranslate"><span class="pre">ForgeActor.num_replicas</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.options"><code class="docutils literal notranslate"><span class="pre">ForgeActor.options()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.procs"><code class="docutils literal notranslate"><span class="pre">ForgeActor.procs</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.shutdown"><code class="docutils literal notranslate"><span class="pre">ForgeActor.shutdown()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.controller.actor.ForgeActor.with_gpus"><code class="docutils literal notranslate"><span class="pre">ForgeActor.with_gpus</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -1020,11 +1113,11 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Actors",
-       "headline": "Actors",
+       "name": "ForgeActor",
+       "headline": "ForgeActor",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api_actors.html",
-       "articleBody": "Actors# The actors module contains the core components for model training and inference in TorchForge. This includes policy actors, reference models, replay buffers, and trainers. Policy Actor# The policy actor is responsible for model inference and policy interactions during training. Reference Model# The reference model provides baseline comparisons for reinforcement learning algorithms. Replay Buffer# The replay buffer manages storage and sampling of training experiences. Trainer# The trainer orchestrates the training process and implements training algorithms.",
+       "articleBody": "ForgeActor# The actors module contains the core components for model training and inference in TorchForge. These pre-built actors provide essential functionality for reinforcement learning workflows and can be used as building blocks for complex distributed training systems. class forge.controller.actor.ForgeActor(*args, **kwargs)[source]# Bases: Actor Base class for Forge actors with configurable resource attributes. The initialization sets up logging configuration with rank/size information and initializes the actor\u2019s process mesh reference. The rank and size are automatically determined from the current execution context. Parameters: *args \u2013 Variable length argument list passed to the parent Actor class. **kwargs \u2013 Arbitrary keyword arguments passed to the parent Actor class. async classmethod as_actor(*args, **actor_kwargs)[source]# Spawns a single actor using the configuration stored in .options(), or defaults. The configuration values stored in the subclass returned by .options() (like procs) are used to construct a ProcessConfig instance. If no configuration was stored, defaults to a single process with no GPU. Return type: TypeVar(T, bound= ForgeActor) hosts = None# Number of hosts to distribute the actor across. If None, uses as many hosts as needed to accommodate the requested processes. Defaults to None. async classmethod launch(*args, **kwargs)[source]# Provisions and deploys a new actor. This method is used by Service to provision a new replica. We implement it this way because special actors like inference servers may be composed of multiple actors spawned across multiple processes. This allows you to specify how your actor gets launched together. This implementation is basic, assuming that we\u2019re spawning a homogeneous set of actors on a single proc mesh. Return type: ForgeActor mesh_name = None# Optional name for the process mesh used by this actor. If None, a default name will be generated. Defaults to None. num_replicas = 1# Number of replicas to create when spawning as a service. Only applies when using as_service(). Defaults to 1. classmethod options(*, procs=1, hosts=None, with_gpus=False, num_replicas=1, mesh_name=None, **kwargs)[source]# Returns a version of ForgeActor with configured resource attributes. This method allows you to pre-configure an actor class before spawning it with .as_actor() or .as_service(). Each call creates a separate subclass, so multiple different configurations can coexist without interfering with each other. Examples: :rtype: Type[TypeVar(T, bound= ForgeActor)] Pre-configure a service with multiple replicas: service = await MyForgeActor.options(num_replicas=2, procs=2).as_service(...) await service.shutdown() Default usage without calling options: service = await MyForgeActor.as_service(...) await service.shutdown() Pre-configure a single actor actor = await MyForgeActor.options(procs=1, hosts=1).as_actor(...) await actor.shutdown() Default usage without calling options actor = await MyForgeActor.as_actor(...) await actor.shutdown() procs = 1# Number of processes to use for this actor. Defaults to 1. async classmethod shutdown(actor)[source]# Shuts down an actor. This method is used by Service to teardown a replica. with_gpus = False# Whether to allocate GPU resources for this actor. Defaults to False.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

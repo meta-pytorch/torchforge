@@ -1,0 +1,1764 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchtitan.config.job_config &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=a8c4d769" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+    <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchtitan/config/job_config';</script>
+    <script src="../../../_static/custom.js?v=b1073d4a"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/_modules/torchtitan/config/job_config.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="../../../_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/forge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/forge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchtitan.c...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../index.html">
+        <meta itemprop="name" content="Module code">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="torchtitan.config.job_config">
+        <meta itemprop="position" content="2">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">_modules/torchtitan/config/job_config</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchtitan.config.job_config</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1"># All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the BSD-style license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">asdict</span><span class="p">,</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+
+<div class="viewcode-block" id="Job">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Job">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Job</span><span class="p">:</span>
+    <span class="n">config_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Job config file&quot;&quot;&quot;</span>
+
+    <span class="n">dump_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;./torchtitan/outputs&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Folder to dump job outputs&quot;&quot;&quot;</span>
+
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default job&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Description of the job&quot;&quot;&quot;</span>
+
+    <span class="n">print_args</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the args to terminal&quot;&quot;&quot;</span></div>
+
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Profiling</span><span class="p">:</span>
+    <span class="n">enable_profiling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to enable pytorch profile&quot;&quot;&quot;</span>
+
+    <span class="n">save_traces_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;profile_traces&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Trace files location&quot;&quot;&quot;</span>
+
+    <span class="n">profile_freq</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How often to collect profile traces, in iterations&quot;&quot;&quot;</span>
+
+    <span class="n">enable_memory_snapshot</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to dump memory snapshot&quot;&quot;&quot;</span>
+
+    <span class="n">save_memory_snapshot_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;memory_snapshot&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Memory snapshot files location&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Metrics</span><span class="p">:</span>
+    <span class="n">log_freq</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How often to log metrics to TensorBoard, in iterations&quot;&quot;&quot;</span>
+
+    <span class="n">enable_tensorboard</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to log metrics to TensorBoard&quot;&quot;&quot;</span>
+
+    <span class="n">disable_color_printing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to disable color printing in logs&quot;&quot;&quot;</span>
+
+    <span class="n">save_tb_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tb&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Folder to dump TensorBoard states&quot;&quot;&quot;</span>
+
+    <span class="n">save_for_all_ranks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Whether to save TensorBoard/Wandb metrics only for rank 0 or for all ranks.</span>
+<span class="sd">    When this option is False and pipeline_parallel_degree is &gt; 1, the metrics</span>
+<span class="sd">    component uses the 0th rank of the last stage pipeline group, which is the</span>
+<span class="sd">    only stage that computes loss metrics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">enable_wandb</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to log metrics to Weights &amp; Biases&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="Model">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Model">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Model</span><span class="p">:</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;llama3&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Which model to train&quot;&quot;&quot;</span>
+
+    <span class="n">flavor</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;debugmodel&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Which model config to train&quot;&quot;&quot;</span>
+
+    <span class="n">hf_assets_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;./tests/assets/tokenizer&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Path to HF assets folder. This folder contains local copies of Hugging Face assets,</span>
+<span class="sd">    including model weights in .safetensors format, the model.safetensor.index.json file</span>
+<span class="sd">    (fqn to file mapping), the config.json file, generation_config.json, and tokenizer files.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">tokenizer_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DEPRECATED: Use hf_assets_path instead.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tokenizer path&quot;&quot;&quot;</span>
+
+    <span class="n">converters</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Comma separated list of converters to apply to the model.</span>
+<span class="sd">    For instance, the `float8` converter swaps `torch.nn.Linear`</span>
+<span class="sd">    with `Float8Linear`. This feature requires you to install &#39;torchao&#39;</span>
+<span class="sd">    which can be found here: https://github.com/pytorch/ao</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">print_after_conversion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    If true, model definition will be printed to stdout after all model</span>
+<span class="sd">    converters have been applied.</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="Optimizer">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Optimizer">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Optimizer</span><span class="p">:</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;AdamW&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Optimizer to use&quot;&quot;&quot;</span>
+
+    <span class="n">lr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">8e-4</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Learning rate to use&quot;&quot;&quot;</span>
+
+    <span class="n">beta1</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9</span>
+    <span class="n">beta2</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exponential moving average hyperparameters to use&quot;&quot;&quot;</span>
+
+    <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Epsilon value to use&quot;&quot;&quot;</span>
+
+    <span class="n">weight_decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weight decay to use&quot;&quot;&quot;</span>
+
+    <span class="n">implementation</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;for-loop&quot;</span><span class="p">,</span> <span class="s2">&quot;foreach&quot;</span><span class="p">,</span> <span class="s2">&quot;fused&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;fused&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Specify which optimizer implementation to use:</span>
+<span class="sd">    - &#39;fused&#39;: Use fused implementation (CUDA only) for best performance.</span>
+<span class="sd">    - &#39;foreach&#39;: Use some horizontal fusion of tensors for better performance.</span>
+<span class="sd">    - &#39;for-loop&#39;: Use the default implementation for the optimizer (slowest).</span>
+<span class="sd">    - more info: https://pytorch.org/docs/stable/optim.html</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">early_step_in_backward</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Whether to apply optimizer in the backward. Caution, optimizer_in_backward</span>
+<span class="sd">    is not compatible with gradients clipping, users should not call</span>
+<span class="sd">    register_post_accumulate_grad_hook after the optimizer is built.</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LRScheduler</span><span class="p">:</span>
+    <span class="n">warmup_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Steps for lr scheduler warmup, normally 1/5 of --training.steps</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">decay_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Controls the proportion of the training steps allocated to the learning rate decay phase.</span>
+<span class="sd">    If `None`, the learning rate will begin decaying immediately after the warmup period.</span>
+<span class="sd">    Otherwise, the learning rate will remain stable after the warmup period and</span>
+<span class="sd">    only start decaying during the last `decay_ratio` portion of the total training steps.</span>
+<span class="sd">    This is known as the Warmup-Stable-Decay (WSD) schedule, as described in https://arxiv.org/abs/2404.06395.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">decay_type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;linear&quot;</span><span class="p">,</span> <span class="s2">&quot;sqrt&quot;</span><span class="p">,</span> <span class="s2">&quot;cosine&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;linear&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Learning rate decay type to use during training:</span>
+<span class="sd">    - &#39;linear&#39;: linearly decays learning rate from initial to final value</span>
+<span class="sd">    - &#39;sqrt&#39;: decays learning rate following a 1 minus square root curve</span>
+<span class="sd">    - &#39;cosine&#39;: smoothly decays learning rate following a cosine curve</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">min_lr_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Min lr ratio for lr scheduler.</span>
+<span class="sd">    If provided, the range of decay factor is scaled from 1 to `min_lr_factor`</span>
+<span class="sd">    to ensure the learning rate does not drop below `optimizer.lr * lr_scheduler.min_lr_factor`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="Training">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Training">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Training</span><span class="p">:</span>
+    <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;c4_test&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dataset to use&quot;&quot;&quot;</span>
+
+    <span class="n">dataset_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Path to the dataset in the file system. If provided, data will be</span>
+<span class="sd">    loaded from this path instead of downloaded.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">local_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Local batch size (i.e., per-device batch size)&quot;&quot;&quot;</span>
+
+    <span class="n">global_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Global batch size (defaults to `training.local_batch_size * data-parallel degree`)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">seq_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sequence length&quot;&quot;&quot;</span>
+
+    <span class="n">max_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Max norm for gradient clipping&quot;&quot;&quot;</span>
+
+    <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;How many train steps to run&quot;&quot;&quot;</span>
+
+    <span class="n">enable_cpu_offload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Whether to apply CPU offloading of parameters, gradients, and optimizer states in FSDP</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;bfloat16&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;float32&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    torch dtype for training. In contrast to mixed precision training, setting training_dtype=bfloat16 will</span>
+<span class="sd">    put all parameters, gradients, and optimizer states in bfloat16, without an extra copy of fp32 weights.</span>
+<span class="sd">    In the case of full bf16 training, RoPE calculations and logits will still be in fp32.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mixed_precision_param</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;bfloat16&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;bfloat16&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    torch dtype to use for parameters when applying mixed precision via fully_shard or torch.autocast.</span>
+<span class="sd">    This feature takes effect via fully_shard when data_parallel_shard_degree &gt; 1 or</span>
+<span class="sd">    context_parallel_degree &gt; 1; it takes effect via torch.autocast when data_replicate_degree &gt;= 1</span>
+<span class="sd">    and no other parallelism is enabled, i.e. under DDP or single-device training.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mixed_precision_reduce</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;float32&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;float32&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    torch dtype to use for reductions when applying mixed precision via FSDP.</span>
+<span class="sd">    This feature only takes effect when data_parallel_shard_degree &gt; 1</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">gc_freq</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Python garbage control scheduling interval, in steps&quot;&quot;&quot;</span>
+
+    <span class="n">gc_debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enable GC debugging mode. This will perform gc.collect() at every step to</span>
+<span class="sd">    detect if there is a reference cycle that includes a CUDA Tensor.</span>
+<span class="sd">    Note that you may want to lower the training steps to avoid generating too</span>
+<span class="sd">    many temporary files.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Choose the base RNG seed used for training&quot;&quot;&quot;</span>
+
+    <span class="n">deterministic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Use deterministic algorithms wherever possible, may be slower&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="Parallelism">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Parallelism">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Parallelism</span><span class="p">:</span>
+    <span class="n">data_parallel_replicate_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The `data_parallel_replicate_degree` argument specifies the degree of</span>
+<span class="sd">    data parallelism for weight replication. When this value is greater</span>
+<span class="sd">    than 1, weights will be replicated across `data_parallel_replicate_degree`</span>
+<span class="sd">    ranks. If `data_parallel_shard_degree` is also greater than 1, the parallelism</span>
+<span class="sd">    method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the</span>
+<span class="sd">    parallelism method used is DDP (Distributed Data Parallelism).</span>
+<span class="sd">    1 means disabled.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">enable_compiled_autograd</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enable CompiledAutograd to compile the backward.&quot;&quot;&quot;</span>
+
+    <span class="n">data_parallel_shard_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The `data_parallel_shard_degree` argument specifies the degree of data</span>
+<span class="sd">    parallelism for weight sharding. When this value is greater than 1, weights</span>
+<span class="sd">    will be sharded across `data_parallel_shard_degree` ranks. If</span>
+<span class="sd">    `data_parallel_replicate_degree` is also greater than 1, the parallelism</span>
+<span class="sd">    method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the</span>
+<span class="sd">    parallelism method used is FSDP (Fully Sharded Data Parallelism).</span>
+<span class="sd">    -1 means leftover ranks will be used (After DP_REPLICATE/SP/PP). Note that</span>
+<span class="sd">    only `data_parallel_shard_degree` can be negative. 1 means disabled.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">fsdp_reshard_after_forward</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="s2">&quot;always&quot;</span><span class="p">,</span> <span class="s2">&quot;never&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    `reshard_after_forward` specifies the policy for applying `reshard_after_forward`</span>
+<span class="sd">    within an FSDP setup. `reshard_after_forward` controls parameter behavior after forward,</span>
+<span class="sd">    trading off memory and communication. See torch&#39;s `fully_shard` API for more documentation</span>
+<span class="sd">    on `reshard_after_forward`.</span>
+<span class="sd">    The supported policies include &quot;default&quot;, &quot;always&quot; and &quot;never&quot;:</span>
+<span class="sd">    - &quot;default&quot; applies default resharding behavior, implementing &quot;smart defaults&quot; for known optimal</span>
+<span class="sd">        scenarios.</span>
+<span class="sd">    - &quot;always&quot; will enable `reshard_after_forward` for all forward passes.</span>
+<span class="sd">    - &quot;never&quot; will disable `reshard_after_forward` for all forward passes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">tensor_parallel_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tensor Parallelism degree. 1 means disabled.&quot;&quot;&quot;</span>
+
+    <span class="n">disable_loss_parallel</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to apply loss parallel when sequence parallel is enabled&quot;&quot;&quot;</span>
+
+    <span class="n">enable_async_tensor_parallel</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to apply async tensor parallel (currently only effective when compile is enabled)&quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Pipeline Parallelism degree, or number of ranks. 1 means disabled.</span>
+<span class="sd">    If using looped schedules, this still specifies the number of physical ranks, not the number</span>
+<span class="sd">    of stages. Stages per rank are inferred from split points degree, and schedule.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_split_points</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    DEPRECATED: Use module_fqns_per_model_part instead.</span>
+<span class="sd">    Specify comma-separated names of modules to use as the beginning of a split point.</span>
+<span class="sd">    e.g. &quot;layers.0,layers.2&quot; will cause the model to be split into 3 stages,</span>
+<span class="sd">    the first containing all the layers up to layers.0,</span>
+<span class="sd">    the second containing layers.0 and up to layers.2,</span>
+<span class="sd">    the third containing layers.2 and all the remaining layers.</span>
+<span class="sd">    Note: fully-automated splitting may be enabled in the future,</span>
+<span class="sd">    but currently the split points must be specified manually.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">module_fqns_per_model_part</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Specify a list of lists containing the FQNs (Fully Qualified Names) of modules for each model chunk.</span>
+<span class="sd">    Each inner list represents one model chunk and contains the module names that belong to that chunk.</span>
+<span class="sd">    e.g. [[&#39;tok_embeddings&#39;, &#39;layers.0&#39;], [&#39;layers.1&#39;, &#39;layers.2&#39;], [&#39;layers.3&#39;, &#39;layers.4&#39;]]</span>
+<span class="sd">    will create 3 chunks: the first containing tok_embeddings and layers.0,</span>
+<span class="sd">    the second containing layers.1 and layers.2, and the third containing layers.3 and layers.4.</span>
+<span class="sd">    This provides more explicit control over which modules belong to each chunk compared to split points.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_first_stage_less_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The number of layers to reduce in the first stage of pipeline parallelism. This is because</span>
+<span class="sd">    the first stage has the extra overhead of the embedding layer, which is not present in the other stages.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_last_stage_less_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The number of layers to reduce in the last stage of pipeline parallelism. This is because</span>
+<span class="sd">    the last stage has the extra overhead of the output layer, which is not present in the other stages.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_layers_per_stage</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The number of layers per (virtual) pipeline stage. If specified, the module_fqns_per_model_part will be</span>
+<span class="sd">    calculated from the number of layers and pipeline_parallel_degree. If not specified, the</span>
+<span class="sd">    layers per stage will be inferred from the model, schedule, and pipeline_parallel_degree.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_schedule</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;1F1B&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Specify the Pipeline Parallel schedule to use. The supported schedules are:</span>
+<span class="sd">    https://github.com/pytorch/pytorch/blob/de4c2a3b4e89d96334dc678d1c3f2ae51a6630a0/torch/distributed/pipelining/schedules.py#L2161.</span>
+<span class="sd">    The schedule must be compatible with the split points and stages_per_rank.</span>
+<span class="sd">    Looped schedules (e.g. Interleaved1F1B) require specifying pipeline_parallel_degree = number of ranks,</span>
+<span class="sd">    and split_points = number of stages - 1</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_schedule_csv</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Specify the path to the pipeline parallel schedule csv file to use.</span>
+<span class="sd">    The pipeline_parallel_schedule argument must be either</span>
+<span class="sd">    PipelineScheduleSingle, PipelineScheduleMulti, or _PipelineScheduleRuntime.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">pipeline_parallel_microbatch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The size of each pipeline parallel microbatch (default 1).</span>
+<span class="sd">    This value is used to compute the total number of microbatches by dividing local_batch_size with</span>
+<span class="sd">    pipeline_parallel_microbatch_size.</span>
+<span class="sd">    The global training batch size must be evenly divisible by pipeline_parallel_microbatch_size.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">context_parallel_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Context parallelism degree. 1 means disabled.&quot;&quot;&quot;</span>
+
+    <span class="n">context_parallel_rotate_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;allgather&quot;</span><span class="p">,</span> <span class="s2">&quot;alltoall&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;allgather&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The collective to use in context parallel SDPA for kv shards exchange.</span>
+<span class="sd">    - &#39;allgather&#39; means to all-gather all kv shards on ranks after the first sub-SDPA computation,</span>
+<span class="sd">    - &#39;alltoall&#39; means to all-to-all shuffle the kv shards.</span>
+<span class="sd">    The default value is &#39;allgather&#39;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">expert_parallel_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Expert parallelism degree. 1 means disabled. No effect for non-MoE models.</span>
+<span class="sd">    Currently, it is supported with the following constraints:</span>
+<span class="sd">    - when etp = tp:</span>
+<span class="sd">      - cp &lt;= ep &lt;= dp_shard * cp</span>
+<span class="sd">      - ep % cp == 0</span>
+<span class="sd">      - dp_shard * cp % ep == 0</span>
+<span class="sd">    - when etp = 1:</span>
+<span class="sd">      - cp * tp &lt;= ep &lt;= dp_shard * cp * tp</span>
+<span class="sd">      - ep % (cp * tp) == 0</span>
+<span class="sd">      - dp_shard * cp * tp % ep == 0</span>
+<span class="sd">    Note that this is still an experimental feature. Some constraints will be</span>
+<span class="sd">    relaxed soon when we have more flexible DeviceMesh support.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">expert_tensor_parallel_degree</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Expert tensor parallelism degree. 1 means disabled. No effect for non-MoE models, or when ep = 1.</span>
+<span class="sd">    With this option, the tensor parallel degree on routed experts can be different from that on other params.</span>
+<span class="sd">    Currently, we only support either</span>
+<span class="sd">    - [partial dp -&gt; ep] etp = tp</span>
+<span class="sd">    - [partial dp + all tp -&gt; ep] etp = 1</span>
+<span class="sd">    Note that this is still an experimental feature.</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="Checkpoint">
+<a class="viewcode-back" href="../../../api_trainer.html#torchtitan.config.job_config.Checkpoint">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Checkpoint</span><span class="p">:</span>
+    <span class="n">enable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to enable checkpoint&quot;&quot;&quot;</span>
+
+    <span class="n">folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;checkpoint&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The folder to store the checkpoints.</span>
+<span class="sd">    When enable is set to true, checkpoints will be in {--job.dump_folder}/{--checkpoint.folder}.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Checkpointing interval in steps.&quot;&quot;&quot;</span>
+
+    <span class="n">initial_load_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This option specifies the path to the initial checkpoint to load, which is</span>
+<span class="sd">    particularly useful for resuming training from a previous run with a</span>
+<span class="sd">    different output path or when loading a checkpoint from a pre-trained model.</span>
+<span class="sd">    If the checkpoint folder for the current run is not empty,</span>
+<span class="sd">    located at {--job.dump_folder}/{--checkpoint.folder}, this option will be ignored.</span>
+<span class="sd">    This feature allows users to load an initial checkpoint from a different folder and</span>
+<span class="sd">    continue training, saving new checkpoints to the specified folder without affecting</span>
+<span class="sd">    the existing ones.</span>
+
+<span class="sd">    Note that the path should contain the full path to the checkpoint folder,</span>
+<span class="sd">    including the step number, if any; for example,</span>
+<span class="sd">    &quot;//pre_train/checkpoints/llama3/llama3_8b/step_10000&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">initial_load_model_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This option specifies if only the model should be loaded during the initial</span>
+<span class="sd">    checkpoint load. The option is only used when `initial_load_path` is specified.</span>
+<span class="sd">    If False, the checkpoint at `initial_load_path` is treated as a standard training</span>
+<span class="sd">    checkpoint, including optimizer, lr scheduler, training states, etc.</span>
+<span class="sd">    The default setting for this option is True. Note that you will have to use</span>
+<span class="sd">    `--checkpoint.no_initial_load_model_only` to override the default setting.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">initial_load_in_hf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enable the use of HuggingFace&#39;s safetensors format for checkpointing. The option</span>
+<span class="sd">    is only used when `initial_load_path` is specified. This will load checkpoints</span>
+<span class="sd">    in HF&#39;s model definition and safetensors format instead of the default torchtitan</span>
+<span class="sd">    model definition and DCP format, after necessary model state dict transformation.</span>
+<span class="sd">    `initial_load_model_only` must be true because safetensors doesn&#39;t support saving</span>
+<span class="sd">    non-tensors. The default value is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">last_save_model_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    When last_save_model_only=True, only the model will be saved at the end of training,</span>
+<span class="sd">    the last save.  With this, checkpoints can be loaded using `torch.load(..., weights_only=True)`</span>
+<span class="sd">    after conversion.  When last_save_model_only=False, the full checkpoint will be saved.</span>
+<span class="sd">    A full checkpoint includes model, optimizer and train_state, which can be used to resume training.</span>
+<span class="sd">    The default value is True.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">last_save_in_hf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enable the use of Hugging Face&#39;s safetensors format for checkpointing. This will save the</span>
+<span class="sd">    final checkpoints in safetensors format instead of the default DCP format, after necessary</span>
+<span class="sd">    model state dict transformation. There will be a performance cost in using this as we need</span>
+<span class="sd">    to consolidate the sharded tensors to full tensors as a separate step.</span>
+<span class="sd">    last_save_model_only must be true because safetensors doesn&#39;t support saving</span>
+<span class="sd">    non-tensors. On load, this argument isn&#39;t needed as we will detect whether the loaded</span>
+<span class="sd">    checkpoint is in safetensors format or not. The default value is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">export_dtype</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;float16&quot;</span><span class="p">,</span> <span class="s2">&quot;bfloat16&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;float32&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts to the specified precision when training completes and last_save_model_only=true.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">async_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;disabled&quot;</span><span class="p">,</span> <span class="s2">&quot;async&quot;</span><span class="p">,</span> <span class="s2">&quot;async_with_pinned_mem&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;disabled&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Which async checkpoint mode to use. Currently there are 3 different modes.</span>
+<span class="sd">    - &quot;disabled&quot;: synchronized checkpointing will be used.</span>
+<span class="sd">    - &quot;async&quot;: torch.distributed.checkpoint.async_save will be used.</span>
+<span class="sd">    - &quot;async_with_pinned_mem&quot;: this option utilizes a dedicated pinned memory space and creates a</span>
+<span class="sd">      separate process for faster GPU-&gt;CPU transfer performance and eliminating GIL contention.</span>
+<span class="sd">      The cost is increased CPU memory usage. If insufficient CPU memory is available, performance</span>
+<span class="sd">      may degrade due to memory paging. For most users, &quot;async&quot; should suffice as the performance</span>
+<span class="sd">      overhead is typically small (on the order of tens of seconds) compared to checkpointing</span>
+<span class="sd">      frequency. This mode can be employed to pursue near-zero checkpointing times</span>
+<span class="sd">      (e.g., &lt; 1 second) given appropriate hardware support such as ample CPU memory and fast PCIe.</span>
+
+<span class="sd">    &quot;disabled&quot; is the default mode.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">keep_latest_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Keeps only the latest k checkpoints, and purging older ones. If 0, keep all checkpoints.</span>
+<span class="sd">    K cannot be 1 as the last one may be in the process of being saved. As a result,</span>
+<span class="sd">    the metadata of the last one may not be ready yet. The default value is 10 to avoid</span>
+<span class="sd">    filling up the disk.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">load_step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load the checkpoint at the specified step. If -1, load the latest checkpoint.&quot;&quot;&quot;</span>
+
+    <span class="n">exclude_from_loading</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Exclude specific keys from being loaded from the checkpoint.</span>
+<span class="sd">    Provide a comma-separated list of keys to exclude, e.g. &#39;optimizer,lr_scheduler,dataloader&#39;.</span>
+<span class="sd">    This will load the model only, excluding the specified keys.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">enable_first_step_checkpoint</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enable the checkpoint save at first step. This will save a checkpoint immediately</span>
+<span class="sd">    after the first step to ensure checkpointing functions correctly. This is useful</span>
+<span class="sd">    when running on a new cluster or storage to verify checkpointing without waiting</span>
+<span class="sd">    for many steps or checkpointing too frequently. The default value is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">create_seed_checkpoint</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint.</span>
+<span class="sd">    Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1.</span>
+<span class="sd">    Could be implemented as a separate script, but this way shares more code.</span>
+<span class="sd">    &quot;&quot;&quot;</span></div>
+
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ActivationCheckpoint</span><span class="p">:</span>
+    <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;selective&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;selective&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Type of activation checkpointing to use&quot;&quot;&quot;</span>
+
+    <span class="n">selective_ac_option</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;2&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Selective activation checkpointing options [&#39;int&#39;, &#39;op&#39;].</span>
+<span class="sd">    &#39;int&#39; (e.g., 2) for every nth layer, or &#39;op&#39; for op level ac.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">per_op_sac_force_recompute_mm_shapes_by_fqns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;moe.router.gate&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    When per-op selective ac is used, this list of fully qualified names is used</span>
+<span class="sd">    to determine which mm shapes to force recompute, rather than being considered</span>
+<span class="sd">    by rest of the sac policy, e.g save every other mm. Only nn.Linear modules are</span>
+<span class="sd">    supported today.</span>
+
+<span class="sd">    Note: this config applies to mms not limited to those matching the specified</span>
+<span class="sd">    fqns, e.g. if &quot;moe.router.gate&quot;, corresponding to Linear(in, out), is specified,</span>
+<span class="sd">    ANY mm with shape matching (*, in) x (in, out) will be force recomputed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">early_stop</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Whether to stop recomputing early when all activations have already been</span>
+<span class="sd">    rematerialized.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Compile</span><span class="p">:</span>
+    <span class="n">enable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to apply torch.compile&quot;&quot;&quot;</span>
+
+    <span class="n">components</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;loss&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;loss&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Which components to compile&quot;&quot;&quot;</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inductor&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Float8Linear</span><span class="p">:</span>
+    <span class="n">enable_fsdp_float8_all_gather</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether enable float8 all-gather in FSDP, recommended for tensorwise scaling&quot;&quot;&quot;</span>
+
+    <span class="n">precompute_float8_dynamic_scale_for_fsdp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether precompute float8 scales dynamically for FSDP, recommended for tensorwise scaling&quot;&quot;&quot;</span>
+
+    <span class="n">recipe_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;tensorwise&quot;</span><span class="p">,</span> <span class="s2">&quot;rowwise&quot;</span><span class="p">,</span> <span class="s2">&quot;rowwise_with_gw_hp&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If specified, creates float8 config from recipe name&quot;&quot;&quot;</span>
+
+    <span class="n">filter_fqns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Comma-separated list of fully qualified names of modules to skip applying float8 training to.</span>
+<span class="sd">    nn.Linear modules with any dim size not divisible by 16 are always skipped due to hardware requirements.</span>
+<span class="sd">    Example: --quantize.linear.float8.filter_fqns &quot;attention.wq,attention.wk,attention.wv,output&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">emulate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    If True, emulation is used instead of hardware accelerated gemm. This is for test purpose only,</span>
+<span class="sd">    as the current CI does not have sm_89 capability, required by Float8.</span>
+<span class="sd">    Not compatible with torch.compile.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Float8GroupedMM</span><span class="p">:</span>
+    <span class="n">fqns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    *Prototype feature, performance optimization still in progress*</span>
+<span class="sd">    Comma-separated list of fully qualified names of MoE Layers to apply FP8 dynamic quantization on grouped GEMM operations.</span>
+<span class="sd">    This is a prototype feature that requires the torchao nightly build.</span>
+<span class="sd">    Example: --quantize.grouped_mm.float8.fqns=&quot;experts&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MXLinear</span><span class="p">:</span>
+    <span class="n">mxfp8_dim1_cast_kernel_choice</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;triton&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="s2">&quot;torch&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;triton&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Temp work around for inductor performance gap.</span>
+
+<span class="sd">    CUDA is recommended for best performance.</span>
+
+<span class="sd">    Example: --quantize.linear.mx.mxfp8_dim1_cast_kernel_choice=&quot;cuda&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">recipe_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mxfp8_cublas&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    If specified, creates MX config from recipe name. See</span>
+<span class="sd">    https://github.com/pytorch/ao/tree/main/torchao/prototype/mx_formats for more information.</span>
+<span class="sd">    Example: --quantize.linear.mx.recipe_name=&quot;mxfp8_cublas&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">filter_fqns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">])</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Comma-separated list of fully qualified names of modules to skip applying mxfp8 training to.</span>
+<span class="sd">    nn.Linear modules with any dim size not divisible by 16 are also always skipped due to hardware requirements.</span>
+<span class="sd">    By default we always skip the output layer.</span>
+<span class="sd">    Example: --quantize.linear.mx.filter_fqns=&quot;attention.wq,attention.wk,attention.wv,output&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MXGroupedMM</span><span class="p">:</span>
+    <span class="n">recipe_name</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;mxfp8&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;mxfp8&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Quantization recipe name for grouped GEMMs. Options: [&quot;mxfp8&quot;]</span>
+
+<span class="sd">    Example: --quantize.grouped_mm.mx.recipe_name=&quot;mxfp8&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">fqns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    *Prototype feature, performance optimization still in progress*</span>
+<span class="sd">    Comma-separated list of fully qualified names of MoE modules to apply MXFP8 dynamic quantization on grouped GEMM operations.</span>
+<span class="sd">    This is a prototype feature that requires the torchao nightly build.</span>
+<span class="sd">    Example: --quantize.grouped_mm.mx.fqns=&quot;experts&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">QuantizedLinear</span><span class="p">:</span>
+    <span class="n">float8</span><span class="p">:</span> <span class="n">Float8Linear</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Float8Linear</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;FP8 training config for nn.Linear layers&quot;&quot;&quot;</span>
+
+    <span class="n">mx</span><span class="p">:</span> <span class="n">MXLinear</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">MXLinear</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MX training config for nn.Linear layers&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">QuantizedGroupedMM</span><span class="p">:</span>
+    <span class="n">float8</span><span class="p">:</span> <span class="n">Float8GroupedMM</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Float8GroupedMM</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;FP8 training config for grouped GEMMs&quot;&quot;&quot;</span>
+
+    <span class="n">mx</span><span class="p">:</span> <span class="n">MXGroupedMM</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">MXGroupedMM</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MX training config for grouped GEMMs&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Quantize</span><span class="p">:</span>
+    <span class="n">linear</span><span class="p">:</span> <span class="n">QuantizedLinear</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">QuantizedLinear</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Quantized training config for nn.Linear layers&quot;&quot;&quot;</span>
+
+    <span class="n">grouped_mm</span><span class="p">:</span> <span class="n">QuantizedGroupedMM</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">QuantizedGroupedMM</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Quantized training config for grouped GEMMs&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Comm</span><span class="p">:</span>
+    <span class="n">init_timeout_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Timeout for communication operations, during initialization and first train step.&quot;&quot;&quot;</span>
+
+    <span class="n">train_timeout_seconds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Timeout for communication operations after the first train step --</span>
+<span class="sd">    usually a tighter bound than during initialization.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">trace_buf_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20000</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flight recorder ring buffer size, &gt;0 means recording by default, 0 means disabled&quot;&quot;&quot;</span>
+
+    <span class="n">save_traces_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;comm_traces&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flight recorder trace files location&quot;&quot;&quot;</span>
+
+    <span class="n">save_traces_file_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;rank_&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flight recorder trace files prefix&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MemoryEstimation</span><span class="p">:</span>
+    <span class="n">enable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to estimate memory usage for FSDP&quot;&quot;&quot;</span>
+
+    <span class="n">disable_fake_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to estimate memory under FakeTensorMode&quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FaultTolerance</span><span class="p">:</span>
+    <span class="n">enable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enable TorchFT integration. When TorchFT is enabled, HSDP will be used.</span>
+<span class="sd">    And --fault_tolerance.data_parallel_replicate_degree should be 1 and</span>
+<span class="sd">    --fault_tolerance.group_size will be used to control the maximum</span>
+<span class="sd">    replicate group size as the replicate group size is dynamic.</span>
+<span class="sd">    Note that this is still an experimental feature.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">process_group</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gloo&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The process group to use for fault tolerance. Currently, only &quot;gloo&quot; and &quot;nccl&quot; are supported.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">process_group_timeout_ms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The process group will abort if operations don&#39;t succeed within this duration.</span>
+<span class="sd">    Note: This currently only works with gloo process group.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">replica_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The TorchFT replica ID of this run.&quot;&quot;&quot;</span>
+
+    <span class="n">group_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The number of TorchFT replicate groups. This number will be used for</span>
+<span class="sd">    dataloader to split the dataset across the replicate groups and FSDP</span>
+<span class="sd">    dimension</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">min_replica_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The minimum number of FT replica for each step.&quot;&quot;&quot;</span>
+
+    <span class="n">semi_sync_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The algorithm to use for semi-sync training. Currently, only &quot;local_sgd&quot; and &quot;diloco&quot; from</span>
+<span class="sd">    torchft are supported</span>
+<span class="sd">    (https://github.com/pytorch/torchft/blob/360c5c534bdeac959507e9d238ba9f3902d3fda9/torchft/local_sgd.py#L41)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Experimental</span><span class="p">:</span>
+    <span class="n">custom_import</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This option enables the importation of external modules.</span>
+<span class="sd">    Currently, it only supports dotted import modules (e.g., some_package.model_x).</span>
+<span class="sd">    It is the user&#39;s responsibility to ensure that the specified path can be</span>
+<span class="sd">    successfully imported. One method to achieve this, you can place your module</span>
+<span class="sd">    inside the ``torchtitan/torchtitan`` folder and execute ``pip install -e .`` to</span>
+<span class="sd">    make it available for import.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">custom_args_module</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This option allows users to extend TorchTitan&#39;s existing JobConfig by extending</span>
+<span class="sd">    a user defined JobConfig dataclass. Similar to ``--experimental.custom_model_path``, the user</span>
+<span class="sd">    needs to ensure that the path can be imported.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Validation</span><span class="p">:</span>
+    <span class="n">enable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enable validation to default run validation after each training loop&quot;&quot;&quot;</span>
+
+    <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;c4_validation&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dataset to use for validation&quot;&quot;&quot;</span>
+
+    <span class="n">dataset_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Path to dataset to use for validation&quot;&quot;&quot;</span>
+
+    <span class="n">local_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Batch size for validation&quot;&quot;&quot;</span>
+
+    <span class="n">seq_len</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sequence length for validation&quot;&quot;&quot;</span>
+
+    <span class="n">freq</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Frequency of validation&quot;&quot;&quot;</span>
+
+    <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Number of steps to take in the validation set, -1 means consuming all the data in the validation dataset</span>
+<span class="sd">    WARNING: When setting to -1 there could be hangs due to mismatch among ranks</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">steps</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">steps</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="p">),</span> <span class="s2">&quot;validation steps must be positive or -1&quot;</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">JobConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Default container for training configuration.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">job</span><span class="p">:</span> <span class="n">Job</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Job</span><span class="p">)</span>
+    <span class="n">profiling</span><span class="p">:</span> <span class="n">Profiling</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Profiling</span><span class="p">)</span>
+    <span class="n">metrics</span><span class="p">:</span> <span class="n">Metrics</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Metrics</span><span class="p">)</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Model</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Model</span><span class="p">)</span>
+    <span class="n">optimizer</span><span class="p">:</span> <span class="n">Optimizer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Optimizer</span><span class="p">)</span>
+    <span class="n">lr_scheduler</span><span class="p">:</span> <span class="n">LRScheduler</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">LRScheduler</span><span class="p">)</span>
+    <span class="n">training</span><span class="p">:</span> <span class="n">Training</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Training</span><span class="p">)</span>
+    <span class="n">parallelism</span><span class="p">:</span> <span class="n">Parallelism</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Parallelism</span><span class="p">)</span>
+    <span class="n">checkpoint</span><span class="p">:</span> <span class="n">Checkpoint</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Checkpoint</span><span class="p">)</span>
+    <span class="n">activation_checkpoint</span><span class="p">:</span> <span class="n">ActivationCheckpoint</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="n">ActivationCheckpoint</span>
+    <span class="p">)</span>
+    <span class="nb">compile</span><span class="p">:</span> <span class="n">Compile</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Compile</span><span class="p">)</span>
+    <span class="n">quantize</span><span class="p">:</span> <span class="n">Quantize</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantize</span><span class="p">)</span>
+    <span class="n">comm</span><span class="p">:</span> <span class="n">Comm</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Comm</span><span class="p">)</span>
+    <span class="n">memory_estimation</span><span class="p">:</span> <span class="n">MemoryEstimation</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">MemoryEstimation</span><span class="p">)</span>
+    <span class="n">fault_tolerance</span><span class="p">:</span> <span class="n">FaultTolerance</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">FaultTolerance</span><span class="p">)</span>
+    <span class="n">experimental</span><span class="p">:</span> <span class="n">Experimental</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Experimental</span><span class="p">)</span>
+    <span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Validation</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchtitan.config.job_config",
+       "headline": "torchtitan.config.job_config",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/_modules/torchtitan/config/job_config.html",
+       "articleBody": "Source code for torchtitan.config.job_config # Copyright (c) Meta Platforms, Inc. and affiliates. # All rights reserved. # # This source code is licensed under the BSD-style license found in the # LICENSE file in the root directory of this source tree. from dataclasses import asdict, dataclass, field from typing import Any, Literal [docs] @dataclass class Job: config_file: str | None = None \"\"\"Job config file\"\"\" dump_folder: str = \"./torchtitan/outputs\" \"\"\"Folder to dump job outputs\"\"\" description: str = \"default job\" \"\"\"Description of the job\"\"\" print_args: bool = False \"\"\"Print the args to terminal\"\"\" @dataclass class Profiling: enable_profiling: bool = False \"\"\"Whether to enable pytorch profile\"\"\" save_traces_folder: str = \"profile_traces\" \"\"\"Trace files location\"\"\" profile_freq: int = 10 \"\"\"How often to collect profile traces, in iterations\"\"\" enable_memory_snapshot: bool = False \"\"\"Whether to dump memory snapshot\"\"\" save_memory_snapshot_folder: str = \"memory_snapshot\" \"\"\"Memory snapshot files location\"\"\" @dataclass class Metrics: log_freq: int = 10 \"\"\"How often to log metrics to TensorBoard, in iterations\"\"\" enable_tensorboard: bool = False \"\"\"Whether to log metrics to TensorBoard\"\"\" disable_color_printing: bool = False \"\"\"Whether to disable color printing in logs\"\"\" save_tb_folder: str = \"tb\" \"\"\"Folder to dump TensorBoard states\"\"\" save_for_all_ranks: bool = False \"\"\" Whether to save TensorBoard/Wandb metrics only for rank 0 or for all ranks. When this option is False and pipeline_parallel_degree is \u003e 1, the metrics component uses the 0th rank of the last stage pipeline group, which is the only stage that computes loss metrics. \"\"\" enable_wandb: bool = False \"\"\"Whether to log metrics to Weights \u0026 Biases\"\"\" [docs] @dataclass class Model: name: str = \"llama3\" \"\"\"Which model to train\"\"\" flavor: str = \"debugmodel\" \"\"\"Which model config to train\"\"\" hf_assets_path: str = \"./tests/assets/tokenizer\" \"\"\" Path to HF assets folder. This folder contains local copies of Hugging Face assets, including model weights in .safetensors format, the model.safetensor.index.json file (fqn to file mapping), the config.json file, generation_config.json, and tokenizer files. \"\"\" tokenizer_path: str | None = None \"\"\"DEPRECATED: Use hf_assets_path instead.\"\"\" \"\"\"Tokenizer path\"\"\" converters: list[str] = field(default_factory=list) \"\"\" Comma separated list of converters to apply to the model. For instance, the `float8` converter swaps `torch.nn.Linear` with `Float8Linear`. This feature requires you to install \u0027torchao\u0027 which can be found here: https://github.com/pytorch/ao \"\"\" print_after_conversion: bool = False \"\"\" If true, model definition will be printed to stdout after all model converters have been applied. \"\"\" [docs] @dataclass class Optimizer: name: str = \"AdamW\" \"\"\"Optimizer to use\"\"\" lr: float = 8e-4 \"\"\"Learning rate to use\"\"\" beta1: float = 0.9 beta2: float = 0.95 \"\"\"Exponential moving average hyperparameters to use\"\"\" eps: float = 1e-8 \"\"\"Epsilon value to use\"\"\" weight_decay: float = 0.1 \"\"\"Weight decay to use\"\"\" implementation: Literal[\"for-loop\", \"foreach\", \"fused\"] = \"fused\" \"\"\" Specify which optimizer implementation to use: - \u0027fused\u0027: Use fused implementation (CUDA only) for best performance. - \u0027foreach\u0027: Use some horizontal fusion of tensors for better performance. - \u0027for-loop\u0027: Use the default implementation for the optimizer (slowest). - more info: https://pytorch.org/docs/stable/optim.html \"\"\" early_step_in_backward: bool = False \"\"\" Whether to apply optimizer in the backward. Caution, optimizer_in_backward is not compatible with gradients clipping, users should not call register_post_accumulate_grad_hook after the optimizer is built. \"\"\" @dataclass class LRScheduler: warmup_steps: int = 200 \"\"\" Steps for lr scheduler warmup, normally 1/5 of --training.steps \"\"\" decay_ratio: float | None = None \"\"\" Controls the proportion of the training steps allocated to the learning rate decay phase. If `None`, the learning rate will begin decaying immediately after the warmup period. Otherwise, the learning rate will remain stable after the warmup period and only start decaying during the last `decay_ratio` portion of the total training steps. This is known as the Warmup-Stable-Decay (WSD) schedule, as described in https://arxiv.org/abs/2404.06395. \"\"\" decay_type: Literal[\"linear\", \"sqrt\", \"cosine\"] = \"linear\" \"\"\" Learning rate decay type to use during training: - \u0027linear\u0027: linearly decays learning rate from initial to final value - \u0027sqrt\u0027: decays learning rate following a 1 minus square root curve - \u0027cosine\u0027: smoothly decays learning rate following a cosine curve \"\"\" min_lr_factor: float = 0.0 \"\"\" Min lr ratio for lr scheduler. If provided, the range of decay factor is scaled from 1 to `min_lr_factor` to ensure the learning rate does not drop below `optimizer.lr * lr_scheduler.min_lr_factor`. \"\"\" [docs] @dataclass class Training: dataset: str = \"c4_test\" \"\"\"Dataset to use\"\"\" dataset_path: str | None = None \"\"\" Path to the dataset in the file system. If provided, data will be loaded from this path instead of downloaded. \"\"\" local_batch_size: int = 8 \"\"\"Local batch size (i.e., per-device batch size)\"\"\" global_batch_size: int = -1 \"\"\" Global batch size (defaults to `training.local_batch_size * data-parallel degree`) \"\"\" seq_len: int = 2048 \"\"\"Sequence length\"\"\" max_norm: float | int = 1.0 \"\"\"Max norm for gradient clipping\"\"\" steps: int = 10000 \"\"\"How many train steps to run\"\"\" enable_cpu_offload: bool = False \"\"\" Whether to apply CPU offloading of parameters, gradients, and optimizer states in FSDP \"\"\" dtype: Literal[\"bfloat16\", \"float32\"] = \"float32\" \"\"\" torch dtype for training. In contrast to mixed precision training, setting training_dtype=bfloat16 will put all parameters, gradients, and optimizer states in bfloat16, without an extra copy of fp32 weights. In the case of full bf16 training, RoPE calculations and logits will still be in fp32. \"\"\" mixed_precision_param: Literal[\"bfloat16\", \"float32\"] = \"bfloat16\" \"\"\" torch dtype to use for parameters when applying mixed precision via fully_shard or torch.autocast. This feature takes effect via fully_shard when data_parallel_shard_degree \u003e 1 or context_parallel_degree \u003e 1; it takes effect via torch.autocast when data_replicate_degree \u003e= 1 and no other parallelism is enabled, i.e. under DDP or single-device training. \"\"\" mixed_precision_reduce: Literal[\"float32\"] = \"float32\" \"\"\" torch dtype to use for reductions when applying mixed precision via FSDP. This feature only takes effect when data_parallel_shard_degree \u003e 1 \"\"\" gc_freq: int = 50 \"\"\"Python garbage control scheduling interval, in steps\"\"\" gc_debug: bool = False \"\"\" Enable GC debugging mode. This will perform gc.collect() at every step to detect if there is a reference cycle that includes a CUDA Tensor. Note that you may want to lower the training steps to avoid generating too many temporary files. \"\"\" seed: int | None = None \"\"\"Choose the base RNG seed used for training\"\"\" deterministic: bool = False \"\"\"Use deterministic algorithms wherever possible, may be slower\"\"\" [docs] @dataclass class Parallelism: data_parallel_replicate_degree: int = 1 \"\"\" The `data_parallel_replicate_degree` argument specifies the degree of data parallelism for weight replication. When this value is greater than 1, weights will be replicated across `data_parallel_replicate_degree` ranks. If `data_parallel_shard_degree` is also greater than 1, the parallelism method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the parallelism method used is DDP (Distributed Data Parallelism). 1 means disabled. \"\"\" enable_compiled_autograd: bool = False \"\"\"Enable CompiledAutograd to compile the backward.\"\"\" data_parallel_shard_degree: int = -1 \"\"\" The `data_parallel_shard_degree` argument specifies the degree of data parallelism for weight sharding. When this value is greater than 1, weights will be sharded across `data_parallel_shard_degree` ranks. If `data_parallel_replicate_degree` is also greater than 1, the parallelism method used is HSDP (Hybrid Sharded Data Parallelism). Otherwise, the parallelism method used is FSDP (Fully Sharded Data Parallelism). -1 means leftover ranks will be used (After DP_REPLICATE/SP/PP). Note that only `data_parallel_shard_degree` can be negative. 1 means disabled. \"\"\" fsdp_reshard_after_forward: Literal[\"default\", \"always\", \"never\"] = \"default\" \"\"\" `reshard_after_forward` specifies the policy for applying `reshard_after_forward` within an FSDP setup. `reshard_after_forward` controls parameter behavior after forward, trading off memory and communication. See torch\u0027s `fully_shard` API for more documentation on `reshard_after_forward`. The supported policies include \"default\", \"always\" and \"never\": - \"default\" applies default resharding behavior, implementing \"smart defaults\" for known optimal scenarios. - \"always\" will enable `reshard_after_forward` for all forward passes. - \"never\" will disable `reshard_after_forward` for all forward passes. \"\"\" tensor_parallel_degree: int = 1 \"\"\"Tensor Parallelism degree. 1 means disabled.\"\"\" disable_loss_parallel: bool = False \"\"\"Whether to apply loss parallel when sequence parallel is enabled\"\"\" enable_async_tensor_parallel: bool = False \"\"\"Whether to apply async tensor parallel (currently only effective when compile is enabled)\"\"\" pipeline_parallel_degree: int = 1 \"\"\" Pipeline Parallelism degree, or number of ranks. 1 means disabled. If using looped schedules, this still specifies the number of physical ranks, not the number of stages. Stages per rank are inferred from split points degree, and schedule. \"\"\" pipeline_parallel_split_points: list[str] = field(default_factory=list) \"\"\" DEPRECATED: Use module_fqns_per_model_part instead. Specify comma-separated names of modules to use as the beginning of a split point. e.g. \"layers.0,layers.2\" will cause the model to be split into 3 stages, the first containing all the layers up to layers.0, the second containing layers.0 and up to layers.2, the third containing layers.2 and all the remaining layers. Note: fully-automated splitting may be enabled in the future, but currently the split points must be specified manually. \"\"\" module_fqns_per_model_part: list[list[str]] | None = None \"\"\" Specify a list of lists containing the FQNs (Fully Qualified Names) of modules for each model chunk. Each inner list represents one model chunk and contains the module names that belong to that chunk. e.g. [[\u0027tok_embeddings\u0027, \u0027layers.0\u0027], [\u0027layers.1\u0027, \u0027layers.2\u0027], [\u0027layers.3\u0027, \u0027layers.4\u0027]] will create 3 chunks: the first containing tok_embeddings and layers.0, the second containing layers.1 and layers.2, and the third containing layers.3 and layers.4. This provides more explicit control over which modules belong to each chunk compared to split points. \"\"\" pipeline_parallel_first_stage_less_layers: int = 1 \"\"\" The number of layers to reduce in the first stage of pipeline parallelism. This is because the first stage has the extra overhead of the embedding layer, which is not present in the other stages. \"\"\" pipeline_parallel_last_stage_less_layers: int = 1 \"\"\" The number of layers to reduce in the last stage of pipeline parallelism. This is because the last stage has the extra overhead of the output layer, which is not present in the other stages. \"\"\" pipeline_parallel_layers_per_stage: int | None = None \"\"\" The number of layers per (virtual) pipeline stage. If specified, the module_fqns_per_model_part will be calculated from the number of layers and pipeline_parallel_degree. If not specified, the layers per stage will be inferred from the model, schedule, and pipeline_parallel_degree. \"\"\" pipeline_parallel_schedule: str = \"1F1B\" \"\"\" Specify the Pipeline Parallel schedule to use. The supported schedules are: https://github.com/pytorch/pytorch/blob/de4c2a3b4e89d96334dc678d1c3f2ae51a6630a0/torch/distributed/pipelining/schedules.py#L2161. The schedule must be compatible with the split points and stages_per_rank. Looped schedules (e.g. Interleaved1F1B) require specifying pipeline_parallel_degree = number of ranks, and split_points = number of stages - 1 \"\"\" pipeline_parallel_schedule_csv: str | None = \"\" \"\"\" Specify the path to the pipeline parallel schedule csv file to use. The pipeline_parallel_schedule argument must be either PipelineScheduleSingle, PipelineScheduleMulti, or _PipelineScheduleRuntime. \"\"\" pipeline_parallel_microbatch_size: int = 1 \"\"\" The size of each pipeline parallel microbatch (default 1). This value is used to compute the total number of microbatches by dividing local_batch_size with pipeline_parallel_microbatch_size. The global training batch size must be evenly divisible by pipeline_parallel_microbatch_size. \"\"\" context_parallel_degree: int = 1 \"\"\"Context parallelism degree. 1 means disabled.\"\"\" context_parallel_rotate_method: Literal[\"allgather\", \"alltoall\"] = \"allgather\" \"\"\" The collective to use in context parallel SDPA for kv shards exchange. - \u0027allgather\u0027 means to all-gather all kv shards on ranks after the first sub-SDPA computation, - \u0027alltoall\u0027 means to all-to-all shuffle the kv shards. The default value is \u0027allgather\u0027. \"\"\" expert_parallel_degree: int = 1 \"\"\" Expert parallelism degree. 1 means disabled. No effect for non-MoE models. Currently, it is supported with the following constraints: - when etp = tp: - cp \u003c= ep \u003c= dp_shard * cp - ep % cp == 0 - dp_shard * cp % ep == 0 - when etp = 1: - cp * tp \u003c= ep \u003c= dp_shard * cp * tp - ep % (cp * tp) == 0 - dp_shard * cp * tp % ep == 0 Note that this is still an experimental feature. Some constraints will be relaxed soon when we have more flexible DeviceMesh support. \"\"\" expert_tensor_parallel_degree: int = 1 \"\"\" Expert tensor parallelism degree. 1 means disabled. No effect for non-MoE models, or when ep = 1. With this option, the tensor parallel degree on routed experts can be different from that on other params. Currently, we only support either - [partial dp -\u003e ep] etp = tp - [partial dp + all tp -\u003e ep] etp = 1 Note that this is still an experimental feature. \"\"\" [docs] @dataclass class Checkpoint: enable: bool = False \"\"\"Whether to enable checkpoint\"\"\" folder: str = \"checkpoint\" \"\"\" The folder to store the checkpoints. When enable is set to true, checkpoints will be in {--job.dump_folder}/{--checkpoint.folder}. \"\"\" interval: int = 500 \"\"\"Checkpointing interval in steps.\"\"\" initial_load_path: str | None = None \"\"\" This option specifies the path to the initial checkpoint to load, which is particularly useful for resuming training from a previous run with a different output path or when loading a checkpoint from a pre-trained model. If the checkpoint folder for the current run is not empty, located at {--job.dump_folder}/{--checkpoint.folder}, this option will be ignored. This feature allows users to load an initial checkpoint from a different folder and continue training, saving new checkpoints to the specified folder without affecting the existing ones. Note that the path should contain the full path to the checkpoint folder, including the step number, if any; for example, \"//pre_train/checkpoints/llama3/llama3_8b/step_10000\". \"\"\" initial_load_model_only: bool = True \"\"\" This option specifies if only the model should be loaded during the initial checkpoint load. The option is only used when `initial_load_path` is specified. If False, the checkpoint at `initial_load_path` is treated as a standard training checkpoint, including optimizer, lr scheduler, training states, etc. The default setting for this option is True. Note that you will have to use `--checkpoint.no_initial_load_model_only` to override the default setting. \"\"\" initial_load_in_hf: bool = False \"\"\" Enable the use of HuggingFace\u0027s safetensors format for checkpointing. The option is only used when `initial_load_path` is specified. This will load checkpoints in HF\u0027s model definition and safetensors format instead of the default torchtitan model definition and DCP format, after necessary model state dict transformation. `initial_load_model_only` must be true because safetensors doesn\u0027t support saving non-tensors. The default value is False. \"\"\" last_save_model_only: bool = True \"\"\" When last_save_model_only=True, only the model will be saved at the end of training, the last save. With this, checkpoints can be loaded using `torch.load(..., weights_only=True)` after conversion. When last_save_model_only=False, the full checkpoint will be saved. A full checkpoint includes model, optimizer and train_state, which can be used to resume training. The default value is True. \"\"\" last_save_in_hf: bool = False \"\"\" Enable the use of Hugging Face\u0027s safetensors format for checkpointing. This will save the final checkpoints in safetensors format instead of the default DCP format, after necessary model state dict transformation. There will be a performance cost in using this as we need to consolidate the sharded tensors to full tensors as a separate step. last_save_model_only must be true because safetensors doesn\u0027t support saving non-tensors. On load, this argument isn\u0027t needed as we will detect whether the loaded checkpoint is in safetensors format or not. The default value is False. \"\"\" export_dtype: Literal[\"float16\", \"bfloat16\", \"float32\"] = \"float32\" \"\"\" Converts to the specified precision when training completes and last_save_model_only=true. \"\"\" async_mode: Literal[\"disabled\", \"async\", \"async_with_pinned_mem\"] = \"disabled\" \"\"\" Which async checkpoint mode to use. Currently there are 3 different modes. - \"disabled\": synchronized checkpointing will be used. - \"async\": torch.distributed.checkpoint.async_save will be used. - \"async_with_pinned_mem\": this option utilizes a dedicated pinned memory space and creates a separate process for faster GPU-\u003eCPU transfer performance and eliminating GIL contention. The cost is increased CPU memory usage. If insufficient CPU memory is available, performance may degrade due to memory paging. For most users, \"async\" should suffice as the performance overhead is typically small (on the order of tens of seconds) compared to checkpointing frequency. This mode can be employed to pursue near-zero checkpointing times (e.g., \u003c 1 second) given appropriate hardware support such as ample CPU memory and fast PCIe. \"disabled\" is the default mode. \"\"\" keep_latest_k: int = 10 \"\"\" Keeps only the latest k checkpoints, and purging older ones. If 0, keep all checkpoints. K cannot be 1 as the last one may be in the process of being saved. As a result, the metadata of the last one may not be ready yet. The default value is 10 to avoid filling up the disk. \"\"\" load_step: int = -1 \"\"\"Load the checkpoint at the specified step. If -1, load the latest checkpoint.\"\"\" exclude_from_loading: list[str] = field(default_factory=list) \"\"\" Exclude specific keys from being loaded from the checkpoint. Provide a comma-separated list of keys to exclude, e.g. \u0027optimizer,lr_scheduler,dataloader\u0027. This will load the model only, excluding the specified keys. \"\"\" enable_first_step_checkpoint: bool = False \"\"\" Enable the checkpoint save at first step. This will save a checkpoint immediately after the first step to ensure checkpointing functions correctly. This is useful when running on a new cluster or storage to verify checkpointing without waiting for many steps or checkpointing too frequently. The default value is False. \"\"\" create_seed_checkpoint: bool = False \"\"\" Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint. Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1. Could be implemented as a separate script, but this way shares more code. \"\"\" @dataclass class ActivationCheckpoint: mode: Literal[\"selective\", \"full\", \"none\"] = \"selective\" \"\"\"Type of activation checkpointing to use\"\"\" selective_ac_option: str = \"2\" \"\"\" Selective activation checkpointing options [\u0027int\u0027, \u0027op\u0027]. \u0027int\u0027 (e.g., 2) for every nth layer, or \u0027op\u0027 for op level ac. \"\"\" per_op_sac_force_recompute_mm_shapes_by_fqns: list[str] = field( default_factory=lambda: [\"moe.router.gate\"] ) \"\"\" When per-op selective ac is used, this list of fully qualified names is used to determine which mm shapes to force recompute, rather than being considered by rest of the sac policy, e.g save every other mm. Only nn.Linear modules are supported today. Note: this config applies to mms not limited to those matching the specified fqns, e.g. if \"moe.router.gate\", corresponding to Linear(in, out), is specified, ANY mm with shape matching (*, in) x (in, out) will be force recomputed. \"\"\" early_stop: bool = False \"\"\" Whether to stop recomputing early when all activations have already been rematerialized. \"\"\" @dataclass class Compile: enable: bool = False \"\"\"Whether to apply torch.compile\"\"\" components: list[Literal[\"model\", \"loss\"]] = field( default_factory=lambda: [\"model\", \"loss\"] ) \"\"\"Which components to compile\"\"\" backend: str = \"inductor\" @dataclass class Float8Linear: enable_fsdp_float8_all_gather: bool = False \"\"\"Whether enable float8 all-gather in FSDP, recommended for tensorwise scaling\"\"\" precompute_float8_dynamic_scale_for_fsdp: bool = False \"\"\"Whether precompute float8 scales dynamically for FSDP, recommended for tensorwise scaling\"\"\" recipe_name: Literal[\"tensorwise\", \"rowwise\", \"rowwise_with_gw_hp\"] | None = None \"\"\"If specified, creates float8 config from recipe name\"\"\" filter_fqns: list[str] = field(default_factory=list) \"\"\" Comma-separated list of fully qualified names of modules to skip applying float8 training to. nn.Linear modules with any dim size not divisible by 16 are always skipped due to hardware requirements. Example: --quantize.linear.float8.filter_fqns \"attention.wq,attention.wk,attention.wv,output\" \"\"\" emulate: bool = False \"\"\" If True, emulation is used instead of hardware accelerated gemm. This is for test purpose only, as the current CI does not have sm_89 capability, required by Float8. Not compatible with torch.compile. \"\"\" @dataclass class Float8GroupedMM: fqns: list[str] | str = field(default_factory=list) \"\"\" *Prototype feature, performance optimization still in progress* Comma-separated list of fully qualified names of MoE Layers to apply FP8 dynamic quantization on grouped GEMM operations. This is a prototype feature that requires the torchao nightly build. Example: --quantize.grouped_mm.float8.fqns=\"experts\" \"\"\" @dataclass class MXLinear: mxfp8_dim1_cast_kernel_choice: Literal[\"triton\", \"cuda\", \"torch\"] = \"triton\" \"\"\" Temp work around for inductor performance gap. CUDA is recommended for best performance. Example: --quantize.linear.mx.mxfp8_dim1_cast_kernel_choice=\"cuda\" \"\"\" recipe_name: str = \"mxfp8_cublas\" \"\"\" If specified, creates MX config from recipe name. See https://github.com/pytorch/ao/tree/main/torchao/prototype/mx_formats for more information. Example: --quantize.linear.mx.recipe_name=\"mxfp8_cublas\" \"\"\" filter_fqns: list[str] = field(default_factory=lambda: [\"output\"]) \"\"\" Comma-separated list of fully qualified names of modules to skip applying mxfp8 training to. nn.Linear modules with any dim size not divisible by 16 are also always skipped due to hardware requirements. By default we always skip the output layer. Example: --quantize.linear.mx.filter_fqns=\"attention.wq,attention.wk,attention.wv,output\" \"\"\" @dataclass class MXGroupedMM: recipe_name: Literal[\"mxfp8\"] = \"mxfp8\" \"\"\" Quantization recipe name for grouped GEMMs. Options: [\"mxfp8\"] Example: --quantize.grouped_mm.mx.recipe_name=\"mxfp8\" \"\"\" fqns: list[str] | str = field(default_factory=list) \"\"\" *Prototype feature, performance optimization still in progress* Comma-separated list of fully qualified names of MoE modules to apply MXFP8 dynamic quantization on grouped GEMM operations. This is a prototype feature that requires the torchao nightly build. Example: --quantize.grouped_mm.mx.fqns=\"experts\" \"\"\" @dataclass class QuantizedLinear: float8: Float8Linear = field(default_factory=Float8Linear) \"\"\"FP8 training config for nn.Linear layers\"\"\" mx: MXLinear = field(default_factory=MXLinear) \"\"\"MX training config for nn.Linear layers\"\"\" @dataclass class QuantizedGroupedMM: float8: Float8GroupedMM = field(default_factory=Float8GroupedMM) \"\"\"FP8 training config for grouped GEMMs\"\"\" mx: MXGroupedMM = field(default_factory=MXGroupedMM) \"\"\"MX training config for grouped GEMMs\"\"\" @dataclass class Quantize: linear: QuantizedLinear = field(default_factory=QuantizedLinear) \"\"\"Quantized training config for nn.Linear layers\"\"\" grouped_mm: QuantizedGroupedMM = field(default_factory=QuantizedGroupedMM) \"\"\"Quantized training config for grouped GEMMs\"\"\" @dataclass class Comm: init_timeout_seconds: int = 300 \"\"\"Timeout for communication operations, during initialization and first train step.\"\"\" train_timeout_seconds: int = 100 \"\"\" Timeout for communication operations after the first train step -- usually a tighter bound than during initialization. \"\"\" trace_buf_size: int = 20000 \"\"\"Flight recorder ring buffer size, \u003e0 means recording by default, 0 means disabled\"\"\" save_traces_folder: str = \"comm_traces\" \"\"\"Flight recorder trace files location\"\"\" save_traces_file_prefix: str = \"rank_\" \"\"\"Flight recorder trace files prefix\"\"\" @dataclass class MemoryEstimation: enable: bool = False \"\"\"Whether to estimate memory usage for FSDP\"\"\" disable_fake_mode: bool = False \"\"\"Whether to estimate memory under FakeTensorMode\"\"\" @dataclass class FaultTolerance: enable: bool = False \"\"\" Enable TorchFT integration. When TorchFT is enabled, HSDP will be used. And --fault_tolerance.data_parallel_replicate_degree should be 1 and --fault_tolerance.group_size will be used to control the maximum replicate group size as the replicate group size is dynamic. Note that this is still an experimental feature. \"\"\" process_group: str = \"gloo\" \"\"\" The process group to use for fault tolerance. Currently, only \"gloo\" and \"nccl\" are supported. \"\"\" process_group_timeout_ms: int = 10000 \"\"\" The process group will abort if operations don\u0027t succeed within this duration. Note: This currently only works with gloo process group. \"\"\" replica_id: int = 0 \"\"\"The TorchFT replica ID of this run.\"\"\" group_size: int = 0 \"\"\" The number of TorchFT replicate groups. This number will be used for dataloader to split the dataset across the replicate groups and FSDP dimension \"\"\" min_replica_size: int = 1 \"\"\"The minimum number of FT replica for each step.\"\"\" semi_sync_method: str | None = None \"\"\" The algorithm to use for semi-sync training. Currently, only \"local_sgd\" and \"diloco\" from torchft are supported (https://github.com/pytorch/torchft/blob/360c5c534bdeac959507e9d238ba9f3902d3fda9/torchft/local_sgd.py#L41) \"\"\" @dataclass class Experimental: custom_import: str = \"\" \"\"\" This option enables the importation of external modules. Currently, it only supports dotted import modules (e.g., some_package.model_x). It is the user\u0027s responsibility to ensure that the specified path can be successfully imported. One method to achieve this, you can place your module inside the ``torchtitan/torchtitan`` folder and execute ``pip install -e .`` to make it available for import. \"\"\" custom_args_module: str = \"\" \"\"\" This option allows users to extend TorchTitan\u0027s existing JobConfig by extending a user defined JobConfig dataclass. Similar to ``--experimental.custom_model_path``, the user needs to ensure that the path can be imported. \"\"\" @dataclass class Validation: enable: bool = False \"\"\"Enable validation to default run validation after each training loop\"\"\" dataset: str = \"c4_validation\" \"\"\"Dataset to use for validation\"\"\" dataset_path: str | None = None \"\"\"Path to dataset to use for validation\"\"\" local_batch_size: int = 8 \"\"\"Batch size for validation\"\"\" seq_len: int = 2048 \"\"\"Sequence length for validation\"\"\" freq: int = 10 \"\"\"Frequency of validation\"\"\" steps: int = -1 \"\"\" Number of steps to take in the validation set, -1 means consuming all the data in the validation dataset WARNING: When setting to -1 there could be hangs due to mismatch among ranks \"\"\" def __post_init__(self): assert ( self.steps \u003e 0 or self.steps == -1 ), \"validation steps must be positive or -1\" @dataclass class JobConfig: \"\"\" Default container for training configuration. \"\"\" job: Job = field(default_factory=Job) profiling: Profiling = field(default_factory=Profiling) metrics: Metrics = field(default_factory=Metrics) model: Model = field(default_factory=Model) optimizer: Optimizer = field(default_factory=Optimizer) lr_scheduler: LRScheduler = field(default_factory=LRScheduler) training: Training = field(default_factory=Training) parallelism: Parallelism = field(default_factory=Parallelism) checkpoint: Checkpoint = field(default_factory=Checkpoint) activation_checkpoint: ActivationCheckpoint = field( default_factory=ActivationCheckpoint ) compile: Compile = field(default_factory=Compile) quantize: Quantize = field(default_factory=Quantize) comm: Comm = field(default_factory=Comm) memory_estimation: MemoryEstimation = field(default_factory=MemoryEstimation) fault_tolerance: FaultTolerance = field(default_factory=FaultTolerance) experimental: Experimental = field(default_factory=Experimental) validation: Validation = field(default_factory=Validation) def to_dict(self) -\u003e dict[str, Any]: return asdict(self)",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "../../../_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchtitan/config/job_config.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>
