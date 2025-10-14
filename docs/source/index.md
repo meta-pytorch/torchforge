@@ -23,10 +23,8 @@ Key Features
 
 getting_started
 concepts
-usage
 tutorials
 api
-faq
 ```
 
 ## Indices and tables

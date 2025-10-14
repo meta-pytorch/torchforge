@@ -58,6 +58,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx_autodoc_typehints",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
@@ -74,11 +75,18 @@ sitemap_excludes = [
 ]
 sitemap_url_scheme = "{link}"
 
+# Ensure static files use relative paths
+html_static_path = ["_static"]
+
 templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
-exclude_patterns = ["tutorials/index.rst"]
+exclude_patterns = ["tutorials/index.rst", "tutorials/template_tutorial.rst"]
+
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_js_files = ["custom.js"]
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -124,6 +132,8 @@ html_theme_options = {
     "navbar_center": "navbar-nav",
     "canonical_url": "https://meta-pytorch.org/forge/",
     "header_links_before_dropdown": 7,
+    "show_nav_level": 2,
+    "show_toc_level": 2,
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
@@ -159,11 +169,35 @@ myst_enable_extensions = [
 
 autodoc_default_options = {
     "members": True,
-    "member-order": "bysource",
-    "special-members": "__init__",
     "undoc-members": True,
-    "exclude-members": "__weakref__",
+    "private-members": False,
+    "inherited-members": False,
 }
+
+# Autodoc configuration for cleaner signatures
+autodoc_preserve_defaults = True  # Preserves default values without expansion
+autodoc_typehints = "description"  # Move type hints to description instead of signature
+autodoc_typehints_description_target = (
+    "documented_params"  # Only add types to documented params
+)
+
+# Disable docstring inheritance
+autodoc_inherit_docstrings = False
+autodoc_typehints = "none"
+
+
+# Removed suppress_warnings to make the build stricter
+# All warnings will now be treated as errors when -W is passed to sphinx-build
+
+# Be strict about references to catch broken links and references
+nitpicky = False
+
+# Napoleon settings for Google-style docstrings (from torchtitan and other dependencies)
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_use_ivar = True
 
 
 # -- Sphinx Gallery configuration -------------------------------------------
@@ -176,6 +210,17 @@ sphinx_gallery_conf = {
     "plot_gallery": "True",
     "promote_jupyter_magic": True,
     "backreferences_dir": None,
-    "write_computation_times": True,
     "show_signature": False,
+    "write_computation_times": False,
 }
+
+
+def clean_docstring_indentation(app, what, name, obj, options, lines):
+    if name and name.startswith("torchtitan."):
+        lines[:] = [line.lstrip() for line in lines]
+        if lines and lines[-1].strip():
+            lines.append("")
+
+
+def setup(app):
+    app.connect("autodoc-process-docstring", clean_docstring_indentation)
