@@ -641,10 +641,12 @@ class PolicyWorker(ForgeActor):
                 "policy_worker_perf/update_weights_from_shared_memory", timer="gpu"
             )
             t.start()
+            loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
                 param = SharedTensor(handle=param_handle).tensor
                 loaded = model.load_weights([(name, param)])
-                loaded_weights = set(loaded)
+                loaded_weights.update(loaded)
+            logger.info(f"[PolicyWorker] update {len(loaded_weights)} paremeters")
             t.stop()
             return
         if policy_version is None:
