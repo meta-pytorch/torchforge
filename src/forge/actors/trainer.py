@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import math
 import os
 import shutil
 
@@ -18,7 +17,7 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from monarch.actor import current_rank, current_size, endpoint
+from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
 from torchtitan.config.job_config import (
@@ -163,19 +162,7 @@ class RLTrainer(ForgeActor):
         self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
-        self.rank = current_rank().rank
-        self.size = math.prod(current_size().values())
-
         env = {
-            "RANK": str(self.rank),
-            "LOCAL_RANK": str(self.rank),
-            "LOCAL_WORLD_SIZE": str(self.size),
-            "GROUP_RANK": str(self.size),
-            "GROUP_WORLD_SIZE": str(self.size),
-            "ROLE_RANK": str(self.rank),
-            "ROLE_WORLD_SIZE": str(self.size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self.size),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         }
         os.environ.update(env)
