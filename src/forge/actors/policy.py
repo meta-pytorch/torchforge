@@ -462,7 +462,7 @@ class Policy(PolicyInterface):
             fetched_weights = await fetch_task
             t.stop()
             await self.policy_worker.update_weights.call(
-                shared_memory_state_dict=fetched_weigths
+                shared_memory_state_dict=fetched_weights
             )
             self.policy_version = policy_version
 
