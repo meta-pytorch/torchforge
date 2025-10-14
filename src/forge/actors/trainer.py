@@ -46,6 +46,7 @@ from forge.actors._torchstore_utils import (
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
@@ -94,6 +95,26 @@ def cleanup_old_weight_versions(
 
 @dataclass
 class RLTrainer(ForgeActor):
+    """A reinforcement learning trainer actor for policy optimization training.
+
+    Built on top of TorchTitan's training engine, this actor provides a complete training
+    loop for reinforcement learning. It performs forward and backward passes with gradient
+    computation, optimization steps, and checkpoint management. Unlike the ReferenceModel
+    actor which only runs forward passes, RLTrainer actively updates the policy model
+    parameters through gradient descent.
+
+    The trainer supports the same distributed training strategies that TorchTitan does,
+    including but not limited to, tensor parallelism, data parallelism, and FSDP
+    (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel
+    for policy optimization algorithms like GRPO (Group Relative Policy Optimization),
+    where it optimizes the policy against a loss that includes KL divergence penalties
+    from the reference model.
+
+    The trainer handles:
+    - Forward and backward propagation with automatic mixed precision (AMP)
+    - Optimizer steps with learning rate scheduling
+    """
+
     job: Job = field(default_factory=Job)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
@@ -111,7 +132,9 @@ class RLTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = (
+        TORCHSTORE_USE_RDMA.get_value() == 0
+    )  # torchstore currently only accepts 0 or 1
     dcp_path: str = "forge_dcp_tmp"
 
     def __post_init__(self):

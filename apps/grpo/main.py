@@ -314,16 +314,14 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Global setups ---- #
+    provisioner = None
     if cfg.get("provisioner", None) is not None:
-        await init_provisioner(
+        provisioner = await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
-    metric_logging_cfg = cfg.get(
-        "metric_logging", {"console": {"logging_mode": "global_reduce"}}
-    )
+    metric_logging_cfg = cfg.get("metric_logging", {})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
-    await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
     # ---- Setup services ---- #
 
@@ -351,13 +349,30 @@ async def main(cfg: DictConfig):
         ),
     )
 
+    # Set max_steps to the configured value, or -1 if not specified or Null
+    max_steps = cfg.trainer.training.steps or -1
+
     print("All services initialized successfully!")
+    shutdown_event = asyncio.Event()
+    # Here we spawn a torchstore storage volume per trainer process.
+    # We initialize after service initialization because torchstore currently
+    # requires access to the underlying proc meshes in the local rank strategy.
+    # We should be able to hide this in the future.
+    # TODO: support multiple host meshes
+    trainer_num_procs = cfg.actors.trainer["procs"]
+    trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
+    trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
+    await ts.initialize(
+        mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
+        strategy=ts.LocalRankStrategy(),
+    )
+    print("Torchstore successfully initialized with local rank strategy")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
         pad_id = await dataloader.pad_token.call_one()
-        while True:
+        while not shutdown_event.is_set():
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
             sample = await dataloader.sample.call_one()
@@ -436,7 +451,7 @@ async def main(cfg: DictConfig):
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
 
-        while True:
+        while max_steps == -1 or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
@@ -473,6 +488,10 @@ async def main(cfg: DictConfig):
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
 
+        print(
+            f"Reached training limit ({max_steps} steps). Exiting continuous_training loop."
+        )
+
     num_rollout_threads = cfg.get("rollout_threads", 1)
     num_training_threads = cfg.get("training_threads", 1)
     print(
@@ -484,14 +503,26 @@ async def main(cfg: DictConfig):
     training_task = asyncio.create_task(continuous_training())
 
     try:
-        await asyncio.gather(*rollout_tasks, training_task)
+        await training_task
     except KeyboardInterrupt:
         print("Training interrupted by user")
-        for rollout_task in rollout_tasks:
-            rollout_task.cancel()
-        training_task.cancel()
     finally:
         print("Shutting down...")
+        shutdown_event.set()
+
+        try:
+            # Give rollouts up to 5s to finish naturally
+            await asyncio.wait_for(
+                asyncio.gather(*rollout_tasks, return_exceptions=True),
+                timeout=5,
+            )
+        except asyncio.TimeoutError:
+            print("Timeout waiting for rollouts; forcing cancellation...")
+            for t in rollout_tasks:
+                t.cancel()
+            await asyncio.gather(*rollout_tasks, return_exceptions=True)
+
+        training_task.cancel()
 
         # give mlogger time to shutdown backends, otherwise they can stay running.
         # TODO (felipemello) find more elegant solution

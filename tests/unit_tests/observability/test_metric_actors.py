@@ -169,7 +169,7 @@ class TestGetOrCreateMetricLogger:
     @pytest.mark.asyncio
     async def test_get_or_create_functionality(self):
         """Test get_or_create_metric_logger basic functionality."""
-        result = await get_or_create_metric_logger()
+        result = await get_or_create_metric_logger(process_name="TestController")
 
         # Should return a GlobalLoggingActor mesh
         assert result is not None

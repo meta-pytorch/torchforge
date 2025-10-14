@@ -15,7 +15,7 @@ from typing import Any
 import pytz
 from monarch.actor import current_rank
 
-from forge.observability.utils import get_actor_name_with_rank
+from forge.observability.utils import get_proc_name_with_rank
 from forge.util.logging import log_once
 
 logger = logging.getLogger(__name__)
@@ -425,6 +425,7 @@ class MetricCollector:
         self.per_rank_no_reduce_backends: list[LoggerBackend] = []
         self.global_step: int = 0  # Set on `init_backends` and updated on `flush`
         self._is_initialized = False
+        self.process_name: str | None = None
 
     async def init_backends(
         self,
@@ -450,10 +451,11 @@ class MetricCollector:
             process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
-            logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
+            logger.debug(
+                f"{get_proc_name_with_rank(self.process_name)}: MetricCollector already initialized"
+            )
             return
-
-        # Initialize step tracking for immediate logging
+        self.process_name = process_name
         self.global_step = global_step
 
         self.per_rank_reduce_backends: list[LoggerBackend] = []
@@ -572,7 +574,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
+                f"Collector for {get_proc_name_with_rank(self.process_name)}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -599,7 +601,7 @@ class MetricCollector:
 
         if not self._is_initialized:
             logger.debug(
-                f"Collector for {get_actor_name_with_rank()} not initialized. Skipping shutdown"
+                f"Collector for rank {get_proc_name_with_rank(self.process_name)} not initialized. Skipping shutdown"
             )
             return
 
@@ -680,7 +682,7 @@ class ConsoleBackend(LoggerBackend):
         primary_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
     ) -> None:
-        self.prefix = get_actor_name_with_rank(actor_name=process_name)
+        self.prefix = get_proc_name_with_rank(proc_name=process_name)
 
     async def log_batch(
         self, metrics: list[Metric], global_step: int, *args, **kwargs
@@ -737,7 +739,7 @@ class WandbBackend(LoggerBackend):
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        self.name = get_actor_name_with_rank(actor_name=process_name)
+        self.name = get_proc_name_with_rank(proc_name=process_name)
 
         # GLOBAL_REDUCE mode: only inits on controller
         if self.logging_mode == LoggingMode.GLOBAL_REDUCE:

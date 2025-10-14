@@ -8,7 +8,14 @@ import asyncio
 import logging
 from typing import Any, Union
 
-from monarch.actor import Actor, endpoint, get_or_spawn_controller, ProcMesh, this_proc
+from monarch.actor import (
+    Actor,
+    context,
+    endpoint,
+    get_or_spawn_controller,
+    ProcMesh,
+    this_proc,
+)
 
 from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
@@ -19,7 +26,7 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
-from forge.observability.utils import detect_actor_name_from_call_stack
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +50,8 @@ async def get_or_create_metric_logger(
         proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on. If None,
             uses `monarch.actor.this_proc()`.
         process_name: Optional process name (e.g., "TrainActor", "GeneratorActor") for logging.
-            If None, will auto-detect from call stack or default to "UnknownActor" if not found.
+            If None, will be auto-detected from the mesh_name provided during actor initialization or
+                a generic mesh name if one was not provided.
 
     Returns:
         GlobalLoggingActor: The global logging controller.
@@ -78,9 +86,6 @@ async def get_or_create_metric_logger(
         await mlogger.shutdown()
     """
 
-    if process_name is None:
-        process_name = detect_actor_name_from_call_stack()
-
     # Get or create the singleton global logger
     global _global_logger
     if _global_logger is None:
@@ -91,6 +96,11 @@ async def get_or_create_metric_logger(
 
     # Determine process context
     proc = proc_mesh if proc_mesh is not None else this_proc()
+
+    # Auto-detect process_name from proc mesh if not provided
+    if process_name is None:
+        ctx = context()
+        process_name = ctx.actor_instance.actor_id.actor_name
 
     # Check current state for consistency
     proc_has_local_fetcher = hasattr(proc, "_local_fetcher")
