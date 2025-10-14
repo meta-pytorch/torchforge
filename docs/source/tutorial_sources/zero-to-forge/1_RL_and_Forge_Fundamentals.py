@@ -191,6 +191,15 @@ async def conceptual_forge_rl_step(services, step):
 
         return loss
 
+######################################################################
+# **Key difference**: Same RL logic, but each component is now a distributed,
+# # fault-tolerant, auto-scaling service.
+
+# Did you realise-we are not worrying about any Infra code here! Forge
+# # Automagically handles the details behind the scenes and you can focus on
+# # writing your RL Algorthms!
+
+
 
 ######################################################################
 # Why This Matters: Traditional ML Infrastructure Fails
@@ -296,6 +305,10 @@ async def real_rl_training_step(services, step):
 
         return loss
 
+#####################################################################
+# **Key insight**: Each line of RL pseudocode becomes a service call.
+# The complexity of distribution, scaling, and fault tolerance is hidden
+# behind these simple interfaces.
 
 ######################################################################
 # What Makes This Powerful
@@ -311,6 +324,15 @@ async def example_automatic_management(policy):
     answer = responses[0].text
     return answer
 
+######################################################################
+# Forge handles behind the scenes:
+#
+# - Routing to least loaded replica
+# - GPU memory management
+# - Batch optimization
+# - Failure recovery
+# - Auto-scaling based on demand
+
 
 ######################################################################
 # Independent Scaling
@@ -320,67 +342,27 @@ async def example_automatic_management(policy):
 
 # Note: This is example code showing the Forge API
 # For actual imports, see apps/grpo/main.py
-try:
-    from forge.actors.policy import Policy
-    from forge.actors.reference_model import ReferenceModel
-    from forge.actors.replay_buffer import ReplayBuffer
-    from forge.actors.trainer import RLTrainer
-    from forge.data.rewards import MathReward, ThinkingReward
+from forge.actors.policy import Policy
+from forge.actors.replay_buffer import ReplayBuffer
+from forge.actors.reference_model import ReferenceModel
+from forge.actors.trainer import RLTrainer
+from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages
+from forge.data.rewards import MathReward, ThinkingReward
+import asyncio
+import torch
 
-    # Mock classes for the example
-    class DatasetActor:
-        pass
+model = "Qwen/Qwen3-1.7B"
+group_size = 1
 
-    class RewardActor:
-        pass
-
-    class ComputeAdvantages:
-        pass
-
-except ImportError:
-    # Provide mock classes if imports fail during doc build
-    class Policy:
-        pass
-
-    class ReplayBuffer:
-        pass
-
-    class ReferenceModel:
-        pass
-
-    class RLTrainer:
-        pass
-
-    class DatasetActor:
-        pass
-
-    class RewardActor:
-        pass
-
-    class ComputeAdvantages:
-        pass
-
-    class MathReward:
-        pass
-
-    class ThinkingReward:
-        pass
-
-
-async def setup_forge_services():
-    """Configure Forge services with independent scaling."""
-    model = "Qwen/Qwen3-1.7B"
-    group_size = 1
-
-    (
-        dataloader,
-        policy,
-        trainer,
-        replay_buffer,
-        compute_advantages,
-        ref_model,
-        reward_actor,
-    ) = await asyncio.gather(
+(
+    dataloader,
+    policy,
+    trainer,
+    replay_buffer,
+    compute_advantages,
+    ref_model,
+    reward_actor,
+) = await asyncio.gather(
         # Dataset actor (CPU)
         DatasetActor.options(procs=1).as_actor(
             path="openai/gsm8k",
@@ -389,61 +371,46 @@ async def setup_forge_services():
             streaming=True,
             model=model,
         ),
-        # Policy service with GPU and multiple replicas
+        # Policy service with GPU
         Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
             engine_config={
                 "model": model,
                 "tensor_parallel_size": 1,
                 "pipeline_parallel_size": 1,
-                "enforce_eager": False,
+                "enforce_eager": False
             },
             sampling_config={
                 "n": group_size,
                 "max_tokens": 16,
                 "temperature": 1.0,
-                "top_p": 1.0,
-            },
+                "top_p": 1.0
+            }
         ),
         # Trainer actor with GPU
         RLTrainer.options(procs=1, with_gpus=True).as_actor(
-            model={
-                "name": "qwen3",
-                "flavor": "1.7B",
-                "hf_assets_path": f"hf://{model}",
-            },
+            # Trainer config would come from YAML in real usage
+            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
             optimizer={"name": "AdamW", "lr": 1e-5},
-            training={"local_batch_size": 2, "seq_len": 2048},
+            training={"local_batch_size": 2, "seq_len": 2048}
         ),
         # Replay buffer (CPU)
         ReplayBuffer.options(procs=1).as_actor(
-            batch_size=2, max_policy_age=1, dp_size=1
+            batch_size=2,
+            max_policy_age=1,
+            dp_size=1
         ),
         # Advantage computation (CPU)
         ComputeAdvantages.options(procs=1).as_actor(),
         # Reference model with GPU
         ReferenceModel.options(procs=1, with_gpus=True).as_actor(
-            model={
-                "name": "qwen3",
-                "flavor": "1.7B",
-                "hf_assets_path": f"hf://{model}",
-            },
-            training={"dtype": "bfloat16"},
+            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+            training={"dtype": "bfloat16"}
         ),
         # Reward actor (CPU)
         RewardActor.options(procs=1, num_replicas=1).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
-        ),
+        )
     )
-
-    return {
-        "dataloader": dataloader,
-        "policy": policy,
-        "trainer": trainer,
-        "replay_buffer": replay_buffer,
-        "compute_advantages": compute_advantages,
-        "ref_model": ref_model,
-        "reward_actor": reward_actor,
-    }
 
 
 ######################################################################
