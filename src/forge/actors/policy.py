@@ -630,7 +630,7 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def update_weights(
         self,
-        policy_version: Optional[int],
+        policy_version: Optional[int] = None,
         *,
         shared_memory_state_dict: Optional[dict[str, SharedTensorHandle]] = None,
     ) -> None:
