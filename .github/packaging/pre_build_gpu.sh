@@ -4,7 +4,11 @@ set -euxo pipefail
 # Builds Monarch
 # This script builds Monarch and places its wheel into dist/.
 
-MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
+# Configuration
+SCRIPT_DIR="$(cd "../../$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+source "$VERSIONS_FILE"
+
 BUILD_DIR="$HOME/forge-build"
 
 # Push other files to the dist folder

@@ -4,7 +4,10 @@ set -euxo pipefail
 # Builds vLLM
 # This script builds vLLM and places its wheel into dist/.
 
-VLLM_BRANCH="v0.10.0"
+SCRIPT_DIR="$(cd "../../$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+source "$VERSIONS_FILE"
+
 BUILD_DIR="$HOME/forge-build"
 
 # Push other files to the dist folder
