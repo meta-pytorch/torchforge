@@ -93,10 +93,10 @@ connection is crucial for optimization and debugging.
 #  **Key insight**: ProcMesh creates one process per GPU, automatically handling the process-to-hardware mapping.
 #
 
-# This simple call:
-procs = this_host().spawn_procs(per_host={"gpus": 8})
+# Example call (commented out since this_host is not defined at module level):
+# procs = this_host().spawn_procs(per_host={"gpus": 8})
 
-# Creates:
+# This creates:
 # Process 0 → GPU 0
 # Process 1 → GPU 1
 # Process 2 → GPU 2

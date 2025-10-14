@@ -141,8 +141,8 @@ async def example_service_creation():
     return policy
 
 
-# Run the example
-asyncio.run(example_service_creation())
+# Run the example (commented out to avoid execution during doc build)
+# asyncio.run(example_service_creation())
 
 
 ######################################################################

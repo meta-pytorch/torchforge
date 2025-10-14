@@ -325,7 +325,12 @@ async def example_automatic_management(policy):
 
 
 import torch
-from apps.grpo.main import ComputeAdvantages, DatasetActor, RewardActor
+
+try:
+    from apps.grpo.main import ComputeAdvantages, DatasetActor, RewardActor
+except ImportError:
+    # Module not available during doc build
+    ComputeAdvantages = DatasetActor = RewardActor = None
 
 ######################################################################
 # Forge handles behind the scenes:
