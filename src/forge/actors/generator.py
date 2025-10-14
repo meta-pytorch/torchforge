@@ -128,11 +128,11 @@ class Generator(GeneratorInterface):
     ) -> "Generator":
         """Launch the Generator with its workers.
 
-        We overwrite the default Service launch method in order to setup Actors (PolicyWorker) within this "coordinating" Actor.
+        We overwrite the default Service launch method in order to setup Actors (GeneratorWorker) within this "coordinating" Actor.
         We first create a proc_mesh for the workers, then a proc_mesh for the generator, and then we spawn the workers
         and the generator in setup.
 
-        The args here generally should match those in the `__init__` method of the Policy class.
+        The args here generally should match those in the `__init__` method of the Generator class.
         """
         # Note: get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         process_config: ProcessConfig = ProcessConfig(
@@ -144,7 +144,7 @@ class Generator(GeneratorInterface):
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # TODO - issues/144 we will want to ensure colocation with workers
-        # We're currently locating the Policy on the local host proc mesh
+        # We're currently locating the Generator on the local host proc mesh
         # vLLM initialization without setting env variables at proc_mesh creation
         # level leads to issues.
         # Once we can create multiple proc meshes on a host mesh, we can ensure
@@ -492,7 +492,7 @@ class Generator(GeneratorInterface):
 
     @classmethod
     async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
-        cls: type["Policy"], actor: "Policy"
+        cls: type["Generator"], actor: "Generator"
     ):
         assert (
             actor._generator_proc is not None
