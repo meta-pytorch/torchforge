@@ -6,17 +6,30 @@
 
 import functools
 import uuid
+from dataclasses import dataclass
 from multiprocessing import shared_memory
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 
+@dataclass
+class SharedTensorHandle:
+    shm_name: str
+    shape: Tuple[int, ...]
+    dtype: str
+
+
 class SharedTensor:
     """Wrapper class for tensors backed my shared memory"""
 
-    def __init__(self, *, tensor=None, handle=None):
+    def __init__(
+        self,
+        *,
+        tensor: Optional[torch.Tensor] = None,
+        handle: Optional[SharedTensorHandle] = None,
+    ):
         if tensor is not None:
             self._create_from_tensor(tensor)
         elif handle is not None:
@@ -125,11 +138,11 @@ class SharedTensor:
         raw_bytes = tensor.view(torch.uint8).view(-1).cpu().contiguous().numpy()
         self._shm.buf[:byte_size] = raw_bytes
 
-    def _create_from_handle(self, handle):
+    def _create_from_handle(self, handle: SharedTensorHandle):
         """Initialize from a handle"""
-        self._shm_name = handle["shm_name"]
-        self._shape = handle["shape"]
-        self._dtype_str = handle["dtype"]
+        self._shm_name = handle.shm_name
+        self._shape = handle.shape
+        self._dtype_str = handle.dtype
         self._dtype = self._parse_dtype(self._dtype_str)
 
         # Attach to existing shared memory
@@ -160,11 +173,11 @@ class SharedTensor:
 
     def get_handle(self):
         """Get picklable handle"""
-        return {
-            "shm_name": self._shm_name,
-            "shape": self._shape,
-            "dtype": self._dtype_str,
-        }
+        return SharedTensorHandle(
+            shm_name=self._shm_name,
+            shape=self._shape,
+            dtype=self._dtype_str,
+        )
 
     @functools.cached_property
     def tensor(self):

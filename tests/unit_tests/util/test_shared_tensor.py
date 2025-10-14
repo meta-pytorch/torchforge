@@ -248,9 +248,6 @@ class TestSharedTensorSerialization:
         unpickled_handle = pickle.loads(pickled)
 
         assert unpickled_handle == handle
-        assert unpickled_handle["shm_name"] == handle["shm_name"]
-        assert unpickled_handle["shape"] == handle["shape"]
-        assert unpickled_handle["dtype"] == handle["dtype"]
 
         shared.cleanup()
 
