@@ -70,24 +70,15 @@ class TestReplayBuffer:
         await replay_buffer.add.call_one(trajectory_1)
         assert replay_buffer._numel.call_one().get() == 2
 
-        # Test a simple sampling w/ no evictions
+        # Test a simple sampling
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is not None
         assert len(samples[0]) == 2
+        assert replay_buffer._numel.call_one().get() == 2
 
-        # Test sampling with overriding batch size
+        # Test sampling (not enough samples in buffer, returns None)
         await replay_buffer.add.call_one(trajectory_0)
-        samples = await replay_buffer.sample.call_one(
-            curr_policy_version=1, batch_size=1
-        )
-        assert samples is not None
-        assert len(samples[0]) == 1
-
-        # Test sampling w/ overriding batch size (not enough samples in buffer, returns None)
-        await replay_buffer.add.call_one(trajectory_0)
-        samples = await replay_buffer.sample.call_one(
-            curr_policy_version=1, batch_size=3
-        )
+        samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is None
         replay_buffer.clear.call_one().get()
 
@@ -95,15 +86,18 @@ class TestReplayBuffer:
     async def test_sample_with_evictions(self, replay_buffer) -> None:
         trajectory_0 = Trajectory(policy_version=0)
         trajectory_1 = Trajectory(policy_version=1)
+        trajectory_2 = Trajectory(policy_version=2)
         await replay_buffer.add.call_one(trajectory_0)
         await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer._numel.call_one().get() == 2
+        await replay_buffer.add.call_one(trajectory_2)
+        assert replay_buffer._numel.call_one().get() == 3
         samples = await replay_buffer.sample.call_one(
-            curr_policy_version=2, batch_size=1
+            curr_policy_version=2,
         )
         assert samples is not None
-        assert len(samples[0]) == 1
+        assert len(samples[0]) == 2
         assert samples[0][0] == trajectory_1
+        assert replay_buffer._numel.call_one().get() == 2
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
