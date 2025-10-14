@@ -327,11 +327,6 @@ async def main(cfg: DictConfig):
     mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
-    # In the host mesh v0 case, actors on remote hosts are not able to communicate
-    # with one another. Therefore we use the controller as our storage volume.
-    if not MONARCH_HOSTMESH_V1.get_value():
-        await ts.initialize(strategy=ts.ControllerStorageVolumes())
-        print("Torchstore successfully initialized with controller storage strategy")
 
     # ---- Setup services ---- #
 
@@ -364,21 +359,19 @@ async def main(cfg: DictConfig):
 
     print("All services initialized successfully!")
     shutdown_event = asyncio.Event()
-    # In the HostMesh v1 case, we spawn a torchstore storage volume
-    # per trainer process.
+    # Here we spawn a torchstore storage volume per trainer process.
     # We initialize after service initialization because torchstore currently
     # requires access to the underlying proc meshes in the local rank strategy.
     # We should be able to hide this in the future.
-    if MONARCH_HOSTMESH_V1.get_value():
-        # TODO: support multiple host meshes
-        trainer_num_procs = cfg.actors.trainer["procs"]
-        trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
-        trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
-        await ts.initialize(
-            mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
-            strategy=ts.LocalRankStrategy(),
-        )
-        print("Torchstore successfully initialized with local rank strategy")
+    # TODO: support multiple host meshes
+    trainer_num_procs = cfg.actors.trainer["procs"]
+    trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
+    trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
+    await ts.initialize(
+        mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
+        strategy=ts.LocalRankStrategy(),
+    )
+    print("Torchstore successfully initialized with local rank strategy")
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -556,6 +549,9 @@ async def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    # This is temporary measure, setting the correct environment variable to 
+    # enable host mesh V1 in Monarch's APIs.
+    MONARCH_HOSTMESH_V1.override_with_default()
 
     @parse
     def _main(cfg):

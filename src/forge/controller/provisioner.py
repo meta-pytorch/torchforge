@@ -22,18 +22,11 @@ from forge.controller.launcher import BaseLauncher, get_launcher
 
 from forge.env import all_env_vars, FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
 
+from monarch.actor import HostMesh, this_host
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-if MONARCH_HOSTMESH_V1.get_value():
-    from monarch._src.actor.v1.host_mesh import HostMesh, this_host
-
-    logger.info("Using Monarch HostMesh v1...")
-else:
-    from monarch.actor import HostMesh, this_host
 
 
 def _get_port() -> str:
@@ -159,27 +152,20 @@ class Provisioner:
             name, num_hosts
         )
 
-        if MONARCH_HOSTMESH_V1.get_value():
-            # We are asking Monarch to allocate a single process on
-            # every host, reflected in the Extent we provide below.
+        # We are asking Monarch to allocate a single process on
+        # every host, reflected in the Extent we provide below.
 
-            # Technically, this is ["hosts", "procs"] but to reduce
-            # confusion on its relationship with procs elsewhere,
-            # we call it "no_dim".
+        # Technically, this is ["hosts", "procs"] but to reduce
+        # confusion on its relationship with procs elsewhere,
+        # we call it "no_dim".
 
-            # TODO - remove this once Monarch supports HostMesh without it.
-            host_mesh = HostMesh.allocate_nonblocking(
-                name=name,
-                extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
-                allocator=alloc,
-                alloc_constraints=alloc_constraints,
-            )
-        else:
-            host_mesh = HostMesh(
-                Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
-                allocator=alloc,
-                alloc_constraints=alloc_constraints,
-            )
+        # TODO - remove this once Monarch supports HostMesh without it.
+        host_mesh = HostMesh.allocate_nonblocking(
+            name=name,
+            extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+            allocator=alloc,
+            alloc_constraints=alloc_constraints,
+        )
         return host_mesh, server_name
 
     def get_host_mesh(self, name: str) -> HostMesh:
@@ -364,6 +350,9 @@ _provisioner: Provisioner | None = None
 
 
 async def init_provisioner(cfg: ProvisionerConfig | None = None):
+    # This is temporary measure, setting the correct environment variable to 
+    # enable host mesh V1 in Monarch's APIs.
+    MONARCH_HOSTMESH_V1.override_with_default()
     global _provisioner
     if not _provisioner:
         _provisioner = Provisioner(cfg)

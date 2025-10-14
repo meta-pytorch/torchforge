@@ -9,6 +9,10 @@
 import os
 from dataclasses import dataclass
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -48,6 +52,15 @@ class EnvVar:
         else:
             # Return as string for other types
             return value
+
+    def override_with_default(self):
+        """Override the environment value set with its default value."""
+        original_value = os.environ.get(self.name, None)
+        if not original_value:
+            logging.info(f"Setting {self.name} to its default value {self.default}")
+        else:
+            logging.info(f"Overriding {self.name} from {original_value} to its default value {self.default}.")
+        os.environ[self.name] = str(self.default)
 
 
 # Environment variable definitions
@@ -101,7 +114,7 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
 
 MONARCH_HOSTMESH_V1 = EnvVar(
     name="MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE",
-    default=False,
+    default=1,
     description="Whether or not to use Monarch's experimental hostmesh v1 APIs",
 )
 

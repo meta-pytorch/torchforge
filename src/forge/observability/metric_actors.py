@@ -10,7 +10,7 @@ from typing import Any, Union
 
 from monarch.actor import Actor, endpoint, ProcMesh
 
-from forge.env import FORGE_DISABLE_METRICS, MONARCH_HOSTMESH_V1
+from forge.env import FORGE_DISABLE_METRICS 
 from forge.observability.metrics import (
     BackendRole,
     get_logger_backend_class,
@@ -19,11 +19,7 @@ from forge.observability.metrics import (
     reduce_metrics_states,
 )
 
-if MONARCH_HOSTMESH_V1.get_value():
-    from monarch._src.actor.v1.host_mesh import this_proc
-    from monarch._src.actor.v1.proc_mesh import get_or_spawn_controller
-else:
-    from monarch.actor import get_or_spawn_controller, this_proc
+from monarch.actor import get_or_spawn_controller, this_proc
 
 
 logger = logging.getLogger(__name__)
