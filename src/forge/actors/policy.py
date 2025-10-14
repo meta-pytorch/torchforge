@@ -388,6 +388,26 @@ class Policy(PolicyInterface):
                 if len(self.requests) == 0:
                     self.request_lock.notify_all()
 
+    async def _fetch_weights(
+        self, policy_version: int
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("policy_perf/_fetch_weights")
+        t.start()
+        prefix = get_param_prefix(policy_version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        shared_memory_state_dict = {}
+        for name in hf_param_names:
+            param_key = get_param_key(policy_version, name)
+            param = await ts.get(param_key)
+            # TODO: preallocate in the shared memory once we have plumbing in torchstore.
+            shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
+        t.stop()
+        return shared_memory_state_dict
+
     @endpoint
     async def update_weights(self, policy_version: int) -> None:
         """Update weights on base model from a policy version to be found in a torchstore volume.
@@ -606,26 +626,6 @@ class PolicyWorker(ForgeActor):
     @endpoint
     async def execute_model(self, schedule: SchedulerOutput) -> ModelRunnerOutput:
         return self.worker.execute_model(schedule)
-
-    async def _fetch_weights(
-        self, policy_version: int
-    ) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("policy_perf/_fetch_weights")
-        t.start()
-        prefix = get_param_prefix(policy_version)
-        matching_keys = await ts.keys(prefix)
-        hf_param_names = [extract_param_name(key) for key in matching_keys]
-        # We can't pass a generator since vllm load_weights is not async.
-        # Instead, we just call load_weights with one parameter at a time.
-        shared_memory_state_dict = {}
-        for name in hf_param_names:
-            param_key = get_param_key(policy_version, name)
-            param = await ts.get(param_key)
-            # TODO: preallocate in the shared memory once we have plumbing in torchstore.
-            shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
-        t.stop()
-        return shared_memory_state_dict
 
     @endpoint
     async def update_weights(
