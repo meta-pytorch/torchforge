@@ -76,6 +76,7 @@ class Policy(PolicyInterface):
         use_dcp (bool): Whether to use DCP for NFS-based weight sync.
 
     Example:
+
     >>> policy = await Policy.options(procs=1, num_replicas=1, with_gpus=True).as_service(
     ...     engine_args=EngineArgs(...),
     ...     sampling_params=SamplingParams(...),
@@ -445,11 +446,6 @@ class Policy(PolicyInterface):
     @endpoint
     async def _reset_prefix_cache(self):
         self.scheduler.reset_prefix_cache()
-
-    @endpoint
-    async def get_version(self) -> int:
-        """Get the current policy version."""
-        return self.policy_version
 
     @endpoint
     async def stop(self):

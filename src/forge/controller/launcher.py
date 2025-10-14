@@ -28,8 +28,6 @@ from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
 
-from forge.env import MONARCH_HOSTMESH_V1
-
 from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
@@ -128,11 +126,10 @@ class BaseLauncher:
 
 class Slurmlauncher(BaseLauncher):
     async def initialize(self) -> None:
-        if MONARCH_HOSTMESH_V1.get_value():
-            # HostMeshV1 currently requires explicit configuration
-            # of the underlying transport from client to mesh.
-            # This can be removed in the future once this has been removed.
-            configure(default_transport=ChannelTransport.Tcp)
+        # HostMesh currently requires explicit configuration
+        # of the underlying transport from client to mesh.
+        # This can be removed in the future once this has been removed.
+        configure(default_transport=ChannelTransport.Tcp)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
@@ -219,11 +216,10 @@ class MastLauncher(BaseLauncher):
         self.job_name = self.cfg.job_name or self.create_job_name()
 
     async def initialize(self) -> None:
-        if MONARCH_HOSTMESH_V1.get_value():
-            # HostMeshV1 currently requires explicit configuration
-            # of the underlying transport from client to mesh.
-            # This can be removed in the future once this has been removed.
-            configure(default_transport=ChannelTransport.MetaTlsWithHostname)
+        # HostMesh currently requires explicit configuration
+        # of the underlying transport from client to mesh.
+        # This can be removed in the future once this has been removed.
+        configure(default_transport=ChannelTransport.MetaTlsWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         allocator = MastAllocator(

@@ -309,6 +309,9 @@ export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
 
+# Temporary measure until this environment variable is removed
+export MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE=1
+
 # Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
 if [ -n "${LD_LIBRARY_PATH:-}" ]; then
   export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat:${LD_LIBRARY_PATH}"
