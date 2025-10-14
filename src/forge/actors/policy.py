@@ -646,7 +646,7 @@ class PolicyWorker(ForgeActor):
                 param = SharedTensor(handle=param_handle).tensor
                 loaded = model.load_weights([(name, param)])
                 loaded_weights.update(loaded)
-            logger.info(f"[PolicyWorker] update {len(loaded_weights)} paremeters")
+            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
             t.stop()
             return
         if policy_version is None:
