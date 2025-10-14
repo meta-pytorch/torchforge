@@ -463,6 +463,8 @@ class Policy(PolicyInterface):
                 shared_memory_state_dict=fetched_weights
             )
             self.policy_version = policy_version
+            for _, handle in fetched_weights.items():
+                SharedTensor(handle=handle).cleanup()
 
             # After updating the weights, we need to reset the KV cache
             self.scheduler.reset_prefix_cache()
