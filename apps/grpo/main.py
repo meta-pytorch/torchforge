@@ -79,6 +79,9 @@ class Episode:
 # Represents the group (G) of episodes in GRPO
 Group = list[Episode]
 
+# Represents the Policy Model to collect data from
+Policy = Generator
+
 
 def collate(
     batches: list[Group],
@@ -317,7 +320,7 @@ async def main(cfg: DictConfig):
         reward_actor,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
+        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
