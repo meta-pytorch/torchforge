@@ -113,35 +113,42 @@ what's actually happening under the hood. Grab your chai!
 # * Health monitoring and failure recovery
 # * Message routing and serialization
 
+import asyncio
 from forge.actors.policy import Policy
 
-model = "Qwen/Qwen3-1.7B"
+async def example_service_creation():
+    """Example of creating and using a policy service."""
+    model = "Qwen/Qwen3-1.7B"
 
-policy = await Policy.options(
-    procs=1,
-    with_gpus=True,
-    num_replicas=1
-).as_service(
-    engine_config={
-        "model": model,
-        "tensor_parallel_size": 1,
-        "pipeline_parallel_size": 1,
-        "enforce_eager": False
-    },
-    sampling_config={
-        "n": 1,
-        "max_tokens": 16,
-        "temperature": 1.0,
-        "top_p": 1.0
-    }
-)
+    policy = await Policy.options(
+        procs=1,
+        with_gpus=True,
+        num_replicas=1
+    ).as_service(
+        engine_config={
+            "model": model,
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "enforce_eager": False
+        },
+        sampling_config={
+            "n": 1,
+            "max_tokens": 16,
+            "temperature": 1.0,
+            "top_p": 1.0
+        }
+    )
 
-prompt = "What is 3 + 5?"
-responses = await policy.generate.route(prompt)
-print(f"Response: {responses[0].text}")
+    prompt = "What is 3 + 5?"
+    responses = await policy.generate.route(prompt)
+    print(f"Response: {responses[0].text}")
 
-# Cleanup when done
-await policy.shutdown()
+    # Cleanup when done
+    await policy.shutdown()
+    return policy
+
+# Run the example
+asyncio.run(example_service_creation())
 
 
 ######################################################################

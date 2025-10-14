@@ -351,66 +351,73 @@ from forge.data.rewards import MathReward, ThinkingReward
 import asyncio
 import torch
 
-model = "Qwen/Qwen3-1.7B"
-group_size = 1
+async def example_forge_service_initialization():
+    """Example of initializing Forge services for RL training."""
+    model = "Qwen/Qwen3-1.7B"
+    group_size = 1
 
-(
-    dataloader,
-    policy,
-    trainer,
-    replay_buffer,
-    compute_advantages,
-    ref_model,
-    reward_actor,
-) = await asyncio.gather(
-        # Dataset actor (CPU)
-        DatasetActor.options(procs=1).as_actor(
-            path="openai/gsm8k",
-            revision="main",
-            data_split="train",
-            streaming=True,
-            model=model,
-        ),
-        # Policy service with GPU
-        Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
-            engine_config={
-                "model": model,
-                "tensor_parallel_size": 1,
-                "pipeline_parallel_size": 1,
-                "enforce_eager": False
-            },
-            sampling_config={
-                "n": group_size,
-                "max_tokens": 16,
-                "temperature": 1.0,
-                "top_p": 1.0
-            }
-        ),
-        # Trainer actor with GPU
-        RLTrainer.options(procs=1, with_gpus=True).as_actor(
-            # Trainer config would come from YAML in real usage
-            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
-            optimizer={"name": "AdamW", "lr": 1e-5},
-            training={"local_batch_size": 2, "seq_len": 2048}
-        ),
-        # Replay buffer (CPU)
-        ReplayBuffer.options(procs=1).as_actor(
-            batch_size=2,
-            max_policy_age=1,
-            dp_size=1
-        ),
-        # Advantage computation (CPU)
-        ComputeAdvantages.options(procs=1).as_actor(),
-        # Reference model with GPU
-        ReferenceModel.options(procs=1, with_gpus=True).as_actor(
-            model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
-            training={"dtype": "bfloat16"}
-        ),
-        # Reward actor (CPU)
-        RewardActor.options(procs=1, num_replicas=1).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        compute_advantages,
+        ref_model,
+        reward_actor,
+    ) = await asyncio.gather(
+            # Dataset actor (CPU)
+            DatasetActor.options(procs=1).as_actor(
+                path="openai/gsm8k",
+                revision="main",
+                data_split="train",
+                streaming=True,
+                model=model,
+            ),
+            # Policy service with GPU
+            Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
+                engine_config={
+                    "model": model,
+                    "tensor_parallel_size": 1,
+                    "pipeline_parallel_size": 1,
+                    "enforce_eager": False
+                },
+                sampling_config={
+                    "n": group_size,
+                    "max_tokens": 16,
+                    "temperature": 1.0,
+                    "top_p": 1.0
+                }
+            ),
+            # Trainer actor with GPU
+            RLTrainer.options(procs=1, with_gpus=True).as_actor(
+                # Trainer config would come from YAML in real usage
+                model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+                optimizer={"name": "AdamW", "lr": 1e-5},
+                training={"local_batch_size": 2, "seq_len": 2048}
+            ),
+            # Replay buffer (CPU)
+            ReplayBuffer.options(procs=1).as_actor(
+                batch_size=2,
+                max_policy_age=1,
+                dp_size=1
+            ),
+            # Advantage computation (CPU)
+            ComputeAdvantages.options(procs=1).as_actor(),
+            # Reference model with GPU
+            ReferenceModel.options(procs=1, with_gpus=True).as_actor(
+                model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
+                training={"dtype": "bfloat16"}
+            ),
+            # Reward actor (CPU)
+            RewardActor.options(procs=1, num_replicas=1).as_service(
+                reward_functions=[MathReward(), ThinkingReward()]
+            )
         )
-    )
+    
+    return dataloader, policy, trainer, replay_buffer, compute_advantages, ref_model, reward_actor
+
+# Run the example (commented out to avoid execution during doc build)
+# asyncio.run(example_forge_service_initialization())
 
 
 ######################################################################
