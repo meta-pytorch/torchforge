@@ -76,6 +76,7 @@ class Policy(PolicyInterface):
         use_dcp (bool): Whether to use DCP for NFS-based weight sync.
 
     Example:
+
     >>> policy = await Policy.options(procs=1, num_replicas=1, with_gpus=True).as_service(
     ...     engine_args=EngineArgs(...),
     ...     sampling_params=SamplingParams(...),
