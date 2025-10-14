@@ -194,8 +194,7 @@ procs = this_host().spawn_procs(per_host={"gpus": 8})
 
 # Same simple API works across hosts:
 cluster_procs = spawn_cluster_procs(
-    hosts=["host1", "host2", "host3"],
-    per_host={"gpus": 4}
+    hosts=["host1", "host2", "host3"], per_host={"gpus": 4}
 )
 
 # Automatically creates:
@@ -213,9 +212,8 @@ actors = cluster_procs.spawn("my_actor", MyActor)
 # This shows the underlying actor system that powers Forge services
 # NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps!
 
-from monarch.actor import Actor, endpoint, this_proc, Future
-from monarch.actor import ProcMesh, this_host
-import asyncio
+from monarch.actor import Actor, endpoint, Future, ProcMesh, this_host, this_proc
+
 
 # STEP 1: Define a basic actor
 class Counter(Actor):
@@ -230,39 +228,43 @@ class Counter(Actor):
     def get_value(self) -> int:
         return self.value
 
-# STEP 2: Single actor in local process
-counter: Counter = this_proc().spawn("counter", Counter, initial_value=0)
 
-# STEP 3: Send messages
-fut: Future[int] = counter.get_value.call_one()
-value = await fut
-print(f"Counter value: {value}")  # 0
+async def example_monarch_counter_usage():
+    """Example showing basic Monarch actor usage."""
+    # STEP 2: Single actor in local process
+    counter: Counter = this_proc().spawn("counter", Counter, initial_value=0)
 
-# STEP 4: Multiple actors across processes
-procs: ProcMesh = this_host().spawn_procs(per_host={"gpus": 8})
-counters: Counter = procs.spawn("counters", Counter, 0)
+    # STEP 3: Send messages
+    fut: Future[int] = counter.get_value.call_one()
+    value = await fut
+    print(f"Counter value: {value}")  # 0
 
-# STEP 5: Broadcast to all actors
-await counters.increment.call()
+    # STEP 4: Multiple actors across processes
+    procs: ProcMesh = this_host().spawn_procs(per_host={"gpus": 8})
+    counters: Counter = procs.spawn("counters", Counter, 0)
 
-# STEP 6: Different message patterns
-# call_one() - single actor
-value = await counters.get_value.call_one()
-print(f"One counter: {value}")  # Output: One counter: 1
+    # STEP 5: Broadcast to all actors
+    await counters.increment.call()
 
-# choose() - random single actor (actors only, not services)
-value = await counters.get_value.choose()
-print(f"Random counter: {value}")  # Output: Random counter: 1
+    # STEP 6: Different message patterns
+    # call_one() - single actor
+    value = await counters.get_value.call_one()
+    print(f"One counter: {value}")  # Output: One counter: 1
 
-# call() - all actors, collect results
-values = await counters.get_value.call()
-print(f"All counters: {values}")  # Output: All counters: [1, 1, 1, 1, 1, 1, 1, 1]
+    # choose() - random single actor (actors only, not services)
+    value = await counters.get_value.choose()
+    print(f"Random counter: {value}")  # Output: Random counter: 1
 
-# broadcast() - fire and forget
-await counters.increment.broadcast()  # No return value - just sends to all actors
+    # call() - all actors, collect results
+    values = await counters.get_value.call()
+    print(f"All counters: {values}")  # Output: All counters: [1, 1, 1, 1, 1, 1, 1, 1]
 
-# Cleanup
-await procs.stop()
+    # broadcast() - fire and forget
+    await counters.increment.broadcast()  # No return value - just sends to all actors
+
+    # Cleanup
+    await procs.stop()
+
 
 ######################################################################
 # Remember: This raw Monarch code is for understanding how Forge works internally.
@@ -457,7 +459,6 @@ policy_actors = procs.spawn("policy", PolicyActor, model="Qwen/Qwen3-7B")
 # * **Optimize resource usage**: How many replicas per service? GPU vs CPU processes?
 # * **Handle failures gracefully**: Which layer failed and how to recover?
 # * **Scale effectively**: Where to add resources for maximum impact?
-
 
 
 ######################################################################

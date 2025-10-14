@@ -27,7 +27,7 @@ Part 2: Peeling Back the Abstraction - What Are Services?
        * Understanding of Python async/await
        * Basic distributed systems knowledge
 
-We highly recommend completing Part 1 before starting this tutorial. 
+We highly recommend completing Part 1 before starting this tutorial.
 Part 1 explains RL Concepts and how they land in Forge.
 
 Now that you see the power of the service abstraction, let's understand
@@ -88,9 +88,9 @@ what's actually happening under the hood. Grab your chai!
 # Here's the actual ``ServiceConfig`` from Forge source code:
 
 # Configuration pattern from apps/grpo/main.py:
-# 
+#
 # .. code-block:: python
-# 
+#
 #    Policy.options(
 #        procs=1,           # Processes per replica
 #        num_replicas=4,    # Number of replicas
@@ -114,29 +114,22 @@ what's actually happening under the hood. Grab your chai!
 # * Message routing and serialization
 
 import asyncio
+
 from forge.actors.policy import Policy
+
 
 async def example_service_creation():
     """Example of creating and using a policy service."""
     model = "Qwen/Qwen3-1.7B"
 
-    policy = await Policy.options(
-        procs=1,
-        with_gpus=True,
-        num_replicas=1
-    ).as_service(
+    policy = await Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
         engine_config={
             "model": model,
             "tensor_parallel_size": 1,
             "pipeline_parallel_size": 1,
-            "enforce_eager": False
+            "enforce_eager": False,
         },
-        sampling_config={
-            "n": 1,
-            "max_tokens": 16,
-            "temperature": 1.0,
-            "top_p": 1.0
-        }
+        sampling_config={"n": 1, "max_tokens": 16, "temperature": 1.0, "top_p": 1.0},
     )
 
     prompt = "What is 3 + 5?"
@@ -146,6 +139,7 @@ async def example_service_creation():
     # Cleanup when done
     await policy.shutdown()
     return policy
+
 
 # Run the example
 asyncio.run(example_service_creation())
@@ -164,7 +158,7 @@ asyncio.run(example_service_creation())
 
 
 # Your code sees this simple interface:
-responses = await policy.generate.route(prompt=prompt)
+# responses = await policy.generate.route(prompt=prompt)
 # But Forge handles all the complexity of replica management, load balancing, and fault tolerance
 
 
@@ -226,8 +220,13 @@ responses = await policy.generate.route(prompt=prompt)
 # **When to use**: Normal request routing where any replica can handle
 # the request.
 
-responses = await policy.generate.route(prompt=question)
-answer = responses[0].text  # Extract text from Completion object
+
+def example_route_pattern():
+    """Example showing route pattern for load balanced requests."""
+    # responses = await policy.generate.route(prompt=question)
+    # answer = responses[0].text  # Extract text from Completion object
+    pass
+
 
 ######################################################################
 # Behind the scenes:
@@ -253,13 +252,16 @@ answer = responses[0].text  # Extract text from Completion object
 # **When to use**: You need responses from ALL replicas.
 
 
-# Get version from all policy replicas
-current_versions = await policy.get_version.fanout()
-# Returns: [version_replica_1, version_replica_2, ...]
+async def example_fanout_pattern():
+    """Example showing fanout pattern for broadcast operations."""
+    # Get version from all policy replicas
+    # current_versions = await policy.get_version.fanout()
+    # Returns: [version_replica_1, version_replica_2, ...]
 
-# Update weights on all replicas
-await policy.update_weights.fanout(new_policy_version)
-# Broadcasts to all replicas simultaneously
+    # Update weights on all replicas
+    # await policy.update_weights.fanout(new_policy_version)
+    # Broadcasts to all replicas simultaneously
+    pass
 
 
 # **Performance characteristics**:
@@ -280,16 +282,20 @@ await policy.update_weights.fanout(new_policy_version)
 # Streaming requires custom implementation in your training loop.
 # The basic ``ReplayBuffer`` doesn't have built-in streaming methods.
 
-# Pattern from apps/grpo/main.py continuous training:
-while training:
+
+async def example_streaming_pattern():
+    """Pattern from apps/grpo/main.py continuous training."""
     # This is the real API call pattern
-    batch = await replay_buffer.sample.call_one(curr_policy_version=step)
-    if batch is not None:
-        # Process batch immediately
-        loss = await trainer.train_step.call_one(batch)
-        print(f"Training loss: {loss}")
-    else:
-        await asyncio.sleep(0.1)  # Wait for more data
+    # while training:
+    #     batch = await replay_buffer.sample.call_one(curr_policy_version=step)
+    #     if batch is not None:
+    #         # Process batch immediately
+    #         loss = await trainer.train_step.call_one(batch)
+    #         print(f"Training loss: {loss}")
+    #     else:
+    #         await asyncio.sleep(0.1)  # Wait for more data
+    pass
+
 
 ######################################################################
 # **Performance characteristics**:
@@ -316,6 +322,7 @@ while training:
 from forge.controller import ForgeActor
 from monarch.actor import endpoint
 
+
 class ForgeCounter(ForgeActor):
     def __init__(self, initial_value: int):
         self.value = initial_value
@@ -333,44 +340,46 @@ class ForgeCounter(ForgeActor):
     async def reset(self):
         self.value = 0
 
-counter_service = await ForgeCounter.options(
-    procs=1, num_replicas=4
-).as_service(initial_value=0)
 
-# WITHOUT SESSIONS: Each .route() call goes to a different replica
-await counter_service.increment.route()  # Might go to replica 2
-await counter_service.increment.route()  # Might go to replica 1
-await counter_service.increment.route()  # Might go to replica 3
+async def example_session_comparison():
+    """Demonstrate the difference between sessions and normal routing."""
+    counter_service = await ForgeCounter.options(procs=1, num_replicas=4).as_service(
+        initial_value=0
+    )
 
-results = await counter_service.increment.fanout()  # Get from all replicas
-print(f"All replica values: {results}")
-# Output: All replica values: [1, 2, 1, 1] - Each replica has different state!
+    # WITHOUT SESSIONS: Each .route() call goes to a different replica
+    await counter_service.increment.route()  # Might go to replica 2
+    await counter_service.increment.route()  # Might go to replica 1
+    await counter_service.increment.route()  # Might go to replica 3
 
-######################################################################
-# The problem: each `.route()` call can go to different replicas, creating inconsistent state.
+    results = await counter_service.increment.fanout()  # Get from all replicas
+    print(f"All replica values: {results}")
+    # Output: All replica values: [1, 2, 1, 1] - Each replica has different state!
 
-# WITH SESSIONS: All calls go to the SAME replica
-print("\nUsing sticky sessions:")
-async with counter_service.session():  # Creates a session that picks one replica
-    await counter_service.reset.route()  # Uses .route() within session
-    print(await counter_service.increment.route())  # 1
-    print(await counter_service.increment.route())  # 2
-    print(await counter_service.increment.route())  # 3
+    # WITH SESSIONS: All calls go to the SAME replica
+    print("\nUsing sticky sessions:")
+    async with counter_service.session():  # Creates a session that picks one replica
+        await counter_service.reset.route()  # Uses .route() within session
+        print(await counter_service.increment.route())  # 1
+        print(await counter_service.increment.route())  # 2
+        print(await counter_service.increment.route())  # 3
 
-    final_value = await counter_service.get_value.route()
-    print(f"Final value on this replica: {final_value}")  # 3
+        final_value = await counter_service.get_value.route()
+        print(f"Final value on this replica: {final_value}")  # 3
 
-######################################################################
-# Same pattern works with Policy for multi-turn conversations:
+    # Cleanup
+    await counter_service.shutdown()
 
-async with policy.session():
-    response1 = await policy.generate.route(turn1)
-    full_prompt = turn1 + response1[0].text + turn2
-    response2 = await policy.generate.route(full_prompt)
-    # Both calls hit same replica, preserving KV cache
 
-# Cleanup
-await counter_service.shutdown()
+async def example_multi_turn_conversation(policy, turn1, turn2):
+    """Same pattern works with Policy for multi-turn conversations."""
+    async with policy.session():
+        response1 = await policy.generate.route(turn1)
+        full_prompt = turn1 + response1[0].text + turn2
+        response2 = await policy.generate.route(full_prompt)
+        # Both calls hit same replica, preserving KV cache
+        return response2
+
 
 ######################################################################
 # **Performance impact**: Critical for maintaining KV cache in multi-turn conversations.
@@ -392,8 +401,11 @@ await counter_service.shutdown()
 async def naive_multi_turn():
     # Each call might go to different replica = cache miss
     response1 = await policy_service.generate.choose(question1)
-    response2 = await policy_service.generate.choose(question1 + response1) # Cache miss!
-    response3 = await policy_service.generate.choose(conversation_so_far)   # Cache miss!
+    response2 = await policy_service.generate.choose(
+        question1 + response1
+    )  # Cache miss!
+    response3 = await policy_service.generate.choose(conversation_so_far)  # Cache miss!
+
 
 ######################################################################
 # **The solution**: Sticky sessions ensure all calls go to same replica.
@@ -412,6 +424,7 @@ async def optimized_multi_turn(policy):
 
     # Session ends, replica can be garbage collected or reused
 
+
 ######################################################################
 # **Performance impact**: Maintaining KV cache across turns avoids
 # recomputing previous tokens.
@@ -426,20 +439,23 @@ async def optimized_multi_turn(policy):
 # **Real Forge approach**: The ReplayBuffer actor handles concurrency
 # internally:
 
-# Forge ReplayBuffer endpoints (verified from source code)
-# Add episodes (thread-safe by actor model)
-await replay_buffer.add.call_one(episode)  # .choose() would work too, but .call_one() clarifies it's a singleton actor not ActorMesh
 
-# Sample batches for training
-batch = await replay_buffer.sample.call_one(
-    curr_policy_version=step_number,
-    batch_size=None  # Optional parameter, uses default from config
-)
+async def example_replay_buffer_usage():
+    """Forge ReplayBuffer endpoints (verified from source code)."""
+    # Add episodes (thread-safe by actor model)
+    # await replay_buffer.add.call_one(episode)
 
-# Additional methods available:
-# await replay_buffer.clear.call_one()  # Clear buffer
-# await replay_buffer.evict.call_one(curr_policy_version)  # Remove old episodes
-# state = await replay_buffer.state_dict.call_one()  # Get state for checkpointing
+    # Sample batches for training
+    # batch = await replay_buffer.sample.call_one(
+    #     curr_policy_version=step_number,
+    #     batch_size=None,  # Optional parameter, uses default from config
+    # )
+
+    # Additional methods available:
+    # await replay_buffer.clear.call_one()  # Clear buffer
+    # await replay_buffer.evict.call_one(curr_policy_version)  # Remove old episodes
+    # state = await replay_buffer.state_dict.call_one()  # Get state
+    pass
 
 
 # **Critical insight**: The actor model provides natural thread safety -
@@ -461,9 +477,13 @@ async def real_weight_sync(trainer, policy, step):
     # Use .fanout() to update ALL policy replicas
     await policy.update_weights.fanout(policy_version=step + 1)
 
-# Check current policy version
-current_version = await policy.get_version.route()
-print(f"Current policy version: {current_version}")
+
+async def check_policy_version(policy):
+    """Check current policy version."""
+    current_version = await policy.get_version.route()
+    print(f"Current policy version: {current_version}")
+    return current_version
+
 
 ######################################################################
 # Deep Dive: Asynchronous Coordination Patterns
@@ -480,6 +500,7 @@ print(f"Current policy version: {current_version}")
 
 
 from apps.grpo.main import Episode, Group
+
 
 async def simple_rl_step():
 
@@ -499,9 +520,7 @@ async def simple_rl_step():
         input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True
     )
     reward = await reward_actor.evaluate_response.route(  # RewardActor is a service
-        prompt=prompt,
-        response=actions[0].text,
-        target=target
+        prompt=prompt, response=actions[0].text, target=target
     )
     print(f"Reward: {reward}")
 
@@ -513,7 +532,7 @@ async def simple_rl_step():
         pad_id=tokenizer.pad_token_id,
         request_len=512,
         response_len=512,
-        target=target
+        target=target,
     )
 
     # Add response data
@@ -526,7 +545,9 @@ async def simple_rl_step():
     # Compute advantages using actual ComputeAdvantages actor
     group = Group.new_group(0, 1, prompt, 0, tokenizer.pad_token_id, 512, 512, target)
     group.episodes[0] = episode
-    advantages = await compute_advantages.compute.call_one(group)  # ComputeAdvantages is an actor
+    advantages = await compute_advantages.compute.call_one(
+        group
+    )  # ComputeAdvantages is an actor
     episode.advantage = advantages[0]
     print(f"Advantage: {advantages[0]}")
     await replay_buffer.add.call_one(episode)  # ReplayBuffer is an actor
@@ -544,14 +565,18 @@ async def simple_rl_step():
         print("Not enough data in buffer yet")
         return None
 
-# Note: This simplified example assumes tokenizer and services are already initialized
-for step in range(10):
-    print(f"\n--- RL Step {step + 1} ---")
-    loss = await simple_rl_step()
-    if loss:
-        print(f"Step {step + 1} complete, loss: {loss:.4f}")
-    else:
-        print(f"Step {step + 1} complete, building buffer...")
+
+async def run_training_steps():
+    """Run multiple RL training steps."""
+    # Note: This simplified example assumes tokenizer and services are already initialized
+    for step in range(10):
+        print(f"\n--- RL Step {step + 1} ---")
+        loss = await simple_rl_step()
+        if loss:
+            print(f"Step {step + 1} complete, loss: {loss:.4f}")
+        else:
+            print(f"Step {step + 1} complete, building buffer...")
+
 
 ######################################################################
 # Handling Speed Mismatches with Service Scaling
@@ -560,27 +585,27 @@ for step in range(10):
 # **The insight**: Scale services independently based on their
 # bottlenecks.
 
-# Scale fast services with more replicas
-policy = await Policy.options(
-    procs=1, num_replicas=8, with_gpus=True  # Many replicas for high throughput
-).as_service(
-    engine_config={"model": model_name, "tensor_parallel_size": 1}
-)
 
-# Reward evaluation might be CPU-bound
-reward_actor = await RewardActor.options(
-    procs=1, num_replicas=16, with_gpus=False  # More CPU replicas
-).as_service(
-    reward_functions=[MathReward()]
-)
+async def example_service_scaling():
+    """Example showing how to scale services independently."""
+    # Scale fast services with more replicas
+    policy = await Policy.options(
+        procs=1, num_replicas=8, with_gpus=True  # Many replicas for high throughput
+    ).as_service(engine_config={"model": "model_name", "tensor_parallel_size": 1})
 
-# Training needs fewer but more powerful replicas
-trainer = await RLTrainer.options(
-    procs=1, with_gpus=True  # Fewer but GPU-heavy
-).as_actor(  # Trainer typically uses .as_actor() not .as_service()
-    model={"name": "qwen3", "flavor": "1.7B"},
-    optimizer={"name": "AdamW", "lr": 1e-5}
-)
+    # Reward evaluation might be CPU-bound
+    reward_actor = await RewardActor.options(
+        procs=1, num_replicas=16, with_gpus=False  # More CPU replicas
+    ).as_service(reward_functions=[MathReward()])
+
+    # Training needs fewer but more powerful replicas
+    trainer = await RLTrainer.options(
+        procs=1, with_gpus=True  # Fewer but GPU-heavy
+    ).as_actor(  # Trainer typically uses .as_actor() not .as_service()
+        model={"name": "qwen3", "flavor": "1.7B"},
+        optimizer={"name": "AdamW", "lr": 1e-5},
+    )
+    return policy, reward_actor, trainer
 
 
 ######################################################################
@@ -592,8 +617,8 @@ trainer = await RLTrainer.options(
 # Exact RewardActor from apps/grpo/main.py
 
 from forge.controller import ForgeActor
-from monarch.actor import endpoint
 from forge.data.rewards import MathReward, ThinkingReward
+from monarch.actor import endpoint
 
 # class definition from apps/grpo/main.py
 class RewardActor(ForgeActor):
@@ -611,29 +636,30 @@ class RewardActor(ForgeActor):
             total_reward += reward
 
         # Return average reward across all functions
-        return total_reward / len(self.reward_functions) if self.reward_functions else 0.0
+        return (
+            total_reward / len(self.reward_functions) if self.reward_functions else 0.0
+        )
 
-reward_actor = await RewardActor.options(
-    procs=1, num_replicas=1
-).as_service(
-    reward_functions=[MathReward(), ThinkingReward()]
-)
 
-prompt = "What is 15% of 240?"
-response = "15% of 240 is 36"
-target = "36"
+async def example_reward_actor_usage():
+    """Example of using the RewardActor service."""
+    reward_actor = await RewardActor.options(procs=1, num_replicas=1).as_service(
+        reward_functions=[MathReward(), ThinkingReward()]
+    )
 
-score = await reward_actor.evaluate_response.route(
-    prompt=prompt,
-    response=response,
-    target=target
-)
-print(f"Reward score: {score}")  # Usually around 1.0 for correct math answers
-# For production scaling - increase num_replicas for parallel evaluation:
-# RewardActor.options(procs=1, num_replicas=16)  # 16 parallel evaluators
+    prompt = "What is 15% of 240?"
+    response = "15% of 240 is 36"
+    target = "36"
 
-# Cleanup when done
-await reward_actor.shutdown()
+    score = await reward_actor.evaluate_response.route(
+        prompt=prompt, response=response, target=target
+    )
+    print(f"Reward score: {score}")  # Usually around 1.0 for correct math answers
+    # For production scaling - increase num_replicas for parallel evaluation:
+    # RewardActor.options(procs=1, num_replicas=16)  # 16 parallel evaluators
+
+    # Cleanup when done
+    await reward_actor.shutdown()
 
 
 ######################################################################
@@ -645,18 +671,82 @@ await reward_actor.shutdown()
 
 # This is the REAL way production RL systems are built with Forge
 
-import asyncio
-import torch
-from forge.actors.policy import Policy
-from forge.actors.reference_model import ReferenceModel
-from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import RLTrainer
-from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages
-from forge.data.rewards import MathReward, ThinkingReward
 
-# Service creation pattern from apps/grpo/main.py lines 322-344
-print("Initializing all services...")
-(
+async def example_full_service_orchestration():
+    """Service creation pattern from apps/grpo/main.py lines 322-344."""
+    print("Initializing all services...")
+    (
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        compute_advantages,
+        ref_model,
+        reward_actor,
+    ) = await asyncio.gather(
+        DatasetActor.options(procs=1).as_actor(
+            path="openai/gsm8k",
+            revision="main",
+            data_split="train",
+            streaming=True,
+            model="Qwen/Qwen3-1.7B",
+        ),
+        Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
+            engine_config={"model": "Qwen/Qwen3-1.7B", "tensor_parallel_size": 1},
+            sampling_config={"n": 1, "max_tokens": 512},
+        ),
+        RLTrainer.options(procs=1, with_gpus=True).as_actor(
+            model={
+                "name": "qwen3",
+                "flavor": "1.7B",
+                "hf_assets_path": "hf://Qwen/Qwen3-1.7B",
+            },
+            optimizer={"name": "AdamW", "lr": 1e-5},
+            training={"local_batch_size": 2, "seq_len": 2048},
+        ),
+        ReplayBuffer.options(procs=1).as_actor(
+            batch_size=2, max_policy_age=1, dp_size=1
+        ),
+        ComputeAdvantages.options(procs=1).as_actor(),
+        ReferenceModel.options(procs=1, with_gpus=True).as_actor(
+            model={
+                "name": "qwen3",
+                "flavor": "1.7B",
+                "hf_assets_path": "hf://Qwen/Qwen3-1.7B",
+            }
+        ),
+        RewardActor.options(procs=1, num_replicas=1).as_service(
+            reward_functions=[MathReward(), ThinkingReward()]
+        ),
+    )
+
+    print("All services initialized successfully!")
+
+    # Run training loop
+    await production_training_loop(
+        dataloader,
+        policy,
+        trainer,
+        replay_buffer,
+        compute_advantages,
+        ref_model,
+        reward_actor,
+    )
+
+    print("Shutting down services...")
+    await asyncio.gather(
+        DatasetActor.shutdown(dataloader),
+        policy.shutdown(),
+        RLTrainer.shutdown(trainer),
+        ReplayBuffer.shutdown(replay_buffer),
+        ComputeAdvantages.shutdown(compute_advantages),
+        ReferenceModel.shutdown(ref_model),
+        reward_actor.shutdown(),
+    )
+    print("All services shut down successfully!")
+
+
+async def production_training_loop(
     dataloader,
     policy,
     trainer,
@@ -664,35 +754,7 @@ print("Initializing all services...")
     compute_advantages,
     ref_model,
     reward_actor,
-) = await asyncio.gather(
-    DatasetActor.options(procs=1).as_actor(
-        path="openai/gsm8k", revision="main", data_split="train",
-        streaming=True, model="Qwen/Qwen3-1.7B"
-    ),
-    Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
-        engine_config={"model": "Qwen/Qwen3-1.7B", "tensor_parallel_size": 1},
-        sampling_config={"n": 1, "max_tokens": 512}
-    ),
-    RLTrainer.options(procs=1, with_gpus=True).as_actor(
-        model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": "hf://Qwen/Qwen3-1.7B"},
-        optimizer={"name": "AdamW", "lr": 1e-5},
-        training={"local_batch_size": 2, "seq_len": 2048}
-    ),
-    ReplayBuffer.options(procs=1).as_actor(
-        batch_size=2, max_policy_age=1, dp_size=1
-    ),
-    ComputeAdvantages.options(procs=1).as_actor(),
-    ReferenceModel.options(procs=1, with_gpus=True).as_actor(
-        model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": "hf://Qwen/Qwen3-1.7B"}
-    ),
-    RewardActor.options(procs=1, num_replicas=1).as_service(
-        reward_functions=[MathReward(), ThinkingReward()]
-    ),
-)
-
-print("All services initialized successfully!")
-
-async def production_training_loop():
+):
     """Real training loop pattern from apps/grpo/main.py"""
     step = 0
 
@@ -713,11 +775,13 @@ async def production_training_loop():
         reward = await reward_actor.evaluate_response.route(
             prompt=sample["question"],
             response=responses[0].text,
-            target=sample["answer"]
+            target=sample["answer"],
         )
 
         # Experience storage (using actual Episode structure)
-        episode = create_episode_from_grpo_data(sample, responses[0], reward, ref_logprobs[0], step)
+        episode = create_episode_from_grpo_data(
+            sample, responses[0], reward, ref_logprobs[0], step
+        )
         await replay_buffer.add.call_one(episode)
 
         # Training when ready
@@ -732,18 +796,6 @@ async def production_training_loop():
 
             print(f"Step {step}, Loss: {loss:.4f}")
             step += 1
-
-print("Shutting down services...")
-await asyncio.gather(
-    DatasetActor.shutdown(dataloader),
-    policy.shutdown(),
-    RLTrainer.shutdown(trainer),
-    ReplayBuffer.shutdown(replay_buffer),
-    ComputeAdvantages.shutdown(compute_advantages),
-    ReferenceModel.shutdown(ref_model),
-    reward_actor.shutdown(),
-)
-print("All services shut down successfully!")
 
 
 # **Key observations:**
