@@ -20,7 +20,7 @@ from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
     get_param_prefix,
 )
-from forge.actors.policy import Policy
+from forge.actors.policy import Policy as Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
@@ -162,6 +162,24 @@ def simple_grpo_loss(
     ).mean()
     return loss
 
+
+class Policy(Generator):
+    """Policy model to collect data from"""
+
+
+class Judge(Generator):
+    """Judge model for computing rewards"""
+
+
+async def evaluate(judge, prompt, response):
+    task = f"""As an expert mathematician, and given the following question:
+            {prompt}
+            Is the following response correct?
+            {response}
+            Answer with a Positive or Negative."""
+    verdicts = await judge.generate.route(task)
+    reward = 1.0 if "Positive" in verdicts[0].text else 0.0
+    return reward
 
 @dataclass
 class RewardActor(ForgeActor):
@@ -338,14 +356,16 @@ async def main(cfg: DictConfig):
     (
         dataloader,
         policy,
+        judge,
         trainer,
         replay_buffer,
         compute_advantages,
         ref_model,
-        reward_actor,
+        #reward_actor,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Judge.options(**cfg.services.judge).as_service(**cfg.judge),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
@@ -354,9 +374,9 @@ async def main(cfg: DictConfig):
         ),
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
-        RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
-        ),
+        #RewardActor.options(**cfg.services.reward_actor).as_service(
+        #    reward_functions=[MathReward(), ThinkingReward()]
+        #),
     )
 
     # Set max_steps to the configured value, or -1 if not specified or Null
@@ -430,9 +450,10 @@ async def main(cfg: DictConfig):
                 episode.response = response.text
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
-                episode.reward = await reward_actor.evaluate_response.route(
-                    prompt=prompt, response=response.text, target=target
-                )
+                #episode.reward = await reward_actor.evaluate_response.route(
+                #    prompt=prompt, response=response.text, target=target
+                #)
+                episode.reward = await evaluate(judge, prompt, response.text)
 
             t.step("reward_evaluation")
 
@@ -544,11 +565,12 @@ async def main(cfg: DictConfig):
         await asyncio.gather(
             DatasetActor.shutdown(dataloader),
             policy.shutdown(),
+            judge.shutdown(),
             RLTrainer.shutdown(trainer),
             ReplayBuffer.shutdown(replay_buffer),
             ComputeAdvantages.shutdown(compute_advantages),
             ref_model.shutdown(),
-            reward_actor.shutdown(),
+            #reward_actor.shutdown(),
         )
         # TODO - add a global shutdown that implicitly shuts down all services
         # and remote allocations
