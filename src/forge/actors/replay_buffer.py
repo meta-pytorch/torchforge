@@ -105,6 +105,7 @@ class ReplayBuffer(ForgeActor):
             for dp_idx in range(self.dp_size)
         ]
 
+        # Call the underlying collate function to collate the episodes into a batch
         return self.collate(reshaped_episodes)
 
     @endpoint

@@ -67,13 +67,6 @@ class Service:
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(
@@ -485,6 +478,10 @@ class Service:
         )
 
     async def stop(self):
+        """
+        Stops the service and all managed replicas.
+        This method should be called when the service is no longer needed.
+        """
         logger.debug("Stopping service...")
         # Signal shutdown to health loop
         self._shutdown_requested = True
@@ -604,12 +601,6 @@ class ServiceActor(Actor):
         actor_def: Actor class definition to instantiate on each replica
         *actor_args: Positional arguments passed to actor constructor
         **actor_kwargs: Keyword arguments passed to actor constructor
-
-    Attributes:
-        _cfg: Service configuration
-        _replicas: List of managed replica instances
-        _active_sessions: Currently active sessions
-        _metrics: Aggregated service and replica metrics
     """
 
     def __init__(self, cfg: ServiceConfig, actor_def, actor_kwargs: dict):

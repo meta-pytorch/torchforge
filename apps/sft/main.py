@@ -6,7 +6,7 @@
 
 """To run:
 
-python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
+python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 
 """
 

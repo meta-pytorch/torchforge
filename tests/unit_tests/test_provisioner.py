@@ -144,7 +144,7 @@ class TestProvisionerCudaVisibleDevices:
         available = local_gpu_manager.get_available_gpus()
         assert available == [str(i) for i in range(8)]
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,1,2"}, clear=True)
+    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,1,2"}, clear=False)
     @pytest.mark.asyncio
     async def test_get_proc_mesh_respects_cuda_visible_devices(self):
         """Test that get_proc_mesh uses CUDA_VISIBLE_DEVICES for local allocation."""

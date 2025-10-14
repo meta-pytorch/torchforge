@@ -65,7 +65,7 @@ $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0
 To run SFT on a Llama3 8B model, run
 
 ```bash
-python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
+python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 ```
 
 ### Citation
