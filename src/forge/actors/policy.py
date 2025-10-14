@@ -155,9 +155,14 @@ class Policy(PolicyInterface):
         policy_proc_config = copy(process_config)
         policy_proc_config.procs = 1
         policy_proc_config.with_gpus = False
-        policy_proc = await get_proc_mesh(
-            process_config=policy_proc_config, host_mesh=host_mesh
-        )
+
+        # TODO - not working yet, delete this once debugged
+        policy_proc_config.hosts = None
+        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
+
+        # policy_proc = await get_proc_mesh(
+        #     process_config=policy_proc_config, host_mesh=host_mesh
+        # )
 
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
