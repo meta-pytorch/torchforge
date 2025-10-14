@@ -119,7 +119,7 @@ ref_model:
 services:
   policy:
     procs: ${policy.engine_args.tensor_parallel_size}
-    num_replicas: 2
+    num_replicas: 4
     hosts: 1
     with_gpus: true
     mesh_name: policy
