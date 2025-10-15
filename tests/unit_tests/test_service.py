@@ -759,8 +759,7 @@ async def test_broadcast_fanout_vs_route():
 # Router Tests
 
 
-@pytest.mark.asyncio
-async def test_session_router_with_round_robin_fallback():
+def test_session_router_with_round_robin_fallback():
     """Switch fallback router to round-robin and verify assignment order."""
     # Choose RoundRobinRouter as fallback, r1 and r2 should be assigned to different replicas
     replicas = [make_replica(0, load=0), make_replica(1, load=5)]

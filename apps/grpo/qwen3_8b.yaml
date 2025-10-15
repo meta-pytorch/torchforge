@@ -41,7 +41,6 @@ policy:
 
 # Trainer configuration
 trainer:
-  use_dcp: true
   model:
     name: qwen3
     flavor: 8B
