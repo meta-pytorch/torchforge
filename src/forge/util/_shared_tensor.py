@@ -31,6 +31,9 @@ class SharedTensorHandle:
         """
         return SharedTensor(handle=self)
 
+    def drop(self) -> None:
+        self.to_shared_tensor().drop()
+
 
 class SharedTensor:
     """Wrapper class for tensors backed my shared memory"""
