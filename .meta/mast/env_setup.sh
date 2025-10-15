@@ -7,10 +7,9 @@
 # LICENSE file in the root directory of this source tree.
 
 # setup_forge_env.sh - Setup conda environment and install forge with mounting
-set -e  # Exit on any error
 
 # Configuration
-CONDA_ENV_NAME="forge:stable"
+CONDA_ENV_NAME="forge:41468b33a03eaf2bf5b44517f418028a"
 
 # Colors for output
 RED='\033[0;31m'
@@ -109,8 +108,6 @@ fi
 # Define paths
 FBSOURCE_PATH="/data/users/$USER/fbsource"
 CONDA_SCRIPT_PATH="$FBSOURCE_PATH/genai/xlformers/dev/xl_conda.sh"
-FORGE_BASE_DIR="/data/users/$USER"
-FORGE_REPO_DIR="$FORGE_BASE_DIR/forge"
 
 # Workspace URL for mounting
 WORKSPACE_URL="ws://ws.ai.pci0ai/genai_fair_llm"
@@ -143,63 +140,12 @@ fi
 
 log_info "Conda environment activated successfully"
 
-# Step 3: Create and navigate to forge base directory
-log_info "Step 3: Setting up forge directory..."
-if [ ! -d "$FORGE_BASE_DIR" ]; then
-    log_info "Creating forge base directory: $FORGE_BASE_DIR"
-    mkdir -p "$FORGE_BASE_DIR"
-fi
 
-cd "$FORGE_BASE_DIR"
-log_info "Changed to directory: $(pwd)"
-
-# Step 4: Clone or update forge repository
-log_info "Step 4: Setting up forge git repository..."
-if [ -d "$FORGE_REPO_DIR" ]; then
-    log_warn "Forge repository already exists at: $FORGE_REPO_DIR"
-    cd "$FORGE_REPO_DIR"
-
-    if [ -d ".git" ]; then
-        log_info "Updating existing repository..."
-        git fetch origin
-        if [ $? -eq 0 ]; then
-            log_info "Repository updated successfully"
-        else
-            log_warn "Failed to fetch updates, continuing with existing code"
-        fi
-    else
-        log_error "Directory exists but is not a git repository"
-        log_info "Removing directory and cloning fresh..."
-        cd "$FORGE_BASE_DIR"
-        rm -rf "$FORGE_REPO_DIR"
-        git clone git@github.com:meta-pytorch/forge.git
-        if [ $? -ne 0 ]; then
-            log_error "Failed to clone forge repository"
-            exit 1
-        fi
-        cd "$FORGE_REPO_DIR"
-    fi
-else
-    log_info "Cloning forge repository..."
-    git clone git@github.com:meta-pytorch/forge.git
-    if [ $? -ne 0 ]; then
-        log_error "Failed to clone forge repository"
-        log_error "Please ensure:"
-        log_error "1. You have SSH access to github.com"
-        log_error "2. Your SSH key is added to GitHub"
-        log_error "3. You have access to meta-pytorch/forge repository"
-        exit 1
-    fi
-    cd "$FORGE_REPO_DIR"
-fi
-
-log_info "Current directory: $(pwd)"
-
-# Step 5: Install torchtitan
-log_info "Step 5: Installing torchtitan..."
+# Step 3: Install torchtitan
+log_info "Step 3: Installing torchtitan..."
 
 # Source versions.sh to get the pinned commit
-VERSIONS_FILE="$FORGE_REPO_DIR/assets/versions.sh"
+VERSIONS_FILE="assets/versions.sh"
 if [ -f "$VERSIONS_FILE" ]; then
     log_info "Sourcing version information from: $VERSIONS_FILE"
     source "$VERSIONS_FILE"
@@ -225,8 +171,8 @@ else
     exit 1
 fi
 
-# Step 5.5: Apply monarch torch import hack
-log_info "Step 5.5: Applying monarch torch import hack..."
+# Step 3.5: Apply monarch torch import hack
+log_info "Step 3.5: Applying monarch torch import hack..."
 
 MONARCH_INIT="$CONDA_PREFIX/lib/python3.10/site-packages/monarch/__init__.py"
 if [ -f "$MONARCH_INIT" ]; then
@@ -259,8 +205,8 @@ else
     log_warn "Skipping monarch torch import hack (monarch may not be installed yet)"
 fi
 
-# Step 6: Install forge package
-log_info "Step 6: Installing forge package..."
+# Step 4: Install forge package
+log_info "Step 4: Installing forge package..."
 pip install --no-deps --force-reinstall .
 if [ $? -ne 0 ]; then
     log_error "Failed to install forge package"
@@ -298,7 +244,7 @@ pip list | grep -E "(forge|monarch)" || log_warn "No forge/monarch packages foun
 log_info "Environment setup complete! You can now run your scripts."
 log_info "Mounted workspace available at: /mnt/wsfuse"
 
-# Step 6: Ask user to deactivate and activate conda env conda environment
+# Step 5: Ask user to test
 echo ""
 log_info "Installation completed successfully!"
 echo ""

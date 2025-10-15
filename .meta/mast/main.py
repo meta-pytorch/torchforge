@@ -7,7 +7,6 @@
 import argparse
 import asyncio
 import sys
-import uuid
 
 from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
@@ -53,7 +52,7 @@ async def main(cfg: DictConfig, mode: str = "detached"):
         if cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] == DEFAULT_CHECKPOINT_FOLDER:
             cfg[
                 DEFAULT_CHECKPOINT_FOLDER_KEY
-            ] = f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}-{uuid.uuid4().hex[:6]}"
+            ] = f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}"
         print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
     launcher_config = LauncherConfig(

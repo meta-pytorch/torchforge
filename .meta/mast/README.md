@@ -21,7 +21,7 @@ The `env_setup.sh` script will automatically:
 chmod +x .meta/mast/env_setup.sh
 
 # Run the setup
-./.meta/mast/env_setup.sh
+source .meta/mast/env_setup.sh
 
 ```
 
