@@ -295,7 +295,7 @@ class Generator(GeneratorInterface):
         futures = []
         for i, names in enumerate(split_keys(hf_param_names)):
             fut = await self.weight_fetchers.slice(procs=i).fetch.call_one(
-                version, names
+                version=version, param_names=names
             )
             futures.append(fut)
 
