@@ -70,8 +70,8 @@ class Generator(ForgeActor):
     Args:
         engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
-        use_dcp (bool): Whether to use DCP for NFS-based weight sync. Default depends on whether or not
-            RDMA is enabled in torchstore.
+        use_dcp_for_weight_sync (bool): Whether to use DCP for NFS-based weight sync. Default depends on
+            whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled.
 
     Example:
     >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
@@ -86,7 +86,7 @@ class Generator(ForgeActor):
 
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
-    use_dcp: bool | None = None
+    use_dcp_for_weight_sync: bool | None = None
 
     def __post_init__(self):
         super().__init__()
@@ -106,9 +106,9 @@ class Generator(ForgeActor):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
-        if self.use_dcp is None:
-            self.use_dcp = TORCHSTORE_USE_RDMA.get_value() == 0
-        logger.debug(f"{self.use_dcp=}")
+        if self.use_dcp_for_weight_sync is None:
+            self.use_dcp_for_weight_sync = TORCHSTORE_USE_RDMA.get_value() == 0
+        logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
     async def get_vllm_config(self) -> VllmConfig:
@@ -130,8 +130,6 @@ class Generator(ForgeActor):
         We overwrite the default Service launch method in order to setup Actors (GeneratorWorker) within this "coordinating" Actor.
         We first create a proc_mesh for the workers, then a proc_mesh for the generator, and then we spawn the workers
         and the generator in setup.
-
-        The args here generally should match those in the `__init__` method of the Generator class.
         """
         # Note: get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         process_config: ProcessConfig = ProcessConfig(
@@ -507,14 +505,8 @@ class GeneratorWorker(ForgeActor):
     """
 
     vllm_config: VllmConfig
-    use_dcp: bool | None = None
     # TODO: Remove below param
     _test_prev_params = {}
-
-    def __post_init__(self):
-        super().__init__()
-        if self.use_dcp is None:
-            self.use_dcp = TORCHSTORE_USE_RDMA.get_value() == 0
 
     @endpoint
     async def setup(self):
@@ -577,11 +569,12 @@ class GeneratorWorker(ForgeActor):
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
         loaded_weights = set()
         t = Tracer("worker_perf/update_weights", timer="gpu")
         t.start()
-        # Entire state dict is stored in a single DCP handle
-        if dcp_whole_state_dict_key in matching_keys:
+
+        if use_dcp_for_weight_sync:
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
             hf_param_names = dcp_handle.param_names
             for name in hf_param_names:
@@ -589,7 +582,7 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
-        else:  # Load each parameter from torchstore directly without DCP
+        else:
             hf_param_names = [extract_param_name(key) for key in matching_keys]
             # We can't pass a generator since vllm load_weights is not async.
             # Instead, we just call load_weights with one parameter at a time.
@@ -599,6 +592,7 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
+
         t.stop()
 
     @endpoint
