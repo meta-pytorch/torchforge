@@ -1,7 +1,8 @@
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> Forge
 
-
 #### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
+[![Unit Tests](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml/badge.svg)](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml)
+[![GPU Tests](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml/badge.svg)](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml)
 
 ## Overview
 The primary purpose of the Forge ecosystem is to delineate infra concerns from model concerns thereby making RL experimentation easier. Forge delivers this by providing clear RL abstractions and one scalable implementation of these abstractions. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
@@ -65,7 +66,7 @@ $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0
 To run SFT on a Llama3 8B model, run
 
 ```bash
-python -m apps.sft_v2.main --config apps/sft_v2/llama3_8b.yaml
+python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 ```
 
 ### Citation
