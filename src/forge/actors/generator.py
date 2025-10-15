@@ -306,7 +306,9 @@ class Generator(GeneratorInterface):
         for i, names in enumerate(split_keys(hf_param_names)):
 
             async def _fetch_task():
-                return await self.weight_fetcher.slice(procs=i).fetch.call_one(names)
+                return await self.weight_fetcher.slice(procs=i).fetch.call_one(
+                    version=version, param_names=names
+                )
 
             tasks.append(_fetch_task())
         sub_state_dicts = await asyncio.gather(*tasks)
