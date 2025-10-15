@@ -91,7 +91,7 @@ class Generator(ForgeActor):
     def __post_init__(self):
         super().__init__()
         self._run_task: asyncio.Task | None = None
-        self._policy_proc: ProcMesh | None = None
+        self._generator_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
         self.worker: GeneratorWorker | None = None
         self.running = False
@@ -107,7 +107,7 @@ class Generator(ForgeActor):
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
         if self.use_dcp_for_weight_sync is None:
-            self.use_dcp_for_weight_sync = TORCHSTORE_USE_RDMA.get_value() == 0
+            self.use_dcp_for_weight_sync = not TORCHSTORE_USE_RDMA.get_value()
         logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
