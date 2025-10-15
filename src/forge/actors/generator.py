@@ -253,7 +253,7 @@ class Generator(GeneratorInterface):
             log_stats=None,
         )
         self._start_processing()
-        fetcher_procs = this_host().spawn_procs(per_host={"procs": 8})
+        fetcher_procs = this_host().spawn_procs(per_host={"procs": 16})
         self._fetcher_procs = fetcher_procs
         self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
 
