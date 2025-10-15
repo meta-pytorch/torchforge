@@ -162,10 +162,7 @@ class RLTrainer(ForgeActor):
         self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
-        env = {
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         logger.info("Compiling loss")
         self.loss = torch.compile(self.loss)
 

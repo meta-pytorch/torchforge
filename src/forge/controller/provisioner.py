@@ -284,12 +284,13 @@ class Provisioner:
                 bootstrap=functools.partial(bootstrap, env=env_vars),
             )
 
-            # Set up environment variables for PyTorch distributed...
-            await setup_env_for_distributed(
-                procs,
-                master_addr=addr,
-                master_port=port,
-            )
+            if with_gpus:
+                # Set up environment variables for PyTorch distributed...
+                await setup_env_for_distributed(
+                    procs,
+                    master_addr=addr,
+                    master_port=port,
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)

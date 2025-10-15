@@ -149,17 +149,22 @@ class Generator(ForgeActor):
             mesh_name=cls.mesh_name,
         )
 
-        # Grab a single host from the workers...
+        # First, spawn the worker processes which may or may not be
+        # on remote hosts.
+        worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # Then, grab a single host from the workers...
         host_mesh = await host_mesh_from_proc(worker_procs)
         singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
         host_mesh = host_mesh.slice(**singleton_slice)
+
+        # We ask the provisioner for a single process on a single host
         generator_proc_config = copy(process_config)
         generator_proc_config.procs = 1
         generator_proc_config.with_gpus = False
         generator_proc = await get_proc_mesh(
             process_config=generator_proc_config, host_mesh=host_mesh
         )
-
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         generator = generator_proc.spawn(
@@ -169,7 +174,6 @@ class Generator(ForgeActor):
             **kwargs,
         )
 
-        worker_procs = await get_proc_mesh(process_config=process_config)
         vllm_config = (
             await generator.get_vllm_config.call_one()
         )  # Config should be the same across all actors
