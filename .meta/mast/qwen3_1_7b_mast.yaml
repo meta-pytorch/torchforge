@@ -26,8 +26,8 @@ metric_logging:
 
 # Dataset configuration
 dataset:
-  # path: "openai/gsm8k"
-  path:  "openai/gsm8k"
+  # path:  "openai/gsm8k"
+  path: /mnt/wsfuse/teamforge/hf/gsm8k_ready
   revision: "main"
   data_split: "train"
   streaming: true
