@@ -111,7 +111,6 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    folder: ""
     initial_load_path: hf://${model}
     initial_load_in_hf: true
 

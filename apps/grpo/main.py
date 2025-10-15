@@ -353,7 +353,7 @@ async def main(cfg: DictConfig):
     )
     print("Torchstore successfully initialized with local rank strategy")
 
-    start_version = int(cfg.trainer.checkpoint.load_step or 0)
+    start_version = max(cfg.trainer.checkpoint.load_step or 0)
     if start_version > 0:
         # Ensure the trainer’s loaded checkpoint is pushed to torchstore at `start_version`
         await trainer.push_weights.call(start_version)
@@ -434,7 +434,6 @@ async def main(cfg: DictConfig):
         while max_steps == -1 or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
-            print(f"[DEBUG], training_step: {training_step}")
             if restart_tracer:
                 t = Tracer("main_perf/continuous_training")
                 t.start()
