@@ -76,6 +76,7 @@ Here's the key insight: **Each RL component becomes a Forge service**. The toy e
 ```mermaid
 graph LR
     subgraph Concepts["RL Concepts"]
+        direction TB
         C1["Dataset"]
         C2["Policy"]
         C3["Reward Model"]
@@ -85,6 +86,7 @@ graph LR
     end
 
     subgraph Services["Forge Services (Real Classes)"]
+        direction TB
         S1["DatasetActor"]
         S2["Policy"]
         S3["RewardActor"]
