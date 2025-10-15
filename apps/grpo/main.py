@@ -353,6 +353,14 @@ async def main(cfg: DictConfig):
     )
     print("Torchstore successfully initialized with local rank strategy")
 
+    start_version = int(cfg.trainer.checkpoint.load_step or 0)
+    if start_version > 0:
+        # Ensure the trainer’s loaded checkpoint is materialized in torchstore at `start_version`
+        await trainer.push_weights.call(start_version)
+
+        # Warm the policy to that exact version so new rollouts carry generator_version == start_version
+        await policy.update_weights.fanout(start_version)
+
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
         rollout_count = 0
@@ -420,12 +428,13 @@ async def main(cfg: DictConfig):
             t.stop()
 
     async def continuous_training():
-        training_step = 0
+        training_step = max(cfg.trainer.checkpoint.load_step, 0)
         restart_tracer = True  # Flag to control when to restart tracer
 
         while max_steps == -1 or training_step < max_steps:
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
+            print(f"[DEBUG], training_step: {training_step}")
             if restart_tracer:
                 t = Tracer("main_perf/continuous_training")
                 t.start()
