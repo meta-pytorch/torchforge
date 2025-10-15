@@ -188,7 +188,6 @@ class Generator(GeneratorInterface):
             sampling_params=sampling_params,
             available_devices=available_devices,
             generator_worker=workers,
-            weight_fetchers=weight_fetchers,
             **kwargs,
         )
         generator._generator_proc = generator_proc
