@@ -65,6 +65,8 @@ extensions = [
     "sphinx_gallery.gen_gallery",
 ]
 
+html_favicon = "_static/logo-icon.svg" 
+
 html_baseurl = (
     f"https://meta-pytorch.org/forge/{version_path}"  # needed for sphinx-sitemap
 )
