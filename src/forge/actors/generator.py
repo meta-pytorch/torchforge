@@ -552,7 +552,6 @@ class Generator(ForgeActor):
         # TODO - may want to expand stop to gracefully respond to
         # ongoing requests.
         await actor.stop.call()
-        await actor._cleanup_shared_memory.call()
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._generator_proc)
         await stop_proc_mesh(actor._fetcher_procs)
