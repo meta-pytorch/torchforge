@@ -264,9 +264,8 @@ Now that you have TorchForge installed and verified:
 
 If you encounter issues:
 
-1. **Check the FAQ**: {doc}`faq` covers common questions and solutions
-2. **Search Issues**: Look through [GitHub Issues](https://github.com/meta-pytorch/forge/issues)
-3. **File a Bug Report**: Create a new issue with:
+1. **Search Issues**: Look through [GitHub Issues](https://github.com/meta-pytorch/forge/issues)
+2. **File a Bug Report**: Create a new issue with:
    - Your system configuration (output of diagnostic command below)
    - Full error message
    - Steps to reproduce
