@@ -254,10 +254,10 @@ class TestWeightSync:
         # Setting everything to zero
         await rl_trainer.zero_out_model_states.call()
         await rl_trainer.push_weights.call(policy_version=v1)
-        await policy._test_save_model_params.fanout()
+        await policy.save_model_params.fanout()
 
         # Sanity check that before update all the tests pass
-        all_errs = await policy._test_validate_model_params.fanout(
+        all_errs = await policy.validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
@@ -265,7 +265,7 @@ class TestWeightSync:
                 assert not e, f"Validation failed with exception: {e}"
 
         await policy.update_weights.fanout(version=v1)
-        all_errs = await policy._test_validate_model_params.fanout(
+        all_errs = await policy.validate_model_params.fanout(
             _test_validate_params_all_zeros
         )
         for errs in all_errs:
@@ -274,7 +274,7 @@ class TestWeightSync:
 
         # Reloading v0, getting back original weights
         await policy.update_weights.fanout(version=v0)
-        all_errs = await policy._test_validate_model_params.fanout(
+        all_errs = await policy.validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
