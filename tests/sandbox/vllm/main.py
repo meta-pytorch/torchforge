@@ -13,7 +13,7 @@ import asyncio
 
 import os
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.cli.config import parse
 
 from forge.controller.provisioner import init_provisioner, shutdown
@@ -33,14 +33,14 @@ async def run(cfg: DictConfig):
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:
         prompt = "Tell me a joke"
 
     print("Spawning service...")
-    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+    policy = await Generator.options(**cfg.services.policy).as_service(**cfg.policy)
 
     import time
 
@@ -66,7 +66,6 @@ async def run(cfg: DictConfig):
         print("-" * 80)
 
     print("\nShutting down...")
-    await policy.shutdown()
     await shutdown()
 
 

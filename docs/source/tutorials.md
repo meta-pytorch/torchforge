@@ -6,4 +6,5 @@
 ```{toctree}
 :maxdepth: 1
 
+zero-to-forge-intro
 ```

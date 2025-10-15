@@ -20,7 +20,7 @@ from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
     get_param_prefix,
 )
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
@@ -78,6 +78,9 @@ class Episode:
 
 # Represents the group (G) of episodes in GRPO
 Group = list[Episode]
+
+# Represents the Policy Model to collect data from
+Policy = Generator
 
 
 def collate(
@@ -302,7 +305,7 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
@@ -493,22 +496,6 @@ async def main(cfg: DictConfig):
 
         training_task.cancel()
 
-        # give mlogger time to shutdown backends, otherwise they can stay running.
-        # TODO (felipemello) find more elegant solution
-        await mlogger.shutdown.call_one()
-        await asyncio.sleep(2)
-
-        await asyncio.gather(
-            DatasetActor.shutdown(dataloader),
-            policy.shutdown(),
-            RLTrainer.shutdown(trainer),
-            ReplayBuffer.shutdown(replay_buffer),
-            ComputeAdvantages.shutdown(compute_advantages),
-            ref_model.shutdown(),
-            reward_actor.shutdown(),
-        )
-        # TODO - add a global shutdown that implicitly shuts down all services
-        # and remote allocations
         await shutdown()
 
 

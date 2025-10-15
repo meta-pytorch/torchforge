@@ -1,4 +1,4 @@
-name: GPU tests
+name: GPU Tests
 
 on:
   schedule:
