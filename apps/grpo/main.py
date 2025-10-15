@@ -302,7 +302,7 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger(process_name="Controller")
+    mlogger = await get_or_create_metric_logger()
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
