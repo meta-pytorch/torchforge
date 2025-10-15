@@ -406,8 +406,12 @@ class Generator(GeneratorInterface):
         # potentially we need to change torchstore
         # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
         if not self.use_dcp:
+            # We have to do this because Monarch future is not directly compatible with asyncio
+            async def fetch_coro():
+                return await self.generator_worker._fetch_weights.choose(version)
+
             fetch_task = asyncio.create_task(
-                self.generator_worker._fetch_weights.choose(version)
+                fetch_coro(),
             )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
