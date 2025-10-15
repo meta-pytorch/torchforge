@@ -755,6 +755,7 @@ class _WeightFetcher(ForgeActor):
     """Fetches weights from torchstore and loads them into shared memory.
     This has to be colocated with the GeneratorWorker."""
 
+    @endpoint
     async def fetch(
         self,
         *,
