@@ -27,7 +27,7 @@ class BufferEntry:
     sample_count: int = 0
 
 
-def default_evict(
+def age_evict(
     buffer: deque, policy_version: int, max_samples: int = None, max_age: int = None
 ):
     """Default buffer eviction policy"""
@@ -41,13 +41,11 @@ def default_evict(
     return indices
 
 
-def default_sample(
-    buffer: deque, sample_size: int, sampler: Callable, policy_version: int
-):
+def random_sample(buffer: deque, sample_size: int, policy_version: int):
     """Default buffer sampling policy"""
     if sample_size > len(buffer):
         return None
-    return sampler(range(len(buffer)), k=sample_size)
+    return random.sample(range(len(buffer)), k=sample_size)
 
 
 @dataclass
@@ -61,8 +59,8 @@ class ReplayBuffer(ForgeActor):
     max_resample_count: int | None = 0
     seed: int | None = None
     collate: Callable = lambda batch: batch
-    eviction_policy: Callable = default_evict
-    sample_policy: Callable = default_sample
+    eviction_policy: Callable = age_evict
+    sample_policy: Callable = random_sample
 
     @endpoint
     async def setup(self) -> None:
@@ -70,7 +68,6 @@ class ReplayBuffer(ForgeActor):
         if self.seed is None:
             self.seed = random.randint(0, 2**32)
         random.seed(self.seed)
-        self.sampler = random.sample
 
     @endpoint
     async def add(self, episode: "Episode") -> None:
@@ -114,7 +111,7 @@ class ReplayBuffer(ForgeActor):
 
         # TODO: prefetch samples in advance
         sampled_indices = self.sample_policy(
-            self.buffer, total_samples, self.sampler, curr_policy_version
+            self.buffer, total_samples, curr_policy_version
         )
         if sampled_indices is None:
             return None
