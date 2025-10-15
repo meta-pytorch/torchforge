@@ -13,7 +13,7 @@ import asyncio
 
 import os
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.cli.config import parse
 
 from forge.controller.provisioner import init_provisioner, shutdown
@@ -40,7 +40,7 @@ async def run(cfg: DictConfig):
         prompt = "Tell me a joke"
 
     print("Spawning service...")
-    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+    policy = await Generator.options(**cfg.services.policy).as_service(**cfg.policy)
 
     import time
 
@@ -66,7 +66,6 @@ async def run(cfg: DictConfig):
         print("-" * 80)
 
     print("\nShutting down...")
-    await policy.shutdown()
     await shutdown()
 
 

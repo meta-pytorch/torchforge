@@ -12,7 +12,7 @@ import pytest
 
 import torch
 import torchstore as ts
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import resolve_hf_hub_paths
@@ -203,7 +203,7 @@ class TestWeightSync:
             trainer_cfg["dcp_path"] = tmpdir
             policy, rl_trainer = await asyncio.gather(
                 *[
-                    Policy.options(**services_policy_cfg).as_service(**cfg.policy),
+                    Generator.options(**services_policy_cfg).as_service(**cfg.policy),
                     MockRLTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
                 ]
             )
@@ -224,7 +224,7 @@ class TestWeightSync:
                 for _, e in errs.items():
                     assert not e, f"Validation failed with exception: {e}"
 
-            await policy.update_weights.fanout(policy_version=v1)
+            await policy.update_weights.fanout(version=v1)
             all_errs = await policy._test_validate_model_params.fanout(
                 validate_fn_all_zeros
             )
@@ -233,7 +233,7 @@ class TestWeightSync:
                     assert not e, f"Validation failed with exception: {e}"
 
             # Reloading v0, getting back original weights
-            await policy.update_weights.fanout(policy_version=v0)
+            await policy.update_weights.fanout(version=v0)
             all_errs = await policy._test_validate_model_params.fanout(validate_fn)
             for errs in all_errs:
                 for _, e in errs.items():

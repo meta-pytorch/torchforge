@@ -1,35 +1,35 @@
 # API Reference
 
-This section provides comprehensive API documentation for TorchForge modules and classes.
+This section provides comprehensive API documentation for TorchForge.
 
-TorchForge is organized into several key modules, each providing specialized functionality for post-training generative AI models:
+## Overview
 
-## Module Overview
+TorchForge is a PyTorch native platform for post-training generative AI models,
+designed to streamline reinforcement learning workflows for large language
+models. The platform leverages PyTorch's distributed computing capabilities
+and is built on top of [Monarch](https://meta-pytorch.org/monarch/),
+making extensive use of actors for distributed computation and fault tolerance.
 
-**Core Components**
-- [Interfaces & Types](api_core.md) - Core interfaces and type definitions
-- [Actors](api_actors.md) - Model training and inference components
-- [Controller](api_controller.md) - Distributed training orchestration and resource management
+Key Features of TorchForge include:
 
-**Data Management**
-- [Data](api_data.md) - Data handling utilities, datasets, and data models
+- **Actor-Based Architecture**: TorchForge uses an actor-based system for distributed training, providing excellent scalability and fault tolerance.
+- **PyTorch Native**: Built natively on PyTorch, ensuring seamless integration with existing PyTorch workflows.
+- **Post-Training Focus**: Specifically designed for post-training techniques like RLVR, SFT, and other alignment methods.
+- **Distributed by Design**: Supports multi-GPU and multi-node training out of the box.
 
-**Training Components**
-- [Losses](api_losses.md) - Loss functions for reinforcement learning and supervised fine-tuning
-- [Environments](api_envs.md) - Training and inference environments
 
-**Tools & Utilities**
-- [Utilities](api_util.md) - General utility functions and helpers
+For most use cases, you'll interact with the high-level service
+interfaces, which handle the complexity of actor coordination and
+distributed training automatically.
+
+For advanced users who need fine-grained control, the individual actor
+APIs provide direct access to the underlying distributed components.
 
 ```{toctree}
-:maxdepth: 2
-:hidden:
-
-api_core
+:maxdepth: 1
 api_actors
-api_data
-api_losses
-api_envs
-api_controller
-api_util
+api_service
+api_generator
+api_model
+api_trainer
 ```
