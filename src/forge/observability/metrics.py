@@ -456,19 +456,18 @@ class MetricCollector:
         self.per_rank_no_reduce_backends: list[LoggerBackend] = []
 
         # Initialize backends based on logging mode
-        # logging_mode is expected to be a LoggingMode enum from GlobalLoggingActor validation
         for backend_name, backend_config in config.items():
             mode = backend_config["logging_mode"]
 
-            # Defensive check - logging_mode should already be a LoggingMode enum
+            # sanity check
             if not isinstance(mode, LoggingMode):
                 raise TypeError(
-                    f"Expected LoggingMode enum for {backend_name}.logging_mode, got {type(mode).__name__}: {mode}."
+                    f"Expected LoggingMode enum for {backend_name}.logging_mode, got {type(mode)}: {mode}."
                 )
 
-            # Skip local instantiation for GLOBAL_REDUCE
-            # Backend will be instantiated in GlobalLoggingActor
+            # Skip local instantiation. Backend will be instantiated in GlobalLoggingActor.
             if mode == LoggingMode.GLOBAL_REDUCE:
+                logger.debug("Skipping local instantiation for GLOBAL_REDUCE")
                 continue
 
             # get metadata from primary backend if any
