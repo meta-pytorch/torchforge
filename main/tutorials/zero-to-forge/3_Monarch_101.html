@@ -1,0 +1,1366 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Part 3: The Forge-Monarch Connection &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=a8c4d769" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+    <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/zero-to-forge/3_Monarch_101';</script>
+    <script src="../../_static/custom.js?v=b1073d4a"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/tutorials/zero-to-forge/3_Monarch_101.html" />
+    <link rel="icon" href="../../_static/logo-icon.svg"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="API Reference" href="../../api.html" />
+    <link rel="prev" title="Part 2: Peeling Back the Abstraction - What Are Services?" href="2_Forge_Internals.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="../../_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/forge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/forge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../zero-to-forge-intro.html">Zero to Forge: From RL Theory to Production-Scale Implementation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="1_RL_and_Forge_Fundamentals.html">Part 1: RL Fundamentals - Using Forge Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="2_Forge_Internals.html">Part 2: Peeling Back the Abstraction - What Are Services?</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Part 3: The Forge-Monarch Connection</a></li>
+
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../zero-to-forge-intro.html" class="nav-link">Zero to Forge: From RL Theory to Production-Scale Implementation</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Part 3: The...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../tutorials.html">
+        <meta itemprop="name" content="Tutorials">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../zero-to-forge-intro.html">
+        <meta itemprop="name" content="Zero to Forge: From RL Theory to Production-Scale Implementation">
+        <meta itemprop="position" content="2">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="Part 3: The Forge-Monarch Connection">
+        <meta itemprop="position" content="3">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">tutorials/zero-to-forge/3_Monarch_101</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="../../_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="../../_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="../../_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="part-3-the-forge-monarch-connection">
+<h1>Part 3: The Forge-Monarch Connection<a class="headerlink" href="#part-3-the-forge-monarch-connection" title="Link to this heading">#</a></h1>
+<p>This is part 3 of our series, in the previous sections: we learned Part 1: <a class="reference internal" href="1_RL_and_Forge_Fundamentals.html"><span class="doc std std-doc">RL Concepts and how they map to Forge</span></a>, Part 2: <a class="reference internal" href="2_Forge_Internals.html"><span class="doc std std-doc">Forge Internals</span></a>.</p>
+<p>Now let’s peel back the layers. Forge services are built on top of <strong>Monarch</strong>, PyTorch’s distributed actor framework. Understanding this connection is crucial for optimization and debugging.</p>
+<section id="the-complete-hierarchy-service-to-silicon">
+<h2>The Complete Hierarchy: Service to Silicon<a class="headerlink" href="#the-complete-hierarchy-service-to-silicon" title="Link to this heading">#</a></h2>
+<pre  class="mermaid">
+        graph TD
+    subgraph YourCode[&quot;1. Your RL Code&quot;]
+        Call[&quot;await policy_service.generate.route('What is 2+2?')&quot;]
+    end
+
+    subgraph ForgeServices[&quot;2. Forge Service Layer&quot;]
+        ServiceInterface[&quot;ServiceInterface: Routes requests, Load balancing, Health checks&quot;]
+        ServiceActor[&quot;ServiceActor: Manages replicas, Monitors health, Coordinates failures&quot;]
+    end
+
+    subgraph MonarchLayer[&quot;3. Monarch Actor Layer&quot;]
+        ActorMesh[&quot;ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing&quot;]
+        ProcMesh[&quot;ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect&quot;]
+    end
+
+    subgraph Hardware[&quot;4. Physical Hardware&quot;]
+        GPU0[&quot;GPU 0: PolicyActor #1, vLLM Engine, Model Weights&quot;]
+        GPU1[&quot;GPU 1: PolicyActor #2, vLLM Engine, Model Weights&quot;]
+        GPU2[&quot;GPU 2: PolicyActor #3, vLLM Engine, Model Weights&quot;]
+        GPU3[&quot;GPU 3: PolicyActor #4, vLLM Engine, Model Weights&quot;]
+    end
+
+    Call --&gt; ServiceInterface
+    ServiceInterface --&gt; ServiceActor
+    ServiceActor --&gt; ActorMesh
+    ActorMesh --&gt; ProcMesh
+    ProcMesh --&gt; GPU0
+    ProcMesh --&gt; GPU1
+    ProcMesh --&gt; GPU2
+    ProcMesh --&gt; GPU3
+
+    style Call fill:#4CAF50
+    style ServiceActor fill:#FF9800
+    style ActorMesh fill:#9C27B0
+    style ProcMesh fill:#2196F3
+    </pre></section>
+<section id="deep-dive-procmesh-the-foundation">
+<h2>Deep Dive: ProcMesh - The Foundation<a class="headerlink" href="#deep-dive-procmesh-the-foundation" title="Link to this heading">#</a></h2>
+<p><strong>ProcMesh</strong> is Monarch’s core abstraction for organizing processes across hardware. Think of it as a multi-dimensional grid that maps directly to your cluster topology.</p>
+<section id="single-host-procmesh">
+<h3>Single Host ProcMesh<a class="headerlink" href="#single-host-procmesh" title="Link to this heading">#</a></h3>
+<p><strong>Key insight</strong>: ProcMesh creates one process per GPU, automatically handling the process-to-hardware mapping.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># This simple call:</span>
+<span class="n">procs</span> <span class="o">=</span> <span class="n">this_host</span><span class="p">()</span><span class="o">.</span><span class="n">spawn_procs</span><span class="p">(</span><span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gpus&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">})</span>
+
+<span class="c1"># Creates:</span>
+<span class="c1"># Process 0 → GPU 0</span>
+<span class="c1"># Process 1 → GPU 1</span>
+<span class="c1"># Process 2 → GPU 2</span>
+<span class="c1"># Process 3 → GPU 3</span>
+<span class="c1"># Process 4 → GPU 4</span>
+<span class="c1"># Process 5 → GPU 5</span>
+<span class="c1"># Process 6 → GPU 6</span>
+<span class="c1"># Process 7 → GPU 7</span>
+</pre></div>
+</div>
+<p>The beauty: you don’t manage individual processes or GPU assignments - ProcMesh handles the topology for you.</p>
+</section>
+<section id="multi-host-procmesh">
+<h3>Multi-Host ProcMesh<a class="headerlink" href="#multi-host-procmesh" title="Link to this heading">#</a></h3>
+<p><strong>Key insight</strong>: ProcMesh seamlessly scales across multiple hosts with continuous process numbering.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Same simple API works across hosts:</span>
+<span class="n">cluster_procs</span> <span class="o">=</span> <span class="n">spawn_cluster_procs</span><span class="p">(</span>
+    <span class="n">hosts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;host1&quot;</span><span class="p">,</span> <span class="s2">&quot;host2&quot;</span><span class="p">,</span> <span class="s2">&quot;host3&quot;</span><span class="p">],</span>
+    <span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gpus&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">}</span>
+<span class="p">)</span>
+
+<span class="c1"># Automatically creates:</span>
+<span class="c1"># Host 1: Processes 0-3  → GPUs 0-3</span>
+<span class="c1"># Host 2: Processes 4-7  → GPUs 0-3</span>
+<span class="c1"># Host 3: Processes 8-11 → GPUs 0-3</span>
+
+<span class="c1"># Your code stays the same whether it&#39;s 1 host or 100 hosts</span>
+<span class="n">actors</span> <span class="o">=</span> <span class="n">cluster_procs</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;my_actor&quot;</span><span class="p">,</span> <span class="n">MyActor</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>The power</strong>: Scale from single host to cluster without changing your actor code - ProcMesh handles all the complexity.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># This shows the underlying actor system that powers Forge services</span>
+<span class="c1"># NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps!</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">Actor</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">,</span> <span class="n">this_proc</span><span class="p">,</span> <span class="n">Future</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProcMesh</span><span class="p">,</span> <span class="n">this_host</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+
+<span class="c1"># STEP 1: Define a basic actor</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">(</span><span class="n">Actor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">initial_value</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">increment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_value</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+
+<span class="c1"># STEP 2: Single actor in local process</span>
+<span class="n">counter</span><span class="p">:</span> <span class="n">Counter</span> <span class="o">=</span> <span class="n">this_proc</span><span class="p">()</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;counter&quot;</span><span class="p">,</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">initial_value</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># STEP 3: Send messages</span>
+<span class="n">fut</span><span class="p">:</span> <span class="n">Future</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter</span><span class="o">.</span><span class="n">get_value</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>
+<span class="n">value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fut</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Counter value: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># 0</span>
+
+<span class="c1"># STEP 4: Multiple actors across processes</span>
+<span class="n">procs</span><span class="p">:</span> <span class="n">ProcMesh</span> <span class="o">=</span> <span class="n">this_host</span><span class="p">()</span><span class="o">.</span><span class="n">spawn_procs</span><span class="p">(</span><span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gpus&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">})</span>
+<span class="n">counters</span><span class="p">:</span> <span class="n">Counter</span> <span class="o">=</span> <span class="n">procs</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;counters&quot;</span><span class="p">,</span> <span class="n">Counter</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># STEP 5: Broadcast to all actors</span>
+<span class="k">await</span> <span class="n">counters</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">call</span><span class="p">()</span>
+
+<span class="c1"># STEP 6: Different message patterns</span>
+<span class="c1"># call_one() - single actor</span>
+<span class="n">value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">counters</span><span class="o">.</span><span class="n">get_value</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;One counter: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Output: One counter: 1</span>
+
+<span class="c1"># choose() - random single actor (actors only, not services)</span>
+<span class="n">value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">counters</span><span class="o">.</span><span class="n">get_value</span><span class="o">.</span><span class="n">choose</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Random counter: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Output: Random counter: 1</span>
+
+<span class="c1"># call() - all actors, collect results</span>
+<span class="n">values</span> <span class="o">=</span> <span class="k">await</span> <span class="n">counters</span><span class="o">.</span><span class="n">get_value</span><span class="o">.</span><span class="n">call</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;All counters: </span><span class="si">{</span><span class="n">values</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Output: All counters: [1, 1, 1, 1, 1, 1, 1, 1]</span>
+
+<span class="c1"># broadcast() - fire and forget</span>
+<span class="k">await</span> <span class="n">counters</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">broadcast</span><span class="p">()</span>  <span class="c1"># No return value - just sends to all actors</span>
+
+<span class="c1"># Cleanup</span>
+<span class="k">await</span> <span class="n">procs</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+
+<span class="c1"># Remember: This raw Monarch code is for understanding how Forge works internally.</span>
+<span class="c1"># In your Forge applications, use ForgeActor, .as_service(), .as_actor() instead!</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="actor-meshes-your-code-running-distributed">
+<h2>Actor Meshes: Your Code Running Distributed<a class="headerlink" href="#actor-meshes-your-code-running-distributed" title="Link to this heading">#</a></h2>
+<p><strong>ActorMesh</strong> is created when you spawn actors across a ProcMesh. Key points:</p>
+<ul class="simple">
+<li><p><strong>One actor instance per process</strong>: <code class="docutils literal notranslate"><span class="pre">mesh.spawn(&quot;policy&quot;,</span> <span class="pre">PolicyActor)</span></code> creates one PolicyActor in each process</p></li>
+<li><p><strong>Same constructor arguments</strong>: All instances get the same initialization parameters</p></li>
+<li><p><strong>Independent state</strong>: Each actor instance maintains its own state and memory</p></li>
+<li><p><strong>Message routing</strong>: You can send messages to one actor or all actors using different methods</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Simple example:</span>
+<span class="n">procs</span> <span class="o">=</span> <span class="n">spawn_procs</span><span class="p">(</span><span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gpus&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">})</span>  <span class="c1"># 4 processes</span>
+<span class="n">policy_actors</span> <span class="o">=</span> <span class="n">procs</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="n">PolicyActor</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;Qwen/Qwen3-7B&quot;</span><span class="p">)</span>
+
+<span class="c1"># Now you have 4 PolicyActor instances, one per GPU</span>
+<span class="c1"># All initialized with the same model parameter</span>
+</pre></div>
+</div>
+</section>
+<section id="how-forge-services-use-monarch">
+<h2>How Forge Services Use Monarch<a class="headerlink" href="#how-forge-services-use-monarch" title="Link to this heading">#</a></h2>
+<p>Now the key insight: <strong>Forge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas</strong>.</p>
+<section id="the-service-creation-process">
+<h3>The Service Creation Process<a class="headerlink" href="#the-service-creation-process" title="Link to this heading">#</a></h3>
+<pre  class="mermaid">
+        graph TD
+    subgraph ServiceCreation[&quot;Service Creation Process&quot;]
+        Call[&quot;await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')&quot;]
+
+        ServiceActor[&quot;ServiceActor: Manages 4 replicas, Health checks, Routes calls&quot;]
+
+        subgraph Replicas[&quot;4 Independent Replicas&quot;]
+            subgraph R0[&quot;Replica 0&quot;]
+                PM0[&quot;ProcMesh: 1 process, GPU 0&quot;]
+                AM0[&quot;ActorMesh&lt;br/&gt;1 PolicyActor&quot;]
+            end
+
+            subgraph R1[&quot;Replica 1&quot;]
+                PM1[&quot;ProcMesh: 1 process, GPU 1&quot;]
+                AM1[&quot;ActorMesh&lt;br/&gt;1 PolicyActor&quot;]
+            end
+
+            subgraph R2[&quot;Replica 2&quot;]
+                PM2[&quot;ProcMesh: 1 process, GPU 2&quot;]
+                AM2[&quot;ActorMesh&lt;br/&gt;1 PolicyActor&quot;]
+            end
+
+            subgraph R3[&quot;Replica 3&quot;]
+                PM3[&quot;ProcMesh: 1 process, GPU 3&quot;]
+                AM3[&quot;ActorMesh&lt;br/&gt;1 PolicyActor&quot;]
+            end
+        end
+
+        Call --&gt; ServiceActor
+        ServiceActor --&gt; R0
+        ServiceActor --&gt; R1
+        ServiceActor --&gt; R2
+        ServiceActor --&gt; R3
+        PM0 --&gt; AM0
+        PM1 --&gt; AM1
+        PM2 --&gt; AM2
+        PM3 --&gt; AM3
+    end
+
+    style ServiceActor fill:#FF9800
+    style AM0 fill:#4CAF50
+    style AM1 fill:#4CAF50
+    style AM2 fill:#4CAF50
+    style AM3 fill:#4CAF50
+    </pre></section>
+<section id="service-call-to-actor-execution">
+<h3>Service Call to Actor Execution<a class="headerlink" href="#service-call-to-actor-execution" title="Link to this heading">#</a></h3>
+<pre  class="mermaid">
+        graph TD
+    subgraph CallFlow[&quot;Complete Call Flow&quot;]
+        UserCall[&quot;await policy_service.generate.route('What is 2+2?')&quot;]
+
+        ServiceInterface[&quot;ServiceInterface: Receives .route() call, Routes to ServiceActor&quot;]
+
+        ServiceActor[&quot;ServiceActor: Selects healthy replica, Load balancing, Failure handling&quot;]
+
+        SelectedReplica[&quot;Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor&quot;]
+
+        PolicyActor[&quot;PolicyActor Instance: Loads model, Runs vLLM inference&quot;]
+
+        GPU[&quot;GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels&quot;]
+
+        UserCall --&gt; ServiceInterface
+        ServiceInterface --&gt; ServiceActor
+        ServiceActor --&gt; SelectedReplica
+        SelectedReplica --&gt; PolicyActor
+        PolicyActor --&gt; GPU
+
+        GPU -.-&gt;|&quot;Response&quot;| PolicyActor
+        PolicyActor -.-&gt;|&quot;Response&quot;| SelectedReplica
+        SelectedReplica -.-&gt;|&quot;Response&quot;| ServiceActor
+        ServiceActor -.-&gt;|&quot;Response&quot;| ServiceInterface
+        ServiceInterface -.-&gt;|&quot;'The answer is 4'&quot;| UserCall
+    end
+
+    style UserCall fill:#4CAF50
+    style ServiceActor fill:#FF9800
+    style PolicyActor fill:#9C27B0
+    style GPU fill:#FF5722
+    </pre></section>
+</section>
+<section id="multiple-services-sharing-infrastructure">
+<h2>Multiple Services Sharing Infrastructure<a class="headerlink" href="#multiple-services-sharing-infrastructure" title="Link to this heading">#</a></h2>
+<p>In real RL systems, you have multiple services that can share or use separate ProcMeshes:</p>
+<pre  class="mermaid">
+        graph TD
+    subgraph Cluster[&quot;RL Training Cluster&quot;]
+        subgraph Services[&quot;Forge Services&quot;]
+            PS[&quot;Policy Service&lt;br/&gt;4 GPU replicas&quot;]
+            TS[&quot;Trainer Service&lt;br/&gt;2 GPU replicas&quot;]
+            RS[&quot;Reward Service&lt;br/&gt;4 CPU replicas&quot;]
+            BS[&quot;Buffer Service&lt;br/&gt;1 CPU replica&quot;]
+        end
+
+        subgraph MonarchInfra[&quot;Monarch Infrastructure&quot;]
+            subgraph GPUMesh[&quot;GPU ProcMesh (6 processes)&quot;]
+                G0[&quot;Process 0&lt;br/&gt;GPU 0&quot;]
+                G1[&quot;Process 1&lt;br/&gt;GPU 1&quot;]
+                G2[&quot;Process 2&lt;br/&gt;GPU 2&quot;]
+                G3[&quot;Process 3&lt;br/&gt;GPU 3&quot;]
+                G4[&quot;Process 4&lt;br/&gt;GPU 4&quot;]
+                G5[&quot;Process 5&lt;br/&gt;GPU 5&quot;]
+            end
+
+            subgraph CPUMesh[&quot;CPU ProcMesh (5 processes)&quot;]
+                C0[&quot;Process 0&lt;br/&gt;CPU&quot;]
+                C1[&quot;Process 1&lt;br/&gt;CPU&quot;]
+                C2[&quot;Process 2&lt;br/&gt;CPU&quot;]
+                C3[&quot;Process 3&lt;br/&gt;CPU&quot;]
+                C4[&quot;Process 4&lt;br/&gt;CPU&quot;]
+            end
+        end
+
+        PS --&gt; G0
+        PS --&gt; G1
+        PS --&gt; G2
+        PS --&gt; G3
+        TS --&gt; G4
+        TS --&gt; G5
+        RS --&gt; C0
+        RS --&gt; C1
+        RS --&gt; C2
+        RS --&gt; C3
+        BS --&gt; C4
+    end
+
+    style PS fill:#4CAF50
+    style TS fill:#E91E63
+    style RS fill:#FF9800
+    style BS fill:#9C27B0
+    style GPUMesh fill:#FFEBEE
+    style CPUMesh fill:#E3F2FD
+    </pre></section>
+<section id="key-insights-why-this-architecture-matters">
+<h2>Key Insights: Why This Architecture Matters<a class="headerlink" href="#key-insights-why-this-architecture-matters" title="Link to this heading">#</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Process Isolation</strong>: Each actor runs in its own process - failures don’t cascade</p></li>
+<li><p><strong>Location Transparency</strong>: Actors can be local or remote with identical APIs</p></li>
+<li><p><strong>Structured Distribution</strong>: ProcMesh maps directly to hardware topology</p></li>
+<li><p><strong>Message Passing</strong>: No shared memory means no race conditions or locks</p></li>
+<li><p><strong>Service Abstraction</strong>: Forge hides Monarch complexity while preserving power</p></li>
+</ol>
+<p>Understanding this hierarchy helps you:</p>
+<ul class="simple">
+<li><p><strong>Debug performance issues</strong>: Is the bottleneck at service, actor, or hardware level?</p></li>
+<li><p><strong>Optimize resource usage</strong>: How many replicas per service? GPU vs CPU processes?</p></li>
+<li><p><strong>Handle failures gracefully</strong>: Which layer failed and how to recover?</p></li>
+<li><p><strong>Scale effectively</strong>: Where to add resources for maximum impact?</p></li>
+</ul>
+</section>
+</section>
+<section id="conclusion">
+<h1>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">#</a></h1>
+<section id="what-you-ve-learned">
+<h2>What You’ve Learned<a class="headerlink" href="#what-you-ve-learned" title="Link to this heading">#</a></h2>
+<ol class="arabic simple">
+<li><p><strong>RL Fundamentals</strong>: How RL concepts map to Forge services with REAL, working examples</p></li>
+<li><p><strong>Service Abstraction</strong>: How to use Forge services effectively with verified communication patterns</p></li>
+<li><p><strong>Monarch Foundation</strong>: How Forge services connect to distributed actors and hardware</p></li>
+</ol>
+</section>
+<section id="key-takeaways">
+<h2>Key Takeaways<a class="headerlink" href="#key-takeaways" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Services hide complexity</strong>: Your RL code looks like simple async functions, but runs on distributed clusters</p></li>
+<li><p><strong>Communication patterns matter</strong>: <code class="docutils literal notranslate"><span class="pre">.route()</span></code>, <code class="docutils literal notranslate"><span class="pre">.fanout()</span></code>, sessions, and <code class="docutils literal notranslate"><span class="pre">.call_one()</span></code> each serve specific purposes</p></li>
+<li><p><strong>Architecture understanding helps</strong>: Knowing the Service → Actor → Process → Hardware hierarchy helps you debug, optimize, and scale</p></li>
+<li><p><strong>Always verify APIs</strong>: This guide is verified, but cross-check with source code for latest changes</p></li>
+<li><p><strong>Real API patterns</strong>: Use <code class="docutils literal notranslate"><span class="pre">.options().as_service()</span></code> not <code class="docutils literal notranslate"><span class="pre">spawn_service()</span></code>, use <code class="docutils literal notranslate"><span class="pre">.route()</span></code> not <code class="docutils literal notranslate"><span class="pre">.choose()</span></code>, etc.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="2_Forge_Internals.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 2: Peeling Back the Abstraction - What Are Services?</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="2_Forge_Internals.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 2: Peeling Back the Abstraction - What Are Services?</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Part 3: The Forge-Monarch Connection</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-complete-hierarchy-service-to-silicon">The Complete Hierarchy: Service to Silicon</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deep-dive-procmesh-the-foundation">Deep Dive: ProcMesh - The Foundation</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#single-host-procmesh">Single Host ProcMesh</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#multi-host-procmesh">Multi-Host ProcMesh</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#actor-meshes-your-code-running-distributed">Actor Meshes: Your Code Running Distributed</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-forge-services-use-monarch">How Forge Services Use Monarch</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-service-creation-process">The Service Creation Process</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#service-call-to-actor-execution">Service Call to Actor Execution</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#multiple-services-sharing-infrastructure">Multiple Services Sharing Infrastructure</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-insights-why-this-architecture-matters">Key Insights: Why This Architecture Matters</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#conclusion">Conclusion</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-you-ve-learned">What You’ve Learned</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-takeaways">Key Takeaways</a></li>
+</ul>
+</li>
+</ul>
+
+  </nav></div>
+    
+
+
+
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Part 3: The Forge-Monarch Connection",
+       "headline": "Part 3: The Forge-Monarch Connection",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/tutorials/zero-to-forge/3_Monarch_101.html",
+       "articleBody": "Part 3: The Forge-Monarch Connection# This is part 3 of our series, in the previous sections: we learned Part 1: RL Concepts and how they map to Forge, Part 2: Forge Internals. Now let\u2019s peel back the layers. Forge services are built on top of Monarch, PyTorch\u2019s distributed actor framework. Understanding this connection is crucial for optimization and debugging. The Complete Hierarchy: Service to Silicon# graph TD subgraph YourCode[\"1. Your RL Code\"] Call[\"await policy_service.generate.route(\u0027What is 2+2?\u0027)\"] end subgraph ForgeServices[\"2. Forge Service Layer\"] ServiceInterface[\"ServiceInterface: Routes requests, Load balancing, Health checks\"] ServiceActor[\"ServiceActor: Manages replicas, Monitors health, Coordinates failures\"] end subgraph MonarchLayer[\"3. Monarch Actor Layer\"] ActorMesh[\"ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing\"] ProcMesh[\"ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect\"] end subgraph Hardware[\"4. Physical Hardware\"] GPU0[\"GPU 0: PolicyActor #1, vLLM Engine, Model Weights\"] GPU1[\"GPU 1: PolicyActor #2, vLLM Engine, Model Weights\"] GPU2[\"GPU 2: PolicyActor #3, vLLM Engine, Model Weights\"] GPU3[\"GPU 3: PolicyActor #4, vLLM Engine, Model Weights\"] end Call --\u003e ServiceInterface ServiceInterface --\u003e ServiceActor ServiceActor --\u003e ActorMesh ActorMesh --\u003e ProcMesh ProcMesh --\u003e GPU0 ProcMesh --\u003e GPU1 ProcMesh --\u003e GPU2 ProcMesh --\u003e GPU3 style Call fill:#4CAF50 style ServiceActor fill:#FF9800 style ActorMesh fill:#9C27B0 style ProcMesh fill:#2196F3 Deep Dive: ProcMesh - The Foundation# ProcMesh is Monarch\u2019s core abstraction for organizing processes across hardware. Think of it as a multi-dimensional grid that maps directly to your cluster topology. Single Host ProcMesh# Key insight: ProcMesh creates one process per GPU, automatically handling the process-to-hardware mapping. # This simple call: procs = this_host().spawn_procs(per_host={\"gpus\": 8}) # Creates: # Process 0 \u2192 GPU 0 # Process 1 \u2192 GPU 1 # Process 2 \u2192 GPU 2 # Process 3 \u2192 GPU 3 # Process 4 \u2192 GPU 4 # Process 5 \u2192 GPU 5 # Process 6 \u2192 GPU 6 # Process 7 \u2192 GPU 7 The beauty: you don\u2019t manage individual processes or GPU assignments - ProcMesh handles the topology for you. Multi-Host ProcMesh# Key insight: ProcMesh seamlessly scales across multiple hosts with continuous process numbering. # Same simple API works across hosts: cluster_procs = spawn_cluster_procs( hosts=[\"host1\", \"host2\", \"host3\"], per_host={\"gpus\": 4} ) # Automatically creates: # Host 1: Processes 0-3 \u2192 GPUs 0-3 # Host 2: Processes 4-7 \u2192 GPUs 0-3 # Host 3: Processes 8-11 \u2192 GPUs 0-3 # Your code stays the same whether it\u0027s 1 host or 100 hosts actors = cluster_procs.spawn(\"my_actor\", MyActor) The power: Scale from single host to cluster without changing your actor code - ProcMesh handles all the complexity. # This shows the underlying actor system that powers Forge services # NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps! from monarch.actor import Actor, endpoint, this_proc, Future from monarch.actor import ProcMesh, this_host import asyncio # STEP 1: Define a basic actor class Counter(Actor): def __init__(self, initial_value: int): self.value = initial_value @endpoint def increment(self) -\u003e None: self.value += 1 @endpoint def get_value(self) -\u003e int: return self.value # STEP 2: Single actor in local process counter: Counter = this_proc().spawn(\"counter\", Counter, initial_value=0) # STEP 3: Send messages fut: Future[int] = counter.get_value.call_one() value = await fut print(f\"Counter value: {value}\") # 0 # STEP 4: Multiple actors across processes procs: ProcMesh = this_host().spawn_procs(per_host={\"gpus\": 8}) counters: Counter = procs.spawn(\"counters\", Counter, 0) # STEP 5: Broadcast to all actors await counters.increment.call() # STEP 6: Different message patterns # call_one() - single actor value = await counters.get_value.call_one() print(f\"One counter: {value}\") # Output: One counter: 1 # choose() - random single actor (actors only, not services) value = await counters.get_value.choose() print(f\"Random counter: {value}\") # Output: Random counter: 1 # call() - all actors, collect results values = await counters.get_value.call() print(f\"All counters: {values}\") # Output: All counters: [1, 1, 1, 1, 1, 1, 1, 1] # broadcast() - fire and forget await counters.increment.broadcast() # No return value - just sends to all actors # Cleanup await procs.stop() # Remember: This raw Monarch code is for understanding how Forge works internally. # In your Forge applications, use ForgeActor, .as_service(), .as_actor() instead! Actor Meshes: Your Code Running Distributed# ActorMesh is created when you spawn actors across a ProcMesh. Key points: One actor instance per process: mesh.spawn(\"policy\", PolicyActor) creates one PolicyActor in each process Same constructor arguments: All instances get the same initialization parameters Independent state: Each actor instance maintains its own state and memory Message routing: You can send messages to one actor or all actors using different methods # Simple example: procs = spawn_procs(per_host={\"gpus\": 4}) # 4 processes policy_actors = procs.spawn(\"policy\", PolicyActor, model=\"Qwen/Qwen3-7B\") # Now you have 4 PolicyActor instances, one per GPU # All initialized with the same model parameter How Forge Services Use Monarch# Now the key insight: Forge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas. The Service Creation Process# graph TD subgraph ServiceCreation[\"Service Creation Process\"] Call[\"await PolicyActor.options(num_replicas=4, procs=1).as_service(model=\u0027Qwen\u0027)\"] ServiceActor[\"ServiceActor: Manages 4 replicas, Health checks, Routes calls\"] subgraph Replicas[\"4 Independent Replicas\"] subgraph R0[\"Replica 0\"] PM0[\"ProcMesh: 1 process, GPU 0\"] AM0[\"ActorMesh\u003cbr/\u003e1 PolicyActor\"] end subgraph R1[\"Replica 1\"] PM1[\"ProcMesh: 1 process, GPU 1\"] AM1[\"ActorMesh\u003cbr/\u003e1 PolicyActor\"] end subgraph R2[\"Replica 2\"] PM2[\"ProcMesh: 1 process, GPU 2\"] AM2[\"ActorMesh\u003cbr/\u003e1 PolicyActor\"] end subgraph R3[\"Replica 3\"] PM3[\"ProcMesh: 1 process, GPU 3\"] AM3[\"ActorMesh\u003cbr/\u003e1 PolicyActor\"] end end Call --\u003e ServiceActor ServiceActor --\u003e R0 ServiceActor --\u003e R1 ServiceActor --\u003e R2 ServiceActor --\u003e R3 PM0 --\u003e AM0 PM1 --\u003e AM1 PM2 --\u003e AM2 PM3 --\u003e AM3 end style ServiceActor fill:#FF9800 style AM0 fill:#4CAF50 style AM1 fill:#4CAF50 style AM2 fill:#4CAF50 style AM3 fill:#4CAF50 Service Call to Actor Execution# graph TD subgraph CallFlow[\"Complete Call Flow\"] UserCall[\"await policy_service.generate.route(\u0027What is 2+2?\u0027)\"] ServiceInterface[\"ServiceInterface: Receives .route() call, Routes to ServiceActor\"] ServiceActor[\"ServiceActor: Selects healthy replica, Load balancing, Failure handling\"] SelectedReplica[\"Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor\"] PolicyActor[\"PolicyActor Instance: Loads model, Runs vLLM inference\"] GPU[\"GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels\"] UserCall --\u003e ServiceInterface ServiceInterface --\u003e ServiceActor ServiceActor --\u003e SelectedReplica SelectedReplica --\u003e PolicyActor PolicyActor --\u003e GPU GPU -.-\u003e|\"Response\"| PolicyActor PolicyActor -.-\u003e|\"Response\"| SelectedReplica SelectedReplica -.-\u003e|\"Response\"| ServiceActor ServiceActor -.-\u003e|\"Response\"| ServiceInterface ServiceInterface -.-\u003e|\"\u0027The answer is 4\u0027\"| UserCall end style UserCall fill:#4CAF50 style ServiceActor fill:#FF9800 style PolicyActor fill:#9C27B0 style GPU fill:#FF5722 Multiple Services Sharing Infrastructure# In real RL systems, you have multiple services that can share or use separate ProcMeshes: graph TD subgraph Cluster[\"RL Training Cluster\"] subgraph Services[\"Forge Services\"] PS[\"Policy Service\u003cbr/\u003e4 GPU replicas\"] TS[\"Trainer Service\u003cbr/\u003e2 GPU replicas\"] RS[\"Reward Service\u003cbr/\u003e4 CPU replicas\"] BS[\"Buffer Service\u003cbr/\u003e1 CPU replica\"] end subgraph MonarchInfra[\"Monarch Infrastructure\"] subgraph GPUMesh[\"GPU ProcMesh (6 processes)\"] G0[\"Process 0\u003cbr/\u003eGPU 0\"] G1[\"Process 1\u003cbr/\u003eGPU 1\"] G2[\"Process 2\u003cbr/\u003eGPU 2\"] G3[\"Process 3\u003cbr/\u003eGPU 3\"] G4[\"Process 4\u003cbr/\u003eGPU 4\"] G5[\"Process 5\u003cbr/\u003eGPU 5\"] end subgraph CPUMesh[\"CPU ProcMesh (5 processes)\"] C0[\"Process 0\u003cbr/\u003eCPU\"] C1[\"Process 1\u003cbr/\u003eCPU\"] C2[\"Process 2\u003cbr/\u003eCPU\"] C3[\"Process 3\u003cbr/\u003eCPU\"] C4[\"Process 4\u003cbr/\u003eCPU\"] end end PS --\u003e G0 PS --\u003e G1 PS --\u003e G2 PS --\u003e G3 TS --\u003e G4 TS --\u003e G5 RS --\u003e C0 RS --\u003e C1 RS --\u003e C2 RS --\u003e C3 BS --\u003e C4 end style PS fill:#4CAF50 style TS fill:#E91E63 style RS fill:#FF9800 style BS fill:#9C27B0 style GPUMesh fill:#FFEBEE style CPUMesh fill:#E3F2FD Key Insights: Why This Architecture Matters# Process Isolation: Each actor runs in its own process - failures don\u2019t cascade Location Transparency: Actors can be local or remote with identical APIs Structured Distribution: ProcMesh maps directly to hardware topology Message Passing: No shared memory means no race conditions or locks Service Abstraction: Forge hides Monarch complexity while preserving power Understanding this hierarchy helps you: Debug performance issues: Is the bottleneck at service, actor, or hardware level? Optimize resource usage: How many replicas per service? GPU vs CPU processes? Handle failures gracefully: Which layer failed and how to recover? Scale effectively: Where to add resources for maximum impact? Conclusion# What You\u2019ve Learned# RL Fundamentals: How RL concepts map to Forge services with REAL, working examples Service Abstraction: How to use Forge services effectively with verified communication patterns Monarch Foundation: How Forge services connect to distributed actors and hardware Key Takeaways# Services hide complexity: Your RL code looks like simple async functions, but runs on distributed clusters Communication patterns matter: .route(), .fanout(), sessions, and .call_one() each serve specific purposes Architecture understanding helps: Knowing the Service \u2192 Actor \u2192 Process \u2192 Hardware hierarchy helps you debug, optimize, and scale Always verify APIs: This guide is verified, but cross-check with source code for latest changes Real API patterns: Use .options().as_service() not spawn_service(), use .route() not .choose(), etc.",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "../../_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/tutorials/zero-to-forge/3_Monarch_101.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

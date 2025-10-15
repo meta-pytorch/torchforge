@@ -1,0 +1,1677 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Part 2: Peeling Back the Abstraction - What Are Services? &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=a8c4d769" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+    <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/zero-to-forge/2_Forge_Internals';</script>
+    <script src="../../_static/custom.js?v=b1073d4a"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/tutorials/zero-to-forge/2_Forge_Internals.html" />
+    <link rel="icon" href="../../_static/logo-icon.svg"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Part 3: The Forge-Monarch Connection" href="3_Monarch_101.html" />
+    <link rel="prev" title="Part 1: RL Fundamentals - Using Forge Terminology" href="1_RL_and_Forge_Fundamentals.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="../../_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/forge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/forge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../getting_started.html">
+    Get Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../concepts.html">
+    Concepts
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../zero-to-forge-intro.html">Zero to Forge: From RL Theory to Production-Scale Implementation</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="1_RL_and_Forge_Fundamentals.html">Part 1: RL Fundamentals - Using Forge Terminology</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Part 2: Peeling Back the Abstraction - What Are Services?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3_Monarch_101.html">Part 3: The Forge-Monarch Connection</a></li>
+
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../zero-to-forge-intro.html" class="nav-link">Zero to Forge: From RL Theory to Production-Scale Implementation</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Part 2:...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../tutorials.html">
+        <meta itemprop="name" content="Tutorials">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../zero-to-forge-intro.html">
+        <meta itemprop="name" content="Zero to Forge: From RL Theory to Production-Scale Implementation">
+        <meta itemprop="position" content="2">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="Part 2: Peeling Back the Abstraction - What Are Services?">
+        <meta itemprop="position" content="3">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">tutorials/zero-to-forge/2_Forge_Internals</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="../../_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="../../_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="../../_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="part-2-peeling-back-the-abstraction-what-are-services">
+<h1>Part 2: Peeling Back the Abstraction - What Are Services?<a class="headerlink" href="#part-2-peeling-back-the-abstraction-what-are-services" title="Link to this heading">#</a></h1>
+<p>We highly recommend reading <a class="reference internal" href="1_RL_and_Forge_Fundamentals.html"><span class="doc std std-doc">Part 1</span></a> before this, it explains RL Concepts and how they land in Forge.</p>
+<p>Now that you see the power of the service abstraction, let’s understand what’s actually happening under the hood, Grab your chai!</p>
+<section id="service-anatomy-beyond-the-interface">
+<h2>Service Anatomy: Beyond the Interface<a class="headerlink" href="#service-anatomy-beyond-the-interface" title="Link to this heading">#</a></h2>
+<p>When you call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">policy_service.generate(question)</span></code>, here’s what actually happens:</p>
+<p>(Don’t worry, we will understand Services right in the next section!)</p>
+<pre  class="mermaid">
+        graph TD
+    Call[&quot;Your Code:&lt;br/&gt;await policy_service.generate&quot;]
+
+    subgraph ServiceLayer[&quot;Service Layer&quot;]
+        Proxy[&quot;Service Proxy: Load balancing, Health checking&quot;]
+        LB[&quot;Load Balancer: Replica selection, Circuit breaker&quot;]
+    end
+
+    subgraph Replicas[&quot;Replica Management&quot;]
+        R1[&quot;Replica 1: GPU 0, Healthy&quot;]
+        R2[&quot;Replica 2: GPU 1, Overloaded&quot;]
+        R3[&quot;Replica 3: GPU 2, Failed&quot;]
+        R4[&quot;Replica 4: GPU 3, Healthy&quot;]
+    end
+
+    subgraph Compute[&quot;Actual Computation&quot;]
+        Actor[&quot;Policy Actor: vLLM engine, Model weights, KV cache&quot;]
+    end
+
+    Call --&gt; Proxy
+    Proxy --&gt; LB
+    LB --&gt; R1
+    LB -.-&gt; R2
+    LB -.-&gt; R3
+    LB --&gt; R4
+    R1 --&gt; Actor
+    R4 --&gt; Actor
+
+    style Call fill:#4CAF50
+    style LB fill:#FF9800
+    style R3 fill:#F44336
+    style Actor fill:#9C27B0
+    </pre></section>
+<section id="service-components-deep-dive">
+<h2>Service Components Deep Dive<a class="headerlink" href="#service-components-deep-dive" title="Link to this heading">#</a></h2>
+<section id="real-service-configuration">
+<h3>1. Real Service Configuration<a class="headerlink" href="#real-service-configuration" title="Link to this heading">#</a></h3>
+<p>Here’s the actual ServiceConfig from Forge source code:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Configuration pattern from apps/grpo/main.py:</span>
+<span class="n">Policy</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>           <span class="c1"># Processes per replica</span>
+    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>    <span class="c1"># Number of replicas</span>
+    <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span>     <span class="c1"># Allocate GPUs</span>
+    <span class="c1"># Other available options:</span>
+    <span class="c1"># hosts=None   #  the number of remote hosts used per replica</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="real-service-creation">
+<h3>2. Real Service Creation<a class="headerlink" href="#real-service-creation" title="Link to this heading">#</a></h3>
+<p>Services are created using the <code class="docutils literal notranslate"><span class="pre">.options().as_service()</span></code> pattern from the actual GRPO implementation:</p>
+<p>The service creation automatically handles:</p>
+<ul class="simple">
+<li><p>Spawning actor replicas across processes/GPUs</p></li>
+<li><p>Load balancing with .route() method for services</p></li>
+<li><p>Health monitoring and failure recovery</p></li>
+<li><p>Message routing and serialization</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Policy</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="s2">&quot;Qwen/Qwen3-1.7B&quot;</span>
+
+<span class="n">policy</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Policy</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+    <span class="n">engine_config</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">model</span><span class="p">,</span>
+        <span class="s2">&quot;tensor_parallel_size&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;pipeline_parallel_size&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;enforce_eager&quot;</span><span class="p">:</span> <span class="kc">False</span>
+    <span class="p">},</span>
+    <span class="n">sampling_config</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;n&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">16</span><span class="p">,</span>
+        <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="mf">1.0</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s2">&quot;What is 3 + 5?&quot;</span>
+<span class="n">responses</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Response: </span><span class="si">{</span><span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Cleanup when done</span>
+<span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="how-services-actually-work">
+<h3>3. How Services Actually Work<a class="headerlink" href="#how-services-actually-work" title="Link to this heading">#</a></h3>
+<p>Forge services are implemented as ServiceActors that manage collections of your ForgeActor replicas:</p>
+<p>When you call <code class="docutils literal notranslate"><span class="pre">.as_service()</span></code>, Forge creates a <code class="docutils literal notranslate"><span class="pre">ServiceInterface</span></code> that manages N replicas of your <code class="docutils literal notranslate"><span class="pre">ForgeActor</span></code> class and gives you methods like <code class="docutils literal notranslate"><span class="pre">.route()</span></code>, <code class="docutils literal notranslate"><span class="pre">.fanout()</span></code>, etc.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Your code sees this simple interface:</span>
+<span class="n">responses</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span>
+<span class="c1"># But Forge handles all the complexity of replica management, load balancing, and fault tolerance</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="communication-patterns-quick-reference">
+<h2>Communication Patterns: Quick Reference<a class="headerlink" href="#communication-patterns-quick-reference" title="Link to this heading">#</a></h2>
+<p><strong>API Summary:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">.route()</span></code> - Send request to any healthy replica in a service (load balanced)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.call_one()</span></code> - Send request to a single actor instance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.fanout()</span></code> - Send request to ALL replicas in a service</p></li>
+</ul>
+<pre  class="mermaid">
+        graph LR
+    subgraph Request[&quot;Your Request&quot;]
+        Code[&quot;await service.method.ADVERB()&quot;]
+    end
+
+    subgraph Patterns[&quot;Communication Patterns&quot;]
+        Route[&quot;.route()&lt;br/&gt;→ One healthy replica&quot;]
+        CallOne[&quot;.call_one()&lt;br/&gt;→ Single actor&quot;]
+        Fanout[&quot;.fanout()&lt;br/&gt;→ ALL replicas&quot;]
+    end
+
+    subgraph Replicas[&quot;Replicas/Actors&quot;]
+        R1[&quot;Replica 1&quot;]
+        R2[&quot;Replica 2&quot;]
+        R3[&quot;Replica 3&quot;]
+        A1[&quot;Actor&quot;]
+    end
+
+    Code --&gt; Route
+    Code --&gt; CallOne
+    Code --&gt; Fanout
+
+    Route --&gt; R2
+    CallOne --&gt; A1
+    Fanout --&gt; R1
+    Fanout --&gt; R2
+    Fanout --&gt; R3
+
+    style Route fill:#4CAF50
+    style CallOne fill:#FF9800
+    style Fanout fill:#9C27B0
+    </pre></section>
+<section id="deep-dive-service-communication-patterns">
+<h2>Deep Dive: Service Communication Patterns<a class="headerlink" href="#deep-dive-service-communication-patterns" title="Link to this heading">#</a></h2>
+<p>These communication patterns (“adverbs”) determine how your service calls are routed to replicas. Understanding when to use each pattern is key to effective Forge usage.</p>
+<section id="route-load-balanced-single-replica">
+<h3>1. <code class="docutils literal notranslate"><span class="pre">.route()</span></code> - Load Balanced Single Replica<a class="headerlink" href="#route-load-balanced-single-replica" title="Link to this heading">#</a></h3>
+<p><strong>When to use</strong>: Normal request routing where any replica can handle the request.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">responses</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">question</span><span class="p">)</span>
+<span class="n">answer</span> <span class="o">=</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>  <span class="c1"># Extract text from Completion object</span>
+</pre></div>
+</div>
+<p>Behind the scenes:</p>
+<ol class="arabic simple">
+<li><p>Health check eliminates failed replicas</p></li>
+<li><p>Load balancer picks replica (currently round robin, configurable balancers coming soon)</p></li>
+<li><p>Request routes to that specific replica</p></li>
+<li><p>Automatic retry on different replica if failure</p></li>
+</ol>
+<p><strong>Performance characteristics</strong>:</p>
+<ul class="simple">
+<li><p><strong>Latency</strong>: Lowest (single network hop)</p></li>
+<li><p><strong>Throughput</strong>: Limited by single replica capacity</p></li>
+<li><p><strong>Fault tolerance</strong>: Automatic failover to other replicas</p></li>
+</ul>
+<p><strong>Critical insight</strong>: <code class="docutils literal notranslate"><span class="pre">.route()</span></code> is your default choice for stateless operations in Forge services.</p>
+</section>
+<section id="fanout-broadcast-with-results-collection">
+<h3>2. <code class="docutils literal notranslate"><span class="pre">.fanout()</span></code> - Broadcast with Results Collection<a class="headerlink" href="#fanout-broadcast-with-results-collection" title="Link to this heading">#</a></h3>
+<p><strong>When to use</strong>: You need responses from ALL replicas.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Get version from all policy replicas</span>
+<span class="n">current_versions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">get_version</span><span class="o">.</span><span class="n">fanout</span><span class="p">()</span>
+<span class="c1"># Returns: [version_replica_1, version_replica_2, ...]</span>
+
+<span class="c1"># Update weights on all replicas</span>
+<span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">update_weights</span><span class="o">.</span><span class="n">fanout</span><span class="p">(</span><span class="n">new_policy_version</span><span class="p">)</span>
+<span class="c1"># Broadcasts to all replicas simultaneously</span>
+</pre></div>
+</div>
+<p><strong>Performance characteristics</strong>:</p>
+<ul class="simple">
+<li><p><strong>Latency</strong>: Slowest replica determines total latency</p></li>
+<li><p><strong>Throughput</strong>: Network bandwidth × number of replicas</p></li>
+<li><p><strong>Fault tolerance</strong>: Fails if ANY replica fails (unless configured otherwise)</p></li>
+</ul>
+<p><strong>Critical gotcha</strong>: Don’t use <code class="docutils literal notranslate"><span class="pre">.fanout()</span></code> for high-frequency operations - it contacts all replicas.</p>
+</section>
+<section id="streaming-operations-custom-implementation-pattern">
+<h3>3. Streaming Operations - Custom Implementation Pattern<a class="headerlink" href="#streaming-operations-custom-implementation-pattern" title="Link to this heading">#</a></h3>
+<p><strong>When to use</strong>: You want to process results as they arrive, not wait for all.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># CONCEPTUAL - Streaming requires custom implementation in your training loop</span>
+<span class="c1"># The basic ReplayBuffer doesn&#39;t have built-in streaming methods</span>
+<span class="c1"># Pattern from apps/grpo/main.py continuous training:</span>
+
+<span class="k">while</span> <span class="n">training</span><span class="p">:</span>
+    <span class="c1"># This is the real API call pattern</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">curr_policy_version</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Process batch immediately</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">train_step</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Training loss: </span><span class="si">{</span><span class="n">loss</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>  <span class="c1"># Wait for more data</span>
+</pre></div>
+</div>
+<p><strong>Performance characteristics</strong>:</p>
+<ul class="simple">
+<li><p><strong>Latency</strong>: Process first result immediately</p></li>
+<li><p><strong>Throughput</strong>: Non-blocking async operations (much higher than waiting for full batches)</p></li>
+<li><p><strong>Fault tolerance</strong>: Continues if some replicas fail</p></li>
+</ul>
+<p><strong>Critical insight</strong>: This is essential for high-throughput RL where you can’t wait for batches.</p>
+</section>
+<section id="service-sessions-for-stateful-operations">
+<h3>3. Service Sessions for Stateful Operations<a class="headerlink" href="#service-sessions-for-stateful-operations" title="Link to this heading">#</a></h3>
+<p><strong>When to use</strong>: When you need multiple calls to hit the same replica (like KV cache preservation).</p>
+<p><strong>What are sticky sessions?</strong> A session ensures all your service calls within the <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">with</span></code> block go to the same replica, instead of being load-balanced across different replicas.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># This Counter example demonstrates the difference between regular routing and sessions</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForgeActor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">endpoint</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ForgeCounter</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_value</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">initial_value</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">increment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_value</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="n">counter_service</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ForgeCounter</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">4</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span><span class="n">initial_value</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># WITHOUT SESSIONS: Each .route() call goes to a different replica</span>
+<span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>  <span class="c1"># Might go to replica 2</span>
+<span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>  <span class="c1"># Might go to replica 1</span>
+<span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>  <span class="c1"># Might go to replica 3</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">fanout</span><span class="p">()</span>  <span class="c1"># Get from all replicas</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;All replica values: </span><span class="si">{</span><span class="n">results</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="c1"># Output: All replica values: [1, 2, 1, 1] - Each replica has different state!</span>
+</pre></div>
+</div>
+<p>The problem: each <code class="docutils literal notranslate"><span class="pre">.route()</span></code> call can go to different replicas, creating inconsistent state.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># WITH SESSIONS: All calls go to the SAME replica</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Using sticky sessions:&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">session</span><span class="p">():</span>  <span class="c1"># Creates a session that picks one replica</span>
+    <span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">reset</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>  <span class="c1"># Uses .route() within session</span>
+    <span class="nb">print</span><span class="p">(</span><span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">())</span>  <span class="c1"># 1</span>
+    <span class="nb">print</span><span class="p">(</span><span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">())</span>  <span class="c1"># 2</span>
+    <span class="nb">print</span><span class="p">(</span><span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">increment</span><span class="o">.</span><span class="n">route</span><span class="p">())</span>  <span class="c1"># 3</span>
+
+    <span class="n">final_value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">get_value</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final value on this replica: </span><span class="si">{</span><span class="n">final_value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># 3</span>
+
+<span class="c1"># Output:</span>
+<span class="c1"># Using sticky sessions:</span>
+<span class="c1"># 1</span>
+<span class="c1"># 2</span>
+<span class="c1"># 3</span>
+<span class="c1"># Final value on this replica: 3</span>
+
+<span class="c1"># Same pattern works with Policy for multi-turn conversations:</span>
+<span class="c1"># async with policy.session():</span>
+<span class="c1">#     response1 = await policy.generate.route(turn1)</span>
+<span class="c1">#     full_prompt = turn1 + response1[0].text + turn2</span>
+<span class="c1">#     response2 = await policy.generate.route(full_prompt)</span>
+<span class="c1">#     # Both calls hit same replica, preserving KV cache</span>
+
+<span class="c1"># Cleanup</span>
+<span class="k">await</span> <span class="n">counter_service</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><strong>Performance impact</strong>: Critical for maintaining KV cache in multi-turn conversations.</p>
+</section>
+</section>
+<section id="deep-dive-state-management-reality">
+<h2>Deep Dive: State Management Reality<a class="headerlink" href="#deep-dive-state-management-reality" title="Link to this heading">#</a></h2>
+<p>The most complex challenge in distributed RL is maintaining state consistency while maximizing performance.</p>
+<section id="the-kv-cache-problem">
+<h3>The KV Cache Problem<a class="headerlink" href="#the-kv-cache-problem" title="Link to this heading">#</a></h3>
+<p><strong>The challenge</strong>: Policy inference is much faster with KV cache, but cache is tied to specific conversation history.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># This breaks KV cache optimization:</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">naive_multi_turn</span><span class="p">():</span>
+    <span class="c1"># Each call might go to different replica = cache miss</span>
+    <span class="n">response1</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy_service</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">choose</span><span class="p">(</span><span class="n">question1</span><span class="p">)</span>
+    <span class="n">response2</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy_service</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">choose</span><span class="p">(</span><span class="n">question1</span> <span class="o">+</span> <span class="n">response1</span><span class="p">)</span> <span class="c1"># Cache miss!</span>
+    <span class="n">response3</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy_service</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">choose</span><span class="p">(</span><span class="n">conversation_so_far</span><span class="p">)</span>   <span class="c1"># Cache miss!</span>
+</pre></div>
+</div>
+<p><strong>The solution</strong>: Sticky sessions ensure all calls go to same replica.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">optimized_multi_turn</span><span class="p">():</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">policy</span><span class="o">.</span><span class="n">session</span><span class="p">():</span>
+        <span class="c1"># All calls guaranteed to hit same replica = cache hits</span>
+        <span class="n">response1</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">question1</span><span class="p">)</span>
+        <span class="n">full_prompt</span> <span class="o">=</span> <span class="n">question1</span> <span class="o">+</span> <span class="n">response1</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+        <span class="n">response2</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">full_prompt</span><span class="p">)</span> <span class="c1"># Cache hit!</span>
+        <span class="n">conversation</span> <span class="o">=</span> <span class="n">full_prompt</span> <span class="o">+</span> <span class="n">response2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+        <span class="n">response3</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">conversation</span><span class="p">)</span>   <span class="c1"># Cache hit!</span>
+
+    <span class="c1"># Session ends, replica can be garbage collected or reused</span>
+</pre></div>
+</div>
+<p><strong>Performance impact</strong>: Maintaining KV cache across turns avoids recomputing previous tokens.</p>
+</section>
+<section id="replay-buffer-consistency">
+<h3>Replay Buffer Consistency<a class="headerlink" href="#replay-buffer-consistency" title="Link to this heading">#</a></h3>
+<p><strong>The challenge</strong>: Multiple trainers and experience collectors reading/writing concurrently.</p>
+<p><strong>Real Forge approach</strong>: The ReplayBuffer actor handles concurrency internally:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Forge ReplayBuffer endpoints (verified from source code)</span>
+<span class="c1"># Add episodes (thread-safe by actor model)</span>
+<span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">episode</span><span class="p">)</span>  <span class="c1"># .choose() would work too, but .call_one() clarifies it&#39;s a singleton actor not ActorMesh</span>
+
+<span class="c1"># Sample batches for training</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span>
+    <span class="n">curr_policy_version</span><span class="o">=</span><span class="n">step_number</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Optional parameter, uses default from config</span>
+<span class="p">)</span>
+
+<span class="c1"># Additional methods available:</span>
+<span class="c1"># await replay_buffer.clear.call_one()  # Clear buffer</span>
+<span class="c1"># await replay_buffer.evict.call_one(curr_policy_version)  # Remove old episodes</span>
+<span class="c1"># state = await replay_buffer.state_dict.call_one()  # Get state for checkpointing</span>
+</pre></div>
+</div>
+<p><strong>Critical insight</strong>: The actor model provides natural thread safety - each actor processes messages sequentially.</p>
+</section>
+<section id="weight-synchronization-strategy">
+<h3>Weight Synchronization Strategy<a class="headerlink" href="#weight-synchronization-strategy" title="Link to this heading">#</a></h3>
+<p><strong>The challenge</strong>: Trainer updates policy weights, but policy service needs those weights.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Forge weight synchronization pattern from apps/grpo/main.py</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">real_weight_sync</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+    <span class="c1"># Trainer pushes weights to TorchStore with version number</span>
+    <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">push_weights</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">policy_version</span><span class="o">=</span><span class="n">step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Policy service updates to new version from TorchStore</span>
+    <span class="c1"># Use .fanout() to update ALL policy replicas</span>
+    <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">update_weights</span><span class="o">.</span><span class="n">fanout</span><span class="p">(</span><span class="n">policy_version</span><span class="o">=</span><span class="n">step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Check current policy version</span>
+<span class="n">current_version</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">get_version</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Current policy version: </span><span class="si">{</span><span class="n">current_version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="deep-dive-asynchronous-coordination-patterns">
+<h2>Deep Dive: Asynchronous Coordination Patterns<a class="headerlink" href="#deep-dive-asynchronous-coordination-patterns" title="Link to this heading">#</a></h2>
+<p><strong>The real challenge</strong>: Different services run at different speeds, but Forge’s service abstraction handles the coordination complexity.</p>
+<section id="the-forge-approach-let-services-handle-coordination">
+<h3>The Forge Approach: Let Services Handle Coordination<a class="headerlink" href="#the-forge-approach-let-services-handle-coordination" title="Link to this heading">#</a></h3>
+<p>Instead of manual coordination, Forge services handle speed mismatches automatically:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">apps.grpo.main</span><span class="w"> </span><span class="kn">import</span> <span class="n">Episode</span><span class="p">,</span> <span class="n">Group</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">simple_rl_step</span><span class="p">():</span>
+
+    <span class="c1"># ===== Generate a rollout =====</span>
+    <span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">dataloader</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>  <span class="c1"># DatasetActor is an actor, not service</span>
+    <span class="n">prompt</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;request&quot;</span><span class="p">],</span> <span class="n">sample</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">]</span>  <span class="c1"># Correct field names</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Prompt: </span><span class="si">{</span><span class="n">prompt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target: </span><span class="si">{</span><span class="n">target</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">actions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span>  <span class="c1"># Policy is a service</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Policy response: </span><span class="si">{</span><span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Create input tensor for reference model (requires full context)</span>
+    <span class="n">input_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">prompt_ids</span><span class="p">,</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">])</span>
+    <span class="n">ref_logprobs</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ref_model</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+        <span class="n">input_ids</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">max_req_tokens</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">return_logprobs</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reward_actor</span><span class="o">.</span><span class="n">evaluate_response</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>  <span class="c1"># RewardActor is a service</span>
+        <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+        <span class="n">response</span><span class="o">=</span><span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+        <span class="n">target</span><span class="o">=</span><span class="n">target</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reward: </span><span class="si">{</span><span class="n">reward</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Create episode using actual GRPO Episode structure</span>
+    <span class="n">episode</span> <span class="o">=</span> <span class="n">Episode</span><span class="p">(</span>
+        <span class="n">episode_id</span><span class="o">=</span><span class="s2">&quot;0&quot;</span><span class="p">,</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+        <span class="n">policy_version</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">pad_id</span><span class="o">=</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span><span class="p">,</span>
+        <span class="n">request_len</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+        <span class="n">response_len</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+        <span class="n">target</span><span class="o">=</span><span class="n">target</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Add response data</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">response</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">request_tokens</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">prompt_ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">response_tokens</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">ref_logprobs</span> <span class="o">=</span> <span class="n">ref_logprobs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Extract from batch dimension</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span>
+
+    <span class="c1"># Compute advantages using actual ComputeAdvantages actor</span>
+    <span class="n">group</span> <span class="o">=</span> <span class="n">Group</span><span class="o">.</span><span class="n">new_group</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">prompt</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token_id</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+    <span class="n">group</span><span class="o">.</span><span class="n">episodes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">episode</span>
+    <span class="n">advantages</span> <span class="o">=</span> <span class="k">await</span> <span class="n">compute_advantages</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>  <span class="c1"># ComputeAdvantages is an actor</span>
+    <span class="n">episode</span><span class="o">.</span><span class="n">advantage</span> <span class="o">=</span> <span class="n">advantages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Advantage: </span><span class="si">{</span><span class="n">advantages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">episode</span><span class="p">)</span>  <span class="c1"># ReplayBuffer is an actor</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Episode stored in replay buffer&quot;</span><span class="p">)</span>
+
+    <span class="c1"># ===== Train on the batch =====</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">curr_policy_version</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Training on batch...&quot;</span><span class="p">)</span>
+        <span class="n">inputs</span><span class="p">,</span> <span class="n">targets</span> <span class="o">=</span> <span class="n">batch</span>  <span class="c1"># GRPO returns (inputs, targets) tuple</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">train_step</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>  <span class="c1"># RLTrainer is an actor</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Training loss: </span><span class="si">{</span><span class="n">loss</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Not enough data in buffer yet&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+<span class="c1"># Note: This simplified example assumes tokenizer and services are already initialized</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">--- RL Step </span><span class="si">{</span><span class="n">step</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> ---&quot;</span><span class="p">)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="k">await</span> <span class="n">simple_rl_step</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">loss</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">step</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> complete, loss: </span><span class="si">{</span><span class="n">loss</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">step</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> complete, building buffer...&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="handling-speed-mismatches-with-service-scaling">
+<h3>Handling Speed Mismatches with Service Scaling<a class="headerlink" href="#handling-speed-mismatches-with-service-scaling" title="Link to this heading">#</a></h3>
+<p><strong>The insight</strong>: Scale services independently based on their bottlenecks.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Scale fast services with more replicas</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Policy</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># Many replicas for high throughput</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+    <span class="n">engine_config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">model_name</span><span class="p">,</span> <span class="s2">&quot;tensor_parallel_size&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}</span>
+<span class="p">)</span>
+
+<span class="c1"># Reward evaluation might be CPU-bound</span>
+<span class="n">reward_actor</span> <span class="o">=</span> <span class="k">await</span> <span class="n">RewardActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">False</span>  <span class="c1"># More CPU replicas</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+    <span class="n">reward_functions</span><span class="o">=</span><span class="p">[</span><span class="n">MathReward</span><span class="p">()]</span>
+<span class="p">)</span>
+
+<span class="c1"># Training needs fewer but more powerful replicas</span>
+<span class="n">trainer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">RLTrainer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># Fewer but GPU-heavy</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span>  <span class="c1"># Trainer typically uses .as_actor() not .as_service()</span>
+    <span class="n">model</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;qwen3&quot;</span><span class="p">,</span> <span class="s2">&quot;flavor&quot;</span><span class="p">:</span> <span class="s2">&quot;1.7B&quot;</span><span class="p">},</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;AdamW&quot;</span><span class="p">,</span> <span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">}</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="service-implementation-example">
+<h2>Service Implementation Example<a class="headerlink" href="#service-implementation-example" title="Link to this heading">#</a></h2>
+<p>Let’s see how a reward service is actually implemented:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Exact RewardActor from apps/grpo/main.py</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForgeActor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">endpoint</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.data.rewards</span><span class="w"> </span><span class="kn">import</span> <span class="n">MathReward</span><span class="p">,</span> <span class="n">ThinkingReward</span>
+
+<span class="c1"># class definition from apps/grpo/main.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RewardActor</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reward_functions</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_functions</span> <span class="o">=</span> <span class="n">reward_functions</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate response quality using multiple reward functions&quot;&quot;&quot;</span>
+        <span class="n">total_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="k">for</span> <span class="n">reward_fn</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_functions</span><span class="p">:</span>
+            <span class="c1"># Each reward function contributes to total score</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="n">reward_fn</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+            <span class="n">total_reward</span> <span class="o">+=</span> <span class="n">reward</span>
+
+        <span class="c1"># Return average reward across all functions</span>
+        <span class="k">return</span> <span class="n">total_reward</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reward_functions</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_functions</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+<span class="n">reward_actor</span> <span class="o">=</span> <span class="k">await</span> <span class="n">RewardActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span>
+    <span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span>
+<span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+    <span class="n">reward_functions</span><span class="o">=</span><span class="p">[</span><span class="n">MathReward</span><span class="p">(),</span> <span class="n">ThinkingReward</span><span class="p">()]</span>
+<span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s2">&quot;What is 15</span><span class="si">% o</span><span class="s2">f 240?&quot;</span>
+<span class="n">response</span> <span class="o">=</span> <span class="s2">&quot;15</span><span class="si">% o</span><span class="s2">f 240 is 36&quot;</span>
+<span class="n">target</span> <span class="o">=</span> <span class="s2">&quot;36&quot;</span>
+
+<span class="n">score</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reward_actor</span><span class="o">.</span><span class="n">evaluate_response</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+    <span class="n">response</span><span class="o">=</span><span class="n">response</span><span class="p">,</span>
+    <span class="n">target</span><span class="o">=</span><span class="n">target</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reward score: </span><span class="si">{</span><span class="n">score</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Usually around 1.0 for correct math answers</span>
+
+<span class="c1"># For production scaling - increase num_replicas for parallel evaluation:</span>
+<span class="c1"># RewardActor.options(procs=1, num_replicas=16)  # 16 parallel evaluators</span>
+
+<span class="c1"># Cleanup when done</span>
+<span class="k">await</span> <span class="n">reward_actor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="service-orchestration-the-training-loop">
+<h2>Service Orchestration: The Training Loop<a class="headerlink" href="#service-orchestration-the-training-loop" title="Link to this heading">#</a></h2>
+<p>Now let’s see how services coordinate in a real training loop:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># This is the REAL way production RL systems are built with Forge</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Policy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.reference_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReferenceModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.replay_buffer</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplayBuffer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.trainer</span><span class="w"> </span><span class="kn">import</span> <span class="n">RLTrainer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.grpo.main</span><span class="w"> </span><span class="kn">import</span> <span class="n">DatasetActor</span><span class="p">,</span> <span class="n">RewardActor</span><span class="p">,</span> <span class="n">ComputeAdvantages</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.data.rewards</span><span class="w"> </span><span class="kn">import</span> <span class="n">MathReward</span><span class="p">,</span> <span class="n">ThinkingReward</span>
+
+<span class="c1"># Service creation pattern from apps/grpo/main.py lines 322-344</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Initializing all services...&quot;</span><span class="p">)</span>
+<span class="p">(</span>
+    <span class="n">dataloader</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">trainer</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="p">,</span>
+    <span class="n">compute_advantages</span><span class="p">,</span>
+    <span class="n">ref_model</span><span class="p">,</span>
+    <span class="n">reward_actor</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+    <span class="n">DatasetActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span>
+        <span class="n">path</span><span class="o">=</span><span class="s2">&quot;openai/gsm8k&quot;</span><span class="p">,</span> <span class="n">revision</span><span class="o">=</span><span class="s2">&quot;main&quot;</span><span class="p">,</span> <span class="n">data_split</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">,</span>
+        <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;Qwen/Qwen3-1.7B&quot;</span>
+    <span class="p">),</span>
+    <span class="n">Policy</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+        <span class="n">engine_config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;Qwen/Qwen3-1.7B&quot;</span><span class="p">,</span> <span class="s2">&quot;tensor_parallel_size&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+        <span class="n">sampling_config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;n&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">}</span>
+    <span class="p">),</span>
+    <span class="n">RLTrainer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;qwen3&quot;</span><span class="p">,</span> <span class="s2">&quot;flavor&quot;</span><span class="p">:</span> <span class="s2">&quot;1.7B&quot;</span><span class="p">,</span> <span class="s2">&quot;hf_assets_path&quot;</span><span class="p">:</span> <span class="s2">&quot;hf://Qwen/Qwen3-1.7B&quot;</span><span class="p">},</span>
+        <span class="n">optimizer</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;AdamW&quot;</span><span class="p">,</span> <span class="s2">&quot;lr&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">},</span>
+        <span class="n">training</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;local_batch_size&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;seq_len&quot;</span><span class="p">:</span> <span class="mi">2048</span><span class="p">}</span>
+    <span class="p">),</span>
+    <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">max_policy_age</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dp_size</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">),</span>
+    <span class="n">ComputeAdvantages</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(),</span>
+    <span class="n">ReferenceModel</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">as_actor</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;qwen3&quot;</span><span class="p">,</span> <span class="s2">&quot;flavor&quot;</span><span class="p">:</span> <span class="s2">&quot;1.7B&quot;</span><span class="p">,</span> <span class="s2">&quot;hf_assets_path&quot;</span><span class="p">:</span> <span class="s2">&quot;hf://Qwen/Qwen3-1.7B&quot;</span><span class="p">}</span>
+    <span class="p">),</span>
+    <span class="n">RewardActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_replicas</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+        <span class="n">reward_functions</span><span class="o">=</span><span class="p">[</span><span class="n">MathReward</span><span class="p">(),</span> <span class="n">ThinkingReward</span><span class="p">()]</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;All services initialized successfully!&quot;</span><span class="p">)</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">production_training_loop</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Real training loop pattern from apps/grpo/main.py&quot;&quot;&quot;</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="c1"># Data generation</span>
+        <span class="n">sample</span> <span class="o">=</span> <span class="k">await</span> <span class="n">dataloader</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>
+
+        <span class="c1"># Policy generation service call</span>
+        <span class="n">responses</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;request&quot;</span><span class="p">])</span>  <span class="c1"># Correct field name</span>
+
+        <span class="c1"># Reference computation service call (requires full input tensor)</span>
+        <span class="n">input_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">prompt_ids</span><span class="p">,</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">])</span>
+        <span class="n">ref_logprobs</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ref_model</span><span class="o">.</span><span class="n">forward</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+            <span class="n">input_ids</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">max_req_tokens</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">return_logprobs</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Reward evaluation service call</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reward_actor</span><span class="o">.</span><span class="n">evaluate_response</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+            <span class="n">prompt</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">],</span>
+            <span class="n">response</span><span class="o">=</span><span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">sample</span><span class="p">[</span><span class="s2">&quot;answer&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Experience storage (using actual Episode structure)</span>
+        <span class="n">episode</span> <span class="o">=</span> <span class="n">create_episode_from_grpo_data</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">reward</span><span class="p">,</span> <span class="n">ref_logprobs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">step</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">episode</span><span class="p">)</span>
+
+        <span class="c1"># Training when ready</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">curr_policy_version</span><span class="o">=</span><span class="n">step</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">batch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">inputs</span><span class="p">,</span> <span class="n">targets</span> <span class="o">=</span> <span class="n">batch</span>  <span class="c1"># GRPO returns (inputs, targets) tuple</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">train_step</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">targets</span><span class="p">)</span>
+
+            <span class="c1"># Weight synchronization pattern</span>
+            <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">push_weights</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">update_weights</span><span class="o">.</span><span class="n">fanout</span><span class="p">(</span><span class="n">step</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># Fanout to all replicas</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Step </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">, Loss: </span><span class="si">{</span><span class="n">loss</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">step</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Shutting down services...&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+    <span class="n">DatasetActor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">dataloader</span><span class="p">),</span>
+    <span class="n">policy</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(),</span>
+    <span class="n">RLTrainer</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">trainer</span><span class="p">),</span>
+    <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">),</span>
+    <span class="n">ComputeAdvantages</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">compute_advantages</span><span class="p">),</span>
+    <span class="n">ReferenceModel</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">ref_model</span><span class="p">),</span>
+    <span class="n">reward_actor</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;All services shut down successfully!&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Key observations:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>Parallelism</strong>: Independent operations run concurrently</p></li>
+<li><p><strong>Load balancing</strong>: Each <code class="docutils literal notranslate"><span class="pre">.route()</span></code> call automatically selects optimal replica</p></li>
+<li><p><strong>Fault tolerance</strong>: Failures automatically retry on different replicas</p></li>
+<li><p><strong>Resource efficiency</strong>: CPU and GPU services scale independently</p></li>
+<li><p><strong>Coordination</strong>: Services coordinate through shared state (replay buffer, weight versions)</p></li>
+</ol>
+<p>This is the power of the service abstraction - complex distributed coordination looks like simple async Python code.</p>
+<p>In the next part we will learn about <a class="reference internal" href="3_Monarch_101.html"><span class="std std-doc">Monarch internals</span></a></p>
+</section>
+</section>
+
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="1_RL_and_Forge_Fundamentals.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 1: RL Fundamentals - Using Forge Terminology</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="3_Monarch_101.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Part 3: The Forge-Monarch Connection</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="1_RL_and_Forge_Fundamentals.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 1: RL Fundamentals - Using Forge Terminology</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="3_Monarch_101.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Part 3: The Forge-Monarch Connection</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-anatomy-beyond-the-interface">Service Anatomy: Beyond the Interface</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-components-deep-dive">Service Components Deep Dive</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#real-service-configuration">1. Real Service Configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#real-service-creation">2. Real Service Creation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#how-services-actually-work">3. How Services Actually Work</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#communication-patterns-quick-reference">Communication Patterns: Quick Reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deep-dive-service-communication-patterns">Deep Dive: Service Communication Patterns</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#route-load-balanced-single-replica">1. <code class="docutils literal notranslate"><span class="pre">.route()</span></code> - Load Balanced Single Replica</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fanout-broadcast-with-results-collection">2. <code class="docutils literal notranslate"><span class="pre">.fanout()</span></code> - Broadcast with Results Collection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-operations-custom-implementation-pattern">3. Streaming Operations - Custom Implementation Pattern</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#service-sessions-for-stateful-operations">3. Service Sessions for Stateful Operations</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deep-dive-state-management-reality">Deep Dive: State Management Reality</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-kv-cache-problem">The KV Cache Problem</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#replay-buffer-consistency">Replay Buffer Consistency</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#weight-synchronization-strategy">Weight Synchronization Strategy</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#deep-dive-asynchronous-coordination-patterns">Deep Dive: Asynchronous Coordination Patterns</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-forge-approach-let-services-handle-coordination">The Forge Approach: Let Services Handle Coordination</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#handling-speed-mismatches-with-service-scaling">Handling Speed Mismatches with Service Scaling</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-implementation-example">Service Implementation Example</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#service-orchestration-the-training-loop">Service Orchestration: The Training Loop</a></li>
+</ul>
+  </nav></div>
+    
+
+
+
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Part 2: Peeling Back the Abstraction - What Are Services?",
+       "headline": "Part 2: Peeling Back the Abstraction - What Are Services?",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/tutorials/zero-to-forge/2_Forge_Internals.html",
+       "articleBody": "Part 2: Peeling Back the Abstraction - What Are Services?# We highly recommend reading Part 1 before this, it explains RL Concepts and how they land in Forge. Now that you see the power of the service abstraction, let\u2019s understand what\u2019s actually happening under the hood, Grab your chai! Service Anatomy: Beyond the Interface# When you call await policy_service.generate(question), here\u2019s what actually happens: (Don\u2019t worry, we will understand Services right in the next section!) graph TD Call[\"Your Code:\u003cbr/\u003eawait policy_service.generate\"] subgraph ServiceLayer[\"Service Layer\"] Proxy[\"Service Proxy: Load balancing, Health checking\"] LB[\"Load Balancer: Replica selection, Circuit breaker\"] end subgraph Replicas[\"Replica Management\"] R1[\"Replica 1: GPU 0, Healthy\"] R2[\"Replica 2: GPU 1, Overloaded\"] R3[\"Replica 3: GPU 2, Failed\"] R4[\"Replica 4: GPU 3, Healthy\"] end subgraph Compute[\"Actual Computation\"] Actor[\"Policy Actor: vLLM engine, Model weights, KV cache\"] end Call --\u003e Proxy Proxy --\u003e LB LB --\u003e R1 LB -.-\u003e R2 LB -.-\u003e R3 LB --\u003e R4 R1 --\u003e Actor R4 --\u003e Actor style Call fill:#4CAF50 style LB fill:#FF9800 style R3 fill:#F44336 style Actor fill:#9C27B0 Service Components Deep Dive# 1. Real Service Configuration# Here\u2019s the actual ServiceConfig from Forge source code: # Configuration pattern from apps/grpo/main.py: Policy.options( procs=1, # Processes per replica num_replicas=4, # Number of replicas with_gpus=True # Allocate GPUs # Other available options: # hosts=None # the number of remote hosts used per replica ) 2. Real Service Creation# Services are created using the .options().as_service() pattern from the actual GRPO implementation: The service creation automatically handles: Spawning actor replicas across processes/GPUs Load balancing with .route() method for services Health monitoring and failure recovery Message routing and serialization from forge.actors.policy import Policy model = \"Qwen/Qwen3-1.7B\" policy = await Policy.options( procs=1, with_gpus=True, num_replicas=1 ).as_service( engine_config={ \"model\": model, \"tensor_parallel_size\": 1, \"pipeline_parallel_size\": 1, \"enforce_eager\": False }, sampling_config={ \"n\": 1, \"max_tokens\": 16, \"temperature\": 1.0, \"top_p\": 1.0 } ) prompt = \"What is 3 + 5?\" responses = await policy.generate.route(prompt) print(f\"Response: {responses[0].text}\") # Cleanup when done await policy.shutdown() 3. How Services Actually Work# Forge services are implemented as ServiceActors that manage collections of your ForgeActor replicas: When you call .as_service(), Forge creates a ServiceInterface that manages N replicas of your ForgeActor class and gives you methods like .route(), .fanout(), etc. # Your code sees this simple interface: responses = await policy.generate.route(prompt=prompt) # But Forge handles all the complexity of replica management, load balancing, and fault tolerance Communication Patterns: Quick Reference# API Summary: .route() - Send request to any healthy replica in a service (load balanced) .call_one() - Send request to a single actor instance .fanout() - Send request to ALL replicas in a service graph LR subgraph Request[\"Your Request\"] Code[\"await service.method.ADVERB()\"] end subgraph Patterns[\"Communication Patterns\"] Route[\".route()\u003cbr/\u003e\u2192 One healthy replica\"] CallOne[\".call_one()\u003cbr/\u003e\u2192 Single actor\"] Fanout[\".fanout()\u003cbr/\u003e\u2192 ALL replicas\"] end subgraph Replicas[\"Replicas/Actors\"] R1[\"Replica 1\"] R2[\"Replica 2\"] R3[\"Replica 3\"] A1[\"Actor\"] end Code --\u003e Route Code --\u003e CallOne Code --\u003e Fanout Route --\u003e R2 CallOne --\u003e A1 Fanout --\u003e R1 Fanout --\u003e R2 Fanout --\u003e R3 style Route fill:#4CAF50 style CallOne fill:#FF9800 style Fanout fill:#9C27B0 Deep Dive: Service Communication Patterns# These communication patterns (\u201cadverbs\u201d) determine how your service calls are routed to replicas. Understanding when to use each pattern is key to effective Forge usage. 1. .route() - Load Balanced Single Replica# When to use: Normal request routing where any replica can handle the request. responses = await policy.generate.route(prompt=question) answer = responses[0].text # Extract text from Completion object Behind the scenes: Health check eliminates failed replicas Load balancer picks replica (currently round robin, configurable balancers coming soon) Request routes to that specific replica Automatic retry on different replica if failure Performance characteristics: Latency: Lowest (single network hop) Throughput: Limited by single replica capacity Fault tolerance: Automatic failover to other replicas Critical insight: .route() is your default choice for stateless operations in Forge services. 2. .fanout() - Broadcast with Results Collection# When to use: You need responses from ALL replicas. # Get version from all policy replicas current_versions = await policy.get_version.fanout() # Returns: [version_replica_1, version_replica_2, ...] # Update weights on all replicas await policy.update_weights.fanout(new_policy_version) # Broadcasts to all replicas simultaneously Performance characteristics: Latency: Slowest replica determines total latency Throughput: Network bandwidth \u00d7 number of replicas Fault tolerance: Fails if ANY replica fails (unless configured otherwise) Critical gotcha: Don\u2019t use .fanout() for high-frequency operations - it contacts all replicas. 3. Streaming Operations - Custom Implementation Pattern# When to use: You want to process results as they arrive, not wait for all. # CONCEPTUAL - Streaming requires custom implementation in your training loop # The basic ReplayBuffer doesn\u0027t have built-in streaming methods # Pattern from apps/grpo/main.py continuous training: while training: # This is the real API call pattern batch = await replay_buffer.sample.call_one(curr_policy_version=step) if batch is not None: # Process batch immediately loss = await trainer.train_step.call_one(batch) print(f\"Training loss: {loss}\") else: await asyncio.sleep(0.1) # Wait for more data Performance characteristics: Latency: Process first result immediately Throughput: Non-blocking async operations (much higher than waiting for full batches) Fault tolerance: Continues if some replicas fail Critical insight: This is essential for high-throughput RL where you can\u2019t wait for batches. 3. Service Sessions for Stateful Operations# When to use: When you need multiple calls to hit the same replica (like KV cache preservation). What are sticky sessions? A session ensures all your service calls within the async with block go to the same replica, instead of being load-balanced across different replicas. # This Counter example demonstrates the difference between regular routing and sessions from forge.controller import ForgeActor from monarch.actor import endpoint class ForgeCounter(ForgeActor): def __init__(self, initial_value: int): self.value = initial_value @endpoint def increment(self) -\u003e int: self.value += 1 return self.value @endpoint def get_value(self) -\u003e int: return self.value @endpoint async def reset(self): self.value = 0 counter_service = await ForgeCounter.options( procs=1, num_replicas=4 ).as_service(initial_value=0) # WITHOUT SESSIONS: Each .route() call goes to a different replica await counter_service.increment.route() # Might go to replica 2 await counter_service.increment.route() # Might go to replica 1 await counter_service.increment.route() # Might go to replica 3 results = await counter_service.increment.fanout() # Get from all replicas print(f\"All replica values: {results}\") # Output: All replica values: [1, 2, 1, 1] - Each replica has different state! The problem: each .route() call can go to different replicas, creating inconsistent state. # WITH SESSIONS: All calls go to the SAME replica print(\"\\nUsing sticky sessions:\") async with counter_service.session(): # Creates a session that picks one replica await counter_service.reset.route() # Uses .route() within session print(await counter_service.increment.route()) # 1 print(await counter_service.increment.route()) # 2 print(await counter_service.increment.route()) # 3 final_value = await counter_service.get_value.route() print(f\"Final value on this replica: {final_value}\") # 3 # Output: # Using sticky sessions: # 1 # 2 # 3 # Final value on this replica: 3 # Same pattern works with Policy for multi-turn conversations: # async with policy.session(): # response1 = await policy.generate.route(turn1) # full_prompt = turn1 + response1[0].text + turn2 # response2 = await policy.generate.route(full_prompt) # # Both calls hit same replica, preserving KV cache # Cleanup await counter_service.shutdown() Performance impact: Critical for maintaining KV cache in multi-turn conversations. Deep Dive: State Management Reality# The most complex challenge in distributed RL is maintaining state consistency while maximizing performance. The KV Cache Problem# The challenge: Policy inference is much faster with KV cache, but cache is tied to specific conversation history. # This breaks KV cache optimization: async def naive_multi_turn(): # Each call might go to different replica = cache miss response1 = await policy_service.generate.choose(question1) response2 = await policy_service.generate.choose(question1 + response1) # Cache miss! response3 = await policy_service.generate.choose(conversation_so_far) # Cache miss! The solution: Sticky sessions ensure all calls go to same replica. async def optimized_multi_turn(): async with policy.session(): # All calls guaranteed to hit same replica = cache hits response1 = await policy.generate.route(prompt=question1) full_prompt = question1 + response1[0].text response2 = await policy.generate.route(prompt=full_prompt) # Cache hit! conversation = full_prompt + response2[0].text response3 = await policy.generate.route(prompt=conversation) # Cache hit! # Session ends, replica can be garbage collected or reused Performance impact: Maintaining KV cache across turns avoids recomputing previous tokens. Replay Buffer Consistency# The challenge: Multiple trainers and experience collectors reading/writing concurrently. Real Forge approach: The ReplayBuffer actor handles concurrency internally: # Forge ReplayBuffer endpoints (verified from source code) # Add episodes (thread-safe by actor model) await replay_buffer.add.call_one(episode) # .choose() would work too, but .call_one() clarifies it\u0027s a singleton actor not ActorMesh # Sample batches for training batch = await replay_buffer.sample.call_one( curr_policy_version=step_number, batch_size=None # Optional parameter, uses default from config ) # Additional methods available: # await replay_buffer.clear.call_one() # Clear buffer # await replay_buffer.evict.call_one(curr_policy_version) # Remove old episodes # state = await replay_buffer.state_dict.call_one() # Get state for checkpointing Critical insight: The actor model provides natural thread safety - each actor processes messages sequentially. Weight Synchronization Strategy# The challenge: Trainer updates policy weights, but policy service needs those weights. # Forge weight synchronization pattern from apps/grpo/main.py async def real_weight_sync(trainer, policy, step): # Trainer pushes weights to TorchStore with version number await trainer.push_weights.call_one(policy_version=step + 1) # Policy service updates to new version from TorchStore # Use .fanout() to update ALL policy replicas await policy.update_weights.fanout(policy_version=step + 1) # Check current policy version current_version = await policy.get_version.route() print(f\"Current policy version: {current_version}\") Deep Dive: Asynchronous Coordination Patterns# The real challenge: Different services run at different speeds, but Forge\u2019s service abstraction handles the coordination complexity. The Forge Approach: Let Services Handle Coordination# Instead of manual coordination, Forge services handle speed mismatches automatically: from apps.grpo.main import Episode, Group async def simple_rl_step(): # ===== Generate a rollout ===== sample = await dataloader.sample.call_one() # DatasetActor is an actor, not service prompt, target = sample[\"request\"], sample[\"target\"] # Correct field names print(f\"Prompt: {prompt}\") print(f\"Target: {target}\") actions = await policy.generate.route(prompt=prompt) # Policy is a service print(f\"Policy response: {actions[0].text}\") # Create input tensor for reference model (requires full context) input_ids = torch.cat([actions[0].prompt_ids, actions[0].token_ids]) ref_logprobs = await ref_model.forward.route( input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True ) reward = await reward_actor.evaluate_response.route( # RewardActor is a service prompt=prompt, response=actions[0].text, target=target ) print(f\"Reward: {reward}\") # Create episode using actual GRPO Episode structure episode = Episode( episode_id=\"0\", request=prompt, policy_version=0, pad_id=tokenizer.pad_token_id, request_len=512, response_len=512, target=target ) # Add response data episode.response = actions[0].text episode.request_tokens = actions[0].prompt_ids.tolist() episode.response_tokens = actions[0].token_ids.tolist() episode.ref_logprobs = ref_logprobs[0] # Extract from batch dimension episode.reward = reward # Compute advantages using actual ComputeAdvantages actor group = Group.new_group(0, 1, prompt, 0, tokenizer.pad_token_id, 512, 512, target) group.episodes[0] = episode advantages = await compute_advantages.compute.call_one(group) # ComputeAdvantages is an actor episode.advantage = advantages[0] print(f\"Advantage: {advantages[0]}\") await replay_buffer.add.call_one(episode) # ReplayBuffer is an actor print(\"Episode stored in replay buffer\") # ===== Train on the batch ===== batch = await replay_buffer.sample.call_one(curr_policy_version=0) if batch is not None: print(\"Training on batch...\") inputs, targets = batch # GRPO returns (inputs, targets) tuple loss = await trainer.train_step.call(inputs, targets) # RLTrainer is an actor print(f\"Training loss: {loss}\") return loss else: print(\"Not enough data in buffer yet\") return None # Note: This simplified example assumes tokenizer and services are already initialized for step in range(10): print(f\"\\n--- RL Step {step + 1} ---\") loss = await simple_rl_step() if loss: print(f\"Step {step + 1} complete, loss: {loss:.4f}\") else: print(f\"Step {step + 1} complete, building buffer...\") Handling Speed Mismatches with Service Scaling# The insight: Scale services independently based on their bottlenecks. # Scale fast services with more replicas policy = await Policy.options( procs=1, num_replicas=8, with_gpus=True # Many replicas for high throughput ).as_service( engine_config={\"model\": model_name, \"tensor_parallel_size\": 1} ) # Reward evaluation might be CPU-bound reward_actor = await RewardActor.options( procs=1, num_replicas=16, with_gpus=False # More CPU replicas ).as_service( reward_functions=[MathReward()] ) # Training needs fewer but more powerful replicas trainer = await RLTrainer.options( procs=1, with_gpus=True # Fewer but GPU-heavy ).as_actor( # Trainer typically uses .as_actor() not .as_service() model={\"name\": \"qwen3\", \"flavor\": \"1.7B\"}, optimizer={\"name\": \"AdamW\", \"lr\": 1e-5} ) Service Implementation Example# Let\u2019s see how a reward service is actually implemented: # Exact RewardActor from apps/grpo/main.py from forge.controller import ForgeActor from monarch.actor import endpoint from forge.data.rewards import MathReward, ThinkingReward # class definition from apps/grpo/main.py class RewardActor(ForgeActor): def __init__(self, reward_functions: list): self.reward_functions = reward_functions @endpoint async def evaluate_response(self, prompt: str, response: str, target: str) -\u003e float: \"\"\"Evaluate response quality using multiple reward functions\"\"\" total_reward = 0.0 for reward_fn in self.reward_functions: # Each reward function contributes to total score reward = reward_fn(prompt, response, target) total_reward += reward # Return average reward across all functions return total_reward / len(self.reward_functions) if self.reward_functions else 0.0 reward_actor = await RewardActor.options( procs=1, num_replicas=1 ).as_service( reward_functions=[MathReward(), ThinkingReward()] ) prompt = \"What is 15% of 240?\" response = \"15% of 240 is 36\" target = \"36\" score = await reward_actor.evaluate_response.route( prompt=prompt, response=response, target=target ) print(f\"Reward score: {score}\") # Usually around 1.0 for correct math answers # For production scaling - increase num_replicas for parallel evaluation: # RewardActor.options(procs=1, num_replicas=16) # 16 parallel evaluators # Cleanup when done await reward_actor.shutdown() Service Orchestration: The Training Loop# Now let\u2019s see how services coordinate in a real training loop: # This is the REAL way production RL systems are built with Forge import asyncio import torch from forge.actors.policy import Policy from forge.actors.reference_model import ReferenceModel from forge.actors.replay_buffer import ReplayBuffer from forge.actors.trainer import RLTrainer from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages from forge.data.rewards import MathReward, ThinkingReward # Service creation pattern from apps/grpo/main.py lines 322-344 print(\"Initializing all services...\") ( dataloader, policy, trainer, replay_buffer, compute_advantages, ref_model, reward_actor, ) = await asyncio.gather( DatasetActor.options(procs=1).as_actor( path=\"openai/gsm8k\", revision=\"main\", data_split=\"train\", streaming=True, model=\"Qwen/Qwen3-1.7B\" ), Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service( engine_config={\"model\": \"Qwen/Qwen3-1.7B\", \"tensor_parallel_size\": 1}, sampling_config={\"n\": 1, \"max_tokens\": 512} ), RLTrainer.options(procs=1, with_gpus=True).as_actor( model={\"name\": \"qwen3\", \"flavor\": \"1.7B\", \"hf_assets_path\": \"hf://Qwen/Qwen3-1.7B\"}, optimizer={\"name\": \"AdamW\", \"lr\": 1e-5}, training={\"local_batch_size\": 2, \"seq_len\": 2048} ), ReplayBuffer.options(procs=1).as_actor( batch_size=2, max_policy_age=1, dp_size=1 ), ComputeAdvantages.options(procs=1).as_actor(), ReferenceModel.options(procs=1, with_gpus=True).as_actor( model={\"name\": \"qwen3\", \"flavor\": \"1.7B\", \"hf_assets_path\": \"hf://Qwen/Qwen3-1.7B\"} ), RewardActor.options(procs=1, num_replicas=1).as_service( reward_functions=[MathReward(), ThinkingReward()] ), ) print(\"All services initialized successfully!\") async def production_training_loop(): \"\"\"Real training loop pattern from apps/grpo/main.py\"\"\" step = 0 while True: # Data generation sample = await dataloader.sample.call_one() # Policy generation service call responses = await policy.generate.route(sample[\"request\"]) # Correct field name # Reference computation service call (requires full input tensor) input_ids = torch.cat([responses[0].prompt_ids, responses[0].token_ids]) ref_logprobs = await ref_model.forward.route( input_ids.unsqueeze(0), max_req_tokens=512, return_logprobs=True ) # Reward evaluation service call reward = await reward_actor.evaluate_response.route( prompt=sample[\"question\"], response=responses[0].text, target=sample[\"answer\"] ) # Experience storage (using actual Episode structure) episode = create_episode_from_grpo_data(sample, responses[0], reward, ref_logprobs[0], step) await replay_buffer.add.call_one(episode) # Training when ready batch = await replay_buffer.sample.call_one(curr_policy_version=step) if batch is not None: inputs, targets = batch # GRPO returns (inputs, targets) tuple loss = await trainer.train_step.call(inputs, targets) # Weight synchronization pattern await trainer.push_weights.call(step + 1) await policy.update_weights.fanout(step + 1) # Fanout to all replicas print(f\"Step {step}, Loss: {loss:.4f}\") step += 1 print(\"Shutting down services...\") await asyncio.gather( DatasetActor.shutdown(dataloader), policy.shutdown(), RLTrainer.shutdown(trainer), ReplayBuffer.shutdown(replay_buffer), ComputeAdvantages.shutdown(compute_advantages), ReferenceModel.shutdown(ref_model), reward_actor.shutdown(), ) print(\"All services shut down successfully!\") Key observations: Parallelism: Independent operations run concurrently Load balancing: Each .route() call automatically selects optimal replica Fault tolerance: Failures automatically retry on different replicas Resource efficiency: CPU and GPU services scale independently Coordination: Services coordinate through shared state (replay buffer, weight versions) This is the power of the service abstraction - complex distributed coordination looks like simple async Python code. In the next part we will learn about Monarch internals",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "../../_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/tutorials/zero-to-forge/2_Forge_Internals.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>
