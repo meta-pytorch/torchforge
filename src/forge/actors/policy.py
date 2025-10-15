@@ -156,13 +156,12 @@ class Policy(PolicyInterface):
         policy_proc_config.procs = 1
         policy_proc_config.with_gpus = False
 
-        # TODO - not working yet, delete this once debugged
-        policy_proc_config.hosts = None
-        policy_proc = await get_proc_mesh(process_config=policy_proc_config)
-
-        # policy_proc = await get_proc_mesh(
-        #     process_config=policy_proc_config, host_mesh=host_mesh
-        # )
+        # By passing in the host_mesh here, we will get a new proc
+        # spawned on the provided host_mesh. Since that host mesh is
+        # taken from the policy_proc, this ensures colocation.
+        policy_proc = await get_proc_mesh(
+            process_config=policy_proc_config, host_mesh=host_mesh
+        )
 
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
