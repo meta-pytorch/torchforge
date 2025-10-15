@@ -39,7 +39,6 @@ class TestGeneratorConfig(unittest.TestCase):
         # Default factories
         self.assertIsInstance(generator.engine_args, EngineArgs)
         self.assertIsInstance(generator.sampling_params, SamplingParams)
-        self.assertIsNone(generator.available_devices)
 
         # Worker defaults
         self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
@@ -81,7 +80,6 @@ class TestGeneratorConfig(unittest.TestCase):
         generator = Generator(
             engine_args=engine_dict,
             sampling_params=sampling_dict,
-            available_devices="test-gpu-device-abcd",
         )
 
         self.assertIsInstance(generator.engine_args, EngineArgs)
@@ -117,8 +115,6 @@ class TestGeneratorConfig(unittest.TestCase):
         sampling_params:
           n: 2468
           max_tokens: 1357
-
-        available_devices: "yaml-test-device-xyz"
         """
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -137,8 +133,6 @@ class TestGeneratorConfig(unittest.TestCase):
 
             self.assertEqual(generator.sampling_params.n, 2468)
             self.assertEqual(generator.sampling_params.max_tokens, 1357)
-
-            self.assertEqual(generator.available_devices, "yaml-test-device-xyz")
 
 
 if __name__ == "__main__":
