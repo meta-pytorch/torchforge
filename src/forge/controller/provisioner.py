@@ -305,7 +305,7 @@ class Provisioner:
         if not FORGE_DISABLE_METRICS.get_value():
             from forge.observability.metric_actors import get_or_create_metric_logger
 
-            _ = await get_or_create_metric_logger(procs, process_name=mesh_name)
+            _ = await get_or_create_metric_logger(procs)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
