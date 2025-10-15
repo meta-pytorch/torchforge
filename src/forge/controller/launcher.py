@@ -329,6 +329,15 @@ class MastLauncher(BaseLauncher):
             timeout_sec=self.timeout_sec,
             env=default_envs,
         )
+        appdef.metadata["mast"] = {
+            "HpcJobDefinition": {
+                "networkAffinity": {
+                    # Ensure colocation
+                    "preferredScope": 3,  # DC
+                    "fallbackScope": 3,  # REGION
+                },
+            },
+        }
 
         for role in appdef.roles:
             role.resource.capabilities["server_sub_types"] = [
