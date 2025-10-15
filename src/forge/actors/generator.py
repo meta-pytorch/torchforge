@@ -51,7 +51,12 @@ from forge.actors._torchstore_utils import (
     load_tensor_from_dcp,
 )
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.controller import (
+    ForgeActor,
+    get_proc_mesh,
+    host_mesh_from_proc,
+    stop_proc_mesh,
+)
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.env import TORCHSTORE_USE_RDMA
@@ -146,17 +151,20 @@ class Generator(GeneratorInterface):
         )
         worker_procs = await get_proc_mesh(process_config=process_config)
 
-        # TODO - issues/144 we will want to ensure colocation with workers
-        # We're currently locating the Generator on the local host proc mesh
-        # vLLM initialization without setting env variables at proc_mesh creation
-        # level leads to issues.
-        # Once we can create multiple proc meshes on a host mesh, we can ensure
-        # host colocation
-        generator_proc_config = copy(process_config)
-        generator_proc_config.procs = 1
-        generator_proc_config.hosts = None
-        generator_proc_config.with_gpus = False
-        generator_proc = await get_proc_mesh(process_config=generator_proc_config)
+        # Grab a single host from the workers...
+        host_mesh = await host_mesh_from_proc(worker_procs)
+        singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
+        host_mesh = host_mesh.slice(**singleton_slice)
+        policy_proc_config = copy(process_config)
+        policy_proc_config.procs = 1
+        policy_proc_config.with_gpus = False
+
+        # By passing in the host_mesh here, we will get a new proc
+        # spawned on the provided host_mesh. Since that host mesh is
+        # taken from the policy_proc, this ensures colocation.
+        policy_proc = await get_proc_mesh(
+            process_config=policy_proc_config, host_mesh=host_mesh
+        )
 
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
