@@ -63,13 +63,13 @@ class TestBasicOperations:
         await global_logger.flush.call_one(global_step=1)
 
     @pytest.mark.asyncio
-    async def test_backend_init(self, global_logger):
-        """Test backend initialization and shutdown through proper validation flow."""
-        # Use global_logger to ensure proper validation flow (string -> enum conversion)
+    async def test_backend_init(self, local_fetcher):
+        """Test backend initialization and shutdown."""
+        metadata = {"wandb": {"shared_run_id": "test123"}}
         config = {"console": {"logging_mode": "per_rank_reduce"}}
 
-        await global_logger.init_backends.call_one(config)
-        await global_logger.shutdown.call_one()
+        await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
+        await local_fetcher.shutdown.call_one()
 
 
 class TestRegistrationLifecycle:

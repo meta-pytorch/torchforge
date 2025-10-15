@@ -301,6 +301,9 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
+    else:
+        provisioner = await init_provisioner()
+
     metric_logging_cfg = cfg.get("metric_logging", {})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
