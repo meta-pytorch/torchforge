@@ -230,7 +230,6 @@ Before starting significant work, signal your intention in the issue tracker to 
 :caption: Documentation
 
 getting_started
-concepts
 tutorials
 api
 ```
