@@ -453,8 +453,9 @@ class Generator(GeneratorInterface):
                 await self.generator_worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
-                for _, handle in fetched_weights.items():
-                    handle.to_shared_tensor().drop()
+                # This can not be dropped in Generator because it is not on the same host as GeneratorWorker
+                # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
+                await self.generator_worker._drop_shared_memory.choose(fetched_weights)
             else:
                 await self.generator_worker.update_weights.call(version=version)
             self.generator_version = version
@@ -684,6 +685,14 @@ class GeneratorWorker(ForgeActor):
             shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
         t.stop()
         return shared_memory_state_dict
+
+    @endpoint
+    async def _drop_shared_memory(
+        self, shared_memory_state_dict: dict[str, SharedTensorHandle]
+    ):
+        """Drop shared memory tensors after use."""
+        for _, handle in shared_memory_state_dict.items():
+            handle.to_shared_tensor().drop()
 
     @endpoint
     async def _test_save_model_params(self):
