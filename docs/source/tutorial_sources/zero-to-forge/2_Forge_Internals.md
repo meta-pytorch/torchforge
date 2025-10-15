@@ -668,4 +668,4 @@ print("All services shut down successfully!")
 
 This is the power of the service abstraction - complex distributed coordination looks like simple async Python code.
 
-In the next part we will learn about [Monarch internals](./3_Monarch_101.MD)
+In the next part we will learn about [Monarch internals](./3_Monarch_101.md)

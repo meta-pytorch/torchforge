@@ -392,4 +392,4 @@ score = await reward_actor.evaluate_response.route(
 
 This is fundamentally different from monolithic RL implementations where any component failure stops everything!
 
-In the next Section, we will go a layer deeper and learn how ForgeServices work. Continue to [Part 2 here](./2_Forge_Internals.MD)
+In the next Section, we will go a layer deeper and learn how ForgeServices work. Continue to [Part 2 here](./2_Forge_Internals.md)
