@@ -31,7 +31,7 @@ Like array programming in NumPy or PyTorch, meshes make it simple to dispatch op
 ```python
 from monarch.actor import Actor, this_host
 
-# Create a process mesh with 8 GPUs
+# Create a process mesh with 8 processes (one per GPU)
 procs = this_host().spawn_procs({"gpus": 8})
 
 # Define an actor
@@ -74,7 +74,7 @@ Control commands go through one optimized path, while large data transfers (like
 **Services** wrap Monarch's ActorMesh with patterns common in RL. A service is a managed group of actor replicas with built-in load balancing, fault tolerance, and routing primitives.
 
 ```python
-# Create a policy service with 16 replicas, each using 8 GPUs
+# Create a policy service with 16 replicas, each using 8 processes
 policy = PolicyActor.options(
     procs=8,
     with_gpus=True,
@@ -118,7 +118,7 @@ async with policy.session():
 Services solve critical infrastructure challenges:
 
 **Heterogeneous Scaling**
-: Different components need different resources. Your policy might need 16 replicas × 8 GPUs for high-throughput vLLM inference. Your reward model might need 4 replicas × 4 GPUs. Your coding environment might need 16 lightweight CPU-only replicas. Services let each component scale independently.
+: Different components need different resources. Your policy might need 16 replicas × 8 processes for high-throughput vLLM inference. Your reward model might need 4 replicas × 4 processes. Your coding environment might need 16 lightweight CPU-only replicas. Services let each component scale independently.
 
 **Load Balancing**
 : In async RL, multiple `continuous_rollouts()` tasks run concurrently. Services automatically distribute these rollouts across available replicas - no manual worker pool management.
