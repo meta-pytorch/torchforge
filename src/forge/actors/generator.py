@@ -11,7 +11,6 @@ import logging
 import os
 import queue
 import sys
-import uuid
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
@@ -107,7 +106,7 @@ class Generator(GeneratorInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     generator_worker: GeneratorWorker | None = None
-    weight_fetchers: list[_WeightFetcher] = None
+    weight_fetchers: _WeightFetcher = None
 
     def __post_init__(self):
         super().__init__()
@@ -162,29 +161,6 @@ class Generator(GeneratorInterface):
         generator_proc_config.procs = 1
         generator_proc_config.with_gpus = False
 
-        # By passing in the host_mesh here, we will get a new proc
-        # spawned on the provided host_mesh. Since that host mesh is
-        # taken from the policy_proc, this ensures colocation.
-        generator_proc = await get_proc_mesh(
-            process_config=generator_proc_config, host_mesh=host_mesh
-        )
-
-        async def spawn_weight_fecher():
-            weight_fetcher_proc_config = copy(process_config)
-            weight_fetcher_proc_config.procs = 1
-            weight_fetcher_proc_config.with_gpus = False
-            weight_fetcher_proc = await get_proc_mesh(
-                process_config=weight_fetcher_proc_config, host_mesh=host_mesh
-            )
-            return weight_fetcher_proc.spawn(
-                f"weight_fetcher_{uuid.uuid4().int}", _WeightFetcher
-            )
-
-        # WeightFetchers have to be spawned on 8 different proc_meshes of size 1 because
-        # there is only one RDMAManager in a proc_mesh and it won't work
-        # concurrently.
-        weight_fetchers = [await spawn_weight_fecher() for _ in range(8)]
-
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
             engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
@@ -194,6 +170,8 @@ class Generator(GeneratorInterface):
         workers = worker_procs.spawn(
             "vllm_worker", GeneratorWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
+
+        weight_fetchers = worker_procs.spawn("weight_fetcher", _WeightFetcher)
 
         if isinstance(sampling_params, Mapping):
             sampling_params = SamplingParams.from_optional(**sampling_params)
@@ -306,21 +284,18 @@ class Generator(GeneratorInterface):
         matching_keys = await ts.keys(prefix)
         hf_param_names = [extract_param_name(key) for key in matching_keys]
 
-        n_fetchers = len(self.weight_fetchers)
+        n_fetchers = self.weight_fetchers.size()
 
         def split_keys(keys):
             return [keys[i::n_fetchers] for i in range(n_fetchers)]
 
-        tasks = []
+        futures = []
         for i, names in enumerate(split_keys(hf_param_names)):
+            fut = await self.weight_fetchers[i].fetch_weights.call(names)
+            futures.append(fut)
 
-            async def _fetch_task():
-                return await self.weight_fetchers[i].fetch.call_one(
-                    version=version, param_names=names
-                )
+        sub_state_dicts = [await fut for fut in futures]
 
-            tasks.append(_fetch_task())
-        sub_state_dicts = await asyncio.gather(*tasks)
         state_dict = {}
         for sd in sub_state_dicts:
             state_dict.update(sd)
