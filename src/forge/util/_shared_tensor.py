@@ -156,7 +156,7 @@ class SharedTensor:
         self._dtype_str = handle.dtype
         self._dtype = self._parse_dtype(self._dtype_str)
 
-        # Attach to existing shared memory
+        # Attach to existing shared memory\
         self._shm = shared_memory.SharedMemory(name=self._shm_name)
 
     def _create_tensor_view(self):

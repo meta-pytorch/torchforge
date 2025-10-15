@@ -388,24 +388,6 @@ class Generator(GeneratorInterface):
                 if len(self.requests) == 0:
                     self.request_lock.notify_all()
 
-    async def _fetch_weights(self, version: int) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("policy_perf/_fetch_weights")
-        t.start()
-        prefix = get_param_prefix(version)
-        matching_keys = await ts.keys(prefix)
-        hf_param_names = [extract_param_name(key) for key in matching_keys]
-        # We can't pass a generator since vllm load_weights is not async.
-        # Instead, we just call load_weights with one parameter at a time.
-        shared_memory_state_dict = {}
-        for name in hf_param_names:
-            param_key = get_param_key(version, name)
-            param = await ts.get(param_key)
-            # TODO: preallocate in the shared memory once we have plumbing in torchstore.
-            shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
-        t.stop()
-        return shared_memory_state_dict
-
     @endpoint
     async def update_weights(self, version: int) -> None:
         """Update weights on base model from a generator version to be found in a torchstore volume.
@@ -422,7 +404,11 @@ class Generator(GeneratorInterface):
         """
         # TODO: currently the alloc in ts.get will block the event loop unfortunately
         # potentially we need to change torchstore
-        fetch_task = asyncio.create_task(self._fetch_weights(version))
+        # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
+        if not self.use_dcp:
+            fetch_task = asyncio.create_task(
+                self.policy_worker._fetch_weights.choose(version)
+            )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -454,17 +440,20 @@ class Generator(GeneratorInterface):
             )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
-            # Call update_weights on every policy_worker
-            t = Tracer("generator_perf/_waiting_for_fetch_weights")
-            t.start()
-            fetched_weights = await fetch_task
-            t.stop()
-            await self.generator_worker.update_weights.call(
-                shared_memory_state_dict=fetched_weights
-            )
+            if not self.use_dcp:
+                t = Tracer("generator_perf/_waiting_for_fetch_weights")
+                t.start()
+                fetched_weights = await fetch_task
+                t.stop()
+                # Call update_weights on every policy_worker
+                await self.generator_worker.update_weights.call(
+                    shared_memory_state_dict=fetched_weights
+                )
+                for _, handle in fetched_weights.items():
+                    handle.to_shared_tensor().drop()
+            else:
+                await self.generator_worker.update_weights.call(version=version)
             self.generator_version = version
-            for _, handle in fetched_weights.items():
-                handle.to_shared_tensor().drop()
 
             # After updating the weights, we need to reset the KV cache
             self.scheduler.reset_prefix_cache()
@@ -679,6 +668,24 @@ class GeneratorWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         t.stop()
+
+    async def _fetch_weights(self, version: int) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("policy_perf/_fetch_weights")
+        t.start()
+        prefix = get_param_prefix(version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        shared_memory_state_dict = {}
+        for name in hf_param_names:
+            param_key = get_param_key(version, name)
+            param = await ts.get(param_key)
+            # TODO: preallocate in the shared memory once we have plumbing in torchstore.
+            shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
+        t.stop()
+        return shared_memory_state_dict
 
     @endpoint
     async def _test_save_model_params(self):
