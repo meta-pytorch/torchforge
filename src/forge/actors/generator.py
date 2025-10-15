@@ -492,11 +492,10 @@ class Generator(ForgeActor):
         await stop_proc_mesh(actor._generator_proc)
 
     @endpoint
-
     async def save_model_params(self):
         """Used for debugging purpose. Save model parameters before weight update."""
         logger.info("[Generator] save model parameters for debugging.")
-        await self.workerr.save_model_params.call()
+        await self.worker.save_model_params.call()
 
     @endpoint
     async def validate_model_params(self, validate_fn):
