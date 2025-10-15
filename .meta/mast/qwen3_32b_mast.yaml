@@ -3,14 +3,13 @@
 
 # Global configuration
 group_size: 8
-batch_size: 16
+local_batch_size: 16 # per-device batch size
 max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
 launcher: mast
 job_name: forge-qwen3-32b
-checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
 rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
@@ -26,7 +25,7 @@ metric_logging:
 
 # Dataset configuration
 dataset:
-  path: "openai/gsm8k"
+  path: /mnt/wsfuse/teamforge/hf_artifacts/gsm8k
   revision: "main"
   data_split: "train"
   streaming: true
@@ -61,7 +60,7 @@ trainer:
   lr_scheduler:
     warmup_steps: 1
   training:
-    local_batch_size: ${batch_size}
+    local_batch_size: ${local_batch_size}
     seq_len: 2048
     max_norm: 1.0
     steps: 1000000
@@ -81,6 +80,7 @@ trainer:
     enable: true
     initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_32b
     initial_load_in_hf: true
+    folder: ${checkpoint_folder}
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
@@ -95,7 +95,7 @@ trainer:
 
 # Replay buffer configuration
 replay_buffer:
-  batch_size: ${batch_size}
+  batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
   dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
 
@@ -120,6 +120,7 @@ ref_model:
   checkpoint:
     enable: true
     initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_32b
+    folder: ""
     initial_load_in_hf: true
   comm:
     # TODO: needs to be revisited. causing NCCL timeouts on inits when loading CP

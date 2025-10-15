@@ -25,7 +25,6 @@ metric_logging:
 
 # Dataset configuration
 dataset:
-  # path:  "openai/gsm8k"
   path: /mnt/wsfuse/teamforge/hf_artifacts/gsm8k
   revision: "main"
   data_split: "train"
@@ -35,7 +34,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: ${model}
+    model: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_1.7b
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
