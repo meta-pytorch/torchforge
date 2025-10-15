@@ -63,10 +63,10 @@ logger.setLevel(logging.INFO)
 @dataclass
 class Generator(ForgeActor):
     """Instance of a vLLM-based generator.
-    
+
     This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
     main difference is that all communications are controlled here via Monarch's proc meshes.
-    
+
     Args:
         engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
@@ -90,7 +90,10 @@ class Generator(ForgeActor):
 
     def __post_init__(self):
         super().__init__()
+        self._run_task: asyncio.Task | None = None
+        self._policy_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
+        self.worker: GeneratorWorker | None = None
         self.running = False
         self.generator_version: int = 0
 
@@ -161,7 +164,7 @@ class Generator(ForgeActor):
         worker_procs = await get_proc_mesh(process_config=process_config)
         vllm_config = (
             await generator.get_vllm_config.call_one()
-        )  # Config should be the same across all policy actors
+        )  # Config should be the same across all actors
         worker = worker_procs.spawn(
             "vllm_worker", GeneratorWorker, vllm_config=vllm_config
         )
