@@ -627,7 +627,7 @@ class GeneratorWorker(ForgeActor):
         if shared_memory_state_dict is not None:
             logger.info("[PolicyWorker] update weights from shared memory.")
             t = Tracer(
-                "policy_worker_perf/update_weights_from_shared_memory", timer="gpu"
+                "generator_worker_perf/update_weights_from_shared_memory", timer="gpu"
             )
             t.start()
             loaded_weights = set()
@@ -642,11 +642,12 @@ class GeneratorWorker(ForgeActor):
             raise ValueError(
                 "version must be provided if not using shared_memory_state_dict"
             )
+        # If shared memory is not provided, we assume we are using DCP
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         loaded_weights = set()
-        t = Tracer("worker_perf/update_weights", timer="gpu")
+        t = Tracer("generator_worker_perf/update_weights", timer="gpu")
         t.start()
         # Entire state dict is stored in a single DCP handle
         if dcp_whole_state_dict_key in matching_keys:
@@ -657,22 +658,14 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
-        else:  # Load each parameter from torchstore directly without DCP
-            hf_param_names = [extract_param_name(key) for key in matching_keys]
-            # We can't pass a generator since vllm load_weights is not async.
-            # Instead, we just call load_weights with one parameter at a time.
-            for name in hf_param_names:
-                param_key = get_param_key(version, name)
-                param = await ts.get(param_key)
-                loaded = model.load_weights([(name, param)])
-                del param
-                loaded_weights.update(loaded)
+        else:
+            raise RuntimeError("No DCP handle found for the given version")
         t.stop()
 
     @endpoint
     async def _fetch_weights(self, version: int) -> dict[str, SharedTensorHandle]:
         """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("policy_perf/_fetch_weights")
+        t = Tracer("generator_worker_perf/_fetch_weights")
         t.start()
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
