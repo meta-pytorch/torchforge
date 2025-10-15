@@ -264,7 +264,7 @@ class TestWeightSync:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
 
-        await policy.update_weights.fanout(policy_version=v1)
+        await policy.update_weights.fanout(version=v1)
         all_errs = await policy._test_validate_model_params.fanout(
             _test_validate_params_all_zeros
         )
@@ -273,7 +273,7 @@ class TestWeightSync:
                 assert not e, f"Validation failed with exception: {e}"
 
         # Reloading v0, getting back original weights
-        await policy.update_weights.fanout(policy_version=v0)
+        await policy.update_weights.fanout(version=v0)
         all_errs = await policy._test_validate_model_params.fanout(
             _test_validate_params_unchanged
         )

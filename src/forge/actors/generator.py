@@ -50,14 +50,10 @@ from forge.actors._torchstore_utils import (
 )
 
 from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
-<<<<<<< HEAD:src/forge/actors/generator.py
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.env import TORCHSTORE_USE_RDMA
 from forge.interfaces import Policy as GeneratorInterface
-from forge.data.sharding import VLLMSharding
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
