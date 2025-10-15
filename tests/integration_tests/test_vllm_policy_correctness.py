@@ -6,7 +6,7 @@
 
 import pytest
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.sampling_params import RequestOutputKind
@@ -51,7 +51,7 @@ async def test_same_output():
         vllm_model = AsyncLLM.from_engine_args(args)
 
         # Setup Policy service
-        policy = await Policy.options(
+        policy = await Generator.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
             engine_args={
