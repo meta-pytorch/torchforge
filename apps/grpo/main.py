@@ -355,7 +355,7 @@ async def main(cfg: DictConfig):
 
     start_version = int(cfg.trainer.checkpoint.load_step or 0)
     if start_version > 0:
-        # Ensure the trainer’s loaded checkpoint is materialized in torchstore at `start_version`
+        # Ensure the trainer’s loaded checkpoint is pushed to torchstore at `start_version`
         await trainer.push_weights.call(start_version)
 
         # Warm the policy to that exact version so new rollouts carry generator_version == start_version
@@ -428,7 +428,7 @@ async def main(cfg: DictConfig):
             t.stop()
 
     async def continuous_training():
-        training_step = max(cfg.trainer.checkpoint.load_step, 0)
+        training_step = start_version
         restart_tracer = True  # Flag to control when to restart tracer
 
         while max_steps == -1 or training_step < max_steps:

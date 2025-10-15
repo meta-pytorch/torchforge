@@ -74,12 +74,12 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    folder: "/home/dxie/tmp/checkpoint"  # Directory to save or resume checkpoints (default: ./checkpoints)
-    load_step: 200              # Step to load from; cannot be hf ckpt; -1 means load from initial_load_path. (default: -1)
+    folder: ./checkpoint  # Directory to save or resume checkpoints (default: ./checkpoints)
+    load_step: -1         # Step to load from; cannot be hf ckpt; -1 means load from initial_load_path. (default: -1)
     initial_load_path: hf://${model} # Optional: path or HF identifier to load model weights initially, will be ignored if `folder` exists
     initial_load_in_hf: true      # If true, interpret initial_load_path as a HuggingFace model repo
     last_save_in_hf: true
-    interval: 2
+    interval: 500
     async_mode: "disabled"
   activation_checkpoint:
     mode: selective
