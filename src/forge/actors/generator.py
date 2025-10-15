@@ -18,7 +18,7 @@ from typing import Optional
 
 import torch
 import torchstore as ts
-from monarch.actor import current_rank, endpoint, ProcMesh
+from monarch.actor import current_rank, endpoint, ProcMesh, this_host
 
 from vllm.config import VllmConfig
 
@@ -174,8 +174,6 @@ class Generator(GeneratorInterface):
             "vllm_worker", GeneratorWorker, vllm_config=vllm_config, use_dcp=use_dcp
         )
 
-        weight_fetchers = worker_procs.spawn("weight_fetcher", _WeightFetcher)
-
         if isinstance(sampling_params, Mapping):
             sampling_params = SamplingParams.from_optional(**sampling_params)
             sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
@@ -256,6 +254,9 @@ class Generator(GeneratorInterface):
             log_stats=None,
         )
         self._start_processing()
+        fetcher_procs = this_host().spawn_procs(per_host={"procs": 8})
+        self._fetcher_procs = fetcher_procs
+        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
 
     def _start_processing(self):
         if self._run_task is None or self._run_task.done():
@@ -585,6 +586,7 @@ class Generator(GeneratorInterface):
         await actor._cleanup_shared_memory.call()
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._generator_proc)
+        await stop_proc_mesh(actor._fetcher_procs)
 
     @endpoint
     async def _test_save_model_params(self):
