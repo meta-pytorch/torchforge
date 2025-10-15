@@ -105,14 +105,14 @@ class TestGeneratorConfig(unittest.TestCase):
 
         yaml_content = """
         engine_args:
-          model: "yaml-test-model-9876"
-          tensor_parallel_size: 1234
-          pipeline_parallel_size: 5678
+          model: "Qwen/Qwen3-0.6B"
+          tensor_parallel_size: 1
+          pipeline_parallel_size: 1
           enforce_eager: true
 
         sampling_params:
-          n: 2468
-          max_tokens: 1357
+          n: 2
+          max_tokens: 32
         """
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -123,14 +123,14 @@ class TestGeneratorConfig(unittest.TestCase):
                 config = yaml.safe_load(yaml_file)
 
             generator = Generator(**config)
-            self.assertEqual(generator.engine_args.model, "yaml-test-model-9876")
-            self.assertEqual(generator.engine_args.tensor_parallel_size, 1234)
-            self.assertEqual(generator.engine_args.pipeline_parallel_size, 5678)
+            self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
+            self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
+            self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
             self.assertTrue(generator.engine_args.enforce_eager)
             self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
-            self.assertEqual(generator.sampling_params.n, 2468)
-            self.assertEqual(generator.sampling_params.max_tokens, 1357)
+            self.assertEqual(generator.sampling_params.n, 2)
+            self.assertEqual(generator.sampling_params.max_tokens, 32)
 
 
 if __name__ == "__main__":
