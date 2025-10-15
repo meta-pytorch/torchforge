@@ -99,24 +99,6 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
     description="Sets the maximum frame length for Monarch's actor message delivery in bytes.",
 )
 
-MONARCH_HOSTMESH_V1 = EnvVar(
-    name="MONARCH_HOSTMESH_V1",
-    default=False,
-    description="Whether or not to use Monarch's experimental hostmesh v1 APIs",
-)
-
-WANDB_MODE = EnvVar(
-    name="WANDB_MODE",
-    default=None,
-    description="Wandb's mode, can be set to offline or off",
-)
-
-HF_HUB_OFFLINE = EnvVar(
-    name="HF_HUB_OFFLINE",
-    default=0,
-    description="Whether or not to run HF hub in offline mode.",
-)
-
 TORCHSTORE_USE_RDMA = EnvVar(
     name="TORCHSTORE_RDMA_ENABLED",
     default=0,

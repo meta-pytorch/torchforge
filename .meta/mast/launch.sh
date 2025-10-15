@@ -72,4 +72,8 @@ log_info "Successfully reinstalled forge package"
 # Launch the job
 CHECKPOINT_FOLDER=/mnt/wsfuse/teamforge/forge_runs/$JOB_NAME
 log_info "Launching MAST job..."
+
+# Manually override the relevant checkpoint path(s)
+# This unfortunately cannot be done in the YAML itself since this should be
+# based on job name...
 PYTHONPATH=. python .meta/mast/main.py --job-name $JOB_NAME --config $CONFIG_FILE trainer.checkpoint.folder=${CHECKPOINT_FOLDER} trainer.dcp_path=${CHECKPOINT_FOLDER}
