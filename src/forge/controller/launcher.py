@@ -296,7 +296,7 @@ class MastLauncher(BaseLauncher):
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
-                "HF_HOME": "/mnt/wsfuse/teamforge/huggingface",
+                "HF_HOME": "/mnt/wsfuse/teamforge/hf",
             },
         }
 

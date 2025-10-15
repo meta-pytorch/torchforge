@@ -244,6 +244,10 @@ pip list | grep -E "(forge|monarch)" || log_warn "No forge/monarch packages foun
 log_info "Environment setup complete! You can now run your scripts."
 log_info "Mounted workspace available at: /mnt/wsfuse"
 
+log_info "Unsetting CUDA_HOME and overwriting the LD_LIBRARY_PATH"
+unset CUDA_HOME
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib
+
 # Step 5: Ask user to test
 echo ""
 log_info "Installation completed successfully!"
