@@ -28,7 +28,7 @@ class BufferEntry:
 
 
 def default_evict(
-    buffer: deque, policy_version: int, max_samples: int = None, max_ag: int = None
+    buffer: deque, policy_version: int, max_samples: int = None, max_age: int = None
 ):
     """Default buffer eviction policy"""
     indices = []
