@@ -407,7 +407,7 @@ class Generator(GeneratorInterface):
         # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
         if not self.use_dcp:
             fetch_task = asyncio.create_task(
-                self.policy_worker._fetch_weights.choose(version)
+                self.generator_worker._fetch_weights.choose(version)
             )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
