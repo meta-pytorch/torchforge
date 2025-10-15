@@ -475,12 +475,12 @@ class Generator(ForgeActor):
                 fetched_weights = await fetch_fut
                 t.stop()
                 # Call update_weights on every policy_worker
-                await self.generator_worker.update_weights.call(
+                await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
                 await self._drop_shared_memory(fetched_weights)
             else:
-                await self.generator_worker.update_weights.call(version=version)
+                await self.worker.update_weights.call(version=version)
             self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
