@@ -97,9 +97,7 @@ async def test_same_output():
         for vllm_output, policy_output in zip(vllm_outputs, policy_outputs):
             assert vllm_output != ""
             assert policy_output != ""
-            if vllm_output != policy_output:
-                print(f"❌ Got different results: {vllm_output} vs. {policy_output}")
-        print("✅ Outputs are the same!")
+            assert vllm_output == policy_output
 
     finally:
         if policy is not None:
@@ -234,10 +232,7 @@ async def test_cache_usage():
         for vllm_output, policy_output in zip(vllm_outputs, policy_outputs):
             assert vllm_output != ""
             assert policy_output != ""
-            if vllm_output != policy_output:
-                print(f"❌ Got different results: {vllm_output} vs. {policy_output}")
-
-        print("\n✅ Prefix cache usage is the same!")
+            assert vllm_output == policy_output
 
     finally:
         if policy is not None:
