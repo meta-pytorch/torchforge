@@ -3,7 +3,7 @@
 A comprehensive guide for ML Engineers building distributed RL systems for language models.
 
 Some of the examples mentioned below will be conceptual in nature for understanding.
-Please refer to [API Docs](./api.html) for more details.
+Please refer to [API Docs](./api) for more details.
 
 Welcome to the Tutorials section! This section is inspired by the A-Z 
 PyTorch tutorial, shoutout to our PyTorch friends that remember!
