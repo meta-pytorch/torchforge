@@ -108,7 +108,7 @@ async def get_or_create_metric_logger(
     # Consistency check: both should be in sync
     if proc_has_local_fetcher != global_logger_has_local_fetcher:
         raise ValueError(
-            f"Inconsistent logging state for proc {proc}: "
+            f"Inconsistent logging state for {proc=} with {process_name=}: "
             f"proc has _local_fetcher={proc_has_local_fetcher}, "
             f"but global_logger has registration={global_logger_has_local_fetcher}. "
             f"This indicates a bug in logging setup/teardown. "

@@ -55,13 +55,7 @@ class Reduce(Enum):
 class Metric:
     """Container for metric data including key, value, reduction type, and timestamp.
 
-    Timestamp is automatically set to current EST time if not provided.
-
-    Args:
-        key: str
-        value: Any
-        reduction: Reduce
-        timestamp: Optional[float] = None
+    Timestamp is automatically set to current UTC time if not provided.
     """
 
     key: str
