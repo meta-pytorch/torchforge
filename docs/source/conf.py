@@ -82,8 +82,14 @@ templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
-exclude_patterns = ["tutorials/index.rst", "tutorials/template_tutorial.rst"]
 
+exclude_patterns = [
+    "tutorials/index.rst",
+    "tutorials/template_tutorial.rst",
+    "tutorials/**/index.rst",
+    "tutorial_sources/**/*.md",  # Exclude all markdown files from tutorial_sources
+    "tutorial_sources/**/*.MD",  # Also exclude uppercase .MD files
+]
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_js_files = ["custom.js"]
@@ -167,6 +173,9 @@ myst_enable_extensions = [
     "html_image",
 ]
 
+# Configure MyST parser to treat mermaid code blocks as mermaid directives
+myst_fence_as_directive = ["mermaid"]
+
 autodoc_default_options = {
     "members": True,
     "undoc-members": True,
@@ -204,7 +213,7 @@ napoleon_use_ivar = True
 sphinx_gallery_conf = {
     "examples_dirs": "tutorial_sources",  # Path to examples directory
     "gallery_dirs": "tutorials",  # Path to generate gallery
-    "filename_pattern": ".*",  # Include all files
+    "filename_pattern": r".*\.py$",  # Only process .py files, not .md files
     "download_all_examples": False,
     "first_notebook_cell": "%matplotlib inline",
     "plot_gallery": "True",
@@ -212,6 +221,7 @@ sphinx_gallery_conf = {
     "backreferences_dir": None,
     "show_signature": False,
     "write_computation_times": False,
+    "ignore_pattern": r".*\.md$|.*\.MD$",  # Explicitly ignore markdown files
 }
 
 
@@ -222,5 +232,40 @@ def clean_docstring_indentation(app, what, name, obj, options, lines):
             lines.append("")
 
 
+def copy_markdown_tutorials(app):
+    """Copy markdown files from tutorial_sources to tutorials directory.
+    
+    This runs after the builder is initialized but before sphinx-gallery processes files,
+    ensuring markdown files are available alongside generated .py tutorials.
+    """
+    import shutil
+    from pathlib import Path
+    
+    source_dir = Path(app.srcdir) / "tutorial_sources"
+    target_dir = Path(app.srcdir) / "tutorials"
+    
+    # Ensure target directory exists
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Walk through tutorial_sources and copy all .md files
+    for md_file in source_dir.rglob("*.md"):
+        # Skip README files
+        if md_file.name.lower() in ["readme.md", "readme.txt"]:
+            continue
+            
+        # Calculate relative path from tutorial_sources
+        rel_path = md_file.relative_to(source_dir)
+        
+        # Create target path in tutorials directory
+        target_path = target_dir / rel_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Copy the file
+        shutil.copy2(md_file, target_path)
+        print(f"[Forge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}")
+
+
 def setup(app):
     app.connect("autodoc-process-docstring", clean_docstring_indentation)
+    # Use builder-inited to ensure it runs before source files are read
+    app.connect("builder-inited", copy_markdown_tutorials)

@@ -1,6 +1,6 @@
 # Part 2: Peeling Back the Abstraction - What Are Services?
 
-We highly recommend reading [Part 1](./1_RL_and_Forge_Fundamentals.MD) before this, it explains RL Concepts and how they land in Forge.
+We highly recommend reading [Part 1](./1_RL_and_Forge_Fundamentals) before this, it explains RL Concepts and how they land in Forge.
 
 Now that you see the power of the service abstraction, let's understand what's actually happening under the hood, Grab your chai!
 
