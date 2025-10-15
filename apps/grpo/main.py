@@ -322,7 +322,7 @@ async def main(cfg: DictConfig):
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
-            **cfg.trainer, loss=simple_grpo_loss
+            **cfg.trainer, loss=simple_grpo_loss, step=cfg.trainer.checkpoint.load_step
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
