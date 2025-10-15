@@ -107,7 +107,7 @@ class Generator(GeneratorInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     generator_worker: GeneratorWorker | None = None
-    weight_fetcher: list[_WeightFetcher] = None
+    weight_fetchers: list[_WeightFetcher] = None
 
     def __post_init__(self):
         super().__init__()
