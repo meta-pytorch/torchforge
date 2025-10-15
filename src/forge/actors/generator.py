@@ -103,10 +103,12 @@ class Generator(GeneratorInterface):
         TORCHSTORE_USE_RDMA.get_value() == 0
     )  # torchstore currently only accepts 0 or 1
     # Remaining variables are initialized in self.setup()
+    prefetch_weights: bool = False
+    n_fetcher_procs: int = 8
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     generator_worker: GeneratorWorker | None = None
-    weight_fetchers: _WeightFetcher = None
+    weight_fetchers: _WeightFetcher | None = None
 
     def __post_init__(self):
         super().__init__()
@@ -213,11 +215,6 @@ class Generator(GeneratorInterface):
         self.request_lock = asyncio.Condition()  # Guard for accepting_requests
         self.update_lock = asyncio.Condition()  # Guard for updating requests
 
-        # Shared memory allocated for weight updates
-        self.cached_state_dict_allocs: queue.Queue[
-            dict[str, SharedTensorHandle]
-        ] = queue.Queue(maxsize=2)
-
         vllm_config: VllmConfig = self.engine_args.create_engine_config(
             UsageContext.LLM_CLASS
         )
@@ -253,7 +250,9 @@ class Generator(GeneratorInterface):
             log_stats=None,
         )
         self._start_processing()
-        fetcher_procs = this_host().spawn_procs(per_host={"procs": 1})
+        fetcher_procs = this_host().spawn_procs(
+            per_host={"procs": self.n_fetcher_procs}
+        )
         self._fetcher_procs = fetcher_procs
         self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
 
@@ -465,8 +464,12 @@ class Generator(GeneratorInterface):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
-        logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
-        fetch_fut = asyncio.create_task(self._fetch_weights(version))
+        # Prefetch only if we are using RDMA
+        if self.prefetch_weights and not self.use_dcp:
+            logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
+            fetch_fut = asyncio.create_task(self._fetch_weights(version))
+        else:
+            fetch_fut = None
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -498,10 +501,8 @@ class Generator(GeneratorInterface):
             )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
-            if not self.use_dcp:
-                # TODO: currently the alloc in ts.get will block the event loop unfortunately
-                # potentially we need to change torchstore
-                # We have to do this because Monarch future is not directly compatible with asyncio
+
+            if fetch_fut is not None:
                 t = Tracer("generator_perf/waiting_for_fetch_weights")
                 t.start()
                 fetched_weights = await fetch_fut
@@ -700,16 +701,17 @@ class GeneratorWorker(ForgeActor):
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
             t.stop()
             return
+        # normal update_weights without shared memory prefetching
         if version is None:
             raise ValueError(
                 "version must be provided if not using shared_memory_state_dict"
             )
-        # If shared memory is not provided, we assume we are using DCP
+        logger.info("[PolicyWorker] update weights from torchstore.")
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         loaded_weights = set()
-        t = Tracer("generator_worker_perf/update_weights", timer="gpu")
+        t = Tracer("generator_worker_perf/update_weights_from_torchstore", timer="gpu")
         t.start()
         # Entire state dict is stored in a single DCP handle
         if dcp_whole_state_dict_key in matching_keys:
@@ -721,7 +723,11 @@ class GeneratorWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         else:
-            raise RuntimeError("No DCP handle found for the given version")
+            for key in matching_keys:
+                param = await ts.get(key)
+                loaded = model.load_weights([(key, param)])
+                del param
+                loaded_weights.update(loaded)
         t.stop()
 
     @endpoint
