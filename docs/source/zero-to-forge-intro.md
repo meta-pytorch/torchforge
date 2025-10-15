@@ -5,7 +5,7 @@ A comprehensive guide for ML Engineers building distributed RL systems for langu
 Some of the examples mentioned below will be conceptual in nature for understanding.
 Please refer to [API Docs](./api) for more details.
 
-Welcome to the Tutorials section! This section is inspired by the A-Z 
+Welcome to the Tutorials section! This section is inspired by the A-Z
 PyTorch tutorial, shoutout to our PyTorch friends that remember!
 
 ## Tutorial Structure
