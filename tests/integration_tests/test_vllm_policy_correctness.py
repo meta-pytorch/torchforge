@@ -140,7 +140,7 @@ async def test_cache_usage():
         vllm_model = AsyncLLM.from_engine_args(args)
 
         # Setup Policy service
-        policy = await Policy.options(
+        policy = await Generator.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
             engine_args={
