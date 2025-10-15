@@ -27,7 +27,7 @@ class BufferEntry:
     sample_count: int = 0
 
 
-def default_evict(buffer, policy_version, max_samples=None, max_age=None):
+def default_evict(buffer: deque, policy_version: int, max_samples: int = None, max_ag: inte = None):
     """Default buffer eviction policy"""
     indices = []
     for i, entry in enumerate(buffer):
@@ -39,7 +39,7 @@ def default_evict(buffer, policy_version, max_samples=None, max_age=None):
     return indices
 
 
-def default_sample(buffer, sample_size, sampler, policy_version):
+def default_sample(buffer: deque, sample_size: int, sampler: Callable, policy_version: int):
     """Default buffer sampling policy"""
     if sample_size > len(buffer):
         return None
