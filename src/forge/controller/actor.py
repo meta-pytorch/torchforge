@@ -8,11 +8,19 @@ import logging
 
 import math
 import sys
-from typing import Any, Type, TypeVar
+from typing import Any, Type, TYPE_CHECKING, TypeVar
 
 from monarch.actor import Actor, current_rank, current_size, endpoint
 
-from forge.controller.provisioner import get_proc_mesh, stop_proc_mesh
+if TYPE_CHECKING:
+    from monarch._src.actor.actor_mesh import ActorMesh
+
+from forge.controller.provisioner import (
+    get_proc_mesh,
+    register_actor,
+    register_service,
+    stop_proc_mesh,
+)
 
 from forge.types import ProcessConfig, ServiceConfig
 
@@ -122,7 +130,7 @@ class ForgeActor(Actor):
           .. code-block:: python
 
              actor = await MyForgeActor.as_actor(...)
-             await actor.shutdown()
+             await MyForgeActor.shutdown(actor)
         """
 
         attrs = {
@@ -161,10 +169,13 @@ class ForgeActor(Actor):
         }
         cfg = ServiceConfig(**cfg_kwargs)
 
-        logger.info("Spawning Service for %s", cls.__name__)
+        logger.info(f"Spawning service {cls.__name__}")
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
-        return ServiceInterface(service, cls)
+        service_interface = ServiceInterface(service, cls)
+        # Register this service with the provisioner so it can cleanly shut this down
+        await register_service(service_interface)
+        return service_interface
 
     @endpoint
     async def setup(self):
@@ -182,7 +193,7 @@ class ForgeActor(Actor):
         pass
 
     @classmethod
-    async def launch(cls, *args, **kwargs) -> "ForgeActor":
+    async def launch(cls, *args, **kwargs) -> "ActorMesh":
         """Provisions and deploys a new actor.
 
         This method is used by `Service` to provision a new replica.
@@ -220,8 +231,10 @@ class ForgeActor(Actor):
         `procs`) are used to construct a ProcessConfig instance.
         If no configuration was stored, defaults to a single process with no GPU.
         """
-        logger.info("Spawning single actor %s", cls.__name__)
+        logger.info(f"Spawning actor {cls.__name__}")
         actor = await cls.launch(*args, **actor_kwargs)
+        # Register this actor with the provisioner so it can cleanly shut this down
+        await register_actor(actor)
         return actor
 
     @classmethod

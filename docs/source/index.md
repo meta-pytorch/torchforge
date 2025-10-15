@@ -224,6 +224,16 @@ TorchForge has been validated in real-world deployments:
 ```{tip}
 Before starting significant work, signal your intention in the issue tracker to coordinate with maintainers.
 ```
+* **Post-Training Focus**: Specializes in techniques
+  like Supervised Fine-Tuning (SFT) and Group Relative Policy Optimization (GRPO)
+* **PyTorch Integration**: Built natively on PyTorch with
+  dependencies on [PyTorch nightly](https://pytorch.org/get-started/locally/),
+  [Monarch](https://meta-pytorch.org/monarch), [vLLM](https://docs.vllm.ai/en/latest/),
+  and [TorchTitan](https://github.com/pytorch/torchtitan).
+* **Multi-GPU Support**: Designed for distributed training
+  with minimum 3 GPU requirement for GRPO training
+* **Model Support**: Includes pre-configured setups for popular models
+  like Llama3 8B and Qwen3.1 7B
 
 ```{toctree}
 :maxdepth: 2
