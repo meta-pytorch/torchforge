@@ -296,6 +296,7 @@ class Generator(GeneratorInterface):
         for i, names in enumerate(split_keys(hf_param_names)):
 
             async def _fetch():
+                await asyncio.sleep(0.1 * i)  # I hope this will work
                 await self.weight_fetchers.slice(procs=i).fetch.call_one(
                     version=version, param_names=names
                 )
