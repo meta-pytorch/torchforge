@@ -305,6 +305,8 @@ class Generator(GeneratorInterface):
         for sd in sub_state_dicts:
             state_dict.update(sd)
 
+        t.stop()
+
         return state_dict
 
     @endpoint
