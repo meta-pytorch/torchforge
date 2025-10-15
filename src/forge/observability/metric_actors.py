@@ -62,7 +62,7 @@ async def get_or_create_metric_logger(
         })
 
         # Initialize services...
-        policy = await Policy.as_service(...)
+        policy = await Generator.as_service(...)
 
         # Training loop
         for step in range(max_steps):

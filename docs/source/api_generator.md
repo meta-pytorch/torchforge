@@ -1,26 +1,26 @@
 # Generator
 
 ```{eval-rst}
-.. currentmodule:: forge.actors.policy
+.. currentmodule:: forge.actors.generator
 ```
 
 The Generator (Policy) is the core inference engine in TorchForge,
 built on top of [vLLM](https://docs.vllm.ai/en/latest/).
 It manages model serving, text generation, and weight updates for reinforcement learning workflows.
 
-## Policy
+## Generator
 
 ```{eval-rst}
-.. autoclass:: Policy
+.. autoclass:: Generator
    :members: generate, update_weights, get_version, stop
    :exclude-members: __init__, launch
    :no-inherited-members:
 ```
 
-## PolicyWorker
+## GeneratorWorker
 
 ```{eval-rst}
-.. autoclass:: PolicyWorker
+.. autoclass:: GeneratorWorker
    :members: execute_model, update, setup_kv_cache
    :show-inheritance:
    :exclude-members: __init__

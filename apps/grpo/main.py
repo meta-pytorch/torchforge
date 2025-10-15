@@ -20,7 +20,7 @@ from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
     get_param_prefix,
 )
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
@@ -78,6 +78,9 @@ class Episode:
 
 # Represents the group (G) of episodes in GRPO
 Group = list[Episode]
+
+# Represents the Policy Model to collect data from
+Policy = Generator
 
 
 def collate(
