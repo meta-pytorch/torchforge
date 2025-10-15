@@ -286,7 +286,6 @@ class Generator(GeneratorInterface):
                     "Cached state dict alloc queue is empty. No state dict to drop."
                 )
 
-    @endpoint
     async def _fetch_weights(
         self,
         version: int,
@@ -474,7 +473,7 @@ class Generator(GeneratorInterface):
             >>> generator.update_weights(version)
         """
         logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
-        fetch_fut = self._fetch_weights.call_one(version)
+        fetch_fut = asyncio.create_task(self._fetch_weights(version))
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
