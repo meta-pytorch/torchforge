@@ -234,35 +234,37 @@ def clean_docstring_indentation(app, what, name, obj, options, lines):
 
 def copy_markdown_tutorials(app):
     """Copy markdown files from tutorial_sources to tutorials directory.
-    
+
     This runs after the builder is initialized but before sphinx-gallery processes files,
     ensuring markdown files are available alongside generated .py tutorials.
     """
     import shutil
     from pathlib import Path
-    
+
     source_dir = Path(app.srcdir) / "tutorial_sources"
     target_dir = Path(app.srcdir) / "tutorials"
-    
+
     # Ensure target directory exists
     target_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Walk through tutorial_sources and copy all .md files
     for md_file in source_dir.rglob("*.md"):
         # Skip README files
         if md_file.name.lower() in ["readme.md", "readme.txt"]:
             continue
-            
+
         # Calculate relative path from tutorial_sources
         rel_path = md_file.relative_to(source_dir)
-        
+
         # Create target path in tutorials directory
         target_path = target_dir / rel_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Copy the file
         shutil.copy2(md_file, target_path)
-        print(f"[Forge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}")
+        print(
+            f"[Forge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}"
+        )
 
 
 def setup(app):
