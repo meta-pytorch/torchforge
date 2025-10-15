@@ -22,13 +22,14 @@ class MockBackend(LoggerBackend):
         self.finish_called = False
         self.metadata = {}
 
-    async def init(self, role="local", primary_logger_metadata=None):
+    async def init(self, role="local", primary_logger_metadata=None, process_name=None):
         self.init_called = True
         self.role = role
         self.primary_logger_metadata = primary_logger_metadata or {}
+        self.process_name = process_name
 
-    async def log(self, metrics, step):
-        self.logged_metrics.append((metrics, step))
+    async def log(self, metrics, global_step):
+        self.logged_metrics.append((metrics, global_step))
 
     async def finish(self):
         self.finish_called = True

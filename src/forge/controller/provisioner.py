@@ -13,6 +13,7 @@ import os
 import socket
 import uuid
 
+from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
@@ -133,6 +134,9 @@ class Provisioner:
         )
         if not self.launcher:
             logger.warning("Launcher not provided, remote allocations will not work.")
+
+        self._registered_actors: list["ForgeActor"] = []
+        self._registered_services: list["ServiceInterface"] = []
 
     async def initialize(self):
         """Call this after creating the instance"""
@@ -309,7 +313,7 @@ class Provisioner:
         if not FORGE_DISABLE_METRICS.get_value():
             from forge.observability.metric_actors import get_or_create_metric_logger
 
-            _ = await get_or_create_metric_logger(procs)
+            _ = await get_or_create_metric_logger(procs, process_name=mesh_name)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -346,8 +350,55 @@ class Provisioner:
                 commands.kill(server_name)
             del self._proc_host_map[proc_mesh]
 
+    def register_service(self, service: "ServiceInterface") -> None:
+        """Registers a service allocation for cleanup."""
+        # Import ServiceInterface here instead of at top-level to avoid circular import
+        from forge.controller.service import ServiceInterface
+
+        if not isinstance(service, ServiceInterface):
+            raise TypeError(
+                f"register_service expected ServiceInterface, got {type(service)}"
+            )
+
+        self._registered_services.append(service)
+
+    def register_actor(self, actor: "ForgeActor") -> None:
+        """Registers a single actor allocation for cleanup."""
+
+        if not isinstance(actor, ActorMesh):
+            raise TypeError(f"register_actor expected ActorMesh, got {type(actor)}")
+
+        self._registered_actors.append(actor)
+
+    async def shutdown_all_allocations(self):
+        """Gracefully shut down all tracked actors and services."""
+        logger.info(
+            f"Shutting down {len(self._registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
+        )
+        # --- ServiceInterface ---
+        for service in reversed(self._registered_services):
+            try:
+                await service.shutdown()
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {service}: {e}")
+
+        # --- Actor instance (ForgeActor or underlying ActorMesh) ---
+        for actor in reversed(self._registered_actors):
+            try:
+                # Get the class to call shutdown on (ForgeActor or its bound class)
+                actor_cls = getattr(actor, "_class", None) or actor.__class__
+                await actor_cls.shutdown(actor)
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {actor}: {e}")
+
+        self._registered_actors.clear()
+        self._registered_services.clear()
+
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
+        await self.shutdown_all_allocations()
         async with self._lock:
             for server_name in self._server_names:
                 commands.kill(server_name)
@@ -416,12 +467,43 @@ async def host_mesh_from_proc(proc_mesh: ProcMesh):
     return await provisioner.host_mesh_from_proc(proc_mesh)
 
 
+async def register_service(service: "ServiceInterface") -> None:
+    """Registers a service allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_service(service)
+
+
+async def register_actor(actor: "ForgeActor") -> None:
+    """Registers an actor allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_actor(actor)
+
+
 async def stop_proc_mesh(proc_mesh: ProcMesh):
     provisioner = await _get_provisioner()
     return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
+async def shutdown_metric_logger():
+    """Shutdown the global metric logger and all its backends."""
+    from forge.observability.metric_actors import get_or_create_metric_logger
+
+    logger.info("Shutting down metric logger...")
+    try:
+        mlogger = await get_or_create_metric_logger()
+        await mlogger.shutdown.call_one()
+    except Exception as e:
+        logger.warning(f"Failed to shutdown metric logger: {e}")
+
+
 async def shutdown():
+
+    await shutdown_metric_logger()
+
     logger.info("Shutting down provisioner..")
+
     provisioner = await _get_provisioner()
-    return await provisioner.shutdown()
+    result = await provisioner.shutdown()
+
+    logger.info("Shutdown completed successfully")
+    return result
