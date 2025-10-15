@@ -124,3 +124,16 @@ class TestReplayBuffer:
             assert len(dp_samples) == 2  # batch_size
 
         replay_buffer.clear.call_one().get()
+
+    @pytest.mark.asyncio
+    async def test_collect(self) -> None:
+        """Test _collect method"""
+        local_rb = ReplayBuffer(batch_size=1)
+        await local_rb.setup._method(local_rb)
+        for i in range(1, 6):
+            local_rb.buffer.append(i)
+        values = local_rb._collect([2, 0, -1])
+        assert values == [3, 1, 5]
+        values = local_rb._collect([1, 3])
+        assert values == [2, 4]
+        assert local_rb.buffer[0] == 1

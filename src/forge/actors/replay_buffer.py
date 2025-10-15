@@ -29,8 +29,8 @@ class BufferEntry:
 
 def age_evict(
     buffer: deque, policy_version: int, max_samples: int = None, max_age: int = None
-):
-    """Default buffer eviction policy"""
+) -> list[int]:
+    """Buffer eviction policy, remove old or over-sampled entries"""
     indices = []
     for i, entry in enumerate(buffer):
         if max_age and policy_version - entry.data.policy_version > max_age:
@@ -41,8 +41,8 @@ def age_evict(
     return indices
 
 
-def random_sample(buffer: deque, sample_size: int, policy_version: int):
-    """Default buffer sampling policy"""
+def random_sample(buffer: deque, sample_size: int, policy_version: int) -> list[int]:
+    """Buffer random sampling policy"""
     if sample_size > len(buffer):
         return None
     return random.sample(range(len(buffer)), k=sample_size)
