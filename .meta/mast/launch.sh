@@ -70,5 +70,6 @@ fi
 log_info "Successfully reinstalled forge package"
 
 # Launch the job
+CHECKPOINT_FOLDER=/mnt/wsfuse/teamforge/forge_runs/$JOB_NAME
 log_info "Launching MAST job..."
-PYTHONPATH=. python .meta/mast/main.py --config "$CONFIG_FILE" --job-name "$JOB_NAME"
+PYTHONPATH=. python .meta/mast/main.py --job-name $JOB_NAME --config $CONFIG_FILE trainer.checkpoint.folder=${CHECKPOINT_FOLDER} trainer.dcp_path=${CHECKPOINT_FOLDER}

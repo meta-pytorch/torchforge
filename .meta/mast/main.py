@@ -31,13 +31,14 @@ DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"
 DEFAULT_CHECKPOINT_FOLDER = "/mnt/wsfuse/teamforge/forge_runs/"
 
 
-async def main(cfg: DictConfig, mode: str = "detached"):
+async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None):
     """Main module for launching mast jobs for GRPO training.
 
     Args:
         cfg: Configuration dictionary
         mode: "detached" (default) launches MAST job with client in MAST,
               "remote" runs training directly (used when client runs in MAST)
+        extra_args: Additional CLI arguments to pass through to the client
     """
     if cfg.get(LAUNCHER_KEY, Launcher.MAST.value) != Launcher.MAST.value:
         raise ValueError("Launcher must be MAST.")
@@ -46,14 +47,6 @@ async def main(cfg: DictConfig, mode: str = "detached"):
     # No need to modify it further here
     if cfg.get(JOB_NAME_KEY, None) is None:
         raise ValueError("Job name is required but not provided")
-
-    if cfg.get(DEFAULT_CHECKPOINT_FOLDER_KEY, DEFAULT_CHECKPOINT_FOLDER) is not None:
-        # append job_name and guid to CP folder path to avoid path collision
-        if cfg[DEFAULT_CHECKPOINT_FOLDER_KEY] == DEFAULT_CHECKPOINT_FOLDER:
-            cfg[
-                DEFAULT_CHECKPOINT_FOLDER_KEY
-            ] = f"{cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}{cfg[JOB_NAME_KEY]}"
-        print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
     launcher_config = LauncherConfig(
         launcher=Launcher(cfg.get(LAUNCHER_KEY, Launcher.MAST.value)),
@@ -64,17 +57,11 @@ async def main(cfg: DictConfig, mode: str = "detached"):
 
     if mode == "detached":
         # In detached mode, just launch the MAST job with client role included
-        # Get the config file from sys.argv to pass to the client role
-        config_file = None
-        for i, arg in enumerate(sys.argv):
-            if arg == "--config" and i + 1 < len(sys.argv):
-                config_file = sys.argv[i + 1]
-                break
-
-        if not config_file:
-            raise ValueError("--config argument is required in detached mode")
-
-        launcher = MastLauncher(launcher_config, detached=True, config_file=config_file)
+        launcher = MastLauncher(
+            launcher_config,
+            detached=True,
+            extra_args=extra_args or [],
+        )
         await launcher.launch_mast_job()
         print(f"MAST job {launcher.job_name} launched successfully with client role.")
         print("The client is running inside MAST and will execute the training.")
@@ -111,6 +98,6 @@ if __name__ == "__main__":
         if args.job_name:
             cfg[JOB_NAME_KEY] = args.job_name
             print(f"Using job name: {args.job_name}")
-        asyncio.run(main(cfg, mode=args.mode))
+        asyncio.run(main(cfg, mode=args.mode, extra_args=remaining))
 
     _main()  # @parse grabs the cfg from CLI

@@ -186,7 +186,7 @@ class MastLauncher(BaseLauncher):
         detached: If True, adds a client role to the MAST job appdef that runs
                   the training script inside MAST. If False, only launches worker
                   roles and expects the client to run on local machine.
-        config_file: The name of the config file that stores the experiment configuration.
+        extra_args: Additional CLI arguments to pass through to the client role.
 
     """
 
@@ -194,13 +194,13 @@ class MastLauncher(BaseLauncher):
         self,
         cfg: LauncherConfig | None = None,
         detached: bool = False,
-        config_file: str | None = None,
+        extra_args: list = None,
     ):
         assert cfg is not None
         self.cfg = cfg
         self.detached = detached
         self.default_monarch_port = 26600
-        self.config_file = config_file
+        self.extra_args = extra_args or []
         self.scheduler_name = "mast_conda"
 
         # TODO: enable taking this from config
@@ -362,11 +362,14 @@ class MastLauncher(BaseLauncher):
         # These args will be passed to client_bootstrap.sh which forwards them to main.py
         args = [
             "--mode=remote",
-            "--config",
-            self.config_file,
             "--job-name",
             self.job_name,
         ]
+
+        # Add any extra args passed from the CLI (includes --config and other args)
+        if self.extra_args:
+            args.extend(self.extra_args)
+
         client_role.args = args
         client_role.num_replicas = 1
 

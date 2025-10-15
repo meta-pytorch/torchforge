@@ -35,7 +35,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    model: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -53,7 +53,7 @@ trainer:
   model:
     name: qwen3
     flavor: 8B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    hf_assets_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -79,7 +79,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
     initial_load_in_hf: true
     last_save_in_hf: true
     interval: 500
@@ -104,7 +104,7 @@ ref_model:
   model:
     name: qwen3
     flavor: 8B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    hf_assets_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
   training:
     dtype: bfloat16
     gc_freq: 1
@@ -119,7 +119,7 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-8B/snapshots/model
+    initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
     initial_load_in_hf: true
 
 # All resource allocations
