@@ -2,7 +2,13 @@ name: Unit Tests
 
 on:
   pull_request:
-
+  schedule:
+    # Runs every hour
+    - cron:  '0 * * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   unit_tests:
