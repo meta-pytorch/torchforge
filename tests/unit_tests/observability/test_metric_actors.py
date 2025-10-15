@@ -66,7 +66,7 @@ class TestBasicOperations:
     async def test_backend_init(self, local_fetcher):
         """Test backend initialization and shutdown."""
         metadata = {"wandb": {"shared_run_id": "test123"}}
-        config = {"console": {"logging_mode": "per_rank_reduce"}}
+        config = {"console": {"logging_mode": LoggingMode.PER_RANK_REDUCE}}
 
         await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
         await local_fetcher.shutdown.call_one()
