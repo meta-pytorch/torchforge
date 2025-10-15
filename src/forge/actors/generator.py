@@ -11,6 +11,7 @@ import logging
 import os
 import queue
 import sys
+import uuid
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
@@ -106,7 +107,7 @@ class Generator(GeneratorInterface):
     lora_request: LoRARequest | None = None
     tokenization_kwargs: dict = field(default_factory=dict)
     generator_worker: GeneratorWorker | None = None
-    weight_fetcher: _WeightFetcher | None = None
+    weight_fetcher: list[_WeightFetcher] = None
 
     def __post_init__(self):
         super().__init__()
@@ -168,13 +169,21 @@ class Generator(GeneratorInterface):
             process_config=generator_proc_config, host_mesh=host_mesh
         )
 
-        weight_fetcher_proc_config = copy(process_config)
-        weight_fetcher_proc_config.procs = 16
-        weight_fetcher_proc_config.with_gpus = False
-        weight_fetcher_procs = await get_proc_mesh(
-            process_config=weight_fetcher_proc_config, host_mesh=host_mesh
-        )
-        weight_fetchers = weight_fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
+        async def spawn_weight_fecher():
+            weight_fetcher_proc_config = copy(process_config)
+            weight_fetcher_proc_config.procs = 1
+            weight_fetcher_proc_config.with_gpus = False
+            weight_fetcher_proc = await get_proc_mesh(
+                process_config=weight_fetcher_proc_config, host_mesh=host_mesh
+            )
+            return weight_fetcher_proc.spawn(
+                f"weight_fetcher_{uuid.uuid4().int}", _WeightFetcher
+            )
+
+        # WeightFetchers have to be spawned on 8 different proc_meshes of size 1 because
+        # there is only one RDMAManager in a proc_mesh and it won't work
+        # concurrently.
+        weight_fetchers = [await spawn_weight_fecher() for _ in range(8)]
 
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
@@ -200,7 +209,7 @@ class Generator(GeneratorInterface):
             sampling_params=sampling_params,
             available_devices=available_devices,
             generator_worker=workers,
-            weight_fetcher=weight_fetchers,
+            weight_fetchers=weight_fetchers,
             **kwargs,
         )
         generator._generator_proc = generator_proc
@@ -296,8 +305,8 @@ class Generator(GeneratorInterface):
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         hf_param_names = [extract_param_name(key) for key in matching_keys]
-        # TODO: parametrize number of weight fetchers
-        n_fetchers = 16
+
+        n_fetchers = len(self.weight_fetchers)
 
         def split_keys(keys):
             return [keys[i::n_fetchers] for i in range(n_fetchers)]
@@ -306,7 +315,7 @@ class Generator(GeneratorInterface):
         for i, names in enumerate(split_keys(hf_param_names)):
 
             async def _fetch_task():
-                return await self.weight_fetcher.slice(procs=i).fetch.call_one(
+                return await self.weight_fetchers[i].fetch.call_one(
                     version=version, param_names=names
                 )
 
