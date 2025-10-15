@@ -439,6 +439,9 @@ class Generator(GeneratorInterface):
                 # We have to do this because Monarch future is not directly compatible with asyncio
                 t = Tracer("generator_perf/_fetch_weights")
                 t.start()
+                logger.info(
+                    f"[Generator] Fetching weights for v{version} to shared memory"
+                )
                 fetched_weights = await self.generator_worker._fetch_weights.choose(
                     version
                 )
