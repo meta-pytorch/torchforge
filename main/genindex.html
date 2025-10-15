@@ -680,13 +680,11 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.activation_checkpoint">activation_checkpoint (forge.actors.trainer.RLTrainer attribute)</a>
 </li>
-      <li><a href="api_actors.html#forge.controller.actor.ForgeActor.as_actor">as_actor() (forge.controller.actor.ForgeActor class method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.async_mode">async_mode (torchtitan.config.job_config.Checkpoint attribute)</a>
+      <li><a href="api_actors.html#forge.controller.actor.ForgeActor.as_actor">as_actor() (forge.controller.actor.ForgeActor class method)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.generator.Generator.available_devices">available_devices (forge.actors.generator.Generator attribute)</a>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.async_mode">async_mode (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -838,17 +836,17 @@ document.write(`
 </li>
       <li><a href="api_generator.html#forge.actors.generator.Generator">Generator (class in forge.actors.generator)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.generator.Generator.generator_worker">generator_worker (forge.actors.generator.Generator attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker">GeneratorWorker (class in forge.actors.generator)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker">GeneratorWorker (class in forge.actors.generator)</a>
-</li>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics">get_metrics() (forge.controller.service.service.Service method)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics_summary">get_metrics_summary() (forge.controller.service.service.Service method)</a>
 </li>
       <li><a href="api_generator.html#forge.actors.generator.Generator.get_version">get_version (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.get_vllm_config">get_vllm_config (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.global_batch_size">global_batch_size (torchtitan.config.job_config.Training attribute)</a>
 </li>
@@ -919,8 +917,6 @@ document.write(`
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.local_batch_size">local_batch_size (torchtitan.config.job_config.Training attribute)</a>
-</li>
-      <li><a href="api_generator.html#forge.actors.generator.Generator.lora_request">lora_request (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.loss">loss() (forge.actors.trainer.RLTrainer method)</a>
 </li>
@@ -1042,6 +1038,8 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_model.html#forge.actors.reference_model.ReferenceModel">ReferenceModel (class in forge.actors.reference_model)</a>
 </li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.register_worker">register_worker (forge.actors.generator.Generator attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer">RLTrainer (class in forge.actors.trainer)</a>
@@ -1084,12 +1082,8 @@ document.write(`
       </ul></li>
       <li><a href="api_service.html#forge.controller.service.service.Service.start_session">start_session() (forge.controller.service.service.Service method)</a>
 </li>
-      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.state_dict_key">state_dict_key (forge.actors.generator.GeneratorWorker attribute)</a>
-
-      <ul>
-        <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.state_dict_key">(forge.actors.trainer.RLTrainer attribute)</a>
+      <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.state_dict_key">state_dict_key (forge.actors.trainer.RLTrainer attribute)</a>
 </li>
-      </ul></li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.steps">steps (torchtitan.config.job_config.Training attribute)</a>
 </li>
       <li><a href="api_generator.html#forge.actors.generator.Generator.stop">stop (forge.actors.generator.Generator attribute)</a>
@@ -1105,8 +1099,6 @@ document.write(`
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.tensor_parallel_degree">tensor_parallel_degree (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.terminate_session">terminate_session() (forge.controller.service.service.Service method)</a>
-</li>
-      <li><a href="api_generator.html#forge.actors.generator.Generator.tokenization_kwargs">tokenization_kwargs (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.tokenizer_path">tokenizer_path (torchtitan.config.job_config.Model attribute)</a>
 </li>
@@ -1136,14 +1128,10 @@ document.write(`
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_generator.html#forge.actors.generator.Generator.use_dcp">use_dcp (forge.actors.generator.Generator attribute)</a>
-
-      <ul>
-        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.use_dcp">(forge.actors.generator.GeneratorWorker attribute)</a>
+      <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.use_dcp">use_dcp (forge.actors.trainer.RLTrainer attribute)</a>
 </li>
-        <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.use_dcp">(forge.actors.trainer.RLTrainer attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.use_dcp_for_weight_sync">use_dcp_for_weight_sync (forge.actors.generator.Generator attribute)</a>
 </li>
-      </ul></li>
   </ul></td>
 </tr></table>
 
