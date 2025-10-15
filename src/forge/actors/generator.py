@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import queue
 import sys
 from collections.abc import Mapping
 from copy import copy
@@ -241,17 +240,6 @@ class Generator(ForgeActor):
     async def _drop_shared_memory(self, state_dict: dict[str, SharedTensorHandle]):
         for handle in state_dict.values():
             handle.drop()
-
-    async def _cleanup_shared_memory(self):
-        """Cleanup shared memory allocated for weight updates."""
-        while not self.cached_state_dict_allocs.empty():
-            try:
-                state_dict = self.cached_state_dict_allocs.get_nowait()
-                await self._drop_shared_memory(state_dict)
-            except queue.Empty:
-                logger.info(
-                    "Cached state dict alloc queue is empty. No state dict to drop."
-                )
 
     async def _fetch_weights(
         self,
