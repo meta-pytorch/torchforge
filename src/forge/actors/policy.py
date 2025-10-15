@@ -100,6 +100,7 @@ class Policy(ForgeActor):
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
         self.engine_args._is_v1_supported_oracle = lambda *_: True
+        self.vllm_config = self.engine_args.create_engine_config(UsageContext.LLM_CLASS)
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
@@ -107,6 +108,11 @@ class Policy(ForgeActor):
 
         if self.use_dcp is None:
             self.use_dcp = TORCHSTORE_USE_RDMA.get_value() == 0
+        logger.debug(f"{self.use_dcp=}")
+
+    @endpoint
+    async def get_vllm_config(self) -> VllmConfig:
+        return self.vllm_config
 
     @endpoint
     async def register_worker(self, worker: PolicyWorker) -> None:
@@ -134,14 +140,12 @@ class Policy(ForgeActor):
             with_gpus=cls.with_gpus,
             mesh_name=cls.mesh_name,
         )
-        worker_procs = await get_proc_mesh(process_config=process_config)
 
         # TODO - issues/144 we will want to ensure colocation with workers
         # We're currently locating the Policy on the local host proc mesh
         # vLLM initialization without setting env variables at proc_mesh creation
-        # level leads to issues.
-        # Once we can create multiple proc meshes on a host mesh, we can ensure
-        # host colocation
+        # level leads to issues. Once we can create multiple proc meshes on a host mesh,
+        # we can ensure host colocation
         policy_proc_config = copy(process_config)
         policy_proc_config.procs = 1
         policy_proc_config.hosts = None
@@ -150,46 +154,32 @@ class Policy(ForgeActor):
 
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
-
-        # if isinstance(engine_args, Mapping):
-        #     engine_args = EngineArgs(**engine_args)
-        #     engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
-        #     logger.debug(f"Resolved engine args: {engine_args}")
-
-        # vllm_config = engine_args.create_engine_config(UsageContext.LLM_CLASS)
-        # engine_args = kwargs["engine_args"]
-        # if isinstance(engine_args, Mapping):
-        #     engine_args = EngineArgs(**engine_args)
-        # engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
-        # vllm_config = engine_args.create_engine_config(UsageContext.LLM_CLASS)
-        worker = worker_procs.spawn("vllm_worker", PolicyWorker, *args, **kwargs)
-
-        # if isinstance(sampling_params, Mapping):
-        #     sampling_params = SamplingParams.from_optional(**sampling_params)
-        #     sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
-        #     logger.debug(f"Resolved sampling params: {sampling_params}")
-
         policy = policy_proc.spawn(
             actor_name,
             cls,
             *args,
             **kwargs,
         )
+
+        worker_procs = await get_proc_mesh(process_config=process_config)
+        vllm_config = (
+            await policy.get_vllm_config.call_one()
+        )  # Config should be the same across all policy actors
+        worker = worker_procs.spawn(
+            "vllm_worker", PolicyWorker, vllm_config=vllm_config
+        )
+        await worker.setup.call()
+        await policy.register_worker.call(worker)
+
         policy._policy_proc = policy_proc
         policy._worker_procs = worker_procs
-        await policy.register_worker.call(worker)
         await policy.setup.call()
+
         return policy
 
     @endpoint
     async def setup(self):
         """Mirrors the __init__ of vLLM's LLMEngine."""
-        if self.worker is None:
-            raise RuntimeError(
-                "Policy worker should not be None. Usually it would be attached to Policy in the ``launch`` method."
-            )
-        await self.worker.setup.call()
-
         self.request_id = 0
         self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
@@ -203,26 +193,26 @@ class Policy(ForgeActor):
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
         tokenizer = init_tokenizer_from_configs(
-            model_config=vllm_config.model_config,
-            scheduler_config=vllm_config.scheduler_config,
-            lora_config=vllm_config.lora_config,
+            model_config=self.vllm_config.model_config,
+            scheduler_config=self.vllm_config.scheduler_config,
+            lora_config=self.vllm_config.lora_config,
         )
         self.processor = Processor(
-            vllm_config=vllm_config, tokenizer=tokenizer, mm_registry=None
+            vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
         # Configure KV caches
         kv_cache_configs = await self.worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
-        vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        vllm_config.cache_config.num_cpu_blocks = 0
+        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_config.cache_config.num_cpu_blocks = 0
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        structured_output_manager = StructuredOutputManager(vllm_config)
+        structured_output_manager = StructuredOutputManager(self.vllm_config)
         self.scheduler = Scheduler(
-            vllm_config=vllm_config,
+            vllm_config=self.vllm_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
             include_finished_set=False,
@@ -256,7 +246,7 @@ class Policy(ForgeActor):
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
-            self.max_model_len,
+            self.vllm_config.model_config.max_model_len,
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
@@ -505,9 +495,6 @@ class Policy(ForgeActor):
         return await self.worker._test_validate_model_params.call(validate_fn)
 
 
-from typing import Any
-
-
 @dataclass
 class PolicyWorker(ForgeActor):
     """Mirrors a vLLM GPUWorker
@@ -517,31 +504,18 @@ class PolicyWorker(ForgeActor):
     the creation and invocation of all PolicyWorkers.
     """
 
-    engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
-    sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
+    vllm_config: VllmConfig
     use_dcp: bool | None = None
     # TODO: Remove below param
     _test_prev_params = {}
 
     def __post_init__(self):
         super().__init__()
-        if isinstance(self.engine_args, Mapping):
-            self.engine_args = EngineArgs(**self.engine_args)
-        self.engine_args._is_v1_supported_oracle = lambda *_: True
-        # Note: vllm_config creation is deferred to setup() method to avoid
-        # model inspection issues during remote actor initialization
-        self.vllm_config = None
-        print("HELLLOOOO")
-
         if self.use_dcp is None:
             self.use_dcp = TORCHSTORE_USE_RDMA.get_value() == 0
 
     @endpoint
     async def setup(self):
-        # Create vllm_config here instead of during initialization to avoid
-        # model inspection issues during remote actor initialization
-        self.vllm_config = self.engine_args.create_engine_config(UsageContext.LLM_CLASS)
-
         self.rank = current_rank().rank
         os.environ["RANK"] = str(self.rank)
         parallel_config = self.vllm_config.parallel_config
