@@ -155,15 +155,15 @@ class Generator(GeneratorInterface):
         host_mesh = await host_mesh_from_proc(worker_procs)
         singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
         host_mesh = host_mesh.slice(**singleton_slice)
-        policy_proc_config = copy(process_config)
-        policy_proc_config.procs = 1
-        policy_proc_config.with_gpus = False
+        generator_proc_config = copy(process_config)
+        generator_proc_config.procs = 1
+        generator_proc_config.with_gpus = False
 
         # By passing in the host_mesh here, we will get a new proc
         # spawned on the provided host_mesh. Since that host mesh is
         # taken from the policy_proc, this ensures colocation.
-        policy_proc = await get_proc_mesh(
-            process_config=policy_proc_config, host_mesh=host_mesh
+        generator_proc = await get_proc_mesh(
+            process_config=generator_proc_config, host_mesh=host_mesh
         )
 
         if isinstance(engine_args, Mapping):
@@ -259,6 +259,59 @@ class Generator(GeneratorInterface):
     def _start_processing(self):
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
+
+    async def _drop_shared_memory(self, state_dict: dict[str, SharedTensorHandle]):
+        for handle in state_dict.values():
+            handle.drop()
+
+    async def _cleanup_shared_memory(self):
+        """Cleanup shared memory allocated for weight updates."""
+        while not self.cached_state_dict_allocs.empty():
+            try:
+                state_dict = self.cached_state_dict_allocs.get_nowait()
+                await self._drop_shared_memory(state_dict)
+            except queue.Empty:
+                logger.info(
+                    "Cached state dict alloc queue is empty. No state dict to drop."
+                )
+
+    async def _fetch_weights(
+        self,
+        version: int,
+        *,
+        pre_allocated: Optional[dict[str, SharedTensorHandle]] = None,
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("generator_perf/_fetch_weights")
+        t.start()
+        prefix = get_param_prefix(version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        shared_memory_state_dict = {}
+        if pre_allocated is not None:
+            logger.info(
+                "[Generator] fetching weights from torchstore to shared memory. Using pre allocated shared memory."
+            )
+            shared_memory_state_dict = pre_allocated
+            assert set(shared_memory_state_dict.keys()) == set(
+                hf_param_names
+            ), "The pre_allocated dict must have the same keys as hf_param_names"
+            for name, handle in shared_memory_state_dict.items():
+                param_key = get_param_key(version, name)
+                param = handle.to_shared_tensor().tensor
+                await ts.get(param_key, inplace_tensor=param)
+        else:
+            logger.info(
+                "[Generator] fetching weights from torchstore to shared memory."
+            )
+            for name in hf_param_names:
+                param_key = get_param_key(version, name)
+                param = await ts.get(param_key)
+                shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
+        t.stop()
+        return shared_memory_state_dict
 
     @endpoint
     async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
@@ -416,6 +469,14 @@ class Generator(GeneratorInterface):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
+        logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
+        try:
+            pre_allocated = self.cached_state_dict_allocs.get_nowait()
+        except queue.Empty:
+            pre_allocated = None
+        fetch_task = asyncio.create_task(
+            self._fetch_weights(version, pre_allocated=pre_allocated)
+        )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -451,32 +512,21 @@ class Generator(GeneratorInterface):
                 # TODO: currently the alloc in ts.get will block the event loop unfortunately
                 # potentially we need to change torchstore
                 # We have to do this because Monarch future is not directly compatible with asyncio
-                t = Tracer("generator_perf/_fetch_weights")
+                t = Tracer("generator_perf/waiting_for_fetch_weights")
                 t.start()
-                logger.info(
-                    f"[Generator] Fetching weights for v{version} to shared memory"
-                )
-                try:
-                    pre_allocated = self.cached_state_dict_allocs.get_nowait()
-                except queue.Empty:
-                    pre_allocated = None
-                fetched_weights = await self.generator_worker._fetch_weights.choose(
-                    version, pre_allocated=pre_allocated
-                )
+                fetched_weights = await fetch_task
                 t.stop()
                 # Call update_weights on every policy_worker
                 await self.generator_worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
-                # This can not be dropped in Generator because it is not on the same host as GeneratorWorker
-                # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
                 try:
                     self.cached_state_dict_allocs.put_nowait(fetched_weights)
                 except queue.Full:
                     logger.info(
                         "Cached state dict alloc queue is full. Dropping allocated state dict."
                     )
-                    self.policy_worker._drop_shared_memory(fetched_weights)
+                    await self._drop_shared_memory(fetched_weights)
             else:
                 await self.generator_worker.update_weights.call(version=version)
             self.generator_version = version
@@ -503,18 +553,6 @@ class Generator(GeneratorInterface):
     @endpoint
     async def stop(self):
         self.running = False
-
-    @endpoint
-    async def _cleanup_shared_memory(self):
-        """Cleanup shared memory allocated for weight updates."""
-        while not self.cached_state_dict_allocs.empty():
-            try:
-                state_dict = self.cached_state_dict_allocs.get_nowait()
-                self.policy_worker._drop_shared_memory(state_dict)
-            except queue.Empty:
-                logger.info(
-                    "Cached state dict alloc queue is empty. No state dict to drop."
-                )
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a vLLM RequestOutput to a list of Completion objects."""
@@ -700,53 +738,6 @@ class GeneratorWorker(ForgeActor):
         else:
             raise RuntimeError("No DCP handle found for the given version")
         t.stop()
-
-    @endpoint
-    async def _fetch_weights(
-        self,
-        version: int,
-        *,
-        pre_allocated: Optional[dict[str, SharedTensorHandle]] = None,
-    ) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("generator_worker_perf/_fetch_weights")
-        t.start()
-        prefix = get_param_prefix(version)
-        matching_keys = await ts.keys(prefix)
-        hf_param_names = [extract_param_name(key) for key in matching_keys]
-        # We can't pass a generator since vllm load_weights is not async.
-        # Instead, we just call load_weights with one parameter at a time.
-        shared_memory_state_dict = {}
-        if pre_allocated is not None:
-            logger.info(
-                "[Generator] fetching weights from torchstore to shared memory. Using pre allocated shared memory."
-            )
-            shared_memory_state_dict = pre_allocated
-            assert set(shared_memory_state_dict.keys()) == set(
-                hf_param_names
-            ), "The pre_allocated dict must have the same keys as hf_param_names"
-            for name, handle in shared_memory_state_dict.items():
-                param_key = get_param_key(version, name)
-                param = handle.to_shared_tensor().tensor
-                await ts.get(param_key, inplace_tensor=param)
-        else:
-            logger.info(
-                "[Generator] fetching weights from torchstore to shared memory."
-            )
-            for name in hf_param_names:
-                param_key = get_param_key(version, name)
-                param = await ts.get(param_key)
-                shared_memory_state_dict[name] = SharedTensor(tensor=param).get_handle()
-        t.stop()
-        return shared_memory_state_dict
-
-    @endpoint
-    async def _drop_shared_memory(
-        self, shared_memory_state_dict: dict[str, SharedTensorHandle]
-    ):
-        """Drop shared memory tensors after use."""
-        for handle in shared_memory_state_dict.values():
-            handle.to_shared_tensor().drop()
 
     @endpoint
     async def _test_save_model_params(self):
