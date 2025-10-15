@@ -4,6 +4,8 @@ on:
   schedule:
     # Runs every hour
     - cron: '0 * * * *'
+  # TODO: remove this when merged to main
+  pull_request:
   workflow_dispatch:
 
 concurrency:
