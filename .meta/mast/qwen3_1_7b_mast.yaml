@@ -28,7 +28,7 @@ metric_logging:
 dataset:
   # path:  "openai/gsm8k"
   path: /mnt/wsfuse/teamforge/hf/gsm8k_ready
-  revision: "main"
+  revision: "default"
   data_split: "train"
   streaming: true
   model: ${model}
