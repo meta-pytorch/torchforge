@@ -669,6 +669,7 @@ class GeneratorWorker(ForgeActor):
                 loaded_weights.update(loaded)
         t.stop()
 
+    @endpoint
     async def _fetch_weights(self, version: int) -> dict[str, SharedTensorHandle]:
         """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
         t = Tracer("policy_perf/_fetch_weights")
