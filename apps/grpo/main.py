@@ -353,7 +353,7 @@ async def main(cfg: DictConfig):
     )
     print("Torchstore successfully initialized with local rank strategy")
 
-    start_version = max(cfg.trainer.checkpoint.load_step or 0)
+    start_version = max(cfg.trainer.checkpoint.load_step, 0)
     if start_version > 0:
         # Ensure the trainer’s loaded checkpoint is pushed to torchstore at `start_version`
         await trainer.push_weights.call(start_version)
