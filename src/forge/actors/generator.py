@@ -160,6 +160,9 @@ class Generator(GeneratorInterface):
         generator_proc_config = copy(process_config)
         generator_proc_config.procs = 1
         generator_proc_config.with_gpus = False
+        generator_proc = await get_proc_mesh(
+            process_config=generator_proc_config, host_mesh=host_mesh
+        )
 
         if isinstance(engine_args, Mapping):
             engine_args = EngineArgs(**engine_args)
