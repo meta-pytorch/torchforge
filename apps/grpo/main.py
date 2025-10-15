@@ -16,10 +16,6 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from datasets import load_dataset
-from forge.actors._torchstore_utils import (
-    get_dcp_whole_state_dict_key,
-    get_param_prefix,
-)
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
@@ -34,6 +30,7 @@ from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util._torchstore import get_dcp_whole_state_dict_key, get_param_prefix
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig

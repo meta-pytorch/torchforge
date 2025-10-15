@@ -14,7 +14,7 @@ import pytest
 
 import torch
 import torch.distributed.checkpoint as dcp
-from forge.actors._torchstore_utils import DcpHandle
+from forge.util._torchstore import DcpHandle
 
 ignore_torch_distributed_unitialized_warning = pytest.mark.filterwarnings(
     r"ignore:.*torch.distributed"
