@@ -381,7 +381,7 @@ class MetricCollector:
     Supports multiple logging backends, each with different logging modes.
     For options, check `forge.observability.metrics.LoggerBackend` and `forge.observability.metrics.LoggingMode`.
 
-    Properties:
+    Behavior:
     - Ensures one instance per rank;
     - Using `record_metric()` delegates here;
     - Init via GlobalLoggingActor -> LocalFetcherActor -> per-rank MetricCollector;
@@ -423,7 +423,7 @@ class MetricCollector:
 
     async def init_backends(
         self,
-        metadata_per_primary_backend: dict[str, dict[str, Any]] | None,
+        metadata_per_controller_backend: dict[str, dict[str, Any]] | None,
         config: dict[str, Any],
         global_step: int = 0,
         process_name: str | None = None,
@@ -434,7 +434,7 @@ class MetricCollector:
         Backends are categorized by their logging_mode. For details, see `forge.observability.metrics.LoggingMode`.
 
         Args:
-            metadata_per_primary_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from primary
+            metadata_per_controller_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from controller
                 logger backends for backends that require shared state across processes, e.g.,
                 {"wandb": {"shared_run_id": "abc123"}}.
             config (Dict[str, Any]): Backend configurations where each key is a backend name
@@ -470,16 +470,18 @@ class MetricCollector:
                 logger.debug("Skipping local instantiation for GLOBAL_REDUCE")
                 continue
 
-            # get metadata from primary backend if any
-            primary_metadata = {}
-            if metadata_per_primary_backend:
-                primary_metadata = metadata_per_primary_backend.get(backend_name, {})
+            # get metadata from controller backend if any
+            controller_metadata = {}
+            if metadata_per_controller_backend:
+                controller_metadata = metadata_per_controller_backend.get(
+                    backend_name, {}
+                )
 
             # instantiate local backend
             backend = get_logger_backend_class(backend_name)(backend_config)
             await backend.init(
                 role=BackendRole.LOCAL,
-                primary_logger_metadata=primary_metadata,
+                controller_logger_metadata=controller_metadata,
                 process_name=process_name,
             )
 
@@ -499,7 +501,6 @@ class MetricCollector:
         - PER_RANK_REDUCE/GLOBAL_REDUCE: Accumulate for per step batch logging
 
         Args:
-            metric (): Metric dataclass
             metric (Metric): Metric dataclass
 
         Example:
@@ -584,7 +585,11 @@ class MetricCollector:
             for backend in self.per_rank_reduce_backends:
                 await backend.log_batch(metrics_for_backends, global_step)
 
-        # Update step (used by NO_REDUCE backends in push)
+        # Update step counter for streaming backends
+        # Note: This is incremented AFTER flush completes, so metrics recorded between
+        # flush(N) and flush(N+1) will stream with global_step=N+1. This is intentional:
+        # metrics belong to the training step being computed (step N+1), not the step
+        # that was just flushed (step N).
         self.global_step = global_step + 1
 
         return states if return_state else {}
@@ -617,16 +622,16 @@ class LoggerBackend(ABC):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: dict[str, Any] | None = None,
+        controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
 
         Args:
-            role (BackendRole): BackendRole.GLOBAL (controller/primary) or BackendRole.LOCAL (per-rank/secondary).
-                Can be used to behave differently for primary vs secondary roles.
-            primary_logger_metadata (dict[str, Any] | None): From global backend for
+            role (BackendRole): BackendRole.GLOBAL (controller) or BackendRole.LOCAL (per-rank).
+                Can be used to behave differently for controller vs rank roles.
+            controller_logger_metadata (dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
             process_name (str | None): Process name for logging.
 
@@ -659,7 +664,7 @@ class LoggerBackend(ABC):
         pass
 
     def get_metadata_for_secondary_ranks(self) -> dict[str, Any] | None:
-        """Return sharable state after primary init (e.g., for shared modes). Called only on globals."""
+        """Return sharable state after controller init (e.g., for shared modes). Called only on controller backends."""
         return None
 
 
@@ -672,7 +677,7 @@ class ConsoleBackend(LoggerBackend):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: dict[str, Any] | None = None,
+        controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
     ) -> None:
         self.prefix = get_proc_name_with_rank(proc_name=process_name)
@@ -725,12 +730,12 @@ class WandbBackend(LoggerBackend):
     async def init(
         self,
         role: BackendRole,
-        primary_logger_metadata: dict[str, Any] | None = None,
+        controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
     ) -> None:
 
-        if primary_logger_metadata is None:
-            primary_logger_metadata = {}
+        if controller_logger_metadata is None:
+            controller_logger_metadata = {}
 
         self.name = get_proc_name_with_rank(proc_name=process_name)
 
@@ -747,7 +752,7 @@ class WandbBackend(LoggerBackend):
 
         elif role == BackendRole.LOCAL:
             if self.per_rank_share_run:
-                await self._init_shared_local(primary_logger_metadata)
+                await self._init_shared_local(controller_logger_metadata)
             else:
                 await self._init_per_rank()
 
@@ -769,10 +774,10 @@ class WandbBackend(LoggerBackend):
         )
         self.run = wandb.init(project=self.project, group=self.group, settings=settings)
 
-    async def _init_shared_local(self, primary_metadata: dict[str, Any]):
+    async def _init_shared_local(self, controller_metadata: dict[str, Any]):
         import wandb
 
-        shared_id = primary_metadata.get("shared_run_id")
+        shared_id = controller_metadata.get("shared_run_id")
         if shared_id is None:
             raise ValueError(
                 f"Shared ID required but not provided for {self.name} backend init"
