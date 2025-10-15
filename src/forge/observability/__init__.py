@@ -12,7 +12,9 @@ from .metric_actors import (
 from .metrics import (
     BackendRole,
     ConsoleBackend,
+    get_logger_backend_class,
     LoggerBackend,
+    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
     Metric,
@@ -43,6 +45,7 @@ __all__ = [
     "BackendRole",
     # Enums
     "Reduce",
+    "LoggingMode",
     # Utility functions
     "get_proc_name_with_rank",
     # Actor classes

@@ -16,6 +16,7 @@ from forge.observability.metrics import (
     BackendRole,
     ConsoleBackend,
     get_logger_backend_class,
+    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
     Metric,
@@ -88,7 +89,9 @@ class TestMetricCreation:
         await console_backend.init(role=BackendRole.LOCAL)
 
         # Test WandbBackend role validation without WandB initialization
-        wandb_backend = WandbBackend({"project": "test"})
+        wandb_backend = WandbBackend(
+            {"project": "test", "logging_mode": "global_reduce"}
+        )
 
         # Mock all the WandB init methods to focus only on role validation
         with patch.object(wandb_backend, "_init_global"), patch.object(
@@ -298,14 +301,14 @@ class TestCriticalFixes:
         config = {
             "project": "test_project",
             "group": "test_group",
-            "reduce_across_ranks": True,
+            "logging_mode": "global_reduce",
         }
         backend = WandbBackend(config)
 
         assert backend.project == "test_project"
         assert backend.group == "test_group"
-        assert backend.reduce_across_ranks is True
-        assert backend.share_run_id is False  # default
+        assert backend.logging_mode == LoggingMode.GLOBAL_REDUCE
+        assert backend.per_rank_share_run is False  # default
 
         # Test metadata method
         metadata = backend.get_metadata_for_secondary_ranks()
@@ -318,10 +321,10 @@ class TestCriticalFixes:
 
         await backend.init(role=BackendRole.LOCAL)
 
-        # Test log - should not raise
+        # Test log_batch - should not raise
         # Create a test metric
         test_metric = Metric("test", 1.0, Reduce.MEAN)
-        await backend.log([test_metric], global_step=1)
+        await backend.log_batch([test_metric], global_step=1)
 
         await backend.finish()  # Should not raise
 
