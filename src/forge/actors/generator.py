@@ -402,17 +402,6 @@ class Generator(GeneratorInterface):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
-        # TODO: currently the alloc in ts.get will block the event loop unfortunately
-        # potentially we need to change torchstore
-        # TODO: move this logic to Generator once we can make sure Generator and GeneratorWorker are on the same host.
-        if not self.use_dcp:
-            # We have to do this because Monarch future is not directly compatible with asyncio
-            async def fetch_coro():
-                return await self.generator_worker._fetch_weights.choose(version)
-
-            fetch_task = asyncio.create_task(
-                fetch_coro(),
-            )
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -445,9 +434,14 @@ class Generator(GeneratorInterface):
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
             if not self.use_dcp:
-                t = Tracer("generator_perf/_waiting_for_fetch_weights")
+                # TODO: currently the alloc in ts.get will block the event loop unfortunately
+                # potentially we need to change torchstore
+                # We have to do this because Monarch future is not directly compatible with asyncio
+                t = Tracer("generator_perf/_fetch_weights")
                 t.start()
-                fetched_weights = await fetch_task
+                fetched_weights = await self.generator_worker._fetch_weights.choose(
+                    version
+                )
                 t.stop()
                 # Call update_weights on every policy_worker
                 await self.generator_worker.update_weights.call(
