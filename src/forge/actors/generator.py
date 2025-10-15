@@ -294,13 +294,10 @@ class Generator(GeneratorInterface):
 
         futures = []
         for i, names in enumerate(split_keys(hf_param_names)):
-
-            async def _fetch():
-                await self.weight_fetchers.slice(procs=i).fetch.call_one(
-                    version=version, param_names=names
-                )
-
-            futures.append(asyncio.create_task(_fetch()))
+            fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
+                version=version, param_names=names
+            )
+            futures.append(fut)
 
         sub_state_dicts = [await fut for fut in futures]
 
