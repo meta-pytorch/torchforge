@@ -231,6 +231,14 @@ class Generator(ForgeActor):
             log_stats=None,
         )
         self._start_processing()
+        if self.prefetch_weights:
+            self._spawn_fetchers()
+
+    def _spawn_fetchers(self):
+        """Spawn weight fetchers that prefetch weights from torchstore to shared memory."""
+        # TODO: this assumes the generator is on the same host as the worker
+        # and only works for single host generators. Figure out how to support
+        # generators with workers spanned across multiple hosts.
         fetcher_procs = this_host().spawn_procs(
             per_host={"procs": self.n_fetcher_procs}
         )
