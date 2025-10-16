@@ -18,15 +18,15 @@ graph TD
     end
 
     subgraph MonarchLayer["3. Monarch Actor Layer"]
-        ActorMesh["ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing"]
+        ActorMesh["ActorMesh Policy Actor: 4 instances, Different GPUs, Message passing"]
         ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
     end
 
     subgraph Hardware["4. Physical Hardware"]
-        GPU0["GPU 0: PolicyActor #1, vLLM Engine, Model Weights"]
-        GPU1["GPU 1: PolicyActor #2, vLLM Engine, Model Weights"]
-        GPU2["GPU 2: PolicyActor #3, vLLM Engine, Model Weights"]
-        GPU3["GPU 3: PolicyActor #4, vLLM Engine, Model Weights"]
+        GPU0["GPU 0: Policy Actor #1, vLLM Engine, Model Weights"]
+        GPU1["GPU 1: Policy Actor #2, vLLM Engine, Model Weights"]
+        GPU2["GPU 2: Policy Actor #3, vLLM Engine, Model Weights"]
+        GPU3["GPU 3: Policy Actor #4, vLLM Engine, Model Weights"]
     end
 
     Call --> ServiceInterface
@@ -154,7 +154,7 @@ await procs.stop()
 
 **ActorMesh** is created when you spawn actors across a ProcMesh. Key points:
 
-- **One actor instance per process**: `mesh.spawn("policy", PolicyActor)` creates one PolicyActor in each process
+- **One actor instance per process**: `mesh.spawn("policy", Policy)` creates one Policy Actor in each process
 - **Same constructor arguments**: All instances get the same initialization parameters
 - **Independent state**: Each actor instance maintains its own state and memory
 - **Message routing**: You can send messages to one actor or all actors using different methods
@@ -162,9 +162,9 @@ await procs.stop()
 ```python
 # Simple example:
 procs = spawn_procs(per_host={"gpus": 4})  # 4 processes
-policy_actors = procs.spawn("policy", PolicyActor, model="Qwen/Qwen3-7B")
+policy_actors = procs.spawn("policy", Policy, model="Qwen/Qwen3-7B")
 
-# Now you have 4 PolicyActor instances, one per GPU
+# Now you have 4 Policy Actor instances, one per GPU
 # All initialized with the same model parameter
 ```
 
@@ -177,29 +177,29 @@ Now the key insight: **TorchForge services are ServiceActors that manage ActorMe
 ```mermaid
 graph TD
     subgraph ServiceCreation["Service Creation Process"]
-        Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
+        Call["await Policy.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
 
         ServiceActor["ServiceActor: Manages 4 replicas, Health checks, Routes calls"]
 
         subgraph Replicas["4 Independent Replicas"]
             subgraph R0["Replica 0"]
                 PM0["ProcMesh: 1 process, GPU 0"]
-                AM0["ActorMesh<br/>1 PolicyActor"]
+                AM0["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R1["Replica 1"]
                 PM1["ProcMesh: 1 process, GPU 1"]
-                AM1["ActorMesh<br/>1 PolicyActor"]
+                AM1["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R2["Replica 2"]
                 PM2["ProcMesh: 1 process, GPU 2"]
-                AM2["ActorMesh<br/>1 PolicyActor"]
+                AM2["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R3["Replica 3"]
                 PM3["ProcMesh: 1 process, GPU 3"]
-                AM3["ActorMesh<br/>1 PolicyActor"]
+                AM3["ActorMesh<br/>1 Policy Actor"]
             end
         end
 
@@ -232,9 +232,9 @@ graph TD
 
         ServiceActor["ServiceActor: Selects healthy replica, Load balancing, Failure handling"]
 
-        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor"]
+        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 Policy Actor"]
 
-        PolicyActor["PolicyActor Instance: Loads model, Runs vLLM inference"]
+        PolicyActor["Policy Actor Instance: Loads model, Runs vLLM inference"]
 
         GPU["GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels"]
 
