@@ -25,7 +25,7 @@ metric_logging:
 
 # Dataset configuration
 dataset:
-  path: /mnt/wsfuse/teamforge/hf_artifacts/gsm8k
+  path: /mnt/wsfuse/teamforge/hf/gsm8k
   revision: "main"
   data_split: "train"
   streaming: true
@@ -34,7 +34,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_4b
+    model: /mnt/wsfuse/teamforge/hf/qwen3_4b
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -52,7 +52,7 @@ trainer:
   model:
     name: qwen3
     flavor: 4B
-    hf_assets_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_4b
+    hf_assets_path: /mnt/wsfuse/teamforge/hf/qwen3_4b
     # hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
@@ -79,7 +79,7 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_4b
+    initial_load_path: /mnt/wsfuse/teamforge/hf/qwen3_4b
     initial_load_in_hf: true
     folder: ${checkpoint_folder}
     last_save_in_hf: true
@@ -105,7 +105,7 @@ ref_model:
   model:
     name: qwen3
     flavor: 4B
-    hf_assets_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_4b
+    hf_assets_path: /mnt/wsfuse/teamforge/hf/qwen3_4b
     # hf_assets_path: hf://${model}
   training:
     dtype: bfloat16
@@ -121,7 +121,7 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_4b
+    initial_load_path: /mnt/wsfuse/teamforge/hf/qwen3_4b
     folder: ""
     initial_load_in_hf: true
 
