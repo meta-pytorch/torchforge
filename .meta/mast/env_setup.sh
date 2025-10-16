@@ -205,8 +205,26 @@ else
     log_warn "Skipping monarch torch import hack (monarch may not be installed yet)"
 fi
 
-# Step 4: Install forge package
-log_info "Step 4: Installing forge package..."
+# Step 4: Check for existing build directory and warn user
+log_info "Step 4: Checking for existing build directory..."
+if [ -d "build" ]; then
+    log_warn "Detected existing build/ directory at: $(pwd)/build"
+    log_warn "This directory may contain artifacts from a previous pip installation"
+    log_warn "that could interfere with the current installation."
+    log_warn "If you encounter issues, manually remove it with: rm -rf build"
+    echo ""
+    read -p "$(echo -e ${YELLOW}Do you want to continue anyway? [y/N]:${NC} )" -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Installation cancelled by user"
+        log_info "You can manually remove the build/ directory with: rm -rf build"
+        exit 0
+    fi
+    log_warn "Continuing with existing build/ directory. Things might go wrong!"
+fi
+
+# Step 5: Install forge package
+log_info "Step 5: Installing forge package..."
 pip install --no-deps --force-reinstall .
 if [ $? -ne 0 ]; then
     log_error "Failed to install forge package"
@@ -248,7 +266,7 @@ log_info "Unsetting CUDA_HOME and overwriting the LD_LIBRARY_PATH"
 unset CUDA_HOME
 export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib
 
-# Step 5: Ask user to test
+# Step 6: Ask user to test
 echo ""
 log_info "Installation completed successfully!"
 echo ""
