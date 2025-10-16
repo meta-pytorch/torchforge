@@ -306,8 +306,7 @@ async def main(cfg: DictConfig):
 
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
-    if mlogger:
-        await mlogger.init_backends.call_one(metric_logging_cfg)
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
 

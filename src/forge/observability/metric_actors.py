@@ -76,9 +76,6 @@ async def get_or_create_metric_logger(
     # Get or create the singleton global logger
     global _global_logger
 
-    if FORGE_DISABLE_METRICS.get_value():
-        return _global_logger
-
     if _global_logger is None:
         _global_logger = await get_or_spawn_controller(
             "global_logger", GlobalLoggingActor
@@ -206,6 +203,9 @@ class GlobalLoggingActor(Actor):
                 e.g. {"console": {"reduce_across_ranks": True}, "wandb": {"reduce_across_ranks": False}}
         """
         self.config = config
+
+        if FORGE_DISABLE_METRICS.get_value():
+            return
 
         for backend_name, backend_config in config.items():
             backend = get_logger_backend_class(backend_name)(backend_config)
