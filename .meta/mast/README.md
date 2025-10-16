@@ -46,6 +46,40 @@ The launch script will automatically:
 You can run it from anywhere, and it will figure out the correct paths.
 
 
+## How MAST Launcher Works
+
+The MAST launcher uses a two-stage architecture to run training jobs:
+
+### Stage 1: Detached Mode (Local Machine)
+
+When you run `./.meta/mast/launch.sh`, the `main.py` script starts in **detached mode**:
+
+1. The launcher creates a MAST job with all the worker roles (GPU hosts)
+2. It also creates a special **client role** - a CPU-only role that will run inside MAST
+3. The client role's entrypoint is set to `client_bootstrap.sh`
+4. All CLI arguments you pass are forwarded to the client role
+
+At this point, the job is submitted to MAST and your local script exits. Everything now runs in the cluster.
+
+### Stage 2: Remote Mode (Inside MAST)
+
+The `client_bootstrap.sh` script runs inside the MAST client role and:
+
+1. Calls `main.py` again, but now with `--mode=remote`
+2. In **remote mode**, the script:
+   - Mounts the OilFS workspace
+   - Initializes the provisioner to connect to worker roles
+   - Runs the actual training workload (e.g., GRPO)
+
+This architecture allows the entire training workflow to run inside MAST without requiring a persistent connection from your local machine.
+
+### Key Files
+
+- **`main.py`**: Entry point that handles both detached and remote modes
+- **`client_bootstrap.sh`**: Entrypoint for the client role in MAST
+- **`launcher.py`**: Creates the MAST job specification and handles role configuration
+
+
 ## Managing HuggingFace Models in MAST
 
 ### The Problem: No Internet Access
