@@ -20,8 +20,9 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       run-smoke-test: false
+      env-var-script: .github/packaging/export_channel_test.sh
       # wheel-nightly-policy: gha_workflow_preview_build_wheels
-      wheel-upload-path: whl/forge/
+      wheel-upload-path: whl/test/forge/
       package-name: forge
       build-matrix: |
         {
@@ -36,7 +37,7 @@ jobs:
               "build_name": "manywheel-py3_10-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
               "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
-              "channel": "release",
+              "channel": "test",
               "upload_to_base_bucket": "no",
               "stable_version": "2.9.0",
               "use_split_build": false
