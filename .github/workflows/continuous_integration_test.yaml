@@ -61,9 +61,9 @@ jobs:
           export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
           pytest tests/integration_tests/test_vllm_policy_correctness.py --durations=20 -vv
         timeout-minutes: 20
-      - name: Run e2e GRPO training test
+      - name: Run GRPO e2e test
         run: |
           export LD_PRELOAD=$CONDA/envs/test/lib/libpython3.10.so.1.0
           export LD_LIBRARY_PATH=$CONDA/envs/test/lib/libpython3.10.so.1.0
-          python tests/integration_tests/run_e2e_tests.py
-        timeout-minutes: 30
+          python tests/integration_tests/test_grpo_e2e.py
+        timeout-minutes: 20

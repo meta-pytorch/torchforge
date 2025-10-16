@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-End-to-end integration test runner for Forge applications.
+End-to-end integration test for GRPO training.
 
-This test runner validates that training can run without crashes or exceptions.
+This test validates that GRPO training can run without crashes or exceptions.
 Similar to TorchTitan's integration test approach, we focus on functional
 correctness (no crashes) rather than numerical validation.
 
 Usage:
-    python tests/integration_tests/run_e2e_tests.py
+    python tests/integration_tests/test_grpo_e2e.py
 """
 
 import subprocess
@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 
-def run_grpo_test(
+def run_grpo_training(
     config_path: str,
     max_steps: int = 5,
     timeout: int = 1800,
@@ -58,7 +58,7 @@ def run_grpo_test(
     if extra_args:
         cmd.extend(extra_args)
 
-    print(f"Running e2e test: {config_path}")
+    print(f"Running GRPO e2e test: {config_path}")
     print(f"Command: {' '.join(cmd)}")
     print(f"Max steps: {max_steps}, Timeout: {timeout}s")
     print("-" * 80)
@@ -75,7 +75,7 @@ def run_grpo_test(
     except subprocess.TimeoutExpired:
         elapsed = time.time() - start_time
         raise Exception(
-            f"Training timed out after {elapsed:.1f}s (timeout={timeout}s)"
+            f"GRPO training timed out after {elapsed:.1f}s (timeout={timeout}s)"
         )
 
     elapsed = time.time() - start_time
@@ -94,33 +94,33 @@ def run_grpo_test(
     # Check for success
     if result.returncode != 0:
         raise Exception(
-            f"Training failed with return code {result.returncode} after {elapsed:.1f}s"
+            f"GRPO training failed with return code {result.returncode} after {elapsed:.1f}s"
         )
 
-    print(f"✓ Training completed successfully in {elapsed:.1f}s")
+    print(f"✓ GRPO training completed successfully in {elapsed:.1f}s")
     return result
 
 
 def main():
-    """Run all e2e tests."""
+    """Run GRPO e2e test."""
     print("=" * 80)
-    print("Forge E2E Integration Tests")
+    print("GRPO E2E Integration Test")
     print("=" * 80)
 
-    # Test 1: GRPO with smallest model
+    # Test GRPO with smallest model
     test_config = "apps/grpo/qwen3_1_7b.yaml"
 
     if not Path(test_config).exists():
         raise FileNotFoundError(f"Config file not found: {test_config}")
 
     try:
-        run_grpo_test(test_config, max_steps=5, timeout=1800)
+        run_grpo_training(test_config, max_steps=5, timeout=1800)
         print("\n" + "=" * 80)
-        print("✓ All e2e tests passed!")
+        print("✓ GRPO e2e test passed!")
         print("=" * 80)
     except Exception as e:
         print("\n" + "=" * 80)
-        print(f"✗ E2E test failed: {e}")
+        print(f"✗ GRPO e2e test failed: {e}")
         print("=" * 80)
         sys.exit(1)
 
