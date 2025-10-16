@@ -94,7 +94,7 @@ graph LR
     (Real Classes)"]
         direction TB
         S1["DatasetActor"]
-        S2["Policy"]
+        S2["Generator"]
         S3["RewardActor"]
         S4["ReferenceModel"]
         S5["ReplayBuffer"]
@@ -305,7 +305,7 @@ TorchForge handles behind the scenes:
 ### Independent Scaling
 ```python
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator as Policy
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.trainer import RLTrainer

@@ -86,7 +86,7 @@ The service creation automatically handles:
 - Message routing and serialization
 
 ```python
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator as Policy
 
 model = "Qwen/Qwen3-1.7B"
 
@@ -577,7 +577,7 @@ Now let's see how services coordinate in a real training loop:
 
 import asyncio
 import torch
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator as Policy
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
