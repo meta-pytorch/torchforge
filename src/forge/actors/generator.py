@@ -448,10 +448,16 @@ class Generator(ForgeActor):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
+        defrag_fut = asyncio.create_task(self._call_torchstore_defrag(version))
+
+        async def prefetch_task():
+            await defrag_fut
+            await self._prefetch_weights(version)
+
         # Prefetch only if we are using RDMA
         if self.prefetch_weights and not self.use_dcp_for_weight_sync:
             logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
-            fetch_fut = asyncio.create_task(self._fetch_weights(version))
+            fetch_fut = asyncio.create_task(prefetch_task())
         else:
             fetch_fut = None
         # Serialize updates (only one update at a time)
@@ -497,6 +503,7 @@ class Generator(ForgeActor):
                 )
                 await self._drop_shared_memory(fetched_weights)
             else:
+                await defrag_fut
                 await self.worker.update_weights.call(version=version)
             self.generator_version = version
 
