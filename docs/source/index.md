@@ -7,7 +7,7 @@ Key Features
 ------------
 
 * **Post-Training Focus**: Specializes in techniques
-  like Supervised Fine-Tuning (SFT) and Generalized Reward Policy Optimization (GRPO)
+  like Supervised Fine-Tuning (SFT) and Group Relative Policy Optimization (GRPO)
 * **PyTorch Integration**: Built natively on PyTorch with
   dependencies on [PyTorch nightly](https://pytorch.org/get-started/locally/),
   [Monarch](https://meta-pytorch.org/monarch), [vLLM](https://docs.vllm.ai/en/latest/),
@@ -23,10 +23,8 @@ Key Features
 
 getting_started
 concepts
-usage
 tutorials
 api
-faq
 ```
 
 ## Indices and tables

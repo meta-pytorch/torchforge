@@ -4,7 +4,13 @@ set -euxo pipefail
 # Builds Monarch
 # This script builds Monarch and places its wheel into dist/.
 
-MONARCH_COMMIT="265034a29ec3fb35919f4a9c23c65f2f4237190d"
+# Script runs relative to forge root
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "current dir is $CURRENT_DIR"
+VERSIONS_FILE="$CURRENT_DIR/../../assets/versions.sh"
+echo "versions file is $VERSIONS_FILE"
+source "$VERSIONS_FILE"
+
 BUILD_DIR="$HOME/forge-build"
 
 # Push other files to the dist folder
@@ -16,6 +22,7 @@ echo "build dir is $BUILD_DIR"
 echo "wheel dir is $WHL_DIR"
 
 build_monarch() {
+    export MONARCH_PACKAGE_NAME="torchmonarch"
     # Get Rust build related pieces
     if ! command -v rustup &> /dev/null; then
         echo "getting rustup"

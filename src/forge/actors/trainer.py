@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import math
 import os
 import shutil
 
@@ -18,10 +17,9 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from monarch.actor import current_rank, current_size, endpoint
+from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
-from torchstore.state_dict_utils import DELIM
 from torchtitan.config.job_config import (
     ActivationCheckpoint,
     Checkpoint,
@@ -47,6 +45,7 @@ from forge.actors._torchstore_utils import (
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
+from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
@@ -95,6 +94,26 @@ def cleanup_old_weight_versions(
 
 @dataclass
 class RLTrainer(ForgeActor):
+    """A reinforcement learning trainer actor for policy optimization training.
+
+    Built on top of TorchTitan's training engine, this actor provides a complete training
+    loop for reinforcement learning. It performs forward and backward passes with gradient
+    computation, optimization steps, and checkpoint management. Unlike the ReferenceModel
+    actor which only runs forward passes, RLTrainer actively updates the policy model
+    parameters through gradient descent.
+
+    The trainer supports the same distributed training strategies that TorchTitan does,
+    including but not limited to, tensor parallelism, data parallelism, and FSDP
+    (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel
+    for policy optimization algorithms like GRPO (Group Relative Policy Optimization),
+    where it optimizes the policy against a loss that includes KL divergence penalties
+    from the reference model.
+
+    The trainer handles:
+    - Forward and backward propagation with automatic mixed precision (AMP)
+    - Optimizer steps with learning rate scheduling
+    """
+
     job: Job = field(default_factory=Job)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
@@ -112,10 +131,10 @@ class RLTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = True
+    use_dcp: bool = (
+        TORCHSTORE_USE_RDMA.get_value() == 0
+    )  # torchstore currently only accepts 0 or 1
     dcp_path: str = "forge_dcp_tmp"
-    vllm_tp_DEPRECATED: int = 1  # noqa: N815
-    use_vllm_builtin_load: bool = True
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -143,22 +162,9 @@ class RLTrainer(ForgeActor):
         self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
-        self.rank = current_rank().rank
-        self.size = math.prod(current_size().values())
-
-        env = {
-            "RANK": str(self.rank),
-            "LOCAL_RANK": str(self.rank),
-            "LOCAL_WORLD_SIZE": str(self.size),
-            "GROUP_RANK": str(self.size),
-            "GROUP_WORLD_SIZE": str(self.size),
-            "ROLE_RANK": str(self.rank),
-            "ROLE_WORLD_SIZE": str(self.size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self.size),
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        logger.info("Compiling loss")
+        self.loss = torch.compile(self.loss)
 
     @endpoint
     async def setup(self):
@@ -168,9 +174,7 @@ class RLTrainer(ForgeActor):
             "loss",
             "state_dict_key",
             "use_dcp",
-            "use_vllm_builtin_load",
             "dcp_path",
-            "vllm_tp_DEPRECATED",
         }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
@@ -303,75 +307,11 @@ class RLTrainer(ForgeActor):
         return loss
 
     @endpoint
-    async def push_weights_DEPRECATED(  # noqa: N802
-        self, policy_version: int, vllm_tp_DEPRECATED: int = 1
-    ) -> None:  # noqa: N802
-        """[Deprecated] This method pushes weights to torchstore in the vllm format,
-        which is buggy and not scalable to other models.
-        Deprecated in favor of push_weights."""
-        return await self._push_weights_DEPRECATED(policy_version, vllm_tp_DEPRECATED)
-
-    async def _push_weights_DEPRECATED(  # noqa: N802
-        self, policy_version: int, vllm_tp_DEPRECATED: int
-    ) -> None:  # noqa: N802
-        # Save to torchstore. Hacking in to the Checkpointer's prepped state-dict for now.
-        # TODO:
-        # 1. Checkpoint invokes state-dict flattening during dcp_save for [MODEL].
-        #    May need to replicate the same in this code path.
-        # 2. Unify CheckpointManager and TorchStore weights save control path.
-        if "model" not in self.engine.checkpointer.states:
-            raise RuntimeError("Model state not found in checkpointer state")
-
-        sd = self.engine.checkpointer.states["model"].state_dict()
-        flattened_state_dict, _ = flatten_state_dict(sd)
-
-        if self.engine.checkpointer.sd_adapter is None:
-            raise RuntimeError(
-                "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
-            )
-        hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-
-        # TODO: Figure out how to gracefully handle which model to-vLLM conversion is needed
-        vllm_ready_hf_sd = _qwen3_hf_to_vllm(
-            sd=hf_state_dict,
-            num_layers=self.engine.model_args.n_layers,
-            vllm_tp=vllm_tp_DEPRECATED,
-        )
-
-        key = f"{self.state_dict_key}{DELIM}{policy_version}"
-        if self.use_dcp:
-            # TODO - DCP should probably be being saved to NFS explicitly?
-            # Right now it will only save everything locally
-            storage_writer = torch.distributed.checkpoint.FileSystemWriter(
-                key, single_file_per_rank=False, thread_count=8
-            )
-            metadata = dcp.save(
-                storage_writer=storage_writer, state_dict=vllm_ready_hf_sd
-            )
-            await ts.put(key, metadata)
-
-            # Delete old weight versions if they exist
-            if self.rank == 0:
-                cleanup_old_weight_versions(
-                    state_dict_key=self.state_dict_key,
-                    delim=DELIM,
-                    current_policy_version=policy_version,
-                )
-        else:
-            await ts.put_state_dict(vllm_ready_hf_sd, key)
-
-    @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
         t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
         t.start()
         logger.info(f"Pushing weights for policy version {policy_version}")
-        if not self.use_vllm_builtin_load:
-            result = await self._push_weights_DEPRECATED(
-                policy_version, self.vllm_tp_DEPRECATED
-            )
-            t.step("push_weights_DEPRECATED")
-            return result
 
         start_time = time.perf_counter()
         if "model" not in self.engine.checkpointer.states:
