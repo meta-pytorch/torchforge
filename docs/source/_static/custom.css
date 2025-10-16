@@ -1,3 +1,62 @@
+/* Center all Mermaid diagrams */
+.mermaid {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+
+/* Center the pre element that contains mermaid diagrams */
+pre.mermaid {
+    display: flex;
+    justify-content: center;
+}
+
+/* Adjust Mermaid line colors based on theme */
+/* Light mode - darker lines for visibility on white background */
+html[data-theme="light"] .mermaid .edgePath .path,
+html[data-theme="light"] .mermaid .flowchart-link {
+    stroke: #555 !important;
+    stroke-width: 2px !important;
+}
+
+/* Light mode - darker arrow tips */
+html[data-theme="light"] .mermaid .arrowheadPath,
+html[data-theme="light"] .mermaid marker path {
+    fill: #555 !important;
+    stroke: #555 !important;
+}
+
+html[data-theme="dark"] .mermaid .arrowheadPath,
+html[data-theme="dark"] .mermaid marker path {
+    fill: #aaa !important;
+    stroke: #aaa !important;
+}
+
+/* Dark mode - lighter lines for visibility on dark background */
+html[data-theme="dark"] .mermaid .edgePath .path,
+html[data-theme="dark"] .mermaid .flowchart-link {
+    stroke: #aaa !important;
+    stroke-width: 2px !important;
+}
+
+/* Dark mode - lighter arrow tips */
+html[data-theme="dark"] .mermaid .arrowheadPath,
+html[data-theme="dark"] .mermaid marker path {
+    fill: #aaa !important;
+    stroke: #aaa !important;
+}
+
+/* Adjust edge labels background based on theme */
+html[data-theme="light"] .mermaid .edgeLabel {
+    background-color: #fff !important;
+}
+
+html[data-theme="dark"] .mermaid .edgeLabel {
+    background-color: #1a1a1a !important;
+    color: #fff !important;
+}
+
 /* Custom CSS for collapsible parameter lists */
 
 /* Hide parameters in signatures */

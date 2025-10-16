@@ -11,8 +11,10 @@ graph TD
     subgraph Example["Math Tutoring RL Example"]
         Dataset["Dataset: math problems"]
         Policy["Policy: student AI"]
-        Reward["Reward Model: scores answers"]
-        Reference["Reference Model: baseline"]
+        Reward["Reward Model:
+        scores answers"]
+        Reference["Reference Model:
+        baseline"]
         ReplayBuffer["Replay Buffer: stores experiences"]
         Trainer["Trainer: improves student"]
     end
@@ -25,9 +27,11 @@ graph TD
     ReplayBuffer --> Trainer
     Trainer --> Policy
 
-    style Policy fill:#4CAF50
-    style Reward fill:#FF9800
-    style Trainer fill:#E91E63
+    style Policy fill:#4CAF50,stroke:#fff,stroke-width:2px
+    style Reward fill:#FF9800,stroke:#fff,stroke-width:2px
+    style Trainer fill:#E91E63,stroke:#fff,stroke-width:2px
+
+    linkStyle default stroke:#888,stroke-width:2px
 ```
 
 ### RL Components Defined (TorchForge Names)
@@ -75,7 +79,8 @@ Here's the key insight: **Each RL component becomes a TorchForge service**. The 
 
 ```mermaid
 graph LR
-    subgraph Concepts["RL Concepts"]
+    subgraph Concepts["RL
+    Concepts"]
         direction TB
         C1["Dataset"]
         C2["Policy"]
@@ -85,7 +90,8 @@ graph LR
         C6["Trainer"]
     end
 
-    subgraph Services["TorchForge Services (Real Classes)"]
+    subgraph Services["TorchForge Services
+    (Real Classes)"]
         direction TB
         S1["DatasetActor"]
         S2["Policy"]
@@ -173,11 +179,20 @@ Our simple RL loop above has complex requirements:
 
 ```mermaid
 graph LR
-    A["Policy: Student AI<br/>'What is 2+2?' → 'The answer is 4'"]
-    B["Reward: Teacher<br/>Scores answer: 0.95"]
-    C["Reference: Original Student<br/>Provides baseline comparison"]
-    D["Replay Buffer: Notebook<br/>Stores: question + answer + score"]
-    E["Trainer: Tutor<br/>Improves student using experiences"]
+    A["Policy: Student AI
+    'What is 2+2?' →
+    'The answer is 4'"]
+    B["Reward: Teacher
+    Scores answer: 0.95"]
+    C["Reference: Original Student
+    Provides baseline comparison"]
+    D["Replay Buffer: Notebook
+    Stores: question
+    + answer
+    + score"]
+    E["Trainer: Tutor
+    Improves student
+    using experiences"]
 
     A --> B
     A --> C

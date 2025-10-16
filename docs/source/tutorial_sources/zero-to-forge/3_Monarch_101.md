@@ -8,25 +8,51 @@ Now let's peel back the layers. TorchForge services are built on top of **Monarc
 
 ```mermaid
 graph TD
-    subgraph YourCode["1. Your RL Code"]
-        Call["await policy_service.generate.route('What is 2+2?')"]
+    subgraph YourCode["(1) Your RL Code"]
+        Call["`await policy_service
+        .generate.route
+        ('What is 2+2?')`"]
     end
 
-    subgraph ForgeServices["2. TorchForge Service Layer"]
-        ServiceInterface["ServiceInterface: Routes requests, Load balancing, Health checks"]
-        ServiceActor["ServiceActor: Manages replicas, Monitors health, Coordinates failures"]
+    subgraph ForgeServices["(2) TorchForge Service Layer"]
+        ServiceInterface["`ServiceInterface:
+        Routes requests
+        Load balancing
+        Health checks`"]
+        ServiceActor["`ServiceActor:
+        Manages replicas
+        Monitors health
+        Coordinates failures`"]
     end
 
-    subgraph MonarchLayer["3. Monarch Actor Layer"]
-        ActorMesh["ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing"]
-        ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
+    subgraph MonarchLayer["(3) Monarch Actor Layer"]
+        ActorMesh["`ActorMesh PolicyActor:
+        4 instances
+        Different GPUs
+        Message passing`"]
+        ProcMesh["`ProcMesh:
+        4 processes
+        GPU topology 0,1,2,3
+        Network interconnect`"]
     end
 
-    subgraph Hardware["4. Physical Hardware"]
-        GPU0["GPU 0: PolicyActor #1, vLLM Engine, Model Weights"]
-        GPU1["GPU 1: PolicyActor #2, vLLM Engine, Model Weights"]
-        GPU2["GPU 2: PolicyActor #3, vLLM Engine, Model Weights"]
-        GPU3["GPU 3: PolicyActor #4, vLLM Engine, Model Weights"]
+    subgraph Hardware["(4) Physical Hardware"]
+        GPU0["`GPU 0:
+        PolicyActor #1
+        vLLM Engine
+        Model Weights`"]
+        GPU1["`GPU 1:
+        PolicyActor #2
+        vLLM Engine
+        Model Weights`"]
+        GPU2["`GPU 2:
+        PolicyActor #3
+        vLLM Engine
+        Model Weights`"]
+        GPU3["`GPU 3:
+        PolicyActor #4
+        vLLM Engine
+        Model Weights`"]
     end
 
     Call --> ServiceInterface
@@ -177,29 +203,42 @@ Now the key insight: **TorchForge services are ServiceActors that manage ActorMe
 ```mermaid
 graph TD
     subgraph ServiceCreation["Service Creation Process"]
-        Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
+        Call["`await PolicyActor.options
+        (num_replicas=4, procs=1)
+        .as_service(model='Qwen')`"]
 
-        ServiceActor["ServiceActor: Manages 4 replicas, Health checks, Routes calls"]
+        ServiceActor["`ServiceActor:
+        Manages 4 replicas
+        Health checks
+        Routes calls`"]
 
         subgraph Replicas["4 Independent Replicas"]
             subgraph R0["Replica 0"]
-                PM0["ProcMesh: 1 process, GPU 0"]
-                AM0["ActorMesh<br/>1 PolicyActor"]
+                PM0["`ProcMesh:
+                1 process, GPU 0`"]
+                AM0["`ActorMesh:
+                1 PolicyActor`"]
             end
 
             subgraph R1["Replica 1"]
-                PM1["ProcMesh: 1 process, GPU 1"]
-                AM1["ActorMesh<br/>1 PolicyActor"]
+                PM1["`ProcMesh:
+                1 process, GPU 1`"]
+                AM1["`ActorMesh:
+                1 PolicyActor`"]
             end
 
             subgraph R2["Replica 2"]
-                PM2["ProcMesh: 1 process, GPU 2"]
-                AM2["ActorMesh<br/>1 PolicyActor"]
+                PM2["`ProcMesh:
+                1 process, GPU 2`"]
+                AM2["`ActorMesh:
+                1 PolicyActor`"]
             end
 
             subgraph R3["Replica 3"]
-                PM3["ProcMesh: 1 process, GPU 3"]
-                AM3["ActorMesh<br/>1 PolicyActor"]
+                PM3["`ProcMesh:
+                1 process, GPU 3`"]
+                AM3["`ActorMesh:
+                1 PolicyActor`"]
             end
         end
 
@@ -224,19 +263,35 @@ graph TD
 ### Service Call to Actor Execution
 
 ```mermaid
+:align: center
 graph TD
     subgraph CallFlow["Complete Call Flow"]
-        UserCall["await policy_service.generate.route('What is 2+2?')"]
+        UserCall["`await policy_service
+        .generate.route
+        ('What is 2+2?')`"]
 
-        ServiceInterface["ServiceInterface: Receives .route() call, Routes to ServiceActor"]
+        ServiceInterface["`ServiceInterface:
+        Receives .route() call
+        Routes to ServiceActor`"]
 
-        ServiceActor["ServiceActor: Selects healthy replica, Load balancing, Failure handling"]
+        ServiceActor["`ServiceActor:
+        Selects healthy replica
+        Load balancing
+        Failure handling`"]
 
-        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor"]
+        SelectedReplica["`Selected Replica #2:
+        ProcMesh 1 process
+        ActorMesh 1 PolicyActor`"]
 
-        PolicyActor["PolicyActor Instance: Loads model, Runs vLLM inference"]
+        PolicyActor["`PolicyActor Instance:
+        Loads model
+        Runs vLLM inference`"]
 
-        GPU["GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels"]
+        GPU["`GPU 2:
+        vLLM engine
+        Model weights
+        KV cache
+        CUDA kernels`"]
 
         UserCall --> ServiceInterface
         ServiceInterface --> ServiceActor
@@ -265,28 +320,28 @@ In real RL systems, you have multiple services that can share or use separate Pr
 graph TD
     subgraph Cluster["RL Training Cluster"]
         subgraph Services["TorchForge Services"]
-            PS["Policy Service<br/>4 GPU replicas"]
-            TS["Trainer Service<br/>2 GPU replicas"]
-            RS["Reward Service<br/>4 CPU replicas"]
-            BS["Buffer Service<br/>1 CPU replica"]
+            PS["Policy Service - 4 GPU replicas"]
+            TS["Trainer Service - 2 GPU replicas"]
+            RS["Reward Service - 4 CPU replicas"]
+            BS["Buffer Service - 1 CPU replica"]
         end
 
         subgraph MonarchInfra["Monarch Infrastructure"]
             subgraph GPUMesh["GPU ProcMesh (6 processes)"]
-                G0["Process 0<br/>GPU 0"]
-                G1["Process 1<br/>GPU 1"]
-                G2["Process 2<br/>GPU 2"]
-                G3["Process 3<br/>GPU 3"]
-                G4["Process 4<br/>GPU 4"]
-                G5["Process 5<br/>GPU 5"]
+                G0["Process 0 - GPU 0"]
+                G1["Process 1 - GPU 1"]
+                G2["Process 2 - GPU 2"]
+                G3["Process 3 - GPU 3"]
+                G4["Process 4 - GPU 4"]
+                G5["Process 5 - GPU 5"]
             end
 
             subgraph CPUMesh["CPU ProcMesh (5 processes)"]
-                C0["Process 0<br/>CPU"]
-                C1["Process 1<br/>CPU"]
-                C2["Process 2<br/>CPU"]
-                C3["Process 3<br/>CPU"]
-                C4["Process 4<br/>CPU"]
+                C0["Process 0 - CPU"]
+                C1["Process 1 - CPU"]
+                C2["Process 2 - CPU"]
+                C3["Process 3 - CPU"]
+                C4["Process 4 - CPU"]
             end
         end
 
