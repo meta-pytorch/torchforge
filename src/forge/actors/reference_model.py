@@ -115,7 +115,11 @@ class ReferenceModel(ForgeActor):
     @endpoint
     async def setup(self):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+        engine_config = ForgeJobConfig(**engine_config)
+        engine_config.checkpoint.folder = (
+            ""  # hardcode to empty to force load from initial_load_path
+        )
+        self.engine = ForgeEngine(engine_config)
         self.engine.checkpointer.load()
         self.model = self.engine.model_parts[0]  # No pipeline parallelism yet
         self.model.eval()

@@ -48,7 +48,12 @@ from forge.actors._torchstore_utils import (
     load_tensor_from_dcp,
 )
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.controller import (
+    ForgeActor,
+    get_proc_mesh,
+    host_mesh_from_proc,
+    stop_proc_mesh,
+)
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.env import TORCHSTORE_USE_RDMA
@@ -139,17 +144,22 @@ class Generator(ForgeActor):
             mesh_name=cls.mesh_name,
         )
 
-        # TODO - issues/144 we will want to ensure colocation with workers
-        # We're currently locating the Generator on the local host proc mesh
-        # vLLM initialization without setting env variables at proc_mesh creation
-        # level leads to issues. Once we can create multiple proc meshes on a host mesh,
-        # we can ensure host colocation
+        # First, spawn the worker processes which may or may not be
+        # on remote hosts.
+        worker_procs = await get_proc_mesh(process_config=process_config)
+
+        # Then, grab a single host from the workers...
+        host_mesh = await host_mesh_from_proc(worker_procs)
+        singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
+        host_mesh = host_mesh.slice(**singleton_slice)
+
+        # We ask the provisioner for a single process on a single host
         generator_proc_config = copy(process_config)
         generator_proc_config.procs = 1
-        generator_proc_config.hosts = None
         generator_proc_config.with_gpus = False
-        generator_proc = await get_proc_mesh(process_config=generator_proc_config)
-
+        generator_proc = await get_proc_mesh(
+            process_config=generator_proc_config, host_mesh=host_mesh
+        )
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         generator = generator_proc.spawn(
@@ -159,7 +169,6 @@ class Generator(ForgeActor):
             **kwargs,
         )
 
-        worker_procs = await get_proc_mesh(process_config=process_config)
         vllm_config = (
             await generator.get_vllm_config.call_one()
         )  # Config should be the same across all actors
@@ -483,16 +492,14 @@ class Generator(ForgeActor):
         await stop_proc_mesh(actor._generator_proc)
 
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info("[Generator] save model parameters for testing.")
-        await self.worker._test_save_model_params.call()
+    async def save_model_params(self):
+        """Used for debugging purpose. Save model parameters before weight update."""
+        await self.worker.save_model_params.call()
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
-        """Validate updated model params using validate_fn."""
-        logger.info("[Generator] start validating model parameters.")
-        return await self.worker._test_validate_model_params.call(validate_fn)
+    async def validate_model_params(self, validate_fn):
+        """Used for debugging purpose. Validate saved params using validate_fn."""
+        return await self.worker.validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -505,8 +512,6 @@ class GeneratorWorker(ForgeActor):
     """
 
     vllm_config: VllmConfig
-    # TODO: Remove below param
-    _test_prev_params = {}
 
     @endpoint
     async def setup(self):
@@ -596,20 +601,19 @@ class GeneratorWorker(ForgeActor):
         t.stop()
 
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
-        logger.info("[GeneratorWorker] save model parameters for testing.")
+    async def save_model_params(self):
+        """Used for debugging purposes. Save model parameters before weight update."""
+        self._debug_saved_params = {}
         for name, param in self.worker.model_runner.model.named_parameters():
-            self._test_prev_params[name] = param.detach().cpu()
+            self._debug_saved_params[name] = param.detach().cpu()
         logger.info(
             "[GeneratorWorker] finished saving model parameters, len = %d",
-            len(self._test_prev_params),
+            len(self._debug_saved_params),
         )
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
-        """Validate updated model params using validate_fn."""
-        logger.info("[GeneratorWorker] start validating model parameters.")
+    async def validate_model_params(self, validate_fn):
+        """Used for debugging purposes. Validate saved params using validate_fn."""
         return validate_fn(
-            self._test_prev_params, self.worker.model_runner.model, logger
+            self._debug_saved_params, self.worker.model_runner.model, logger
         )

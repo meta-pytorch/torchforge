@@ -1,6 +1,6 @@
 # Part 2: Peeling Back the Abstraction - What Are Services?
 
-We highly recommend reading [Part 1](./1_RL_and_Forge_Fundamentals) before this, it explains RL Concepts and how they land in Forge.
+We highly recommend reading [Part 1](./1_RL_and_Forge_Fundamentals) before this, it explains RL Concepts and how they land in TorchForge.
 
 Now that you see the power of the service abstraction, let's understand what's actually happening under the hood, Grab your chai!
 
@@ -49,7 +49,7 @@ graph TD
 
 ### 1. Real Service Configuration
 
-Here's the actual ServiceConfig from Forge source code:
+Here's the actual ServiceConfig from TorchForge source code:
 
 ```python
 # Configuration pattern from apps/grpo/main.py:
@@ -106,14 +106,14 @@ await policy.shutdown()
 
 ### 3. How Services Actually Work
 
-Forge services are implemented as ServiceActors that manage collections of your ForgeActor replicas:
+TorchForge services are implemented as ServiceActors that manage collections of your ForgeActor replicas:
 
-When you call `.as_service()`, Forge creates a `ServiceInterface` that manages N replicas of your `ForgeActor` class and gives you methods like `.route()`, `.fanout()`, etc.
+When you call `.as_service()`, TorchForge creates a `ServiceInterface` that manages N replicas of your `ForgeActor` class and gives you methods like `.route()`, `.fanout()`, etc.
 
 ```python
 # Your code sees this simple interface:
 responses = await policy.generate.route(prompt=prompt)
-# But Forge handles all the complexity of replica management, load balancing, and fault tolerance
+# But TorchForge handles all the complexity of replica management, load balancing, and fault tolerance
 ```
 
 ## Communication Patterns: Quick Reference
@@ -159,7 +159,7 @@ graph LR
 
 ## Deep Dive: Service Communication Patterns
 
-These communication patterns (\"adverbs\") determine how your service calls are routed to replicas. Understanding when to use each pattern is key to effective Forge usage.
+These communication patterns (\"adverbs\") determine how your service calls are routed to replicas. Understanding when to use each pattern is key to effective TorchForge usage.
 
 ### 1. `.route()` - Load Balanced Single Replica
 
@@ -181,7 +181,7 @@ Behind the scenes:
 - **Throughput**: Limited by single replica capacity
 - **Fault tolerance**: Automatic failover to other replicas
 
-**Critical insight**: `.route()` is your default choice for stateless operations in Forge services.
+**Critical insight**: `.route()` is your default choice for stateless operations in TorchForge services.
 
 ### 2. `.fanout()` - Broadcast with Results Collection
 
@@ -346,10 +346,10 @@ async def optimized_multi_turn():
 
 **The challenge**: Multiple trainers and experience collectors reading/writing concurrently.
 
-**Real Forge approach**: The ReplayBuffer actor handles concurrency internally:
+**Real TorchForge approach**: The ReplayBuffer actor handles concurrency internally:
 
 ```python
-# Forge ReplayBuffer endpoints (verified from source code)
+# TorchForge ReplayBuffer endpoints (verified from source code)
 # Add episodes (thread-safe by actor model)
 await replay_buffer.add.call_one(episode)  # .choose() would work too, but .call_one() clarifies it's a singleton actor not ActorMesh
 
@@ -372,7 +372,7 @@ batch = await replay_buffer.sample.call_one(
 **The challenge**: Trainer updates policy weights, but policy service needs those weights.
 
 ```python
-# Forge weight synchronization pattern from apps/grpo/main.py
+# TorchForge weight synchronization pattern from apps/grpo/main.py
 async def real_weight_sync(trainer, policy, step):
     # Trainer pushes weights to TorchStore with version number
     await trainer.push_weights.call_one(policy_version=step + 1)
@@ -388,11 +388,11 @@ print(f"Current policy version: {current_version}")
 
 ## Deep Dive: Asynchronous Coordination Patterns
 
-**The real challenge**: Different services run at different speeds, but Forge's service abstraction handles the coordination complexity.
+**The real challenge**: Different services run at different speeds, but TorchForge's service abstraction handles the coordination complexity.
 
-### The Forge Approach: Let Services Handle Coordination
+### The TorchForge Approach: Let Services Handle Coordination
 
-Instead of manual coordination, Forge services handle speed mismatches automatically:
+Instead of manual coordination, TorchForge services handle speed mismatches automatically:
 
 ```python
 from apps.grpo.main import Episode, Group
@@ -556,7 +556,7 @@ await reward_actor.shutdown()
 Now let's see how services coordinate in a real training loop:
 
 ```python
-# This is the REAL way production RL systems are built with Forge
+# This is the REAL way production RL systems are built with TorchForge
 
 import asyncio
 import torch

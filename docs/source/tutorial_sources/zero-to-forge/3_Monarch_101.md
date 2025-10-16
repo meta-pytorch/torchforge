@@ -1,8 +1,8 @@
-# Part 3: The Forge-Monarch Connection
+# Part 3: The TorchForge-Monarch Connection
 
-This is part 3 of our series, in the previous sections: we learned Part 1: [RL Concepts and how they map to Forge](./1_RL_and_Forge_Fundamentals), Part 2: [Forge Internals](./2_Forge_Internals).
+This is part 3 of our series, in the previous sections: we learned Part 1: [RL Concepts and how they map to TorchForge](./1_RL_and_Forge_Fundamentals), Part 2: [TorchForge Internals](./2_Forge_Internals).
 
-Now let's peel back the layers. Forge services are built on top of **Monarch**, PyTorch's distributed actor framework. Understanding this connection is crucial for optimization and debugging.
+Now let's peel back the layers. TorchForge services are built on top of **Monarch**, PyTorch's distributed actor framework. Understanding this connection is crucial for optimization and debugging.
 
 ## The Complete Hierarchy: Service to Silicon
 
@@ -12,7 +12,7 @@ graph TD
         Call["await policy_service.generate.route('What is 2+2?')"]
     end
 
-    subgraph ForgeServices["2. Forge Service Layer"]
+    subgraph ForgeServices["2. TorchForge Service Layer"]
         ServiceInterface["ServiceInterface: Routes requests, Load balancing, Health checks"]
         ServiceActor["ServiceActor: Manages replicas, Monitors health, Coordinates failures"]
     end
@@ -92,8 +92,8 @@ actors = cluster_procs.spawn("my_actor", MyActor)
 **The power**: Scale from single host to cluster without changing your actor code - ProcMesh handles all the complexity.
 
 ```python
-# This shows the underlying actor system that powers Forge services
-# NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps!
+# This shows the underlying actor system that powers TorchForge services
+# NOTE: This is for educational purposes - use ForgeActor and .as_service() in real TorchForge apps!
 
 from monarch.actor import Actor, endpoint, this_proc, Future
 from monarch.actor import ProcMesh, this_host
@@ -146,8 +146,8 @@ await counters.increment.broadcast()  # No return value - just sends to all acto
 # Cleanup
 await procs.stop()
 
-# Remember: This raw Monarch code is for understanding how Forge works internally.
-# In your Forge applications, use ForgeActor, .as_service(), .as_actor() instead!
+# Remember: This raw Monarch code is for understanding how TorchForge works internally.
+# In your TorchForge applications, use ForgeActor, .as_service(), .as_actor() instead!
 ```
 
 ## Actor Meshes: Your Code Running Distributed
@@ -168,9 +168,9 @@ policy_actors = procs.spawn("policy", PolicyActor, model="Qwen/Qwen3-7B")
 # All initialized with the same model parameter
 ```
 
-## How Forge Services Use Monarch
+## How TorchForge Services Use Monarch
 
-Now the key insight: **Forge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas**.
+Now the key insight: **TorchForge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas**.
 
 ### The Service Creation Process
 
@@ -264,7 +264,7 @@ In real RL systems, you have multiple services that can share or use separate Pr
 ```mermaid
 graph TD
     subgraph Cluster["RL Training Cluster"]
-        subgraph Services["Forge Services"]
+        subgraph Services["TorchForge Services"]
             PS["Policy Service<br/>4 GPU replicas"]
             TS["Trainer Service<br/>2 GPU replicas"]
             RS["Reward Service<br/>4 CPU replicas"]
@@ -317,7 +317,7 @@ graph TD
 2. **Location Transparency**: Actors can be local or remote with identical APIs
 3. **Structured Distribution**: ProcMesh maps directly to hardware topology
 4. **Message Passing**: No shared memory means no race conditions or locks
-5. **Service Abstraction**: Forge hides Monarch complexity while preserving power
+5. **Service Abstraction**: TorchForge hides Monarch complexity while preserving power
 
 Understanding this hierarchy helps you:
 - **Debug performance issues**: Is the bottleneck at service, actor, or hardware level?
@@ -329,9 +329,9 @@ Understanding this hierarchy helps you:
 
 ## What You've Learned
 
-1. **RL Fundamentals**: How RL concepts map to Forge services with REAL, working examples
-2. **Service Abstraction**: How to use Forge services effectively with verified communication patterns
-3. **Monarch Foundation**: How Forge services connect to distributed actors and hardware
+1. **RL Fundamentals**: How RL concepts map to TorchForge services with REAL, working examples
+2. **Service Abstraction**: How to use TorchForge services effectively with verified communication patterns
+3. **Monarch Foundation**: How TorchForge services connect to distributed actors and hardware
 
 ## Key Takeaways
 
