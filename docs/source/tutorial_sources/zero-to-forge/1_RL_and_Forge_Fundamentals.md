@@ -79,9 +79,8 @@ Here's the key insight: **Each RL component becomes a TorchForge service**. The 
 
 ```mermaid
 graph LR
-    subgraph Concepts["RL
-    Concepts"]
-        direction TB
+    subgraph Concepts["RL Concepts"]
+
         C1["Dataset"]
         C2["Policy"]
         C3["Reward Model"]
@@ -90,9 +89,8 @@ graph LR
         C6["Trainer"]
     end
 
-    subgraph Services["TorchForge Services
-    (Real Classes)"]
-        direction TB
+    subgraph Services["TorchForge Services (Real Classes)"]
+
         S1["DatasetActor"]
         S2["Generator"]
         S3["RewardActor"]
