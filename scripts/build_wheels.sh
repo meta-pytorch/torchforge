@@ -138,26 +138,26 @@ setup_build_dir() {
 setup_cuda_env() {
     log_info "Setting up CUDA environment..."
 
-    export CUDA_VERSION=12.9
+    export CUDA_VERSION=12.
     export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
     export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
     export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
     export PATH="${CUDA_HOME}/bin:$PATH"
     export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
     export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-    export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
+    export LD_LIBRARY_PATH=/usr/local/cuda-12.8/compat:${LD_LIBRARY_PATH:-}
     export LIBRARY_PATH=$CUDA_HOME/lib64:${LIBRARY_PATH:-}
 
     # Save to file for persistence
     cat > ~/.forge_cuda_env << 'EOF'
-export CUDA_VERSION=12.9
+export CUDA_VERSION=12.8
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}
 export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
-export LD_LIBRARY_PATH=/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/compat:${LD_LIBRARY_PATH:-}
 export LIBRARY_PATH=${CUDA_HOME}/lib64:${LIBRARY_PATH:-}
 EOF
 
@@ -231,7 +231,7 @@ run_step() {
 
 # Step 1: Install PyTorch nightly
 step1_pytorch() {
-    pip3 install --pre torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
+    pip3 install --pre torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu128
 }
 
 # Step 2: Install CUDA system packages
@@ -388,7 +388,7 @@ main() {
     log_info "Users can now install with:"
     log_info "  conda create -n forge python=3.10 -y"
     log_info "  conda activate forge"
-    log_info "  pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129"
+    log_info "  pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu128"
     log_info "  pip install $WHEEL_DIR/*.whl"
     if should_build "vllm" || should_build "monarch"; then
         log_info "  source ~/.forge_cuda_env"

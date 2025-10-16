@@ -35,7 +35,7 @@ if [ -z "${PYTORCH_VERSION:-}" ]; then
 fi
 
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0-93025"
+RELEASE_TAG="v0.0.0-93025"  # Why is this hardcoded?
 GITHUB_REPO="meta-pytorch/forge"
 
 # Check conda environment
@@ -161,57 +161,91 @@ check_wheels() {
     log_info "Found $wheel_count local wheels"
 }
 
-# Download vLLM wheel from GitHub releases
-download_vllm_wheel() {
-    log_info "Downloading vLLM wheel from GitHub releases..."
+# Generic package installation function supporting multiple sources
+# Args: package_name, version, github_repo
+install_package() {
+    local package_name="$1"
+    local version="$2"
+    local github_repo="$3"
+
+    log_info "Installing $package_name..."
+
+    # Determine installation method based on version format
+    if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+        # GitHub release tag format (e.g., v0.10.0)
+        log_info "  Method: GitHub release tag ($version)"
+        install_from_github_release "$package_name" "$version" "$github_repo"
+    elif [[ "$version" =~ ^[0-9a-f]{40}$ ]]; then
+        # GitHub commit SHA format (40-character hex string)
+        log_info "  Method: GitHub commit SHA ($version)"
+        install_from_github_commit "$package_name" "$version" "$github_repo"
+    else
+        # PyPI or PyTorch index format (e.g., 0.1.0, 2.9.0, 0.1.0.dev20251015)
+        log_info "  Method: PyPI/PyTorch index ($version)"
+        install_from_index "$package_name" "$version"
+    fi
+}
+
+# Install from PyPI or PyTorch index
+install_from_index() {
+    local package_name="$1"
+    local version="$2"
+
+    if [[ "$version" == *"dev"* ]]; then
+        pip install --pre "${package_name}==${version}" --extra-index-url https://download.pytorch.org/whl/nightly/cu128
+    else
+        pip install "${package_name}==${version}"
+    fi
+
+    if [ $? -ne 0 ]; then
+        log_error "Failed to install $package_name from index"
+        exit 1
+    fi
+}
+
+# Install from GitHub release tag
+install_from_github_release() {
+    local package_name="$1"
+    local release_tag="$2"
+    local github_repo="$3"
 
     # Check if gh is installed
     if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) is required to download vLLM wheel"
-        log_info "Install it with: sudo dnf install gh"
-        log_info "Then run: gh auth login"
+        log_error "GitHub CLI (gh) is required to download from GitHub releases"
+        log_info "Run the installation script - it will install gh via conda"
         exit 1
     fi
 
-    # Get the vLLM wheel filename from the release
-    local vllm_wheel_name
-    vllm_wheel_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPO" --json assets --jq '.assets[] | select(.name | contains("vllm")) | .name' | head -1)
+    # Get the wheel URL from the release
+    local wheel_url
+    wheel_url=$(gh release view "$release_tag" --repo "$github_repo" --json assets --jq ".assets[] | select(.name | contains(\"$package_name\")) | .url" | head -1)
 
-    if [ -z "$vllm_wheel_name" ]; then
-        log_error "Could not find vLLM wheel in release $RELEASE_TAG"
-        log_info "Make sure the vLLM wheel has been uploaded to the GitHub release"
+    if [ -z "$wheel_url" ]; then
+        log_error "Could not find $package_name wheel in release $release_tag"
+        log_info "Make sure the $package_name wheel has been uploaded to the GitHub release"
         exit 1
     fi
-    for f in assets/wheels/vllm-*; do
-        [ -e "$f" ] || continue  # skip if glob didn't match
-        if [ "$(basename "$f")" != "$vllm_wheel_name" ]; then
-            log_info "Removing stale vLLM wheel: $(basename "$f")"
-            rm -f "$f"
-        fi
-    done
 
-    local local_path="$WHEEL_DIR/$vllm_wheel_name"
+    log_info "  Installing from: $wheel_url"
+    pip install "$wheel_url"
 
-    if [ -f "$local_path" ]; then
-        log_info "vLLM wheel already downloaded: $vllm_wheel_name"
-        return 0
+    if [ $? -ne 0 ]; then
+        log_error "Failed to install $package_name from GitHub release"
+        exit 1
     fi
+}
 
-    log_info "Downloading: $vllm_wheel_name"
+# Install from GitHub commit SHA
+install_from_github_commit() {
+    local package_name="$1"
+    local commit_sha="$2"
+    local github_repo="$3"
 
-    # Save current directory and change to wheel directory
-    local original_dir=$(pwd)
-    cd "$WHEEL_DIR"
-    gh release download "$RELEASE_TAG" --repo "$GITHUB_REPO" --pattern "*vllm*"
-    local download_result=$?
+    log_info "  Installing from: git+https://github.com/$github_repo.git@$commit_sha"
+    pip install "git+https://github.com/$github_repo.git@$commit_sha"
 
-    # Always return to original directory
-    cd "$original_dir"
-
-    if [ $download_result -eq 0 ]; then
-        log_info "Successfully downloaded vLLM wheel"
-    else
-        log_error "Failed to download vLLM wheel"
+    if [ $? -ne 0 ]; then
+        log_error "Failed to install $package_name from GitHub commit"
         exit 1
     fi
 }
@@ -265,28 +299,30 @@ main() {
     echo ""
 
     check_conda_env
-    check_wheels
+    # check_wheels
 
     # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
     conda install -y openssl
 
     install_system_packages "$USE_SUDO"
     check_gh_install
-    download_vllm_wheel
 
-    log_info "Installing PyTorch nightly..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
+    # Install all packages using the generic install_package function
+    # Syntax: install_package "package_name" "version" "github_repo"
+    install_package "torch" "$PYTORCH_VERSION" "pytorch/pytorch"
+    install_package "vllm" "$VLLM_VERSION" "vllm-project/vllm"
+    install_package "torchmonarch" "$MONARCH_VERSION" "meta-pytorch/monarch"
+    install_package "torchstore" "$TORCHSTORE_VERSION" "meta-pytorch/torchstore"
+    install_package "torchtitan" "$TORCHTITAN_VERSION" "pytorch/torchtitan"
+    install_package "torch" "$PYTORCH_VERSION" "pytorch/pytorch"
 
-    log_info "Installing all wheels (local + downloaded)..."
-    pip install "$WHEEL_DIR"/*.whl
-
-    log_info "Installing Forge from source..."
+    log_info "Installing TorchForge from source..."
     pip install -e .
 
     # Set up environment
     log_info "Setting up environment..."
 
-     # Get conda environment directory
+    # Get conda environment directory
     local conda_env_dir="${CONDA_PREFIX}"
 
     if [ -z "$conda_env_dir" ]; then
@@ -301,7 +337,7 @@ main() {
     local cuda_activation_script="${conda_env_dir}/etc/conda/activate.d/cuda_env.sh"
     cat > "$cuda_activation_script" << 'EOF'
 # CUDA environment for Forge
-export CUDA_VERSION=12.9
+export CUDA_VERSION=12.8
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}

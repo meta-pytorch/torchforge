@@ -5,15 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 # Version Configuration for Forge Wheel Building
-# This file contains all pinned versions and commits for dependencies
+# This file contains all pinned versions/tags/commits for dependencies
 
-# PyTorch version
-PYTORCH_VERSION="2.9.0.dev20250905"
-
-# vLLM branch
-VLLM_BRANCH="v0.10.0"
-
-# Commit hashes
-MONARCH_COMMIT="195503223b5c2896846171f60ac99dc6868f8f2c"
-TORCHTITAN_COMMIT="0cfbd0b3c2d827af629a107a77a9e47229c31663"
-TORCHSTORE_COMMIT="662299faf4fd50ee30bd9aa3f4ce8c0e2db1d310"
+PYTORCH_VERSION="2.9.0"
+VLLM_VERSION="v0.10.0"
+MONARCH_VERSION="0.1.0rc3"
+TORCHTITAN_VERSION="0.1.0.dev20251015"
+TORCHSTORE_VERSION="662299faf4fd50ee30bd9aa3f4ce8c0e2db1d310"
