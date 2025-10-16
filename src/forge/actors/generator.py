@@ -494,13 +494,11 @@ class Generator(ForgeActor):
     @endpoint
     async def save_model_params(self):
         """Used for debugging purpose. Save model parameters before weight update."""
-        logger.info("[Generator] save model parameters for debugging.")
         await self.worker.save_model_params.call()
 
     @endpoint
     async def validate_model_params(self, validate_fn):
         """Used for debugging purpose. Validate saved params using validate_fn."""
-        logger.info("[Generator] start validating saved model parameters.")
         return await self.worker.validate_model_params.call(validate_fn)
 
 
@@ -514,8 +512,6 @@ class GeneratorWorker(ForgeActor):
     """
 
     vllm_config: VllmConfig
-    # Used for debugging purposes only
-    debug_saved_params = {}
 
     @endpoint
     async def setup(self):
@@ -607,18 +603,17 @@ class GeneratorWorker(ForgeActor):
     @endpoint
     async def save_model_params(self):
         """Used for debugging purposes. Save model parameters before weight update."""
-        logger.info("[GeneratorWorker] save model parameters for debugging.")
+        self._debug_saved_params = {}
         for name, param in self.worker.model_runner.model.named_parameters():
-            self.debug_saved_params[name] = param.detach().cpu()
+            self._debug_saved_params[name] = param.detach().cpu()
         logger.info(
             "[GeneratorWorker] finished saving model parameters, len = %d",
-            len(self.debug_saved_params),
+            len(self._debug_saved_params),
         )
 
     @endpoint
     async def validate_model_params(self, validate_fn):
         """Used for debugging purposes. Validate saved params using validate_fn."""
-        logger.info("[GeneratorWorker] start validating saved model parameters.")
         return validate_fn(
-            self.debug_saved_params, self.worker.model_runner.model, logger
+            self._debug_saved_params, self.worker.model_runner.model, logger
         )
