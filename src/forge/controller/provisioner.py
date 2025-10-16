@@ -20,8 +20,9 @@ from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
 
-from forge.controller.launcher import BaseLauncher, get_launcher
+from monarch.utils import setup_env_for_distributed
 
+from forge.controller.launcher import BaseLauncher, get_launcher
 from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 from forge.types import ProcessConfig, ProvisionerConfig
 
@@ -282,6 +283,14 @@ class Provisioner:
                 per_host={"procs": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),
             )
+
+            if with_gpus:
+                # Set up environment variables for PyTorch distributed...
+                await setup_env_for_distributed(
+                    procs,
+                    master_addr=addr,
+                    master_port=port,
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)

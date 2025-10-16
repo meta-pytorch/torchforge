@@ -5,5 +5,5 @@ Welcome to TorchForge! This guide will help you get up and running with TorchFor
 TorchForge specializes in post-training techniques for large language models, including:
 
 - **Supervised Fine-Tuning (SFT)**: Adapt pre-trained models to specific tasks using labeled data
-- **Generalized Reward Policy Optimization (GRPO)**: Advanced reinforcement learning for model alignment
+- **Group Relative Policy Optimization (GRPO)**: Advanced reinforcement learning for model alignment
 - **Multi-GPU Distributed Training**: Efficient scaling across multiple GPUs and nodes

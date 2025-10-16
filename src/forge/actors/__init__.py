@@ -5,23 +5,19 @@
 # LICENSE file in the root directory of this source tree.
 
 __all__ = [
-    "Generator" "PolicyRouter",
+    "Generator",
     "RLTrainer",
     "ReplayBuffer",
-    "TitanRefModel",
+    "ReferenceModel",
     "SandboxedPythonCoder",
 ]
 
 
 def __getattr__(name):
     if name == "Generator":
-        from .policy import Generator
+        from .generator import Generator
 
         return Generator
-    elif name == "PolicyRouter":
-        from .policy import PolicyRouter
-
-        return PolicyRouter
     elif name == "RLTrainer":
         from .trainer import RLTrainer
 
