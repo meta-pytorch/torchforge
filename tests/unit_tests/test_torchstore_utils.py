@@ -111,7 +111,7 @@ class TestWeightCleaner(unittest.IsolatedAsyncioTestCase):
 
     @ignore_coroutine_not_awaited
     @pytest.mark.asyncio
-    @patch("forge.actors._torchstore_utils.drop_weights", new_callable=AsyncMock)
+    @patch("forge.util._torchstore.drop_weights", new_callable=AsyncMock)
     @patch("asyncio.create_task")
     async def test_step_no_cleanup_needed_equal_version(
         self, mock_create_task, mock_drop_weights
@@ -139,7 +139,7 @@ class TestWeightCleaner(unittest.IsolatedAsyncioTestCase):
 
     @ignore_coroutine_not_awaited
     @pytest.mark.asyncio
-    @patch("forge.actors._torchstore_utils.drop_weights", new_callable=AsyncMock)
+    @patch("forge.util._torchstore.drop_weights", new_callable=AsyncMock)
     @patch("asyncio.create_task")
     async def test_step_no_cleanup_needed_lower_version(
         self, mock_create_task, mock_drop_weights
@@ -165,7 +165,7 @@ class TestWeightCleaner(unittest.IsolatedAsyncioTestCase):
 
     @ignore_coroutine_not_awaited
     @pytest.mark.asyncio
-    @patch("forge.actors._torchstore_utils.drop_weights", new_callable=AsyncMock)
+    @patch("forge.util._torchstore.drop_weights", new_callable=AsyncMock)
     @patch("asyncio.create_task")
     async def test_step_creates_tasks_initial_call(
         self, mock_create_task, mock_drop_weights
@@ -184,7 +184,7 @@ class TestWeightCleaner(unittest.IsolatedAsyncioTestCase):
 
     @ignore_coroutine_not_awaited
     @pytest.mark.asyncio
-    @patch("forge.actors._torchstore_utils.drop_weights", new_callable=AsyncMock)
+    @patch("forge.util._torchstore.drop_weights", new_callable=AsyncMock)
     @patch("asyncio.create_task")
     async def test_step_creates_only_new_version_tasks(
         self, mock_create_task, mock_drop_weights
