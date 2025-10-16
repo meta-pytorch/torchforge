@@ -1,7 +1,6 @@
 # Grouped Relative Policy Optimization (GRPO)
 # >>> python -m apps.grpo.main --config apps/grpo/qwen32b.yaml
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
-
 # Global configuration
 group_size: 16
 local_batch_size: 2 # per-device batch size
@@ -9,13 +8,10 @@ max_req_tokens: 1024
 max_res_tokens: 1024
 model: "Qwen/Qwen3-32B"
 off_by_n: 1 # Off by one by default
-
 provisioner:
   launcher: slurm
-
 # Main loop configuration
 rollout_threads: 4 # make this 4x the number of policy replicas seems to work well
-
 # Observability configuration
 metric_logging:
   wandb:
@@ -24,7 +20,6 @@ metric_logging:
     reduce_across_ranks: True
   console:
     reduce_across_ranks: True
-
 # Dataset configuration
 dataset:
   path: "openai/gsm8k"
@@ -32,7 +27,6 @@ dataset:
   data_split: "train"
   streaming: true
   model: ${model}
-
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
@@ -45,7 +39,6 @@ policy:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
-
 # Trainer configuration
 trainer:
   model:
@@ -84,14 +77,12 @@ trainer:
     async_mode: "disabled"
   activation_checkpoint:
     mode: full
-
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
   # dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
-  dp_size: 64
-
+  dp_size: 32
 # Reference model configuration
 ref_model:
   model:
@@ -114,7 +105,6 @@ ref_model:
     enable: true
     initial_load_path: hf://${model}
     initial_load_in_hf: true
-
 # All resource allocations
 services:
   policy:
@@ -133,7 +123,6 @@ services:
     num_replicas: 1
     with_gpus: false
     mesh_name: reward_actor
-
 actors:
   dataset:
     procs: 1
@@ -141,7 +130,7 @@ actors:
     mesh_name: dataset
   trainer:
     procs: 8
-    hosts: 4
+    hosts: 2
     with_gpus: true
     mesh_name: trainer
   replay_buffer:
