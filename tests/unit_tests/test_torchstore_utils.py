@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import torch
 import torch.distributed.checkpoint as dcp
-from forge.actors._torchstore_utils import DcpHandle, WeightCleaner
+from forge.util._torchstore import DcpHandle, WeightCleaner
 
 ignore_torch_distributed_unitialized_warning = pytest.mark.filterwarnings(
     r"ignore:.*torch.distributed"

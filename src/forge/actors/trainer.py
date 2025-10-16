@@ -37,17 +37,17 @@ from torchtitan.config.job_config import (
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
 
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-)
-
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
+
+from forge.util._torchstore import (
+    DcpHandle,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
