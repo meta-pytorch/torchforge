@@ -492,7 +492,8 @@ async def shutdown_metric_logger():
     logger.info("Shutting down metric logger...")
     try:
         mlogger = await get_or_create_metric_logger()
-        await mlogger.shutdown.call_one()
+        if mlogger:
+            await mlogger.shutdown.call_one()
     except Exception as e:
         logger.warning(f"Failed to shutdown metric logger: {e}")
 

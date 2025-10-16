@@ -75,6 +75,10 @@ async def get_or_create_metric_logger(
     """
     # Get or create the singleton global logger
     global _global_logger
+
+    if FORGE_DISABLE_METRICS.get_value():
+        return _global_logger
+
     if _global_logger is None:
         _global_logger = await get_or_spawn_controller(
             "global_logger", GlobalLoggingActor
