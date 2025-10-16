@@ -6,13 +6,13 @@
 
 import pickle
 import time
-from multiprocessing import Process, Queue
 
 import pytest
 import torch
 
 # Assuming SharedTensor is in shared_tensor.py
 from forge.util._shared_tensor import SharedTensor
+from multiprocess import Process, Queue
 
 
 class TestSharedTensorCreation:
