@@ -48,11 +48,9 @@ def run_grpo_training(
         "apps.grpo.main",
         "--config",
         config_path,
-        "--trainer.training.steps",
-        str(max_steps),
+        f"trainer.training.steps={str(max_steps)}",
         # Disable WandB for CI to avoid auth issues - only use console logging
-        "--metric_logging",
-        '{"console": {"reduce_across_ranks": true}}',
+        "~metric_logging.wandb",
     ]
 
     if extra_args:
@@ -76,7 +74,7 @@ def run_grpo_training(
         elapsed = time.time() - start_time
         raise Exception(
             f"GRPO training timed out after {elapsed:.1f}s (timeout={timeout}s)"
-        )
+        ) from None
 
     elapsed = time.time() - start_time
 
