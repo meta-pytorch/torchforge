@@ -17,12 +17,12 @@ graph TD
     .generate"]
 
     subgraph ServiceLayer["Service Layer"]
-        Proxy["`Service Proxy:
+        Proxy["Service Proxy:
         Load balancing
-        Health checking`"]
-        LB["`Load Balancer:
+        Health checking"]
+        LB["Load Balancer:
         Replica selection
-        Circuit breaker`"]
+        Circuit breaker"]
     end
 
     subgraph Replicas["Replica Management"]
@@ -144,12 +144,12 @@ graph LR
     end
 
     subgraph Patterns["Communication Patterns"]
-        Route["`.route()
-        → One healthy replica`"]
-        CallOne["`.call_one()
-        → Single actor`"]
-        Fanout["`.fanout()
-        → ALL replicas`"]
+        Route[".route()
+        → One healthy replica"]
+        CallOne[".call_one()
+        → Single actor"]
+        Fanout[".fanout()
+        → ALL replicas"]
     end
 
     subgraph Replicas["Replicas/Actors"]

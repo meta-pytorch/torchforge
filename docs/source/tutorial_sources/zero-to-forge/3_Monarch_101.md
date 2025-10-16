@@ -9,32 +9,50 @@ Now let's peel back the layers. TorchForge services are built on top of **Monarc
 ```mermaid
 graph TD
     subgraph YourCode["(1) Your RL Code"]
-        Call["`await policy_service
+        Call["await policy_service
         .generate.route
-        ('What is 2+2?')`"]
+        ('What is 2+2?')"]
     end
 
     subgraph ForgeServices["(2) TorchForge Service Layer"]
-        ServiceInterface["`ServiceInterface:
+        ServiceInterface["ServiceInterface:
         Routes requests
         Load balancing
-        Health checks`"]
-        ServiceActor["`ServiceActor:
+        Health checks"]
+        ServiceActor["ServiceActor:
         Manages replicas
         Monitors health
-        Coordinates failures`"]
+        Coordinates failures"]
     end
 
     subgraph MonarchLayer["3. Monarch Actor Layer"]
-        ActorMesh["ActorMesh Policy Actor: 4 instances, Different GPUs, Message passing"]
-        ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
+        ActorMesh["ActorMesh Policy Actor:
+        4 instances
+        Different GPUs
+        Message passing"]
+        ProcMesh["ProcMesh:
+        4 processes
+        GPU topology 0,1,2,3
+        Network interconnect"]
     end
 
     subgraph Hardware["4. Physical Hardware"]
-        GPU0["GPU 0: Policy Actor #1, vLLM Engine, Model Weights"]
-        GPU1["GPU 1: Policy Actor #2, vLLM Engine, Model Weights"]
-        GPU2["GPU 2: Policy Actor #3, vLLM Engine, Model Weights"]
-        GPU3["GPU 3: Policy Actor #4, vLLM Engine, Model Weights"]
+        GPU0["GPU 0:
+        Policy Actor #1
+        vLLM Engine
+        Model Weights"]
+        GPU1["GPU 1:
+        Policy Actor #2
+        vLLM Engine
+        Model Weights"]
+        GPU2["GPU 2:
+        Policy Actor #3
+        vLLM Engine
+        Model Weights"]
+        GPU3["GPU 3:
+        Policy Actor #4
+        vLLM Engine
+        Model Weights"]
     end
 
     Call --> ServiceInterface
@@ -185,32 +203,49 @@ Now the key insight: **TorchForge services are ServiceActors that manage ActorMe
 ```mermaid
 graph TD
     subgraph ServiceCreation["Service Creation Process"]
-        Call["await Policy.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
+        Call["await Policy
+        .options(
+        num_replicas=4,
+        procs=1)
+        .as_service(
+        model='Qwen')"]
 
-        ServiceActor["`ServiceActor:
+        ServiceActor["ServiceActor:
         Manages 4 replicas
         Health checks
-        Routes calls`"]
+        Routes calls"]
 
         subgraph Replicas["4 Independent Replicas"]
             subgraph R0["Replica 0"]
-                PM0["ProcMesh: 1 process, GPU 0"]
-                AM0["ActorMesh<br/>1 Policy Actor"]
+                PM0["ProcMesh:
+                1 process
+                GPU 0"]
+                AM0["ActorMesh
+                1 Policy Actor"]
             end
 
             subgraph R1["Replica 1"]
-                PM1["ProcMesh: 1 process, GPU 1"]
-                AM1["ActorMesh<br/>1 Policy Actor"]
+                PM1["ProcMesh:
+                1 process
+                GPU 1"]
+                AM1["ActorMesh
+                1 Policy Actor"]
             end
 
             subgraph R2["Replica 2"]
-                PM2["ProcMesh: 1 process, GPU 2"]
-                AM2["ActorMesh<br/>1 Policy Actor"]
+                PM2["ProcMesh:
+                1 process
+                GPU 2"]
+                AM2["ActorMesh
+                1 Policy Actor"]
             end
 
             subgraph R3["Replica 3"]
-                PM3["ProcMesh: 1 process, GPU 3"]
-                AM3["ActorMesh<br/>1 Policy Actor"]
+                PM3["ProcMesh:
+                1 process
+                GPU 3"]
+                AM3["ActorMesh
+                1 Policy Actor"]
             end
         end
 
@@ -238,28 +273,32 @@ graph TD
 :align: center
 graph TD
     subgraph CallFlow["Complete Call Flow"]
-        UserCall["`await policy_service
+        UserCall["await policy_service
         .generate.route
-        ('What is 2+2?')`"]
+        ('What is 2+2?')"]
 
-        ServiceInterface["`ServiceInterface:
+        ServiceInterface["ServiceInterface:
         Receives .route() call
-        Routes to ServiceActor`"]
+        Routes to ServiceActor"]
 
-        ServiceActor["`ServiceActor:
+        ServiceActor["ServiceActor:
         Selects healthy replica
         Load balancing
-        Failure handling`"]
+        Failure handling"]
 
-        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 Policy Actor"]
+        SelectedReplica["Selected Replica #2:
+        ProcMesh 1 process
+        ActorMesh 1 Policy Actor"]
 
-        PolicyActor["Policy Actor Instance: Loads model, Runs vLLM inference"]
+        PolicyActor["Policy Actor Instance:
+        Loads model
+        Runs vLLM inference"]
 
-        GPU["`GPU 2:
+        GPU["GPU 2:
         vLLM engine
         Model weights
         KV cache
-        CUDA kernels`"]
+        CUDA kernels"]
 
         UserCall --> ServiceInterface
         ServiceInterface --> ServiceActor
