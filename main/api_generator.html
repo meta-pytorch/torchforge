@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-10-15T23:24:24+00:00" />
+    <meta property="article:modified_time" content="2025-10-16T16:46:51+00:00" />
     <title>Generator &#8212; torchforge 0.1 documentation</title>
   
   
@@ -58,7 +58,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 16, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -208,7 +208,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 16, 2025"/>
 
   </head>
 
@@ -796,6 +796,11 @@ token_ids=[…], logprobs=[…])
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.save_model_params">
+<span class="sig-name descname"><span class="pre">save_model_params</span></span><a class="headerlink" href="#forge.actors.generator.Generator.save_model_params" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.setup">
 <span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.generator.Generator.setup" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
@@ -820,6 +825,11 @@ token_ids=[…], logprobs=[…])
 <span class="sig-name descname"><span class="pre">use_dcp_for_weight_sync</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#forge.actors.generator.Generator.use_dcp_for_weight_sync" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.generator.Generator.validate_model_params">
+<span class="sig-name descname"><span class="pre">validate_model_params</span></span><a class="headerlink" href="#forge.actors.generator.Generator.validate_model_params" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 </section>
@@ -839,6 +849,11 @@ the creation and invocation of all GeneratorWorker.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.save_model_params">
+<span class="sig-name descname"><span class="pre">save_model_params</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.save_model_params" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.setup">
 <span class="sig-name descname"><span class="pre">setup</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.setup" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
@@ -851,6 +866,11 @@ the creation and invocation of all GeneratorWorker.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.update_weights">
 <span class="sig-name descname"><span class="pre">update_weights</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.update_weights" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="forge.actors.generator.GeneratorWorker.validate_model_params">
+<span class="sig-name descname"><span class="pre">validate_model_params</span></span><a class="headerlink" href="#forge.actors.generator.GeneratorWorker.validate_model_params" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -989,11 +1009,13 @@ the creation and invocation of all GeneratorWorker.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.register_worker"><code class="docutils literal notranslate"><span class="pre">Generator.register_worker</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.run"><code class="docutils literal notranslate"><span class="pre">Generator.run()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.sampling_params"><code class="docutils literal notranslate"><span class="pre">Generator.sampling_params</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.save_model_params"><code class="docutils literal notranslate"><span class="pre">Generator.save_model_params</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.setup"><code class="docutils literal notranslate"><span class="pre">Generator.setup</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.shutdown"><code class="docutils literal notranslate"><span class="pre">Generator.shutdown()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.stop"><code class="docutils literal notranslate"><span class="pre">Generator.stop</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.update_weights"><code class="docutils literal notranslate"><span class="pre">Generator.update_weights</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.use_dcp_for_weight_sync"><code class="docutils literal notranslate"><span class="pre">Generator.use_dcp_for_weight_sync</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.validate_model_params"><code class="docutils literal notranslate"><span class="pre">Generator.validate_model_params</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1001,9 +1023,11 @@ the creation and invocation of all GeneratorWorker.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generatorworker">GeneratorWorker</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.execute_model"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.execute_model</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.save_model_params"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.save_model_params</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.setup"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.setup</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.setup_kv_cache"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.setup_kv_cache</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.update_weights"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.update_weights</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.validate_model_params"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.validate_model_params</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.GeneratorWorker.vllm_config"><code class="docutils literal notranslate"><span class="pre">GeneratorWorker.vllm_config</span></code></a></li>
 </ul>
 </li>
@@ -1143,7 +1167,7 @@ the creation and invocation of all GeneratorWorker.</p>
        "headline": "Generator",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api_generator.html",
-       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Generator# class forge.actors.generator.Generator(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, use_dcp_for_weight_sync=None)[source]# Instance of a vLLM-based generator. This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The main difference is that all communications are controlled here via Monarch\u2019s proc meshes. Parameters: engine_args (EngineArgs) \u2013 The engine arguments to use for the vLLM engine. sampling_params (SamplingParams) \u2013 The sampling parameters to use for the vLLM engine. use_dcp_for_weight_sync (bool) \u2013 Whether to use DCP for NFS-based weight sync. Default depends on whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled. Example: \u003e\u003e\u003e generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service( \u2026 engine_args=EngineArgs(\u2026), \u2026 sampling_params=SamplingParams(\u2026), \u2026 ) \u003e\u003e\u003e await generator.generate(\u201cTell me a joke\u201d) Completion(prompt=\u201dTell me a joke\u201d, text=\u201dA: Why did the chicken cross the road? B: To get to the other side.\u201d, token_ids=[\u2026], logprobs=[\u2026]) \u003e\u003e\u003e await generator.shutdown() engine_args# generate# get_version# get_vllm_config# register_worker# async run()[source]# Schedule, execute, and make output. vllm-project/vllm Return type: None sampling_params# setup# async classmethod shutdown(actor)[source]# stop# update_weights# use_dcp_for_weight_sync = None# GeneratorWorker# class forge.actors.generator.GeneratorWorker(vllm_config)[source]# Bases: ForgeActor Mirrors a vLLM GPUWorker vllm-project/vllm In general, this class should not be instantiated or called directly. Rather, the Generator controls the creation and invocation of all GeneratorWorker. execute_model# setup# setup_kv_cache# update_weights# vllm_config#",
+       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Generator# class forge.actors.generator.Generator(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, use_dcp_for_weight_sync=None)[source]# Instance of a vLLM-based generator. This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The main difference is that all communications are controlled here via Monarch\u2019s proc meshes. Parameters: engine_args (EngineArgs) \u2013 The engine arguments to use for the vLLM engine. sampling_params (SamplingParams) \u2013 The sampling parameters to use for the vLLM engine. use_dcp_for_weight_sync (bool) \u2013 Whether to use DCP for NFS-based weight sync. Default depends on whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled. Example: \u003e\u003e\u003e generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service( \u2026 engine_args=EngineArgs(\u2026), \u2026 sampling_params=SamplingParams(\u2026), \u2026 ) \u003e\u003e\u003e await generator.generate(\u201cTell me a joke\u201d) Completion(prompt=\u201dTell me a joke\u201d, text=\u201dA: Why did the chicken cross the road? B: To get to the other side.\u201d, token_ids=[\u2026], logprobs=[\u2026]) \u003e\u003e\u003e await generator.shutdown() engine_args# generate# get_version# get_vllm_config# register_worker# async run()[source]# Schedule, execute, and make output. vllm-project/vllm Return type: None sampling_params# save_model_params# setup# async classmethod shutdown(actor)[source]# stop# update_weights# use_dcp_for_weight_sync = None# validate_model_params# GeneratorWorker# class forge.actors.generator.GeneratorWorker(vllm_config)[source]# Bases: ForgeActor Mirrors a vLLM GPUWorker vllm-project/vllm In general, this class should not be instantiated or called directly. Rather, the Generator controls the creation and invocation of all GeneratorWorker. execute_model# save_model_params# setup# setup_kv_cache# update_weights# validate_model_params# vllm_config#",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
