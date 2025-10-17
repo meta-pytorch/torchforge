@@ -46,6 +46,17 @@ jobs:
           sudo rpm -ivh enroot-${version}-1.el8.x86_64.rpm enroot+caps-${version}-1.el8.x86_64.rpm
 
           rm -f enroot*.rpm
+
+          # Configure enroot to use user-writable directories
+          mkdir -p ${HOME}/.config/enroot
+          cat > ${HOME}/.config/enroot/enroot.conf <<EOF
+          ENROOT_RUNTIME_PATH ${HOME}/.local/share/enroot/runtime
+          ENROOT_CACHE_PATH ${HOME}/.local/share/enroot/cache
+          ENROOT_DATA_PATH ${HOME}/.local/share/enroot/data
+          EOF
+
+          # Create the directories
+          mkdir -p ${HOME}/.local/share/enroot/{runtime,cache,data}
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
