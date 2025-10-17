@@ -661,6 +661,7 @@ class GeneratorWorker(ForgeActor):
                 with param_handle.to_shared_tensor() as shared_tensor:
                     param = shared_tensor.tensor
                     loaded = model.load_weights([(name, param)])
+                    del param
                     loaded_weights.update(loaded)
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
             t.stop()

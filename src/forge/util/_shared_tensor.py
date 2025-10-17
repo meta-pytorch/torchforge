@@ -10,10 +10,13 @@ import uuid
 from dataclasses import dataclass
 from multiprocessing import shared_memory
 from typing import Optional, Tuple, Union
+import logging
 
 import numpy as np
 import torch
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 @dataclass
 class SharedTensorHandle:
@@ -249,6 +252,7 @@ class SharedTensor:
         # Copy data as raw bytes
         raw_bytes = tensor.view(torch.uint8).view(-1).cpu().contiguous().numpy()
         self._shm.buf[:byte_size] = raw_bytes
+        del raw_bytes  # Explicitly free the intermediate numpy array
 
     def _create_from_handle(self, handle: SharedTensorHandle):
         """Initialize from a handle"""
@@ -276,8 +280,7 @@ class SharedTensor:
         uint8_tensor = torch.from_numpy(np_array)
         tensor = uint8_tensor.view(self._dtype).reshape(self._shape)
 
-        # Keep both the np array and the SharedTensor object alive
-        tensor._forge_shared_tensor = self
+        # Keep the np array alive
         tensor._forge_np_array = np_array
 
         return tensor
@@ -371,7 +374,7 @@ class SharedTensor:
         try:
             self._shm.close()
         except Exception:
-            pass
+            logger.warn("Error closing shared memory: ", self._shm_name)
 
     def drop(self):
         """
@@ -394,7 +397,7 @@ class SharedTensor:
         try:
             self._shm.unlink()
         except Exception:
-            pass
+            raise RuntimeError("Error unlinking shared memory: ", self._shm_name)
 
     @property
     def is_closed(self) -> bool:
