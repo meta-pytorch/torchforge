@@ -93,20 +93,7 @@ Build your own components and compose them naturally with existing infrastructur
 
 ## Requirements at a Glance
 
-Before diving in, ensure your system meets these requirements:
-
-| Component | Requirement | Why It's Needed |
-|-----------|-------------|-----------------|
-| **Operating System** | Linux (Fedora/Ubuntu) | Dependency compatibility |
-| **Python** | 3.10+ | Core runtime |
-| **CUDA** | 12.8+ | GPU acceleration |
-| **GPUs** | 2+ for SFT, 3+ for GRPO | Distributed training & separate policy/ref/reward models |
-| **PyTorch** | Nightly build | Latest distributed features (DTensor, FSDP) |
-| **Monarch** | Pre-packaged wheel | Distributed orchestration and actor system |
-| **vLLM** | v0.10.0+ | Fast inference with PagedAttention |
-| **TorchTitan** | Latest | Production training infrastructure |
-
-See {doc}`getting_started` for detailed installation instructions.
+Before diving in, check out {doc}`getting_started` and ensure your system meets the requirements.
 
 ## Quick Start
 
