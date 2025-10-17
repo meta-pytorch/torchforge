@@ -18,8 +18,9 @@ jobs:
       repository: meta-pytorch/forge
       ref: main
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: vllm-push
+      test-infra-ref: 'vllm-push'
       run-smoke-test: false
+      channel: test
       # env-var-script: .github/packaging/export_channel_test.sh
       # wheel-nightly-policy: gha_workflow_preview_build_wheels
       # wheel-upload-path: whl/test/forge/
@@ -48,4 +49,3 @@ jobs:
       post-script: .github/packaging/post_build_script.sh
       trigger-event: ${{ github.event_name }}
       build-platform: 'python-build-package'
-      channel: 'test'
