@@ -6,17 +6,19 @@
 
 from __future__ import annotations
 
+import logging
+
 import uuid
 from dataclasses import dataclass
 from multiprocessing import shared_memory
 from typing import Optional, Tuple, Union
-import logging
 
 import numpy as np
 import torch
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 @dataclass
 class SharedTensorHandle:
@@ -373,8 +375,8 @@ class SharedTensor:
 
         try:
             self._shm.close()
-        except Exception:
-            logger.warn("Error closing shared memory: ", self._shm_name)
+        except Exception as e:
+            logger.error(f"Error closing shared memory {self._shm_name}: {e}")
 
     def drop(self):
         """
@@ -396,8 +398,10 @@ class SharedTensor:
         # Then unlink
         try:
             self._shm.unlink()
-        except Exception:
-            raise RuntimeError("Error unlinking shared memory: ", self._shm_name)
+        except Exception as e:
+            raise RuntimeError(
+                f"Error unlinking shared memory {self._shm_name}: {e}"
+            ) from e
 
     @property
     def is_closed(self) -> bool:
