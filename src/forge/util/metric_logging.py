@@ -178,7 +178,7 @@ class WandBLogger(MetricLogger):
             If int, all metrics will be logged at this frequency.
             If Mapping, calls to `log` and `log_dict` will be ignored if `step % freq[metric_name] != 0`
         log_dir (str | None): WandB log directory.
-        project (str): WandB project name. Default is `TorchForge`.
+        project (str): WandB project name. Default is `torchforge`.
         entity (str | None): WandB entity name. If you don't specify an entity,
             the run will be sent to your default entity, which is usually your username.
         group (str | None): WandB group name for grouping runs together. If you don't
@@ -205,7 +205,7 @@ class WandBLogger(MetricLogger):
     def __init__(
         self,
         freq: Union[int, Mapping[str, int]],
-        project: str = "TorchForge",
+        project: str = "torchforge",
         log_dir: str = "metrics_log",
         entity: str | None = None,
         group: str | None = None,
