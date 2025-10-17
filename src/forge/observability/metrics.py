@@ -507,7 +507,8 @@ class MetricCollector:
                 logger,
                 level=logging.WARNING,
                 msg=(
-                    "Skipping metric collection. Metric logging backends (e.g. wandb) were not initialized."
+                    f"Skipping metric collection for {get_proc_name_with_rank()}."
+                    " Metric logging backends (e.g. wandb) were not initialized."
                     " This happens when you try to use `record_metric` before calling `init_backends`."
                     " To disable this warning, please call in your main file:\n"
                     "`mlogger = await get_or_create_metric_logger()`\n"
@@ -546,7 +547,8 @@ class MetricCollector:
             log_once(
                 logger,
                 level=logging.WARNING,
-                msg="Cannot flush collected metrics. MetricCollector.flush() called before init_backends()."
+                msg=f"Cannot flush collected metrics for {get_proc_name_with_rank()}. "
+                " MetricCollector.flush() called before init_backends()."
                 "\nPlease call in your main file:\n"
                 "`mlogger = await get_or_create_metric_logger()`\n"
                 "`await mlogger.init_backends.call_one(logging_config)`\n"
