@@ -95,7 +95,7 @@ class Generator(ForgeActor):
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     use_dcp_for_weight_sync: bool | None = None
-    prefetch_weights_to_shm: bool = False
+    prefetch_weights_to_shm: bool = True
     n_fetcher_procs: int = 8
 
     def __post_init__(self):
