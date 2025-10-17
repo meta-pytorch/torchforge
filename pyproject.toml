@@ -50,10 +50,6 @@ oss = [
     "torchstore",
 ]
 
-[project.scripts]
-forge = "forge.cli.forge:main"
-
-
 # ---- Explicit project build information ---- #
 [build-system]
 requires = ["setuptools>=61.0"]
