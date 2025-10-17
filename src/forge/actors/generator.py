@@ -740,4 +740,5 @@ class _WeightFetcher(ForgeActor):
             with SharedTensor(tensor=param) as shared_tensor:
                 handle = shared_tensor.get_handle()
                 sd[name] = handle
+            del param  # Explicitly free the tensor after copying to shared memory
         return sd
