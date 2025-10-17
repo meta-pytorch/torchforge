@@ -36,7 +36,7 @@ jobs:
           version="3.5.0"
 
           # Install dependencies
-          yum install -y jq squashfs-tools parallel || apt-get install -y jq squashfs-tools parallel || true
+          dnf install -y jq squashfs-tools parallel
 
           # Download pre-built packages
           curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v${version}/enroot-${version}-1.x86_64.rpm
