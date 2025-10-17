@@ -36,14 +36,14 @@ jobs:
           version="3.5.0"
 
           # Install dependencies
-          dnf install -y jq squashfs-tools parallel
+          sudo dnf install -y jq squashfs-tools parallel
 
           # Download pre-built packages
           curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v${version}/enroot-${version}-1.x86_64.rpm
           curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v${version}/enroot+caps-${version}-1.x86_64.rpm
 
           # Install packages
-          rpm -ivh enroot-${version}-1.x86_64.rpm enroot+caps-${version}-1.x86_64.rpm
+          sudo rpm -ivh enroot-${version}-1.x86_64.rpm enroot+caps-${version}-1.x86_64.rpm
 
           rm -f enroot*.rpm
       - name: Setup conda env
