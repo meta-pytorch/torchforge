@@ -289,18 +289,6 @@ class GlobalLoggingActor(Actor):
                 f"Available fetchers: {self.fetchers.keys()}"
             )
             return
-
-        # Shutdown this fetcher's backends before removing it
-        fetcher = self.fetchers[proc_id]
-        try:
-            await asyncio.wait_for(fetcher.shutdown.call(), timeout=10.0)
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"Fetcher {proc_id} shutdown timed out after 1s during deregister"
-            )
-        except Exception as e:
-            logger.warning(f"Fetcher {proc_id} shutdown failed during deregister: {e}")
-
         del self.fetchers[proc_id]
 
     @endpoint
