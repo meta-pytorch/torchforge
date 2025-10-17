@@ -6,10 +6,25 @@
 
 """Test for data/replay_buffer.py"""
 
+from dataclasses import dataclass
+
 import pytest
 import pytest_asyncio
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.types import Trajectory
+
+
+@dataclass
+class TestEpisode:
+    """
+    Dummy Episode containing just a policy version
+
+    ReplayBuffer expects any construct (typically an Episode) that contains a
+    `policy_version`.
+
+    TODO: Replaced with a unified interface in the future.
+    """
+
+    policy_version: int
 
 
 class TestReplayBuffer:
@@ -23,27 +38,27 @@ class TestReplayBuffer:
 
     @pytest.mark.asyncio
     async def test_add(self, replay_buffer: ReplayBuffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        episode = TestEpisode(policy_version=0)
+        await replay_buffer.add.call_one(episode)
         assert replay_buffer._numel.call_one().get() == 1
-        assert replay_buffer._getitem.call_one(0).get() == trajectory
+        assert replay_buffer._getitem.call_one(0).get() == episode
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_add_multiple(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
-        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
-        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
+        assert replay_buffer._getitem.call_one(0).get() == episode_0
+        assert replay_buffer._getitem.call_one(1).get() == episode_1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_state_dict_save_load(self, replay_buffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        episode = TestEpisode(policy_version=0)
+        await replay_buffer.add.call_one(episode)
         state_dict = replay_buffer.state_dict.call_one().get()
         replay_buffer.clear.call_one().get()
         assert replay_buffer._numel.call_one().get() == 0
@@ -53,10 +68,10 @@ class TestReplayBuffer:
 
     @pytest.mark.asyncio
     async def test_evict(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
         await replay_buffer.evict.call_one(curr_policy_version=2)
         assert replay_buffer._numel.call_one().get() == 1
@@ -64,10 +79,10 @@ class TestReplayBuffer:
 
     @pytest.mark.asyncio
     async def test_sample(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
 
         # Test a simple sampling
@@ -77,19 +92,19 @@ class TestReplayBuffer:
         assert replay_buffer._numel.call_one().get() == 2
 
         # Test sampling (not enough samples in buffer, returns None)
-        await replay_buffer.add.call_one(trajectory_0)
+        await replay_buffer.add.call_one(episode_0)
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is None
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_sample_with_evictions(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        trajectory_2 = Trajectory(policy_version=2)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
-        await replay_buffer.add.call_one(trajectory_2)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        episode_2 = TestEpisode(policy_version=2)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
+        await replay_buffer.add.call_one(episode_2)
         assert replay_buffer._numel.call_one().get() == 3
         samples = await replay_buffer.sample.call_one(
             curr_policy_version=2,
@@ -112,8 +127,8 @@ class TestReplayBuffer:
 
         # Add enough trajectories to sample
         for i in range(10):
-            trajectory = Trajectory(policy_version=0)
-            await replay_buffer.add.call_one(trajectory)
+            episode = TestEpisode(policy_version=0)
+            await replay_buffer.add.call_one(episode)
 
         # Sample and verify len(samples) == dp_size
         samples = await replay_buffer.sample.call_one(curr_policy_version=0)
