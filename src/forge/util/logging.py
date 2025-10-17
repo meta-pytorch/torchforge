@@ -20,14 +20,17 @@ def get_logger(level: str | None = None) -> logging.Logger:
     Example:
         >>> logger = get_logger("INFO")
         >>> logger.info("Hello world!")
-        INFO:torchtune.utils._logging:Hello world!
+        INFO:forge.util.logging: Hello world!
 
     Returns:
         logging.Logger: The logger.
     """
     logger = logging.getLogger(__name__)
     if not logger.hasHandlers():
-        logger.addHandler(logging.StreamHandler())
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("%(levelname)s:%(name)s: %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     if level is not None:
         level = getattr(logging, level.upper())
         logger.setLevel(level)
