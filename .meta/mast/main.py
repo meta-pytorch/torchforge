@@ -9,7 +9,6 @@ import asyncio
 import sys
 
 from apps.grpo.main import main as grpo_main
-from forge.cli.config import parse
 from forge.controller.launcher import (
     JOB_NAME_KEY,
     LAUNCHER_KEY,
@@ -25,6 +24,7 @@ from forge.types import (
     ProvisionerConfig,
     ServiceConfig,
 )
+from forge.util.config import parse
 from omegaconf import DictConfig
 
 DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"

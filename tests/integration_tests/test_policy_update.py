@@ -17,11 +17,11 @@ import torchstore as ts
 from forge.actors.generator import Generator
 
 from forge.actors.trainer import RLTrainer
-from forge.cli.config import resolve_hf_hub_paths
 from forge.controller.provisioner import init_provisioner
 
 from forge.controller.service.service import uuid
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import resolve_hf_hub_paths
 from monarch.actor import endpoint
 
 from omegaconf import DictConfig, OmegaConf
