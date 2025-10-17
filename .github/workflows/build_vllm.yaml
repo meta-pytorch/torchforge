@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: forge-cu128
-    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@vllm-push
     strategy:
       fail-fast: false
     with:
