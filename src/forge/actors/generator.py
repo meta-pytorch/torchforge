@@ -439,7 +439,7 @@ class Generator(ForgeActor):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
-        # Prefetch only if we are using RDMA
+        # TODO: enable shared memory prefetch for DCP-based weight sync
         if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
             logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
             fetch_fut = asyncio.create_task(self._fetch_weights(version))
