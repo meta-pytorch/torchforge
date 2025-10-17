@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import uuid
 from typing import Any, Union
 
 from monarch.actor import (
@@ -36,21 +37,18 @@ async def get_or_create_metric_logger(
     proc_mesh: ProcMesh | None = None,
     process_name: str | None = None,
 ) -> "GlobalLoggingActor":
-    """Initializes a LocalFetcherActor in the specified process mesh (or current process if None),
-    if not already initialized, registers it with the GlobalLoggingActor and returns the
-    GlobalLoggingActor instance.
+    """Spawns a LocalFetcherActor for the specified ProcMesh (if not already initialized),
+    registers it with the GlobalLoggingActor, and returns the GlobalLoggingActor.
 
-    There are primarily two ways to use this function:
-    1. In the main process, call `get_or_create_metric_logger()` to get the global logger.
-    2. In service processes, call `get_or_create_metric_logger(proc_mesh)` to register the
-       local fetcher with the global logger.
+    Usage:
+    1. Main process: call `get_or_create_metric_logger()` to get the global logger
+    2. Service spawning: call `get_or_create_metric_logger(proc_mesh)` to register the
+       {proc_mesh: local fetcher} with the global logger, so it knows to broadcast to all ranks.
 
     Args:
-        proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on. If None,
-            uses `monarch.actor.this_proc()`.
-        process_name: Optional process name (e.g., "TrainActor", "GeneratorActor") for logging.
-            If None, will be auto-detected from the mesh_name provided during actor initialization or
-                a generic mesh name if one was not provided.
+        proc_mesh: Optional ProcMesh to spawn LocalFetcherActor on, if it hasn't already. If no ProcMesh is given,
+            uses `this_proc()`.
+        process_name: Optional process name (e.g., "TrainActor") for logging. Auto-detected it from context if None.
 
     Returns:
         GlobalLoggingActor: The global logging controller.
@@ -95,7 +93,6 @@ async def get_or_create_metric_logger(
 
     # Determine process context
     proc = proc_mesh if proc_mesh is not None else this_proc()
-
     # Auto-detect process_name from proc mesh if not provided
     if process_name is None:
         ctx = context()
@@ -103,7 +100,8 @@ async def get_or_create_metric_logger(
 
     # Check current state for consistency
     proc_has_local_fetcher = hasattr(proc, "_local_fetcher")
-    global_logger_has_local_fetcher = await global_logger.has_fetcher.call_one(proc)
+    proc_id = proc._uid if proc_has_local_fetcher else None
+    global_logger_has_local_fetcher = await global_logger.has_fetcher.call_one(proc_id)
 
     # Consistency check: both should be in sync
     if proc_has_local_fetcher != global_logger_has_local_fetcher:
@@ -120,18 +118,24 @@ async def get_or_create_metric_logger(
         local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger, process_name
         )
-        await global_logger.register_fetcher.call_one(local_fetcher_actor, proc)
+        # Generate a unique ID to map procmesh to fetcher
+        proc._uid = str(uuid.uuid4())
         proc._local_fetcher = local_fetcher_actor  # pyre-ignore
+
+        await global_logger.register_fetcher.call_one(local_fetcher_actor, proc._uid)
 
     return global_logger
 
 
 class LocalFetcherActor(Actor):
-    """Thin per-process actor used to trigger MetricCollector singleton
-    operations without direct access. It is what GlobalLoggingActor
-    uses to broadcast inits/flushes across ranks.
+    """Actor spawned once per ProcMesh. When called, runs on every rank in that ProcMesh
+    and accesses each rank's local MetricCollector singleton.
 
-    GlobalLoggingActor -> per-rank LocalFetcherActor -> per-rank MetricCollector
+    Flow:
+    - GlobalLoggingActor calls fetcher.flush() [one call per ProcMesh]
+    - Monarch broadcasts to all ranks in the ProcMesh
+    - LocalFetcherActor.flush() runs on each rank [rank 0, rank 1, ...]
+    - Each execution accesses MetricCollector() for that rank
     """
 
     def __init__(
@@ -140,7 +144,7 @@ class LocalFetcherActor(Actor):
         process_name: str | None = None,
     ) -> None:
         self.global_logger = global_logger
-        self.process_name = process_name  # Passed to MetricCollector for logging
+        self.process_name = process_name
         _is_initialized = False
 
     @endpoint
@@ -191,22 +195,21 @@ class LocalFetcherActor(Actor):
 
 
 class GlobalLoggingActor(Actor):
-    """Coordinates metric logging across all ranks for every training step.
+    """Coordinates metric logging across all ProcMeshes and their ranks.
 
     Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
-    for per-rank and/or global reduction logging modes.
+    with per-rank and/or global reduction logging modes.
 
     If a backend config has flag `reduce_across_ranks=False`, an instance of the backend
     is initialized per-rank, otherwise it is done once globally.
 
-    This GlobalLoggingActor should be spawned once in the controller. A LocalFetcherActor
-    is automatically spawned per-rank in `forge.controller.provisioner.py` and registered
-    with this actor. The LocalFetcherActor is responsible for instantiating
-    the per-rank MetricCollector.
+    Setup: One GlobalLoggingActor in controller, one LocalFetcherActor registered per ProcMesh,
+    one MetricCollector singleton per rank.
 
-    In summary, the flow is:
-    - GlobalLoggingActor init_backends() -> LocalFetcherActor init_backends() -> per-rank MetricCollector
-    - GlobalLoggingActor flush() -> LocalFetcherActor flush() -> per-rank MetricCollector flush
+    Flow:
+    - GlobalLoggingActor.flush() calls each registered LocalFetcherActor [one call per ProcMesh]
+    - Each LocalFetcherActor call is broadcast by Monarch to all ranks in that ProcMesh
+    - LocalFetcherActor.flush() runs on each rank and accesses that rank's MetricCollector
     """
 
     def __init__(self):
@@ -267,30 +270,34 @@ class GlobalLoggingActor(Actor):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     @endpoint
-    async def register_fetcher(
-        self, fetcher: LocalFetcherActor, name: str | ProcMesh
-    ) -> None:
-        """Registers a fetcher with the global actor. Each key represents a process mesh.
-        If there are 2 processes, each with 2 replicas with N gpus, we would
-        have 4 keys, i.e. 2 proces meshes, each with 2 replicas."""
-        self.fetchers[name] = fetcher  # pyre-ignore
+    async def register_fetcher(self, fetcher: LocalFetcherActor, proc_id: str) -> None:
+        """Registers a LocalFetcherActor with the GlobalLoggingActor.
+
+        One LocalFetcherActor per ProcMesh. When called (e.g., fetcher.flush()), Monarch broadcasts
+        the call to all ranks in that ProcMesh, where each rank accesses its own MetricCollector.
+
+        Args:
+            fetcher: The LocalFetcherActor instance for a ProcMesh
+            proc_id: Unique identifier for the ProcMesh
+        """
+        self.fetchers[proc_id] = fetcher
 
         # Self-init for respawned actors
         if self.config:
-            logger.debug(f"Initializing new LocalFetcherActor {name}")
+            logger.debug(f"Initializing new LocalFetcherActor for proc_id={proc_id}")
             await fetcher.init_backends.call(
                 self.metadata_per_primary_backend, self.config
             )
 
     @endpoint
-    async def deregister_fetcher(self, name: str | ProcMesh) -> None:
-        if name not in self.fetchers:
+    async def deregister_fetcher(self, proc_id: str) -> None:
+        if proc_id not in self.fetchers:
             logger.warning(
-                f"Fetcher {name} not registered in GlobalLoggingActor. Cannot deregister."
+                f"Fetcher {proc_id} not registered in GlobalLoggingActor. Cannot deregister."
                 f"Available fetchers: {self.fetchers.keys()}"
             )
             return
-        del self.fetchers[name]
+        del self.fetchers[proc_id]
 
     @endpoint
     async def flush(self, global_step: int) -> None:
@@ -363,9 +370,9 @@ class GlobalLoggingActor(Actor):
                 await logger_backend.log(reduced_metrics, global_step)
 
     @endpoint
-    def has_fetcher(self, name: str | ProcMesh) -> bool:
-        """Check if a fetcher is registered with the given name."""
-        return name in self.fetchers
+    def has_fetcher(self, proc_id: str) -> bool:
+        """Check if a fetcher is registered with the given proc_id."""
+        return proc_id in self.fetchers
 
     @endpoint
     def get_fetcher_count(self) -> int:
