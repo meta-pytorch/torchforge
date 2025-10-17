@@ -3,7 +3,7 @@
 name = "forge"
 description = "A PyTorch native platform for post-training generative AI models"
 readme = "README.md"
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10, <=3.13"
 license = {file = "LICENSE"}
 authors = [
     { name = "PyTorch Team", email = "packages@pytorch.org" },
@@ -11,11 +11,12 @@ authors = [
 keywords = ["pytorch", "training", "llm"]
 dependencies = [
     # PyTorch
+    "torch==2.9.0",
     "torchdata>=0.8.0",
     "torchtitan",
-    # vLLM
-    # TODO: pin specific vllm version
-    #"vllm==0.10.0",
+    "torchmonarch==0.1.0rc4",
+    "torchstore==0.0.1rc2",
+    "vllm==0.11.0",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -43,11 +44,6 @@ dev = [
     "anyio",
     "pytest-asyncio",
 ]
-oss = [
-    "torch",
-    "torchmonarch-nightly==2025.8.1",
-    "torchstore",
-]
 
 # ---- Explicit project build information ---- #
 [build-system]
@@ -68,23 +64,15 @@ members = [
 ]
 
 # pytorch
-# TODO: get auto backend to work
 [[tool.uv.index]]
-name = "pytorch-nightly-cu129"
-url  = "https://download.pytorch.org/whl/nightly/cu129"
-#explicit = true
-
-# vllm
-# [[tool.uv.index]]
-# name = "vllm-nightly"
-# url = "https://wheels.vllm.ai/nightly"
-# explicit = true
+name = "pytorch-nightly"
+url  = "https://download.pytorch.org/whl/nightly"
 
 [tool.uv.sources]
-torchtitan = { index = "pytorch-nightly-cu129" }
-torch = { index = "pytorch-nightly-cu129" }
-torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
-#vllm = { index = "vllm-nightly" }
+# torchtitan = { index = "pytorch-nightly" }
+# torch = { index = "pytorch-nightly" }
+# torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git"}
+# vllm = { index = "pytorch-nightly" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy
@@ -94,4 +82,4 @@ prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
 ]
-# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
+override-dependencies = ["torch>2.7.1"] # , "torchaudio>=2.7.1", "torchvision>=0.22.0"]

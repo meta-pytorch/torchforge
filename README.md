@@ -29,7 +29,7 @@ You can also find our notebook tutorials (coming soon)
 
 ## Installation
 
-### Basic
+### Build Script
 
 TorchForge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). For convenience,
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
