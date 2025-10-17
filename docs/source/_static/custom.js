@@ -1,3 +1,103 @@
+// Lightbox functionality for Mermaid diagrams
+document.addEventListener('DOMContentLoaded', function() {
+    // Create lightbox modal for Mermaid diagrams
+    const lightbox = document.createElement('div');
+    lightbox.id = 'mermaid-lightbox';
+    lightbox.style.cssText = `
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.9);
+        cursor: zoom-out;
+    `;
+
+    const lightboxContent = document.createElement('div');
+    lightboxContent.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 95%;
+        max-height: 95%;
+        overflow: auto;
+    `;
+
+    const closeBtn = document.createElement('span');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = `
+        position: absolute;
+        top: 15px;
+        right: 35px;
+        color: #f1f1f1;
+        font-size: 40px;
+        font-weight: bold;
+        cursor: pointer;
+        z-index: 10000;
+    `;
+    closeBtn.onclick = function() {
+        lightbox.style.display = 'none';
+    };
+
+    lightbox.appendChild(closeBtn);
+    lightbox.appendChild(lightboxContent);
+    document.body.appendChild(lightbox);
+
+    // Click outside to close
+    lightbox.onclick = function(e) {
+        if (e.target === lightbox) {
+            lightbox.style.display = 'none';
+        }
+    };
+
+    // ESC key to close
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lightbox.style.display === 'block') {
+            lightbox.style.display = 'none';
+        }
+    });
+
+    // Make all Mermaid diagrams clickable
+    const mermaidDivs = document.querySelectorAll('.mermaid');
+    mermaidDivs.forEach(function(div) {
+        div.style.cursor = 'zoom-in';
+        div.title = 'Click to enlarge';
+
+        div.addEventListener('click', function() {
+            const clone = div.cloneNode(true);
+
+            // Style the cloned diagram to fill the lightbox
+            clone.style.cssText = `
+                cursor: default;
+                width: 90vw;
+                max-width: 1400px;
+                height: auto;
+                margin: auto;
+            `;
+
+            // Find and resize the SVG inside
+            const svg = clone.querySelector('svg');
+            if (svg) {
+                svg.style.cssText = `
+                    width: 100% !important;
+                    height: auto !important;
+                    max-width: none !important;
+                    max-height: 90vh !important;
+                `;
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+            }
+
+            lightboxContent.innerHTML = '';
+            lightboxContent.appendChild(clone);
+            lightbox.style.display = 'block';
+        });
+    });
+});
+
 // Custom JavaScript to make long parameter lists in class signatures collapsible
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Collapsible parameters script loaded');
