@@ -22,12 +22,12 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
-from forge.cli.config import parse
 from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.util.config import parse
 
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf

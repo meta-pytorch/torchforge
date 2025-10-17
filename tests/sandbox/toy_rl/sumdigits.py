@@ -18,13 +18,13 @@ import torchstore as ts
 from forge.actors._torchstore_utils import get_param_key
 from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
+from forge.util.config import parse
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig

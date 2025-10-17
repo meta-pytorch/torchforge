@@ -36,8 +36,7 @@ class Transform(ABC):
 class BaseTokenizer(ABC):
     """
     Abstract token encoding model that implements ``encode`` and ``decode`` methods.
-    See :class:`~torchtune.modules.transforms.tokenizers.SentencePieceBaseTokenizer` and
-    :class:`~torchtune.modules.transforms.tokenizers.TikTokenBaseTokenizer` for example implementations of this protocol.
+    See :class:`forge.data.HuggingFaceModelTokenizer for an example implementation of this protocol.
     """
 
     @abstractmethod
@@ -72,7 +71,7 @@ class BaseTokenizer(ABC):
 class ModelTokenizer(ABC):
     """
     Abstract tokenizer that implements model-specific special token logic in
-    the ``tokenize_messages`` method. See :class:`~torchtune.models.llama3.Llama3Tokenizer`
+    the ``tokenize_messages`` method. See :class:`forge.data.HuggingFaceModelTokenizer`
     for an example implementation of this protocol.
     """
 
