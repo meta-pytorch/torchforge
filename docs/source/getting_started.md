@@ -15,10 +15,15 @@ Before installing TorchForge, ensure your system meets the following requirement
 | **Operating System** | Linux (Fedora/Ubuntu/Debian) | MacOS and Windows not currently supported |
 | **Python** | 3.10 or higher | Python 3.11 recommended |
 | **GPU** | NVIDIA with CUDA support | AMD GPUs not currently supported |
-| **CUDA** | 12.8 or higher | Required for GPU training |
-| **Minimum GPUs** | 2 for SFT, 3 for GRPO | More GPUs enable larger models |
+| **Minimum GPUs** | 2+ for SFT, 3+ for GRPO | More GPUs enable larger models |
+| **CUDA** | 12.8 | Required for GPU training |
 | **RAM** | 32GB+ recommended | Depends on model size |
 | **Disk Space** | 50GB+ free | For models, datasets, and checkpoints |
+| **PyTorch** | Nightly build | Latest distributed features (DTensor, FSDP) |
+| **Monarch** | Pre-packaged wheel | Distributed orchestration and actor system |
+| **vLLM** | v0.10.0+ | Fast inference with PagedAttention |
+| **TorchTitan** | Latest | Production training infrastructure |
+
 
 ## Prerequisites
 
@@ -72,16 +77,6 @@ TorchForge uses pre-packaged wheels for all dependencies, making installation fa
    `./scripts/install.sh --use-sudo`
    ```
 
-4. **Verify Installation**
-
-   Test that TorchForge is properly installed:
-
-   ```bash
-   python -c "import forge; print(f'TorchForge version: {forge.__version__}')"
-   python -c "import monarch; print('Monarch: OK')"
-   python -c "import vllm; print(f'vLLM version: {vllm.__version__}')"
-   ```
-
    ```{warning}
    When adding packages to `pyproject.toml`, use `uv sync --inexact` to avoid removing Monarch and vLLM.
    ```
@@ -104,8 +99,7 @@ After installation, verify that all components are working correctly:
    python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
    ```
 
-   Expected output: `CUDA version: 12.8` (or higher)
-
+   Expected output: `CUDA version: 12.8`
 3. **Check All Dependencies**
 
    ```bash
@@ -141,6 +135,28 @@ After installation, verify that all components are working correctly:
 ## Quick Start Examples
 
 Now that TorchForge is installed, let's run some training examples.
+
+Here's what training looks like with TorchForge:
+
+```bash
+# Install dependencies
+conda create -n forge python=3.10
+conda activate forge
+git clone https://github.com/meta-pytorch/forge
+cd forge
+./scripts/install.sh
+
+# Download a model
+uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
+
+# Run SFT training (requires 2+ GPUs)
+uv run forge run --nproc_per_node 2 \
+  apps/sft/main.py --config apps/sft/llama3_8b.yaml
+
+# Run GRPO training (requires 3+ GPUs)
+python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
+```
 
 ### Example 1: Supervised Fine-Tuning (SFT)
 
@@ -191,31 +207,11 @@ python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
 **What's Happening:**
-- GPU 0: Policy model (being trained, powered by TorchTitan)
-- GPU 1: Reference model (frozen baseline)
-- GPU 2: Reward model (scoring outputs, powered by vLLM)
+- GPU 0: Trainer model (being trained, powered by TorchTitan)
+- GPU 1: Reference model (frozen baseline, powered by TorchTitan)
+- GPU 2: Policy model (scoring outputs, powered by vLLM)
 - **Monarch** orchestrates all three components
 - **TorchStore** handles weight synchronization from training to inference
-
-**Expected Output:**
-```bash
-Initializing GRPO training...
-Loading policy model on GPU 0...
-Loading reference model on GPU 1...
-Loading reward model on GPU 2...
-Episode 1 | Avg Reward: 0.75 | KL Divergence: 0.12
-...
-```
-
-### Example 3: Inference with vLLM
-
-Generate text using a trained model:
-
-```bash
-python -m apps.vllm.main --config apps/vllm/llama3_8b.yaml
-```
-
-This loads your model with vLLM and starts an interactive generation session.
 
 ## Understanding Configuration Files
 
@@ -248,15 +244,12 @@ checkpointing:
 - **distributed**: Multi-GPU strategy (FSDP, tensor parallel, etc.) handled by TorchTitan
 - **checkpointing**: Where and when to save model checkpoints
 
-See {doc}`usage` for detailed configuration options.
-
 ## Next Steps
 
 Now that you have TorchForge installed and verified:
 
 1. **Learn the Concepts**: Read {doc}`concepts` to understand TorchForge's architecture, including Monarch, Services, and TorchStore
 2. **Explore Examples**: Check the `apps/` directory for more training examples
-3. **Customize Training**: See {doc}`usage` for configuration patterns
 4. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
 5. **API Documentation**: Explore {doc}`api` for detailed API reference
 
@@ -307,7 +300,3 @@ Include this output in your bug reports!
 - **Monarch Documentation**: [meta-pytorch.org/monarch](https://meta-pytorch.org/monarch)
 - **vLLM Documentation**: [docs.vllm.ai](https://docs.vllm.ai)
 - **TorchTitan**: [github.com/pytorch/torchtitan](https://github.com/pytorch/torchtitan)
-
----
-
-**Ready to start training?** Head to {doc}`usage` for practical configuration examples and workflows, or dive into {doc}`concepts` to understand how all the pieces work together.
