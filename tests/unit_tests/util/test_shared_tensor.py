@@ -688,5 +688,221 @@ class TestSharedTensorBfloat16:
         shared.drop()
 
 
+class TestSharedTensorCloseAndCleanup:
+    """Test explicit close() and cleanup patterns to prevent memory leaks"""
+
+    def test_close_method(self):
+        """Test explicit close() releases handle and sets closed state"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        shared.tensor.fill_(5.0)
+
+        assert not shared.is_closed
+
+        # Close should not raise
+        shared.close()
+
+        assert shared.is_closed
+
+        # Cleanup
+        shared._shm.unlink()
+
+    def test_tensor_access_after_close_raises_error(self):
+        """Test that accessing tensor after close raises RuntimeError"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        shared.tensor.fill_(5.0)
+
+        shared.close()
+
+        with pytest.raises(RuntimeError, match="Cannot access tensor after close"):
+            _ = shared.tensor
+
+        # Cleanup
+        shared._shm.unlink()
+
+    def test_get_handle_after_close_raises_error(self):
+        """Test that getting handle after close raises RuntimeError"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+
+        shared.close()
+
+        with pytest.raises(RuntimeError, match="Cannot get handle after close"):
+            shared.get_handle()
+
+        # Cleanup
+        shared._shm.unlink()
+
+    def test_is_closed_property(self):
+        """Test is_closed property reflects state correctly"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+
+        assert not shared.is_closed
+
+        shared.close()
+
+        assert shared.is_closed
+
+        # Cleanup
+        shared._shm.unlink()
+
+    def test_cached_tensor_reference_becomes_invalid_after_close(self):
+        """Test that tensor reference obtained before close becomes invalid after close"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        shared.tensor.fill_(5.0)
+
+        # Get reference before close
+        tensor_ref = shared.tensor
+
+        shared.close()
+
+        # After close(), the memory mapping is unmapped, so even cached references
+        # point to invalid memory. Accessing them will cause segfault or undefined behavior.
+        # We can't safely test this, but we document it.
+
+        # Accessing via shared.tensor raises error (this is what we CAN test)
+        with pytest.raises(RuntimeError):
+            _ = shared.tensor
+
+        # Cleanup
+        shared._shm.unlink()
+
+    def test_context_manager(self):
+        """Test context manager automatically closes"""
+        shm_name = None
+
+        with SharedTensor.empty((10, 10), torch.float32) as shared:
+            shm_name = shared._shm_name
+            shared.tensor.fill_(7.0)
+            assert torch.all(shared.tensor == 7.0)
+
+        # After exiting context, should be closed (but not unlinked yet)
+        # We need to unlink separately
+        from multiprocessing import shared_memory
+
+        # Should still be able to attach (not unlinked)
+        shm = shared_memory.SharedMemory(name=shm_name)
+        shm.close()
+        shm.unlink()
+
+    def test_creator_receiver_workflow(self):
+        """Test proper workflow: creator creates, gets handle, closes, receiver uses and closes"""
+
+        def receiver_process(handle, result_queue):
+            # Receiver creates SharedTensor from handle
+            with SharedTensor(handle=handle) as shared:
+                result = shared.tensor.sum().item()
+                result_queue.put(result)
+            # Context manager auto-closes
+
+        # Creator process
+        shared = SharedTensor.empty((50, 50), torch.float32)
+        shared.tensor.fill_(4.0)
+        handle = shared.get_handle()
+        shared.close()  # Creator closes its reference
+
+        # Pass to receiver
+        result_queue = Queue()
+        p = Process(target=receiver_process, args=(handle, result_queue))
+        p.start()
+        p.join()
+
+        result = result_queue.get()
+        assert abs(result - (4.0 * 50 * 50)) < 1e-5
+
+        # Unlink after all processes done
+        handle.drop()
+
+    def test_handle_drop_without_creating_shared_tensor(self):
+        """Test that handle.drop() doesn't create unnecessary SharedTensor instance"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        shared.tensor.fill_(3.0)
+        handle = shared.get_handle()
+        shared.close()
+
+        # drop() should work without creating new SharedTensor
+        handle.drop()
+
+        # Memory should be unlinked
+        from multiprocessing import shared_memory
+
+        with pytest.raises(FileNotFoundError):
+            shared_memory.SharedMemory(name=handle.shm_name)
+
+    def test_multiple_receivers_close_independently(self):
+        """Test that multiple receivers can close independently"""
+
+        def receiver_process(handle, value, result_queue):
+            shared = SharedTensor(handle=handle)
+            result = shared.tensor[0, 0].item() == value
+            shared.close()  # Each receiver closes its own reference
+            result_queue.put(result)
+
+        # Creator
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        shared.tensor.fill_(9.0)
+        handle = shared.get_handle()
+        shared.close()
+
+        # Multiple receivers
+        result_queue = Queue()
+        processes = []
+        for _ in range(3):
+            p = Process(target=receiver_process, args=(handle, 9.0, result_queue))
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+
+        # All should succeed
+        for _ in range(3):
+            assert result_queue.get() is True
+
+        # Cleanup
+        handle.drop()
+
+    def test_close_is_idempotent(self):
+        """Test that calling close() multiple times is safe"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+
+        # Multiple closes should not raise
+        shared.close()
+        shared.close()
+        shared.close()
+
+        # Cleanup
+        shared.drop()
+
+    def test_drop_is_idempotent(self):
+        """Test that calling drop() multiple times is safe"""
+        shared = SharedTensor.empty((10, 10), torch.float32)
+        handle = shared.get_handle()
+        shared.close()
+
+        # Multiple drops should not raise
+        handle.drop()
+        handle.drop()
+        handle.drop()
+
+    def test_proper_cleanup_prevents_leak(self):
+        """Test that proper close + unlink pattern doesn't leak"""
+        import glob
+
+        # Get initial shared memory count
+        shm_before = len(glob.glob("/dev/shm/shared_tensor_*"))
+
+        # Create and properly cleanup 10 shared tensors
+        for _ in range(10):
+            shared = SharedTensor.empty((100, 100), torch.float32)
+            handle = shared.get_handle()
+            shared.close()
+            handle.drop()
+
+        # Check no leaks
+        shm_after = len(glob.glob("/dev/shm/shared_tensor_*"))
+        assert (
+            shm_after == shm_before
+        ), f"Memory leak detected: {shm_after - shm_before} tensors leaked"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

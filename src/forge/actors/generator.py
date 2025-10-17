@@ -656,12 +656,18 @@ class GeneratorWorker(ForgeActor):
             )
             t.start()
             loaded_weights = set()
+            shared_tensors = []
             for name, param_handle in shared_memory_state_dict.items():
-                param = param_handle.to_shared_tensor().tensor
+                shared_tensor = param_handle.to_shared_tensor()
+                shared_tensors.append(shared_tensor)
+                param = shared_tensor.tensor
                 loaded = model.load_weights([(name, param)])
                 loaded_weights.update(loaded)
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
             t.stop()
+            # Close worker's references to shared memory after loading
+            for st in shared_tensors:
+                st.close()
             return
         # normal update_weights without shared memory prefetching
         if version is None:
@@ -733,5 +739,9 @@ class _WeightFetcher(ForgeActor):
         for name in param_names:
             param_key = get_param_key(version, name)
             param = await ts.get(param_key)
-            sd[name] = SharedTensor(tensor=param).get_handle()
+            # Create SharedTensor, get handle, then close the creator's reference
+            shared_tensor = SharedTensor(tensor=param)
+            handle = shared_tensor.get_handle()
+            shared_tensor.close()  # Explicitly close fetcher's reference
+            sd[name] = handle
         return sd
