@@ -274,21 +274,24 @@ main() {
     check_gh_install
     download_vllm_wheel
 
-    log_info "Installing PyTorch nightly..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
+    log_info "Installing PyTorch..."
+    if [[ "$PYTORCH_VERSION" == *"dev"* ]]; then
+        pip install --pre torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu128
+    else
+        pip install torch==$PYTORCH_VERSION
+    fi
 
-    log_info "Installing all wheels (local + downloaded)..."
+    log_info "Installing Monarch ..."
+    pip install torchmonarch==$MONARCH_VERSION
+
+    log_info "Installing remaining wheels (local + downloaded)..."
     pip install "$WHEEL_DIR"/*.whl
 
     log_info "Installing Forge from source..."
     pip install -e .
 
-    # Set up environment
     log_info "Setting up environment..."
-
-     # Get conda environment directory
     local conda_env_dir="${CONDA_PREFIX}"
-
     if [ -z "$conda_env_dir" ]; then
         log_error "Could not determine conda environment directory"
         exit 1
