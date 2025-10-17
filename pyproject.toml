@@ -11,8 +11,12 @@ authors = [
 keywords = ["pytorch", "training", "llm"]
 dependencies = [
     # PyTorch
+    "torch==2.9.0",
     "torchdata>=0.8.0",
-    "torchtitan==0.1.0.dev20250912+cu128",
+    "torchtitan",
+    "torchmonarch==0.1.0rc4",
+    "torchstore==0.0.1rc2",
+    "vllm==0.11.0",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -40,12 +44,6 @@ dev = [
     "anyio",
     "pytest-asyncio",
 ]
-oss = [
-    "torch==2.10.0.dev20250912+cu128",
-    "torchmonarch-nightly==2025.9.12",
-    "torchstore",
-    "vllm==1.0.0.dev20250912+cu128"
-]
 
 # ---- Explicit project build information ---- #
 [build-system]
@@ -66,16 +64,15 @@ members = [
 ]
 
 # pytorch
-# TODO: get auto backend to work
 [[tool.uv.index]]
 name = "pytorch-nightly"
 url  = "https://download.pytorch.org/whl/nightly"
 
 [tool.uv.sources]
-torchtitan = { index = "pytorch-nightly" }
-torch = { index = "pytorch-nightly" }
-torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
-vllm = { index = "pytorch-nightly" }
+# torchtitan = { index = "pytorch-nightly" }
+# torch = { index = "pytorch-nightly" }
+# torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git"}
+# vllm = { index = "pytorch-nightly" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy
@@ -85,4 +82,4 @@ prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
 ]
-# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
+override-dependencies = ["torch>2.7.1"] # , "torchaudio>=2.7.1", "torchvision>=0.22.0"]
