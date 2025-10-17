@@ -147,5 +147,4 @@ rl_workflows
 
 **Related Documentation:**
 - {doc}`getting_started` - Installation and first training run
-- {doc}`usage` - Practical configuration examples
 - {doc}`api` - Complete API reference
