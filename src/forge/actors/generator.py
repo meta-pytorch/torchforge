@@ -46,6 +46,7 @@ from forge.actors._torchstore_utils import (
     get_param_key,
     get_param_prefix,
     load_tensor_from_dcp,
+    rdma_available,
 )
 
 from forge.controller import (
@@ -56,7 +57,6 @@ from forge.controller import (
 )
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
@@ -112,7 +112,7 @@ class Generator(ForgeActor):
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
         if self.use_dcp_for_weight_sync is None:
-            self.use_dcp_for_weight_sync = not TORCHSTORE_USE_RDMA.get_value()
+            self.use_dcp_for_weight_sync = not rdma_available()
         logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
@@ -492,14 +492,16 @@ class Generator(ForgeActor):
         await stop_proc_mesh(actor._generator_proc)
 
     @endpoint
-    async def save_model_params(self):
-        """Used for debugging purpose. Save model parameters before weight update."""
-        await self.worker.save_model_params.call()
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[Generator] save model parameters for testing.")
+        await self.worker._test_save_model_params.call()
 
     @endpoint
-    async def validate_model_params(self, validate_fn):
-        """Used for debugging purpose. Validate saved params using validate_fn."""
-        return await self.worker.validate_model_params.call(validate_fn)
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[Generator] start validating model parameters.")
+        return await self.worker._test_validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -512,6 +514,8 @@ class GeneratorWorker(ForgeActor):
     """
 
     vllm_config: VllmConfig
+    # TODO: Remove below param
+    _test_prev_params = {}
 
     @endpoint
     async def setup(self):
@@ -601,19 +605,20 @@ class GeneratorWorker(ForgeActor):
         t.stop()
 
     @endpoint
-    async def save_model_params(self):
-        """Used for debugging purposes. Save model parameters before weight update."""
-        self._debug_saved_params = {}
+    async def _test_save_model_params(self):
+        """Save model parameters before weight update, used for tesing purposes only."""
+        logger.info("[GeneratorWorker] save model parameters for testing.")
         for name, param in self.worker.model_runner.model.named_parameters():
-            self._debug_saved_params[name] = param.detach().cpu()
+            self._test_prev_params[name] = param.detach().cpu()
         logger.info(
             "[GeneratorWorker] finished saving model parameters, len = %d",
-            len(self._debug_saved_params),
+            len(self._test_prev_params),
         )
 
     @endpoint
-    async def validate_model_params(self, validate_fn):
-        """Used for debugging purposes. Validate saved params using validate_fn."""
+    async def _test_validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("[GeneratorWorker] start validating model parameters.")
         return validate_fn(
-            self._debug_saved_params, self.worker.model_runner.model, logger
+            self._test_prev_params, self.worker.model_runner.model, logger
         )
