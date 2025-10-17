@@ -135,6 +135,7 @@ class RLTrainer(ForgeActor):
         TORCHSTORE_USE_RDMA.get_value() == 0
     )  # torchstore currently only accepts 0 or 1
     dcp_path: str = "forge_dcp_tmp"
+    step: int = 1
 
     def __post_init__(self):
         """Initializes config types and env variables.
@@ -158,8 +159,9 @@ class RLTrainer(ForgeActor):
                 raise TypeError(
                     f"{f.name} should be a {f.type} type or a dict like object"
                 )
-
-        self.step = 1  # fragile contract.
+        self.step = max(
+            self.step, 1
+        )  # start from 1 if not loading from a saved checkpoint
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -170,12 +172,7 @@ class RLTrainer(ForgeActor):
     async def setup(self):
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        for key in {
-            "loss",
-            "state_dict_key",
-            "use_dcp",
-            "dcp_path",
-        }:
+        for key in {"loss", "state_dict_key", "use_dcp", "dcp_path", "step"}:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
         self.engine.checkpointer.load(step=self.step)

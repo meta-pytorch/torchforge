@@ -322,7 +322,7 @@ async def main(cfg: DictConfig):
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
         RLTrainer.options(**cfg.actors.trainer).as_actor(
-            **cfg.trainer, loss=simple_grpo_loss
+            **cfg.trainer, loss=simple_grpo_loss, step=cfg.trainer.checkpoint.load_step
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
@@ -352,6 +352,14 @@ async def main(cfg: DictConfig):
         strategy=ts.LocalRankStrategy(),
     )
     print("Torchstore successfully initialized with local rank strategy")
+
+    start_version = max(cfg.trainer.checkpoint.load_step, 0)
+    if start_version > 0:
+        # Ensure the trainer’s loaded checkpoint is pushed to torchstore at `start_version`
+        await trainer.push_weights.call(start_version)
+
+        # Warm the policy to that exact version so new rollouts carry generator_version == start_version
+        await policy.update_weights.fanout(start_version)
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
@@ -420,7 +428,7 @@ async def main(cfg: DictConfig):
             t.stop()
 
     async def continuous_training():
-        training_step = 0
+        training_step = start_version
         restart_tracer = True  # Flag to control when to restart tracer
 
         while max_steps == -1 or training_step < max_steps:
