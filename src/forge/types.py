@@ -15,15 +15,6 @@ class Message(TypedDict):
     tools: dict[str, Any] | None
 
 
-@dataclass
-class ForgeEnvInfo:
-    """Environment info returned with observations."""
-
-    episode_id: str | None = None
-    step_count: int = 0
-    metadata: dict | None = None
-
-
 @dataclass(kw_only=True)
 class Observation:
     """Base class for environment observations.
@@ -41,50 +32,6 @@ class Observation:
 
     done: bool = False
     reward: bool | int | float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(kw_only=True)
-class Action:
-    """Base class for environment actions.
-
-    Contract:
-    - Should contain all information needed to execute a step in the environment
-    - Should be serializable/deserializable
-    - Should be immutable (or treated as such)
-
-    Args:
-        metadata: Additional data that may be useful for logging, debugging, or transforms
-    """
-
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Trajectory:
-    """A trajectory containing a sequence of states, actions, etc."""
-
-    policy_version: int
-    states: list[Observation] = field(default_factory=list)
-    actions: list[Action] = field(default_factory=list)
-
-    def __post_init__(self):
-        assert self.policy_version >= 0
-
-
-@dataclass(kw_only=True)
-class State:
-    """Base class for environment state.
-
-    Contract:
-    - Should contain all information needed to restore the environment
-    - Should be serializable/deserializable
-    - May contain information not exposed in observations
-
-    Args:
-        metadata: Additional state information that may be useful for debugging or analysis
-    """
-
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
