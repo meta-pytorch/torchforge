@@ -95,6 +95,7 @@ ref_model:
     flavor: 8B
     hf_assets_path: hf://${model}
   training:
+    seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
     gc_freq: 1
   compile:

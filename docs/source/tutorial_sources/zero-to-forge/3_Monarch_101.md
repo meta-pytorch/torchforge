@@ -1,8 +1,8 @@
-# Part 3: The Forge-Monarch Connection
+# Part 3: The TorchForge-Monarch Connection
 
-This is part 3 of our series, in the previous sections: we learned Part 1: [RL Concepts and how they map to Forge](./1_RL_and_Forge_Fundamentals), Part 2: [Forge Internals](./2_Forge_Internals).
+This is part 3 of our series, in the previous sections: we learned Part 1: [RL Concepts and how they map to TorchForge](./1_RL_and_Forge_Fundamentals), Part 2: [TorchForge Internals](./2_Forge_Internals).
 
-Now let's peel back the layers. Forge services are built on top of **Monarch**, PyTorch's distributed actor framework. Understanding this connection is crucial for optimization and debugging.
+Now let's peel back the layers. TorchForge services are built on top of **Monarch**, PyTorch's distributed actor framework. Understanding this connection is crucial for optimization and debugging.
 
 ## The Complete Hierarchy: Service to Silicon
 
@@ -12,21 +12,21 @@ graph TD
         Call["await policy_service.generate.route('What is 2+2?')"]
     end
 
-    subgraph ForgeServices["2. Forge Service Layer"]
+    subgraph ForgeServices["2. TorchForge Service Layer"]
         ServiceInterface["ServiceInterface: Routes requests, Load balancing, Health checks"]
         ServiceActor["ServiceActor: Manages replicas, Monitors health, Coordinates failures"]
     end
 
     subgraph MonarchLayer["3. Monarch Actor Layer"]
-        ActorMesh["ActorMesh PolicyActor: 4 instances, Different GPUs, Message passing"]
+        ActorMesh["ActorMesh Policy Actor: 4 instances, Different GPUs, Message passing"]
         ProcMesh["ProcMesh: 4 processes, GPU topology 0,1,2,3, Network interconnect"]
     end
 
     subgraph Hardware["4. Physical Hardware"]
-        GPU0["GPU 0: PolicyActor #1, vLLM Engine, Model Weights"]
-        GPU1["GPU 1: PolicyActor #2, vLLM Engine, Model Weights"]
-        GPU2["GPU 2: PolicyActor #3, vLLM Engine, Model Weights"]
-        GPU3["GPU 3: PolicyActor #4, vLLM Engine, Model Weights"]
+        GPU0["GPU 0: Policy Actor #1, vLLM Engine, Model Weights"]
+        GPU1["GPU 1: Policy Actor #2, vLLM Engine, Model Weights"]
+        GPU2["GPU 2: Policy Actor #3, vLLM Engine, Model Weights"]
+        GPU3["GPU 3: Policy Actor #4, vLLM Engine, Model Weights"]
     end
 
     Call --> ServiceInterface
@@ -92,8 +92,8 @@ actors = cluster_procs.spawn("my_actor", MyActor)
 **The power**: Scale from single host to cluster without changing your actor code - ProcMesh handles all the complexity.
 
 ```python
-# This shows the underlying actor system that powers Forge services
-# NOTE: This is for educational purposes - use ForgeActor and .as_service() in real Forge apps!
+# This shows the underlying actor system that powers TorchForge services
+# NOTE: This is for educational purposes - use ForgeActor and .as_service() in real TorchForge apps!
 
 from monarch.actor import Actor, endpoint, this_proc, Future
 from monarch.actor import ProcMesh, this_host
@@ -146,15 +146,15 @@ await counters.increment.broadcast()  # No return value - just sends to all acto
 # Cleanup
 await procs.stop()
 
-# Remember: This raw Monarch code is for understanding how Forge works internally.
-# In your Forge applications, use ForgeActor, .as_service(), .as_actor() instead!
+# Remember: This raw Monarch code is for understanding how TorchForge works internally.
+# In your TorchForge applications, use ForgeActor, .as_service(), .as_actor() instead!
 ```
 
 ## Actor Meshes: Your Code Running Distributed
 
 **ActorMesh** is created when you spawn actors across a ProcMesh. Key points:
 
-- **One actor instance per process**: `mesh.spawn("policy", PolicyActor)` creates one PolicyActor in each process
+- **One actor instance per process**: `mesh.spawn("policy", Policy)` creates one Policy Actor in each process
 - **Same constructor arguments**: All instances get the same initialization parameters
 - **Independent state**: Each actor instance maintains its own state and memory
 - **Message routing**: You can send messages to one actor or all actors using different methods
@@ -162,44 +162,44 @@ await procs.stop()
 ```python
 # Simple example:
 procs = spawn_procs(per_host={"gpus": 4})  # 4 processes
-policy_actors = procs.spawn("policy", PolicyActor, model="Qwen/Qwen3-7B")
+policy_actors = procs.spawn("policy", Policy, model="Qwen/Qwen3-7B")
 
-# Now you have 4 PolicyActor instances, one per GPU
+# Now you have 4 Policy Actor instances, one per GPU
 # All initialized with the same model parameter
 ```
 
-## How Forge Services Use Monarch
+## How TorchForge Services Use Monarch
 
-Now the key insight: **Forge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas**.
+Now the key insight: **TorchForge services are ServiceActors that manage ActorMeshes of your ForgeActor replicas**.
 
 ### The Service Creation Process
 
 ```mermaid
 graph TD
     subgraph ServiceCreation["Service Creation Process"]
-        Call["await PolicyActor.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
+        Call["await Policy.options(num_replicas=4, procs=1).as_service(model='Qwen')"]
 
         ServiceActor["ServiceActor: Manages 4 replicas, Health checks, Routes calls"]
 
         subgraph Replicas["4 Independent Replicas"]
             subgraph R0["Replica 0"]
                 PM0["ProcMesh: 1 process, GPU 0"]
-                AM0["ActorMesh<br/>1 PolicyActor"]
+                AM0["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R1["Replica 1"]
                 PM1["ProcMesh: 1 process, GPU 1"]
-                AM1["ActorMesh<br/>1 PolicyActor"]
+                AM1["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R2["Replica 2"]
                 PM2["ProcMesh: 1 process, GPU 2"]
-                AM2["ActorMesh<br/>1 PolicyActor"]
+                AM2["ActorMesh<br/>1 Policy Actor"]
             end
 
             subgraph R3["Replica 3"]
                 PM3["ProcMesh: 1 process, GPU 3"]
-                AM3["ActorMesh<br/>1 PolicyActor"]
+                AM3["ActorMesh<br/>1 Policy Actor"]
             end
         end
 
@@ -232,9 +232,9 @@ graph TD
 
         ServiceActor["ServiceActor: Selects healthy replica, Load balancing, Failure handling"]
 
-        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 PolicyActor"]
+        SelectedReplica["Selected Replica #2: ProcMesh 1 process, ActorMesh 1 Policy Actor"]
 
-        PolicyActor["PolicyActor Instance: Loads model, Runs vLLM inference"]
+        PolicyActor["Policy Actor Instance: Loads model, Runs vLLM inference"]
 
         GPU["GPU 2: vLLM engine, Model weights, KV cache, CUDA kernels"]
 
@@ -264,7 +264,7 @@ In real RL systems, you have multiple services that can share or use separate Pr
 ```mermaid
 graph TD
     subgraph Cluster["RL Training Cluster"]
-        subgraph Services["Forge Services"]
+        subgraph Services["TorchForge Services"]
             PS["Policy Service<br/>4 GPU replicas"]
             TS["Trainer Service<br/>2 GPU replicas"]
             RS["Reward Service<br/>4 CPU replicas"]
@@ -317,7 +317,7 @@ graph TD
 2. **Location Transparency**: Actors can be local or remote with identical APIs
 3. **Structured Distribution**: ProcMesh maps directly to hardware topology
 4. **Message Passing**: No shared memory means no race conditions or locks
-5. **Service Abstraction**: Forge hides Monarch complexity while preserving power
+5. **Service Abstraction**: TorchForge hides Monarch complexity while preserving power
 
 Understanding this hierarchy helps you:
 - **Debug performance issues**: Is the bottleneck at service, actor, or hardware level?
@@ -329,9 +329,9 @@ Understanding this hierarchy helps you:
 
 ## What You've Learned
 
-1. **RL Fundamentals**: How RL concepts map to Forge services with REAL, working examples
-2. **Service Abstraction**: How to use Forge services effectively with verified communication patterns
-3. **Monarch Foundation**: How Forge services connect to distributed actors and hardware
+1. **RL Fundamentals**: How RL concepts map to TorchForge services with REAL, working examples
+2. **Service Abstraction**: How to use TorchForge services effectively with verified communication patterns
+3. **Monarch Foundation**: How TorchForge services connect to distributed actors and hardware
 
 ## Key Takeaways
 
