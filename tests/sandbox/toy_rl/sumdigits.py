@@ -15,7 +15,6 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 import torchstore as ts
-from forge.actors._torchstore_utils import get_param_key
 from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.cli.config import parse
@@ -25,6 +24,7 @@ from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
+from forge.util._torchstore import get_param_key
 from forge.util.ops import selective_log_softmax
 from monarch.actor import endpoint
 from omegaconf import DictConfig
