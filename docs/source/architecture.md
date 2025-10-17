@@ -80,13 +80,6 @@ policy = PolicyActor.options(
     with_gpus=True,
     num_replicas=16
 ).as_service()
-
-# Create a lightweight coding environment service
-coder = SandboxedCoder.options(
-    procs=1,
-    with_gpus=False,
-    num_replicas=16
-).as_service()
 ```
 
 ### Service Adverbs
@@ -188,64 +181,16 @@ async def load_weights():
 
 ### Why TorchStore Matters
 
-Without TorchStore, weight synchronization becomes the bottleneck in async RL. Traditional approaches either:
+Weight synchronization becomes a bottleneck in async RL. Traditional approaches either:
 - Require synchronous GPU-to-GPU transfers (blocking training)
 - Use slow network filesystems (minutes per update)
 - Demand complex manual resharding logic (error-prone, hard to maintain)
 
 TorchStore solves all of these, keeping data distributed across the cluster until requested and moving it efficiently with RDMA.
 
-## Resource Management
-
-Effective resource management is crucial for training large models.
-
-### Memory Optimization
-
-**Gradient Checkpointing**
-: Trade computation for memory by recomputing activations during backward pass
-
-**Mixed Precision**
-: Use FP16/BF16 for reduced memory footprint while maintaining quality
-
-**Activation Offloading**
-: Move activations to CPU when not needed on GPU
-
-**Parameter Sharding**
-: Distribute model parameters across devices using FSDP
-
-### Compute Optimization
-
-**Asynchronous Execution**
-: Overlap communication with computation to hide latency
-
-**Batch Size Tuning**
-: Balance memory usage and throughput for optimal training speed
-
-**Dynamic Batching**
-: Group requests efficiently for inference (vLLM does this)
-
-**Kernel Fusion**
-: Combine operations to reduce memory bandwidth (torch.compile helps)
-
 ## Distributed Training Strategies
 
-TorchForge leverages multiple parallelism strategies through TorchTitan:
-
-### Data Parallelism
-
-Each GPU processes different batches using the same model replica. Gradients are synchronized via all-reduce operations.
-
-### FSDP (Fully Sharded Data Parallel)
-
-**Sharding** splits model parameters, gradients, and optimizer states across multiple devices, dramatically reducing memory per GPU. FSDP is the strategy that enables training models larger than single-GPU memory.
-
-### Tensor Parallelism
-
-Split individual tensors (like large weight matrices) across devices. Each device computes a portion of the operation.
-
-### Pipeline Parallelism
-
-Partition model layers across devices, pipeline micro-batches through the stages for efficient utilization.
+TorchForge leverages multiple parallelism strategies through TorchTitan. [See their docs for more](https://github.com/pytorch/torchtitan).
 
 ## See Also
 
@@ -253,4 +198,3 @@ Partition model layers across devices, pipeline micro-batches through the stages
 - {doc}`technology_stack` - Understanding the dependency stack
 - {doc}`rl_workflows` - Writing RL algorithms with these components
 - {doc}`getting_started` - Installation and setup
-- {doc}`usage` - Practical usage examples

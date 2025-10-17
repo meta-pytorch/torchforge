@@ -93,44 +93,7 @@ Build your own components and compose them naturally with existing infrastructur
 
 ## Requirements at a Glance
 
-Before diving in, ensure your system meets these requirements:
-
-| Component | Requirement | Why It's Needed |
-|-----------|-------------|-----------------|
-| **Operating System** | Linux (Fedora/Ubuntu) | Dependency compatibility |
-| **Python** | 3.10+ | Core runtime |
-| **CUDA** | 12.8+ | GPU acceleration |
-| **GPUs** | 2+ for SFT, 3+ for GRPO | Distributed training & separate policy/ref/reward models |
-| **PyTorch** | Nightly build | Latest distributed features (DTensor, FSDP) |
-| **Monarch** | Pre-packaged wheel | Distributed orchestration and actor system |
-| **vLLM** | v0.10.0+ | Fast inference with PagedAttention |
-| **TorchTitan** | Latest | Production training infrastructure |
-
-See {doc}`getting_started` for detailed installation instructions.
-
-## Quick Start
-
-Here's what training looks like with TorchForge:
-
-```bash
-# Install dependencies
-conda create -n forge python=3.10
-conda activate forge
-git clone https://github.com/meta-pytorch/forge
-cd forge
-./scripts/install.sh
-
-# Download a model
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
-
-# Run SFT training (requires 2+ GPUs)
-uv run forge run --nproc_per_node 2 \
-  apps/sft/main.py --config apps/sft/llama3_8b.yaml
-
-# Run GRPO training (requires 3+ GPUs)
-python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
-```
+Before diving in, check out {doc}`getting_started` and ensure your system meets the requirements.
 
 ## Writing RL Code
 
@@ -186,13 +149,13 @@ Architecture, Monarch integration, Services, TorchStore, and how everything work
 **For understanding the system**
 :::
 
-:::{grid-item-card} 💻 Usage Patterns
-:link: usage
+:::{grid-item-card} 💻 Tutorials
+:link: tutorials
 :link-type: doc
 
-Configuration examples, common workflows, and practical scenarios.
+Step-by-step guides and practical examples for training with TorchForge.
 
-**For day-to-day development**
+**For hands-on development**
 :::
 
 :::{grid-item-card} 📖 API Reference
@@ -240,6 +203,7 @@ Before starting significant work, signal your intention in the issue tracker to 
 :caption: Documentation
 
 getting_started
+concepts
 tutorials
 api
 ```
