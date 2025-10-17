@@ -14,7 +14,7 @@ When you call `await policy_service.generate(question)`, here's what actually ha
 graph TD
     Call["Your Code:
     await policy_service
-    .generate"]
+    .generate.route"]
 
     subgraph ServiceLayer["Service Layer"]
         Proxy["Service Proxy:
