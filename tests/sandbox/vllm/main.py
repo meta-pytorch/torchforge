@@ -33,7 +33,7 @@ async def run(cfg: DictConfig):
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:

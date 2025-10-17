@@ -6,7 +6,7 @@
 
 import pytest
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator as Policy
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.sampling_params import RequestOutputKind

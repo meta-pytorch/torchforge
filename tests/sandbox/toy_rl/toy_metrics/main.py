@@ -95,12 +95,16 @@ async def main():
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(config)
 
     # Spawn services first (triggers registrations via provisioner hook)
-    trainer = await TrainActor.options(**service_config).as_service()
-    generator = await GeneratorActor.options(**service_config).as_service()
+    trainer = await TrainActor.options(
+        **service_config, mesh_name="TrainActor"
+    ).as_service()
+    generator = await GeneratorActor.options(
+        **service_config, mesh_name="GeneratorActor"
+    ).as_service()
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
