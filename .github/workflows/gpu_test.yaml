@@ -31,6 +31,13 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+      - name: Install enroot
+        run: |
+          arch=$(dpkg --print-architecture)
+          curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_${arch}.deb
+          curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot+caps_3.5.0-1_${arch}.deb
+          sudo apt-get install -y ./*.deb
+          rm -f enroot*.deb
       - name: Setup conda env
         uses: conda-incubator/setup-miniconda@v2
         with:
