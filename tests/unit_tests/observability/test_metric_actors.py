@@ -62,7 +62,7 @@ class TestBasicOperations:
     async def test_backend_init(self, local_fetcher):
         """Test backend initialization and shutdown."""
         metadata = {"wandb": {"shared_run_id": "test123"}}
-        config = {"console": {"logging_mode": "per_rank_reduce"}}
+        config = {"console": {"reduce_across_ranks": False}}
 
         await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
         await local_fetcher.shutdown.call_one()
@@ -108,9 +108,9 @@ class TestBackendConfiguration:
         # Empty config
         await global_logger.init_backends.call_one({})
 
-        # Valid configs for all logging modes
-        for mode in ["per_rank_reduce", "per_rank_no_reduce", "global_reduce"]:
-            config = {"console": {"logging_mode": mode}}
+        # Valid configs for different reduce_across_ranks modes
+        for reduce_across_ranks in [True, False]:
+            config = {"console": {"reduce_across_ranks": reduce_across_ranks}}
             await global_logger.init_backends.call_one(config)
 
     @pytest.mark.timeout(3)
@@ -124,7 +124,7 @@ class TestBackendConfiguration:
         config_with_project = {"console": {"project": "test_project"}}
         await global_logger.init_backends.call_one(config_with_project)
 
-        # Config with reduce_across_ranks should work (Diff 3 doesn't validate logging_mode yet)
+        # Config with reduce_across_ranks should work
         config_with_reduce = {"console": {"reduce_across_ranks": True}}
         await global_logger.init_backends.call_one(config_with_reduce)
 

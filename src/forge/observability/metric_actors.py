@@ -21,6 +21,7 @@ from monarch.actor import (
 from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
     BackendRole,
+    context,
     get_logger_backend_class,
     LoggerBackend,
     MetricCollector,

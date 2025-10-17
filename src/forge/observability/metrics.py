@@ -465,7 +465,7 @@ class MetricCollector:
             return
 
         self.global_step = global_step
-        self.proc_name_with_rank = get_proc_name_with_rank(self.process_name)
+        self.proc_name_with_rank = get_proc_name_with_rank(process_name)
 
         # instantiate local backends if any
         for backend_name, backend_config in config.items():
@@ -482,7 +482,7 @@ class MetricCollector:
             await logger_backend.init(
                 role=BackendRole.LOCAL,
                 primary_logger_metadata=primary_metadata,
-                name=proc_name_with_rank,
+                name=self.proc_name_with_rank,
             )
             self.logger_backends.append(logger_backend)
 
@@ -632,6 +632,7 @@ class LoggerBackend(ABC):
         """
         pass
 
+    @abstractmethod
     async def finish(self) -> None:
         pass
 
