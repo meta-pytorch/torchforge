@@ -15,6 +15,8 @@ from typing import Any
 import pytz
 from monarch.actor import context, current_rank
 
+from forge.observability.utils import get_proc_name_with_rank
+
 from forge.util.logging import log_once
 
 logger = logging.getLogger(__name__)
@@ -438,11 +440,14 @@ class MetricCollector:
         self.rank = current_rank().rank
         self.logger_backends: list[LoggerBackend] = []
         self._is_initialized = False
+        self.proc_name_with_rank: str | None = None
 
     async def init_backends(
         self,
         metadata_per_primary_backend: dict[str, dict[str, Any]] | None,
         config: dict[str, Any],
+        global_step: int = 0,
+        process_name: str | None = None,
     ) -> None:
         """A logger is represented by a backend, i.e. wandb backend. If reduce_across_ranks=False,
         the backend is instantiated per-rank, in the MetricCollector, otherwise it is only instantiated
@@ -452,10 +457,15 @@ class MetricCollector:
             metadata_per_primary_backend (dict[str, dict[str, Any]] | None): Metadata from primary
                 logger backend, e.g., {"wandb": {"run_id": "abc123"}}.
             config (dict[str, Any]): Logger backend configuration, e.g. {"wandb": {"project": "my_project"}}.
+            global_step (int, default 0): Initial step for metrics.
+            process_name (str | None): The meaningful process name for logging.
         """
         if self._is_initialized:
             logger.debug(f"Rank {self.rank}: MetricCollector already initialized")
             return
+
+        self.global_step = global_step
+        self.proc_name_with_rank = get_proc_name_with_rank(self.process_name)
 
         # instantiate local backends if any
         for backend_name, backend_config in config.items():
@@ -470,7 +480,9 @@ class MetricCollector:
             # instantiate local backend
             logger_backend = get_logger_backend_class(backend_name)(backend_config)
             await logger_backend.init(
-                role=BackendRole.LOCAL, primary_logger_metadata=primary_metadata
+                role=BackendRole.LOCAL,
+                primary_logger_metadata=primary_metadata,
+                name=proc_name_with_rank,
             )
             self.logger_backends.append(logger_backend)
 
@@ -544,7 +556,7 @@ class MetricCollector:
 
         if not self.accumulators:
             logger.debug(
-                f"Collector rank {get_actor_name_with_rank()}: No metrics to flush for global_step {global_step}"
+                f"Collector {self.proc_name_with_rank}: No metrics to flush for global_step {global_step}"
             )
             return {}
 
@@ -569,7 +581,7 @@ class MetricCollector:
         """Shutdown logger_backends if initialized."""
         if not self._is_initialized:
             logger.debug(
-                f"Collector for {get_actor_name_with_rank()} not initialized. Skipping shutdown"
+                f"Collector for {self.proc_name_with_rank} not initialized. Skipping shutdown"
             )
             return
 
@@ -593,6 +605,7 @@ class LoggerBackend(ABC):
         self,
         role: BackendRole,
         primary_logger_metadata: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -602,6 +615,7 @@ class LoggerBackend(ABC):
                 Can be used to behave differently for primary vs secondary roles.
             primary_logger_metadata (dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
+            name (str | None): Name for logging.
 
         Raises: ValueError if missing metadata for shared local init.
         """
@@ -636,12 +650,10 @@ class ConsoleBackend(LoggerBackend):
         self,
         role: BackendRole,
         primary_logger_metadata: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> None:
-        self.prefix = (
-            get_actor_name_with_rank()
-            if self.logger_backend_config.get("reduce_across_ranks", True)
-            else "Controller"
-        )
+
+        self.name = name
 
     async def log(self, metrics: list[Metric], global_step: int) -> None:
         metrics_str = "\n".join(
@@ -649,7 +661,7 @@ class ConsoleBackend(LoggerBackend):
             for metric in sorted(metrics, key=lambda m: m.key)
         )
         logger.info(
-            f"=== [{self.prefix}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
+            f"=== [{self.name}] - METRICS STEP {global_step} ===\n{metrics_str}\n==============================\n"
         )
 
     async def finish(self) -> None:
@@ -689,16 +701,13 @@ class WandbBackend(LoggerBackend):
         self,
         role: BackendRole,
         primary_logger_metadata: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> None:
 
         if primary_logger_metadata is None:
             primary_logger_metadata = {}
 
-        self.name = (
-            get_actor_name_with_rank()
-            if role == BackendRole.LOCAL
-            else "global_controller"
-        )
+        self.name = name
 
         # Default global mode: only inits on controller
         if self.reduce_across_ranks:
