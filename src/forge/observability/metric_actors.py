@@ -372,10 +372,17 @@ class GlobalLoggingActor(Actor):
 
     @endpoint
     async def shutdown(self) -> None:
-        # Finish per-rank logger_backends via fetchers
         if self.fetchers:
-            tasks = [fetcher.shutdown.call() for fetcher in self.fetchers.values()]
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                tasks = [fetcher.shutdown.call() for fetcher in self.fetchers.values()]
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True), timeout=2.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Metric logging fetcher shutdown timed out likely due to the child process being terminated before the parent."
+                )
+
         # Finish global logger_backends
         for logger_backend_name, logger_backend in self.global_logger_backends.items():
             await logger_backend.finish()
