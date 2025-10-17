@@ -1,6 +1,6 @@
 # This is an experimental fork of qwen3_32b.yaml that enables the following:
 # - shared memory based weight prefetching for weight updates
-#
+# - tp = 8 for policy
 # Grouped Relative Policy Optimization (GRPO)
 # >>> python -m apps.grpo.main --config apps/grpo/qwen32b.yaml
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
@@ -41,7 +41,7 @@ policy:
   prefetch_weights_to_shm: true
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
-    tensor_parallel_size: 4
+    tensor_parallel_size: 8
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
