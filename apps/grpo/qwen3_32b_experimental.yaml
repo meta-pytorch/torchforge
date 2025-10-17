@@ -38,7 +38,7 @@ dataset:
 
 # Policy configuration
 policy:
-  prefetch_weights: true
+  prefetch_weights_to_shm: true
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
     tensor_parallel_size: 4
