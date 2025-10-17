@@ -95,7 +95,7 @@ class Generator(ForgeActor):
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     use_dcp_for_weight_sync: bool | None = None
-    prefetch_weights: bool = False
+    prefetch_weights_to_shm: bool = False
     n_fetcher_procs: int = 8
 
     def __post_init__(self):
@@ -231,7 +231,7 @@ class Generator(ForgeActor):
             log_stats=None,
         )
         self._start_processing()
-        if self.prefetch_weights:
+        if self.prefetch_weights_to_shm:
             self._spawn_fetchers()
 
     def _spawn_fetchers(self):
@@ -440,7 +440,7 @@ class Generator(ForgeActor):
             >>> generator.update_weights(version)
         """
         # Prefetch only if we are using RDMA
-        if self.prefetch_weights and not self.use_dcp_for_weight_sync:
+        if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
             logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
             fetch_fut = asyncio.create_task(self._fetch_weights(version))
         else:
