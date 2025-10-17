@@ -408,9 +408,8 @@ class TestSharedTensorMultiprocess:
         """Test reading shared tensor from another process"""
 
         def reader_process(handle_dict, result_queue):
-            shared = SharedTensor(handle=handle_dict)
-            tensor = shared.tensor
-            result_queue.put(tensor.sum().item())
+            with SharedTensor(handle=handle_dict) as shared:
+                result_queue.put(shared.tensor.sum().item())
 
         # Create shared tensor in main process
         shared = SharedTensor.empty((100, 100), torch.float32)
@@ -435,8 +434,8 @@ class TestSharedTensorMultiprocess:
         """Test writing to shared tensor from another process"""
 
         def writer_process(handle_dict, value):
-            shared = SharedTensor(handle=handle_dict)
-            shared.tensor.fill_(value)
+            with SharedTensor(handle=handle_dict) as shared:
+                shared.tensor.fill_(value)
 
         # Create empty shared tensor
         shared = SharedTensor.empty((50, 50), torch.float32)
@@ -458,11 +457,10 @@ class TestSharedTensorMultiprocess:
         """Test bidirectional communication"""
 
         def worker_process(input_handle, output_handle):
-            input_tensor = SharedTensor(handle=input_handle).tensor
-            output_tensor = SharedTensor(handle=output_handle).tensor
-
-            # Compute: output = input * 2
-            output_tensor.copy_(input_tensor * 2)
+            with SharedTensor(handle=input_handle) as input_shared:
+                with SharedTensor(handle=output_handle) as output_shared:
+                    # Compute: output = input * 2
+                    output_shared.tensor.copy_(input_shared.tensor * 2)
 
         # Create input and output tensors
         input_shared = SharedTensor.empty((100, 100), torch.float32)
@@ -605,8 +603,8 @@ class TestSharedTensorHandleToSharedTensor:
         """Test to_shared_tensor in multiprocess scenario"""
 
         def worker_process(handle, result_queue):
-            shared = handle.to_shared_tensor()
-            result_queue.put(shared.tensor.sum().item())
+            with handle.to_shared_tensor() as shared:
+                result_queue.put(shared.tensor.sum().item())
 
         original = SharedTensor.empty((50, 50), torch.float32)
         original.tensor.fill_(3.0)
@@ -831,10 +829,9 @@ class TestSharedTensorCloseAndCleanup:
         """Test that multiple receivers can close independently"""
 
         def receiver_process(handle, value, result_queue):
-            shared = SharedTensor(handle=handle)
-            result = shared.tensor[0, 0].item() == value
-            shared.close()  # Each receiver closes its own reference
-            result_queue.put(result)
+            with SharedTensor(handle=handle) as shared:
+                result = shared.tensor[0, 0].item() == value
+                result_queue.put(result)
 
         # Creator
         shared = SharedTensor.empty((10, 10), torch.float32)
