@@ -95,30 +95,6 @@ Build your own components and compose them naturally with existing infrastructur
 
 Before diving in, check out {doc}`getting_started` and ensure your system meets the requirements.
 
-## Quick Start
-
-Here's what training looks like with TorchForge:
-
-```bash
-# Install dependencies
-conda create -n forge python=3.10
-conda activate forge
-git clone https://github.com/meta-pytorch/forge
-cd forge
-./scripts/install.sh
-
-# Download a model
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
-
-# Run SFT training (requires 2+ GPUs)
-uv run forge run --nproc_per_node 2 \
-  apps/sft/main.py --config apps/sft/llama3_8b.yaml
-
-# Run GRPO training (requires 3+ GPUs)
-python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
-```
-
 ## Writing RL Code
 
 With TorchForge, your RL logic looks like pseudocode:
@@ -164,22 +140,13 @@ Installation, prerequisites, verification, and your first training run.
 **Time to first run: ~15 minutes**
 :::
 
-:::{grid-item-card} 🧠 Core Concepts
-:link: concepts
+:::{grid-item-card} 💻 Tutorials
+:link: tutorials
 :link-type: doc
 
-Architecture, Monarch integration, Services, TorchStore, and how everything works together.
+Step-by-step guides and practical examples for training with TorchForge.
 
-**For understanding the system**
-:::
-
-:::{grid-item-card} 💻 Usage Patterns
-:link: usage
-:link-type: doc
-
-Configuration examples, common workflows, and practical scenarios.
-
-**For day-to-day development**
+**For hands-on development**
 :::
 
 :::{grid-item-card} 📖 API Reference

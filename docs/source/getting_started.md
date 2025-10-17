@@ -244,17 +244,15 @@ checkpointing:
 - **distributed**: Multi-GPU strategy (FSDP, tensor parallel, etc.) handled by TorchTitan
 - **checkpointing**: Where and when to save model checkpoints
 
-See {doc}`usage` for detailed configuration options.
+See the configuration examples in your training scripts for detailed options.
 
 ## Next Steps
 
 Now that you have TorchForge installed and verified:
 
-1. **Learn the Concepts**: Read {doc}`concepts` to understand TorchForge's architecture, including Monarch, Services, and TorchStore
-2. **Explore Examples**: Check the `apps/` directory for more training examples
-3. **Customize Training**: See {doc}`usage` for configuration patterns
-4. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
-5. **API Documentation**: Explore {doc}`api` for detailed API reference
+1. **Explore Examples**: Check the `apps/` directory for more training examples
+2. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
+3. **API Documentation**: Explore {doc}`api` for detailed API reference
 
 ## Getting Help
 
@@ -303,7 +301,3 @@ Include this output in your bug reports!
 - **Monarch Documentation**: [meta-pytorch.org/monarch](https://meta-pytorch.org/monarch)
 - **vLLM Documentation**: [docs.vllm.ai](https://docs.vllm.ai)
 - **TorchTitan**: [github.com/pytorch/torchtitan](https://github.com/pytorch/torchtitan)
-
----
-
-**Ready to start training?** Head to {doc}`usage` for practical configuration examples and workflows, or dive into {doc}`concepts` to understand how all the pieces work together.
