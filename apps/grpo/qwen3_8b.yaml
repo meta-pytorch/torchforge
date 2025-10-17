@@ -29,7 +29,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: ${model}
+    model: /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -95,6 +95,7 @@ ref_model:
     flavor: 8B
     hf_assets_path: hf://${model}
   training:
+    seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
     gc_freq: 1
   compile:
