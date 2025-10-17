@@ -21,7 +21,6 @@ from monarch.actor import (
 from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
     BackendRole,
-    context,
     get_logger_backend_class,
     LoggerBackend,
     MetricCollector,
@@ -128,14 +127,11 @@ async def get_or_create_metric_logger(
 
 
 class LocalFetcherActor(Actor):
-    """Actor spawned once per ProcMesh. When called, runs on every rank in that ProcMesh
-    and accesses each rank's local MetricCollector singleton.
+    """Actor spawned once per ProcMesh that, when called, runs on every rank in that ProcMesh
+    and accesses each rank's local MetricCollector.
 
     Flow:
-    - GlobalLoggingActor calls fetcher.flush() [one call per ProcMesh]
-    - Monarch broadcasts to all ranks in the ProcMesh
-    - LocalFetcherActor.flush() runs on each rank [rank 0, rank 1, ...]
-    - Each execution accesses MetricCollector() for that rank
+    GlobalLoggingActor.method() -> per-procmesh LocalFetcherActor.method() -> per-rank MetricCollector.method() -> logger
     """
 
     def __init__(
@@ -173,7 +169,7 @@ class LocalFetcherActor(Actor):
         config: dict[str, Any],
         global_step: int = 0,
     ) -> None:
-        """Init local (per-rank) logger backends and MetricCollector.
+        """Init per-rank logger backends and MetricCollector.
 
         Args:
             metadata_per_primary_backend (dict[str, dict[str, Any]]): Metadata from primary backends for shared state.
@@ -203,13 +199,9 @@ class GlobalLoggingActor(Actor):
     If a backend config has flag `reduce_across_ranks=False`, an instance of the backend
     is initialized per-rank, otherwise it is done once globally.
 
-    Setup: One GlobalLoggingActor in controller, one LocalFetcherActor registered per ProcMesh,
-    one MetricCollector singleton per rank.
 
     Flow:
-    - GlobalLoggingActor.flush() calls each registered LocalFetcherActor [one call per ProcMesh]
-    - Each LocalFetcherActor call is broadcast by Monarch to all ranks in that ProcMesh
-    - LocalFetcherActor.flush() runs on each rank and accesses that rank's MetricCollector
+    GlobalLoggingActor.method() -> per-procmesh LocalFetcherActor.method() -> per-rank MetricCollector.method() -> logger
     """
 
     def __init__(self):
@@ -274,10 +266,7 @@ class GlobalLoggingActor(Actor):
 
     @endpoint
     async def register_fetcher(self, fetcher: LocalFetcherActor, proc_id: str) -> None:
-        """Registers a LocalFetcherActor with the GlobalLoggingActor.
-
-        One LocalFetcherActor per ProcMesh. When called (e.g., fetcher.flush()), Monarch broadcasts
-        the call to all ranks in that ProcMesh, where each rank accesses its own MetricCollector.
+        """Registers a LocalFetcherActor with the GlobalLoggingActor. One LocalFetcherActor per ProcMesh.
 
         Args:
             fetcher: The LocalFetcherActor instance for a ProcMesh
