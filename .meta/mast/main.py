@@ -20,6 +20,7 @@ from forge.types import (
     ProvisionerConfig,
     ServiceConfig,
 )
+from forge.util.config import parse
 from omegaconf import DictConfig
 
 DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"

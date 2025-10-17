@@ -22,6 +22,7 @@ from forge.controller.provisioner import get_or_create_provisioner
 
 from forge.controller.service.service import uuid
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import resolve_hf_hub_paths
 from monarch.actor import endpoint
 
 from omegaconf import DictConfig, OmegaConf
