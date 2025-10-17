@@ -1,0 +1,167 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-docs:
+    if: github.repository_owner == 'meta-pytorch'
+    name: Build Documentation
+    runs-on: linux.g5.4xlarge.nvidia.gpu
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup conda env
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          miniconda-version: "latest"
+          activate-environment: test
+          python-version: '3.10'
+          auto-activate: false
+      - name: Verify conda environment
+        shell: bash -l {0}
+        run: |
+          conda info
+          which python
+          which conda
+      - name: Update pip
+        shell: bash -l {0}
+        run: python -m pip install --upgrade pip
+      - name: Install pytorch
+        shell: bash -l {0}
+        run: pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 --force-reinstall
+      - name: Install monarch
+        shell: bash -l {0}
+        run: pip install assets/ci/monarch_no_torch-0.1.0.dev20251010-py3-none-any.whl
+      - name: Install torchforge
+        shell: bash -l {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/install.sh
+      - name: Install docs dependencies
+        shell: bash -l {0}
+        run: python -m pip install -r docs/requirements.txt
+      - name: Build docs
+        shell: bash -l {0}
+        working-directory: docs
+        run: |
+          # Set up library paths to ensure all dependencies are available
+          # This is critical for monarch and other native dependencies that need libpython3.10.so.1.0
+          export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
+          # Also set CUDA paths if needed
+          if [ -d "/usr/local/cuda-12.9" ]; then
+            export LD_LIBRARY_PATH="/usr/local/cuda-12.9/compat:${LD_LIBRARY_PATH}"
+            export CUDA_HOME=/usr/local/cuda-12.9
+          fi
+
+          # Verify dependencies can be imported before building docs
+          echo "Verifying dependencies..."
+          python -c "import forge; print('✓ forge imported successfully')"
+          python -c "import monarch; print('✓ monarch imported successfully')"
+
+          # Build docs with -W (warnings as errors) and --keep-going to see all issues
+          # Capture exit code but continue to see all errors
+          set +e
+          make html SPHINXOPTS="-W --keep-going"
+          BUILD_EXIT_CODE=$?
+          set -e
+
+          # Report results
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Documentation build failed with warnings or errors (exit code: $BUILD_EXIT_CODE)"
+            exit $BUILD_EXIT_CODE
+          else
+            echo "✅ Documentation build completed successfully with no warnings or errors"
+          fi
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: docs/build/html/
+
+  doc-preview:
+    runs-on: linux.large
+    needs: build-docs
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: docs
+      - name: Add noindex to preview docs
+        run: |
+          echo "Adding noindex meta tag to prevent search engine indexing of preview docs"
+          find docs -name "*.html" -print0 | xargs -0 sed -i 's/<head>/<head>\n  <meta name="robots" content="noindex">/'
+      - name: Upload docs preview
+        uses: seemethere/upload-artifact-s3@v5
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          retention-days: 14
+          s3-bucket: doc-previews
+          if-no-files-found: error
+          path: docs
+          s3-prefix: meta-pytorch/forge/${{ github.event.pull_request.number }}
+
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      # Grant write permission here so that the doc can be pushed to gh-pages branch
+      contents: write
+    needs: build-docs
+    if: github.repository == 'meta-pytorch/forge' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          persist-credentials: true
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: docs
+      #- name: Add no-index tag
+      #  run: |
+      #    REF_NAME=$(echo "${{ github.ref }}")
+      #    echo "Ref name: ${REF_NAME}"
+      #    if [[ "${{ github.ref }}" == 'refs/heads/main' ]]; then
+      #      find docs -name "*.html" -print0 | xargs -0 sed -i '/<head>/a \ \ <meta name="robots" content="noindex">';
+      #    fi
+      - name: Move and commit changes
+        run: |
+          set -euo pipefail
+          # Get github.ref for the output doc folder. By default "main"
+          # If matches a tag like refs/tags/v1.12.0-rc3 or
+          # refs/tags/v1.12.0 convert to 1.12
+          GITHUB_REF=${{ github.ref }}
+
+          # Convert refs/tags/v1.12.0rc3 into 1.12.
+          # Adopted from https://github.com/pytorch/pytorch/blob/main/.github/workflows/_docs.yml#L150C11-L155C13
+          if [[ "${GITHUB_REF}" =~ ^refs/tags/v([0-9]+\.[0-9]+)\.* ]]; then
+            TARGET_FOLDER="${BASH_REMATCH[1]}"
+          else
+            TARGET_FOLDER="main"
+          fi
+          echo "Target Folder: ${TARGET_FOLDER}"
+
+          mkdir -p "${TARGET_FOLDER}"
+          rm -rf "${TARGET_FOLDER}"/*
+          mv docs/* "${TARGET_FOLDER}"
+
+          git config user.name 'pytorchbot'
+          git config user.email 'soumith+bot@pytorch.org'
+          git add "${TARGET_FOLDER}" || true
+          git commit -m "auto-generating sphinx docs" || true
+          git push -f

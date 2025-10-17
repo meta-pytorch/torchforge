@@ -15,6 +15,10 @@ __pycache__/
 # Cython debug symbols
 cython_debug/
 
+# SLURM logs
+slogs/
+slurm-*
+
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
@@ -76,6 +80,8 @@ ipython_config.py
 *.pt
 *.pth
 *.ckpt
+*.distcp
+.metadata
 
 # mypy
 .mypy_cache/
@@ -147,6 +153,7 @@ docs/source/generated_examples/
 docs/source/gen_modules/
 docs/source/generated/
 docs/source/sg_execution_times.rst
+docs/source/tutorials/*
 # pytorch-sphinx-theme gets installed here
 docs/src
 
@@ -189,3 +196,11 @@ cover/
 wandb/
 
 assets/wheels/vllm*.whl
+
+# DCP artifacts
+forge_dcp_tmp/
+demo_top_down.md
+
+
+# enroot / sqsh
+*.sqsh

@@ -11,7 +11,6 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from monarch.actor import ActorError
 
@@ -81,7 +80,7 @@ class ServiceRequest:
 
     """
 
-    session_id: Optional[str]
+    session_id: str | None
     function: str
     args: tuple
     kwargs: dict
@@ -103,10 +102,11 @@ class Replica:
     # Configuration for the underlying ProcMesh (scheduler, hosts, GPUs)
     proc_config: ProcessConfig
     actor_def: type[ForgeActor]
+    actor_args: tuple
     actor_kwargs: dict
 
     # The Actor that this replica is running
-    actor: Optional[ForgeActor] = None
+    actor: ForgeActor | None = None
 
     # Async queue for incoming requests
     request_queue: asyncio.Queue[ServiceRequest] = field(default_factory=asyncio.Queue)
@@ -126,10 +126,10 @@ class Replica:
     return_first_rank_result: bool = False
 
     # Recovery-related state
-    _recovery_task: Optional[asyncio.Task] = None
+    _recovery_task: asyncio.Task | None = None
 
     # Run task is the replica's event loop
-    _run_task: Optional[asyncio.Task] = None
+    _run_task: asyncio.Task | None = None
 
     # Metrics tracking
     metrics: ReplicaMetrics = field(default_factory=ReplicaMetrics)
@@ -157,11 +157,18 @@ class Replica:
         try:
             # Deploy the actor and its underlying resources
             logger.debug(f"Launching actor for replica {self.idx}")
+
+            # If a Mesh name was specified, incorporate this info.
+            if self.proc_config.mesh_name:
+                mesh_name_with_replica = f"{self.proc_config.mesh_name}_{self.idx}"
+                self.proc_config.mesh_name = mesh_name_with_replica
+                if hasattr(self.actor_def, "mesh_name"):
+                    self.actor_def.mesh_name = mesh_name_with_replica
+
             self.actor = await self.actor_def.launch(
-                process_config=self.proc_config,
+                *self.actor_args,
                 **self.actor_kwargs,
             )
-
             # Transition to healthy state and start processing
             self.state = ReplicaState.HEALTHY
             self.start_processing()
@@ -242,12 +249,9 @@ class Replica:
             try:
                 result = await endpoint_func.call(*request.args, **request.kwargs)
                 # Unwrap ValueMesh if configured to return first rank result
-                if (
-                    self.return_first_rank_result
-                    and hasattr(result, "_values")
-                    and result._values
-                ):
-                    result = result._values[0]
+                if self.return_first_rank_result:
+                    _, first_result = next(result.items())
+                    result = first_result
                 request.future.set_result(result)
             except ActorError as e:
                 logger.warning(f"Got failure on replica {self.idx}. Error:\n{e}")

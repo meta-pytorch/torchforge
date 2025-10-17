@@ -6,47 +6,59 @@
 
 """Test for data/replay_buffer.py"""
 
+from dataclasses import dataclass
+
 import pytest
 import pytest_asyncio
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.types import Trajectory
 
-from monarch.actor import proc_mesh
+
+@dataclass
+class TestEpisode:
+    """
+    Dummy Episode containing just a policy version
+
+    ReplayBuffer expects any construct (typically an Episode) that contains a
+    `policy_version`.
+
+    TODO: Replaced with a unified interface in the future.
+    """
+
+    policy_version: int
 
 
 class TestReplayBuffer:
     @pytest_asyncio.fixture
     async def replay_buffer(self) -> ReplayBuffer:
-        mesh = await proc_mesh(gpus=1)
-        replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=False).as_actor(
+            batch_size=2, max_policy_age=1
         )
         await replay_buffer.setup.call()
         return replay_buffer
 
     @pytest.mark.asyncio
     async def test_add(self, replay_buffer: ReplayBuffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        episode = TestEpisode(policy_version=0)
+        await replay_buffer.add.call_one(episode)
         assert replay_buffer._numel.call_one().get() == 1
-        assert replay_buffer._getitem.call_one(0).get() == trajectory
+        assert replay_buffer._getitem.call_one(0).get() == episode
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_add_multiple(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
-        assert replay_buffer._getitem.call_one(0).get() == trajectory_0
-        assert replay_buffer._getitem.call_one(1).get() == trajectory_1
+        assert replay_buffer._getitem.call_one(0).get() == episode_0
+        assert replay_buffer._getitem.call_one(1).get() == episode_1
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_state_dict_save_load(self, replay_buffer) -> None:
-        trajectory = Trajectory(policy_version=0)
-        await replay_buffer.add.call_one(trajectory)
+        episode = TestEpisode(policy_version=0)
+        await replay_buffer.add.call_one(episode)
         state_dict = replay_buffer.state_dict.call_one().get()
         replay_buffer.clear.call_one().get()
         assert replay_buffer._numel.call_one().get() == 0
@@ -56,10 +68,10 @@ class TestReplayBuffer:
 
     @pytest.mark.asyncio
     async def test_evict(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
         await replay_buffer.evict.call_one(curr_policy_version=2)
         assert replay_buffer._numel.call_one().get() == 1
@@ -67,62 +79,56 @@ class TestReplayBuffer:
 
     @pytest.mark.asyncio
     async def test_sample(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
         assert replay_buffer._numel.call_one().get() == 2
 
-        # Test a simple sampling w/ no evictions
+        # Test a simple sampling
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is not None
         assert len(samples[0]) == 2
+        assert replay_buffer._numel.call_one().get() == 2
 
-        # Test sampling with overriding batch size
-        await replay_buffer.add.call_one(trajectory_0)
-        samples = await replay_buffer.sample.call_one(
-            curr_policy_version=1, batch_size=1
-        )
-        assert samples is not None
-        assert len(samples[0]) == 1
-
-        # Test sampling w/ overriding batch size (not enough samples in buffer, returns None)
-        await replay_buffer.add.call_one(trajectory_0)
-        samples = await replay_buffer.sample.call_one(
-            curr_policy_version=1, batch_size=3
-        )
+        # Test sampling (not enough samples in buffer, returns None)
+        await replay_buffer.add.call_one(episode_0)
+        samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is None
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_sample_with_evictions(self, replay_buffer) -> None:
-        trajectory_0 = Trajectory(policy_version=0)
-        trajectory_1 = Trajectory(policy_version=1)
-        await replay_buffer.add.call_one(trajectory_0)
-        await replay_buffer.add.call_one(trajectory_1)
-        assert replay_buffer._numel.call_one().get() == 2
+        episode_0 = TestEpisode(policy_version=0)
+        episode_1 = TestEpisode(policy_version=1)
+        episode_2 = TestEpisode(policy_version=2)
+        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(episode_1)
+        await replay_buffer.add.call_one(episode_2)
+        assert replay_buffer._numel.call_one().get() == 3
         samples = await replay_buffer.sample.call_one(
-            curr_policy_version=2, batch_size=1
+            curr_policy_version=2,
         )
         assert samples is not None
-        assert len(samples[0]) == 1
-        assert samples[0][0] == trajectory_1
+        assert len(samples[0]) == 2
+        assert samples[0][0].policy_version > 0
+        assert samples[0][1].policy_version > 0
+        assert replay_buffer._numel.call_one().get() == 2
         replay_buffer.clear.call_one().get()
 
     @pytest.mark.asyncio
     async def test_sample_dp_size(self) -> None:
         """Test that len(samples) == dp_size when sampling."""
-        mesh = await proc_mesh(gpus=1)
         # Create replay buffer with dp_size=3
-        replay_buffer = await mesh.spawn(
-            "replay_buffer", ReplayBuffer, batch_size=2, max_policy_age=1, dp_size=3
+        replay_buffer = await ReplayBuffer.options(procs=1, with_gpus=False).as_actor(
+            batch_size=2, max_policy_age=1, dp_size=3
         )
         await replay_buffer.setup.call()
 
         # Add enough trajectories to sample
         for i in range(10):
-            trajectory = Trajectory(policy_version=0)
-            await replay_buffer.add.call_one(trajectory)
+            episode = TestEpisode(policy_version=0)
+            await replay_buffer.add.call_one(episode)
 
         # Sample and verify len(samples) == dp_size
         samples = await replay_buffer.sample.call_one(curr_policy_version=0)
@@ -133,3 +139,16 @@ class TestReplayBuffer:
             assert len(dp_samples) == 2  # batch_size
 
         replay_buffer.clear.call_one().get()
+
+    @pytest.mark.asyncio
+    async def test_collect(self) -> None:
+        """Test _collect method"""
+        local_rb = ReplayBuffer(batch_size=1)
+        await local_rb.setup._method(local_rb)
+        for i in range(1, 6):
+            local_rb.buffer.append(i)
+        values = local_rb._collect([2, 0, -1])
+        assert values == [3, 1, 5]
+        values = local_rb._collect([1, 3])
+        assert values == [2, 4]
+        assert local_rb.buffer[0] == 1

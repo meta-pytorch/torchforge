@@ -1,0 +1,21 @@
+# >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/qwen2_5_32b.yaml
+
+policy:
+  engine_args:
+    model: "Qwen/Qwen2.5-32B"
+    tensor_parallel_size: 4
+    pipeline_parallel_size: 1
+    enforce_eager: true
+  sampling_params:
+    n: 2
+    max_tokens: 512
+
+services:
+  policy:
+    procs: 4
+    num_replicas: 1
+    with_gpus: true
+
+
+# Optional, otherwise argparse fallback kicks in
+prompt: "Tell me a joke"

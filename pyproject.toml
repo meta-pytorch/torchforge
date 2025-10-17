@@ -19,6 +19,7 @@ dependencies = [
     # Miscellaneous
     "omegaconf",
     "wandb",
+    "hf_transfer",
 ]
 dynamic = ["version"]
 
@@ -45,10 +46,6 @@ oss = [
     "torchstore",
     "vllm==1.0.0.dev20250912+cu128"
 ]
-
-[project.scripts]
-forge = "forge.cli.forge:main"
-
 
 # ---- Explicit project build information ---- #
 [build-system]

@@ -1,14 +1,37 @@
-# forge
+# <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> Forge
 
-#### A PyTorch native platform for post-training generative AI models
+#### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
+[![Unit Tests](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml?query=branch%3Amain)
+[![GPU Tests](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml?query=branch%3Amain)
 
 ## Overview
+The primary purpose of the Forge ecosystem is to delineate infra concerns from model concerns thereby making RL experimentation easier. Forge delivers this by providing clear RL abstractions and one scalable implementation of these abstractions. When you need fine-grained control over placement, fault handling/redirecting training loads during a run, or communication patterns, the primitives are there. When you don’t, you can focus purely on your RL algorithm.
+
+Key features:
+- Usability for rapid research (isolating the RL loop from infrastructure)
+- Hackability for power users (all parts of the RL loop can be easily modified without interacting with infrastructure)
+- Scalability (ability to shift between async and synchronous training and across thousands of GPUs)
+
+> ⚠️ **Early Development Warning** Forge is currently in an experimental
+> stage. You should expect bugs, incomplete features, and APIs that may change
+> in future versions. The project welcomes bugfixes, but to make sure things are
+> well coordinated you should discuss any significant change before starting the
+> work. It's recommended that you signal your intention to contribute in the
+> issue tracker, either by filing a new issue or by claiming an existing one.
+
+## 📖 Documentation (Coming Soon)
+
+View Forge's hosted documentation (coming soon)
+
+## Tutorials
+
+You can also find our notebook tutorials (coming soon)
 
 ## Installation
 
 ### Build Script
 
-Forge requires the latest PyTorch nightly with Monarch, vLLM, and torchtitan. For convenience,
+Forge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). For convenience,
 we have pre-packaged these dependencies as wheels in assets/wheels. (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
@@ -22,10 +45,10 @@ conda activate forge
 
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices).
+After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
 
 ```
-python -m apps.grpo.main  --config apps/grpo/qwen3_1_7b.yaml
+python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
 If you need to re-build the wheels for whatever reason, you can do so with:
@@ -38,26 +61,12 @@ For your information, since the vLLM wheel is too large for GitHub, we uploaded 
 $ gh release create v0.0.0 assets/wheels/vllm-*.whl --title "Forge Wheels v0.0.0"
 ```
 
-### UV Build (Alternative Build)
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/pytorch-labs/forge
-cd forge
-uv sync --all-extras
-source .venv/bin/activate
-```
-
-> [!WARNING]
-> If you add packages to the pyproject.toml, use `uv sync --inexact` so it doesn't remove Monarch and vLLM
-
 ## Quick Start
 
-To run SFT for Llama3 8B, run
+To run SFT on a Llama3 8B model, run
 
 ```bash
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct --output-dir /tmp/Meta-Llama-3.1-8B-Instruct --ignore-patterns "original/consolidated.00.pth"
-uv run forge run --nproc_per_node 2 apps/sft/main.py --config apps/sft/llama3_8b.yaml
+python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 ```
 
 ### Citation

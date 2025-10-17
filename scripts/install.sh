@@ -18,10 +18,24 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1";}
 
 # Configuration
-PYTORCH_VERSION="2.9.0.dev20250828"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSIONS_FILE="$SCRIPT_DIR/../assets/versions.sh"
+
+if [ ! -f "$VERSIONS_FILE" ]; then
+    log_error "Versions file not found: $VERSIONS_FILE"
+    exit 1
+fi
+
+source "$VERSIONS_FILE"
+
+# Validate required variables are set
+if [ -z "${PYTORCH_VERSION:-}" ]; then
+    log_error "PYTORCH_VERSION not set in $VERSIONS_FILE"
+    exit 1
+fi
+
 WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0"
+RELEASE_TAG="v0.0.0-93025"
 GITHUB_REPO="meta-pytorch/forge"
 
 # Check conda environment
@@ -165,9 +179,16 @@ download_vllm_wheel() {
 
     if [ -z "$vllm_wheel_name" ]; then
         log_error "Could not find vLLM wheel in release $RELEASE_TAG"
-        log_info "Make sure you've uploaded the vLLM wheel to the GitHub release"
+        log_info "Make sure the vLLM wheel has been uploaded to the GitHub release"
         exit 1
     fi
+    for f in assets/wheels/vllm-*; do
+        [ -e "$f" ] || continue  # skip if glob didn't match
+        if [ "$(basename "$f")" != "$vllm_wheel_name" ]; then
+            log_info "Removing stale vLLM wheel: $(basename "$f")"
+            rm -f "$f"
+        fi
+    done
 
     local local_path="$WHEEL_DIR/$vllm_wheel_name"
 
@@ -288,6 +309,9 @@ export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
 
+# Temporary measure until this environment variable is removed
+export MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE=1
+
 # Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
 if [ -n "${LD_LIBRARY_PATH:-}" ]; then
   export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat:${LD_LIBRARY_PATH}"
@@ -358,7 +382,7 @@ EOF
     log_info "Installation completed successfully!"
     echo ""
     log_info "Re-activate the conda environment to make the changes take effect:"
-    log_info "  conda activate $CONDA_DEFAULT_ENV"
+    log_info "  conda deactivate && conda activate $CONDA_DEFAULT_ENV"
 }
 
 main "$@"

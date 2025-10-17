@@ -4,295 +4,281 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, Tuple
+import asyncio
+import logging
+import shutil
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
 import torch
+import torchstore as ts
+from forge.actors.generator import Generator
 
-from forge.actors.policy import EngineConfig, Policy, SamplingConfig
-from forge.controller.service import ServiceConfig, spawn_service
-from forge.data.sharding import VLLMSharding
-from torchstore import MultiProcessStore
-from torchstore._state_dict_utils import push_state_dict
-from transformers import AutoModelForCausalLM
+from forge.actors.trainer import RLTrainer
+from forge.cli.config import resolve_hf_hub_paths
+from forge.controller.provisioner import init_provisioner
+
+from forge.controller.service.service import uuid
+from forge.types import LauncherConfig, ProvisionerConfig
+from monarch.actor import endpoint
+
+from omegaconf import DictConfig, OmegaConf
 
 requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="CUDA not available",
 )
 
+from huggingface_hub import snapshot_download
 
-def convert_state_dict(saved_sd):
-    """
-    Convert transformers state dict to vLLM format.
+logger: logging.Logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-    Key conversions:
-    1. Copy over directly mapped keys (down_proj, input_layernorm, etc.)
-    2. Fuse QKV projections: combine q_proj, k_proj, v_proj into qkv_proj
-    3. Fuse MLP projections: combine gate_proj and up_proj into gate_up_proj
-    """
-    load_sd = {}
-    num_layers = 32  # For Llama-8B-3.1
+"""
+Run tests:
 
-    # Copy over directly mapped keys
-    for k in saved_sd:
-        if any(
-            x in k
-            for x in [
-                "down_proj",
-                "input_layernorm",
-                "post_attention_layernorm",
-                "o_proj",
-                "norm.weight",
-                "embed_tokens.weight",
-                "lm_head.weight",
-            ]
-        ):
-            load_sd[k] = saved_sd[k]
+PYTHONPATH=. pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
+    --config tests/integration_tests/fixtures/qwen3_1_7b_tp.yaml --use_dcp=false
 
-    # Fuse QKV and gate_up_proj
-    for i in range(num_layers):
-        prefix = f"model.layers.{i}."
+PYTHONPATH=. pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check \
+        --config apps/grpo/qwen3_8b.yaml
+"""
 
-        # QKV fusion
-        q = saved_sd[prefix + "self_attn.q_proj.weight"]
-        k = saved_sd[prefix + "self_attn.k_proj.weight"]
-        v = saved_sd[prefix + "self_attn.v_proj.weight"]
-        load_sd[prefix + "self_attn.qkv_proj.weight"] = torch.cat([q, k, v], dim=0)
-
-        # MLP gate_up_proj fusion
-        gate = saved_sd[prefix + "mlp.gate_proj.weight"]
-        up = saved_sd[prefix + "mlp.up_proj.weight"]
-        load_sd[prefix + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-
-    return load_sd
+# Temp directory won't work for multi-node because NFS does not cover the tmp path
+TEST_DCP_DIR = "test_dcp_tmp"
 
 
-async def save_state_dict(
-    store: MultiProcessStore, state_dict: dict[str, torch.Tensor], key_prefix: str
-):
-    print(f"Saving {len(state_dict)} tensors")
+class MockRLTrainer(RLTrainer):
+    @endpoint
+    async def zero_out_model_states(self):
+        """This simply sets all model weights to zero."""
+        for model_part in self.engine.model_parts:
+            sd = model_part.state_dict()
+            for k in sd.keys():
+                if not torch.is_floating_point(sd[k]):
+                    logger.info(
+                        f"[MockRLTrainer] zero_out_model_states(): skipping non-float param {k}"
+                    )
+                    continue
+                sd[k] *= 0.0
 
-    await push_state_dict(store, state_dict, key_prefix)
 
-    print(f"Successfully saved {len(state_dict)} tensors")
+def _load_config(config_path: str) -> DictConfig:
+    cfg = None
+    try:
+        cfg = OmegaConf.load(config_path)
+    except Exception as e:
+        pytest.fail(f"Failed to load config file {config_path}: {e}")
+
+    assert isinstance(cfg, DictConfig)
+
+    cfg = resolve_hf_hub_paths(cfg)
+    return cfg
 
 
-def calculate_expected_shard(
-    full_tensor: torch.Tensor,
-    param_name: str,
-    expected_shape: torch.Size,
-    tensor_parallel_size: int,
-    rank: int,
-) -> torch.Tensor:
-    """
-    Calculate the expected shard of a full tensor for comparison with loaded tensor.
-    This is mainly used for validation in tests.
-
-    Args:
-        full_tensor: The full tensor to shard
-        param_name: Name of the parameter (used to determine sharding strategy)
-        expected_shape: Expected shape of the sharded tensor
-        tensor_parallel_size: Number of tensor parallel ranks
-        rank: Current rank
-
-    Returns:
-        torch.Tensor: The expected sharded tensor for this rank
-    """
-
-    sharding = VLLMSharding(tensor_parallel_size, rank)
-    shard_dim, is_sharded = sharding._get_tensor_parallel_sharding_strategy(param_name)
-
-    if not is_sharded:
-        return full_tensor
-
-    sharded_tensor = sharding._calculate_tensor_shard(
-        full_tensor, shard_dim, tensor_parallel_size, rank
+def _test_validate_params_unchanged(
+    prev_params, curr_model, logger
+) -> Exception | None:
+    """Validate that current parameters are the same as prev_params."""
+    verified = set()
+    skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() = {curr_model.named_parameters()}"
     )
-    return sharded_tensor
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
+            assert name in prev_params, f"Param {name} not found in prev_params"
+            assert torch.allclose(
+                prev_params[name], param.cpu(), atol=1e-3, rtol=1e-2
+            ), (
+                f"current param {name} does not match expected value; "
+                f"previous param ({prev_params[name].size()})= {prev_params[name]}; "
+                f"expected = {prev_params[name]} vs got = {param.cpu().size()} {param.cpu()}"
+            )
+            verified.add(name)
+        except Exception as e:
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
 
 
-def validate_loaded_tensors_equals_original(
-    loaded_state_dict: dict[str, torch.Tensor],
-    original_state_dict: dict[str, torch.Tensor],
-    tensor_parallel_size: int,
-    rank: int,
-):
-    """
-    Shared validation function to verify that every tensor loaded by the policy
-    equals the original tensor.
-
-    For tensor parallel cases, instead of gathering sharded tensors, we shard
-    the original tensor and compare it with the loaded shard.
-    """
-    validation_errors = []
-
-    for param_name, loaded_tensor in loaded_state_dict.items():
-        if param_name in original_state_dict:
-            expected_tensor = original_state_dict[param_name]
-
-            if tensor_parallel_size > 1:
-                expected_shard = calculate_expected_shard(
-                    expected_tensor,
-                    param_name,
-                    loaded_tensor.shape,
-                    tensor_parallel_size,
-                    rank,
-                )
-                tensor_to_compare = expected_shard.cpu().float()
-            else:
-                tensor_to_compare = expected_tensor.cpu().float()
-
-            if not torch.allclose(
-                loaded_tensor.float(),
-                tensor_to_compare,
-                rtol=1e-5,
-                atol=1e-8,
-            ):
-                validation_errors.append(
-                    f"Loaded tensor {param_name} does not equal original "
-                    f"(shapes: loaded={loaded_tensor.shape}, expected={tensor_to_compare.shape})"
-                )
-            else:
-                print(f"Loaded tensor {param_name} correctly validated")
-
-    if validation_errors:
-        raise ValueError(f"Validation failed: {validation_errors}")
-
-    print(
-        f"Successfully validated that all {len(loaded_state_dict)} loaded tensors equal original"
+def _test_validate_params_all_zeros(
+    prev_params, curr_model, logger
+) -> Exception | None:
+    """Validate all parameters are set to zero. prev_params is actually not used."""
+    _ = prev_params
+    verified = set()
+    skipped = set()
+    logger.info(
+        f"Validating model params, all named_parameters() = {curr_model.named_parameters()}"
     )
+    errs = []
+    for name, param in curr_model.named_parameters():
+        if not torch.is_floating_point(param):
+            logger.info(f"Skipping non-float param {name}")
+            skipped.add(name)
+            continue
+        try:
+            param = param.cpu()
+            assert torch.allclose(
+                torch.zeros_like(param), param, atol=1e-4, rtol=1e-3
+            ), f"param {name} is not zero."
+            verified.add(name)
+        except Exception as e:
+            errs.append((name, e))
+    logger.info(f"Verified params = {verified}")
+    logger.info(f"Skipped params = {skipped}")
+    if errs:
+        logger.error(
+            f"Validation failed for the following params: {[e[0] for e in errs]}"
+        )
+        return AssertionError(f"Validation failed: {errs}")
 
 
-def get_configs(worker_size: int, model_name: str) -> Tuple[Dict, ServiceConfig]:
+@pytest_asyncio.fixture(autouse=True)
+async def _setup_and_teardown(request):
+    # ---- setup ---- #
+    config_path = request.config.getoption("--config", default=None)
+    if not config_path:
+        pytest.skip(
+            "No config file provided. Use --config <path> to specify a YAML config file"
+        )
 
-    engine_config = EngineConfig(
-        model=model_name,
-        tensor_parallel_size=worker_size,
-        pipeline_parallel_size=1,
-        enforce_eager=True,
-    )
+    use_dcp_override = request.config.getoption("--use_dcp")
+    cfg = _load_config(config_path=config_path)
 
-    sampling_config = SamplingConfig(
-        n=3,
-        guided_decoding=True,
-    )
+    trainer_proc_size = cfg.actors.trainer.procs
+    policy_tp_size = cfg.policy.engine_args.tensor_parallel_size
 
-    policy_config = {
-        "engine_config": engine_config,
-        "sampling_config": sampling_config,
+    if policy_tp_size != cfg.services.policy.procs:
+        pytest.fail(
+            f"Expect policy proc = {cfg.services.policy.procs} to be equal to tensor parallel size = {policy_tp_size}"
+        )
+
+    model_card = cfg.model
+    logger.info(f"Running sanity check with config: {config_path}")
+    logger.info(f"Model name: {model_card}")
+    logger.info(f"Trainer proc size: {trainer_proc_size}")
+    logger.info(f"Policy tensor parallel size: {policy_tp_size}")
+
+    logger.info("Downloading model checkpoint from HuggingFace Hub")
+    cached_dir = snapshot_download(repo_id=model_card)
+    logger.info("Finished downloading model checkpoint from HuggingFace Hub")
+
+    services_policy_cfg = cfg.services.policy
+    services_policy_cfg.num_replicas = 1
+
+    trainer_cfg = cfg.trainer
+    trainer_cfg.dcp_path = TEST_DCP_DIR
+    trainer_cfg.checkpoint = {
+        "enable": True,
+        "folder": "/tmp/saved_checkpoints",
+        "initial_load_path": cached_dir,
+        "initial_load_in_hf": True,
     }
-    service_config = ServiceConfig(
-        procs_per_replica=worker_size, num_replicas=1, with_gpus=True
+
+    if use_dcp_override is not None:
+        trainer_cfg["use_dcp"] = use_dcp_override
+        logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
+
+    if cfg.get("provisioner", None) is not None:
+        await init_provisioner(
+            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
+        )
+    await ts.initialize(strategy=ts.ControllerStorageVolumes())
+
+    policy, rl_trainer = await asyncio.gather(
+        *[
+            Generator.options(**services_policy_cfg).as_service(**cfg.policy),
+            MockRLTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
+        ]
     )
 
-    return policy_config, service_config
+    yield policy, rl_trainer
 
+    # ---- teardown ---- #
+    logger.info("Shutting down services and cleaning up DCP directory..")
 
-async def run_policy_integration(
-    store, original_state_dict, worker_size
-) -> Dict[str, torch.Tensor]:
-    """
-    Common helper function to test Policy integration with different GPU configurations.
-
-    Args:
-        store: TorchStore instance
-        original_state_dict: Original state dict for validation
-        num_gpus: Number of GPUs to use (1 for single GPU, 2+ for tensor parallel)
-    """
-    print(f"=== PHASE 2: Testing Policy Integration (Workers: {worker_size}) ===")
-
-    policy_config, service_config = get_configs(
-        worker_size=1, model_name="meta-llama/Llama-3.1-8B-Instruct"
-    )
-    policy = await spawn_service(service_config, Policy, store=store, **policy_config)
-
-    # Policy engine start with default version 0 that gets incremented.
-    print("Calling Policy.update() to load weights from torchstore...")
-    await policy.update_weights.call()
-    print(
-        "Successfully called Policy.update_weights() to load weights from torchstore!"
-    )
-    # We get the result as a list.
-    results = await policy._get_model_params.call()
-    assert len(results) == 1
-    print("Successfully got model state dict after update")
-    return results[0]
-
-
-@pytest_asyncio.fixture(scope="session")
-async def llama3_torchstore_setup():
-    """
-    Pytest fixture to load Llama 3.1 8B-Instruct and write state dict to torchstore.
-    Uses session scope so it's only called once when both tests are run.
-    """
-    print("=== PHASE 1: Writing Llama 3.1 8B-Instruct to TorchStore ===")
-
-    store = await MultiProcessStore.create_store()
-
-    model_path = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-
-    # Load the model from local path - using device_map="auto" for efficient loading
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch.float16,  # Use half precision to save memory
-        device_map="auto",
-        trust_remote_code=True,
+    await asyncio.gather(
+        policy.shutdown(),
+        ts.shutdown(),
+        RLTrainer.shutdown(rl_trainer),
     )
 
-    original_state_dict = model.state_dict()
-    print(f"Original state dict has {len(original_state_dict)} parameters")
-
-    print("Converting transformers state dict to vLLM format...")
-    converted_state_dict = convert_state_dict(original_state_dict)
-    print(f"Converted state dict has {len(converted_state_dict)} parameters")
-
-    state_dict_key = "model_state_dict/1"  # {app_namespace}/{version}
-    await save_state_dict(store, converted_state_dict, state_dict_key)
-    print(
-        f"Successfully wrote converted state dict to torchstore with key: {state_dict_key}"
-    )
-
-    return store, converted_state_dict
+    # Cleanup DCP directory
+    path = Path(TEST_DCP_DIR)
+    if not path.exists() or not path.is_dir():
+        return
+    try:
+        shutil.rmtree(path)
+        logger.info(f"Successfully removed {TEST_DCP_DIR}")
+    except Exception as e:
+        logger.error(f"Failed to remove {TEST_DCP_DIR}: {e}")
 
 
-@pytest.mark.asyncio
-@requires_cuda
-async def test_llama3_policy_update_single(llama3_torchstore_setup):
-    print("Starting Llama 3 8B torchstore test (single GPU)...")
+class TestWeightSync:
+    """Tests for weight sync between trainer and policy."""
 
-    store, original_state_dict = llama3_torchstore_setup
+    @pytest.mark.asyncio
+    @requires_cuda
+    async def test_sanity_check(self, _setup_and_teardown):
+        """
+        Sanity check for weight sync sharding between RLTrainer and Policy for a given model config.
 
-    loaded_state_dict = await run_policy_integration(
-        store, original_state_dict, worker_size=1
-    )
+        The check performs the following steps:
+        - Initialize trainer and push weights v0 (original huggingface ckpt)
+        - Step the trainer, setting all weights to zero and push weights v1
+        - Load weights v0 and check the policy has all zero weights
+        - Load weights v1 and check the policy has all the weights back
 
-    # validating for single resource case.
-    validate_loaded_tensors_equals_original(
-        loaded_state_dict, original_state_dict, tensor_parallel_size=0, rank=0
-    )
+        """
 
-    print(
-        "Single GPU test passed! Llama 3.1 8B-Instruct model successfully loaded into Policy via TorchStore!"
-    )
+        policy, rl_trainer = _setup_and_teardown
 
+        v0 = uuid.uuid4().int
+        v1 = v0 + 1
 
-# @pytest.mark.asyncio
-# @requires_cuda
-# async def test_llama3_policy_update_tp(llama3_torchstore_setup):
-#    print("Starting tensor parallel test (load full state dict into sharded model)...")
-#
-#    if torch.cuda.device_count() < 2:
-#        pytest.skip(
-#            f"Only {torch.cuda.device_count()} GPU(s) available, need 2+ for tensor parallel"
-#        )
-#
-#    store, original_state_dict = llama3_torchstore_setup
-#
-#    await run_policy_integration(store, original_state_dict, num_gpus=2)
-#
-#    print(
-#        "Tensor parallel test passed! Full state dict successfully loaded into tensor parallel model!"
-#    )
+        await rl_trainer.push_weights.call(policy_version=v0)
+        # Setting everything to zero
+        await rl_trainer.zero_out_model_states.call()
+        await rl_trainer.push_weights.call(policy_version=v1)
+        await policy.save_model_params.fanout()
+
+        # Sanity check that before update all the tests pass
+        all_errs = await policy.validate_model_params.fanout(
+            _test_validate_params_unchanged
+        )
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+
+        await policy.update_weights.fanout(version=v1)
+        all_errs = await policy.validate_model_params.fanout(
+            _test_validate_params_all_zeros
+        )
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+
+        # Reloading v0, getting back original weights
+        await policy.update_weights.fanout(version=v0)
+        all_errs = await policy.validate_model_params.fanout(
+            _test_validate_params_unchanged
+        )
+        for errs in all_errs:
+            for _, e in errs.items():
+                assert not e, f"Validation failed with exception: {e}"
+
+        logger.info("✅ Weight sharding sanity check passed!")

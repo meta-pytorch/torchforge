@@ -4,9 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import torch
+
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 from forge.data.utils import mask_messages, TuneMessage
@@ -25,7 +26,7 @@ class AlpacaToMessages(Transform):
     due to this custom logic.
 
     Args:
-        column_map (Optional[dict[str, str]]): a mapping to change the expected "instruction", "input",
+        column_map (dict[str, str] | None): a mapping to change the expected "instruction", "input",
             and "output" column names to the actual column names in the dataset. Default is None,
             keeping the default column names.
         masking_strategy (str): masking strategy to use for model training.
@@ -44,7 +45,7 @@ class AlpacaToMessages(Transform):
 
     def __init__(
         self,
-        column_map: Optional[dict[str, str]] = None,
+        column_map: dict[str, str] | None = None,
         masking_strategy: str = "train_on_all",
     ):
         self.masking_strategy = masking_strategy
@@ -157,12 +158,12 @@ def sft_iterable_dataset(
     *,
     weight: int = 1,
     message_transform: Transform,
-    shuffle_buffer_size: Optional[int] = 1000,
+    shuffle_buffer_size: int | None = 1000,
     seed: int = 42,
     num_shards_per_rank: int = 64,
-    dataset_name: Optional[str] = None,
-    filter_fn: Optional[Callable] = None,
-    filter_kwargs: Optional[dict[str, Any]] = None,
+    dataset_name: str | None = None,
+    filter_fn: Callable | None = None,
+    filter_kwargs: dict[str, Any] | None = None,
     **load_dataset_kwargs: dict[str, Any],
 ) -> HfIterableDataset:
     """
@@ -172,12 +173,12 @@ def sft_iterable_dataset(
         model_transform (Transform): Usually the tokenizer
         weight (int): Weight of the dataset. Used for sampling when interleaving datasets.
         message_transform (Transform): Transform to convert raw data to messages
-        shuffle_buffer_size (Optional[int]): Buffer size for shuffling
+        shuffle_buffer_size (int | None): Buffer size for shuffling
         seed (int): Random seed for shuffling
         num_shards_per_rank (int): Target shards per worker
-        dataset_name (Optional[str]): Name for metrics namespacing
-        filter_fn (Optional[Callable]): Filter function
-        filter_kwargs (Optional[dict[str, Any]]): Filter function kwargs
+        dataset_name (str | None): Name for metrics namespacing
+        filter_fn (Callable | None): Filter function
+        filter_kwargs (dict[str, Any] | None): Filter function kwargs
         **load_dataset_kwargs (dict[str, Any]): Args passed to load_dataset
 
     Returns:
