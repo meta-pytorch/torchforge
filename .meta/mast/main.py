@@ -11,7 +11,7 @@ import uuid
 from apps.grpo.main import main as grpo_main
 from forge.cli.config import parse
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
-from forge.controller.provisioner import init_provisioner
+from forge.controller.provisioner import get_or_create_provisioner
 
 from forge.types import (
     Launcher,
@@ -45,7 +45,7 @@ async def main(cfg: DictConfig):
         print(f"Overriding checkpoint folder to {cfg[DEFAULT_CHECKPOINT_FOLDER_KEY]}")
 
     # init mast provisioner
-    await init_provisioner(
+    await get_or_create_provisioner(
         ProvisionerConfig(
             launcher_config=LauncherConfig(
                 launcher=Launcher(cfg.get(LAUNCHER_KEY, Launcher.MAST.value)),

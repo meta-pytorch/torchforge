@@ -13,7 +13,7 @@ import torchstore as ts
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import parse
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
-from forge.controller.provisioner import init_provisioner, shutdown
+from forge.controller.provisioner import get_or_create_provisioner, shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.perf_tracker import Tracer
 from forge.types import (
@@ -164,7 +164,7 @@ async def main(cfg: DictConfig):
         trainer_dp_degree = cfg.trainer.parallelism.get("data_parallel_shard_degree", 1)
         dp_size = trainer_dp_degree if trainer_dp_degree != -1 else 1
 
-    await init_provisioner(
+    await get_or_create_provisioner(
         ProvisionerConfig(
             launcher_config=LauncherConfig(
                 launcher=cfg.get(LAUNCHER_KEY, Launcher.SLURM.value),

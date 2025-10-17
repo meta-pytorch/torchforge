@@ -18,7 +18,7 @@ from forge.actors.generator import Generator
 
 from forge.actors.trainer import RLTrainer
 from forge.cli.config import resolve_hf_hub_paths
-from forge.controller.provisioner import init_provisioner
+from forge.controller.provisioner import get_or_create_provisioner
 
 from forge.controller.service.service import uuid
 from forge.types import LauncherConfig, ProvisionerConfig
@@ -194,7 +194,7 @@ async def _setup_and_teardown(request):
         logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
 
     if cfg.get("provisioner", None) is not None:
-        await init_provisioner(
+        await get_or_create_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     await ts.initialize(strategy=ts.ControllerStorageVolumes())

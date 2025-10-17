@@ -149,7 +149,7 @@ class Generator(ForgeActor):
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # Then, grab a single host from the workers...
-        host_mesh = await host_mesh_from_proc(worker_procs)
+        host_mesh = await host_mesh_from_proc.call_one(worker_procs)
         singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
         host_mesh = host_mesh.slice(**singleton_slice)
 
@@ -488,8 +488,8 @@ class Generator(ForgeActor):
         # TODO - may want to expand stop to gracefully respond to
         # ongoing requests.
         await actor.stop.call()
-        await stop_proc_mesh(actor._worker_procs)
-        await stop_proc_mesh(actor._generator_proc)
+        await stop_proc_mesh.call_one(actor._worker_procs)
+        await stop_proc_mesh.call_one(actor._generator_proc)
 
     @endpoint
     async def save_model_params(self):

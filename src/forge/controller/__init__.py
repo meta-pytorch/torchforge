@@ -5,9 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 from .actor import ForgeActor
 from .provisioner import (
+    get_or_create_provisioner,
     get_proc_mesh,
     host_mesh_from_proc,
-    init_provisioner,
     shutdown,
     stop_proc_mesh,
 )
@@ -16,7 +16,7 @@ __all__ = [
     "ForgeActor",
     "get_proc_mesh",
     "stop_proc_mesh",
-    "init_provisioner",
     "shutdown",
     "host_mesh_from_proc",
+    "get_or_create_provisioner",
 ]

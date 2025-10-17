@@ -174,7 +174,7 @@ class ForgeActor(Actor):
         await service.__initialize__()
         service_interface = ServiceInterface(service, cls)
         # Register this service with the provisioner so it can cleanly shut this down
-        await register_service(service_interface)
+        await register_service.call_one(service_interface)
         return service_interface
 
     @endpoint
@@ -234,7 +234,7 @@ class ForgeActor(Actor):
         logger.info(f"Spawning actor {cls.__name__}")
         actor = await cls.launch(*args, **actor_kwargs)
         # Register this actor with the provisioner so it can cleanly shut this down
-        await register_actor(actor)
+        await register_actor.call_one(actor)
         return actor
 
     @classmethod
@@ -244,4 +244,4 @@ class ForgeActor(Actor):
         """
         if actor._proc_mesh is None:
             raise AssertionError("Called shutdown on a replica with no proc_mesh.")
-        await stop_proc_mesh(actor._proc_mesh)
+        await stop_proc_mesh.call_one(actor._proc_mesh)
