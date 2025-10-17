@@ -34,6 +34,12 @@ fi
 
 CONFIG_FILE="$1"
 
+# Generate a unique job name
+USER=$(whoami)
+RANDOM_SUFFIX=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 6 | head -n 1)
+JOB_NAME="${USER}-forge-${RANDOM_SUFFIX}"
+log_info "Generated job name: $JOB_NAME"
+
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -64,5 +70,10 @@ fi
 log_info "Successfully reinstalled forge package"
 
 # Launch the job
+CHECKPOINT_FOLDER=/mnt/wsfuse/teamforge/forge_runs/$JOB_NAME
 log_info "Launching MAST job..."
-PYTHONPATH=. python .meta/mast/main.py --config "$CONFIG_FILE"
+
+# Manually override the relevant checkpoint path(s)
+# This unfortunately cannot be done in the YAML itself since this should be
+# based on job name...
+PYTHONPATH=. python .meta/mast/main.py --job-name $JOB_NAME --config $CONFIG_FILE trainer.checkpoint.folder=${CHECKPOINT_FOLDER} trainer.dcp_path=${CHECKPOINT_FOLDER}
