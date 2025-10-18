@@ -20,7 +20,7 @@ from forge.types import Message
 class HuggingFaceBaseTokenizer(BaseTokenizer):
     """
     A wrapper around Hugging Face tokenizers. See https://github.com/huggingface/tokenizers
-    This can be used to load from a Hugging Face tokenizer.json file into a torchtune BaseTokenizer.
+    This can be used to load from a Hugging Face tokenizer.json file into a forge BaseTokenizer.
 
     This class will load the tokenizer.json file from tokenizer_json_path. It will
     attempt to infer BOS and EOS token IDs from config.json if possible, and if not
@@ -210,7 +210,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
     Then, it will load all special tokens and chat template from tokenizer config file.
 
     It can be used to tokenize messages with correct chat template, and it eliminates the requirement of
-    the specific ModelTokenizer and custom PromptTemplate.
+    the specific ModelTokenizer.
 
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file

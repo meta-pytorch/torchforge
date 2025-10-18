@@ -7,11 +7,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Mapping
 
-from monarch.actor import endpoint
-
-from forge.controller import ForgeActor
-
-from forge.types import Action, Message, Observation, Scalar, State
+from forge.types import Message, Observation, Scalar
 
 
 class Transform(ABC):
@@ -37,68 +33,10 @@ class Transform(ABC):
         pass
 
 
-class Environment(ABC):
-    """Abstract base class for environments.
-
-    Args:
-        transform: Optional transform that modifies observations, typically to add rewards.
-                  Can be a Transform instance or a callable for backward compatibility.
-    """
-
-    def __init__(
-        self,
-        transform: Transform | None = None,
-    ):
-        self.transform = transform
-
-    @abstractmethod
-    def reset(self) -> Observation:
-        """Reset the environment and return an initial observation."""
-        pass
-
-    @abstractmethod
-    def step(self, action: Any) -> Observation:
-        """Take a step in the environment and return an observation."""
-        pass
-
-    @property
-    @abstractmethod
-    def state(self) -> State:
-        """Get the current state of the environment."""
-        pass
-
-    def _apply_transform(self, observation: Observation) -> Observation:
-        """Apply the transform to an observation if one is provided."""
-        if self.transform is not None:
-            return self.transform(observation)
-        return observation
-
-
-class Policy(ForgeActor, ABC):
-    """Abstract interface for policies."""
-
-    @endpoint
-    @abstractmethod
-    async def generate(self, request: Observation) -> Action:
-        """Generate an action given a state/request."""
-        pass
-
-    @endpoint
-    @abstractmethod
-    async def update_weights(self, policy_version: int):
-        """Update the policy weights.
-
-        Args:
-            policy_version: The version number to update to.
-        """
-        pass
-
-
 class BaseTokenizer(ABC):
     """
     Abstract token encoding model that implements ``encode`` and ``decode`` methods.
-    See :class:`~torchtune.modules.transforms.tokenizers.SentencePieceBaseTokenizer` and
-    :class:`~torchtune.modules.transforms.tokenizers.TikTokenBaseTokenizer` for example implementations of this protocol.
+    See :class:`forge.data.HuggingFaceModelTokenizer for an example implementation of this protocol.
     """
 
     @abstractmethod
@@ -133,7 +71,7 @@ class BaseTokenizer(ABC):
 class ModelTokenizer(ABC):
     """
     Abstract tokenizer that implements model-specific special token logic in
-    the ``tokenize_messages`` method. See :class:`~torchtune.models.llama3.Llama3Tokenizer`
+    the ``tokenize_messages`` method. See :class:`forge.data.HuggingFaceModelTokenizer`
     for an example implementation of this protocol.
     """
 
@@ -210,10 +148,3 @@ class Reward(ABC):
     def __call__(self, observation: Observation) -> float:
         """Compute a reward for an observation."""
         pass
-
-
-# TODO
-# class RLLoss(ABC):
-
-# class SFTLoss(ABC): # inherit from titan loss
-# from torchtitan.components.loss import LossFunction

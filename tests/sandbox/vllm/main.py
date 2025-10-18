@@ -14,13 +14,13 @@ import asyncio
 import os
 
 from forge.actors.generator import Generator
-from forge.cli.config import parse
 
 from forge.controller.provisioner import init_provisioner, shutdown
 
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import parse
 from omegaconf import DictConfig
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
@@ -33,7 +33,7 @@ async def run(cfg: DictConfig):
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:

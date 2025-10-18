@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from forge.cli.config import resolve_hf_hub_paths
+from forge.util.config import resolve_hf_hub_paths
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -39,7 +39,7 @@ from omegaconf import DictConfig, OmegaConf
         ({"level1": {"level2": {"model": "hf://deep/model"}}}, [("deep/model",)]),
     ],
 )
-@patch("forge.cli.config.snapshot_download")
+@patch("forge.util.config.snapshot_download")
 def test_hf_path_resolution(mock_download, config_data, expected_calls):
     """Test hf:// path resolution in various data structures."""
     mock_download.return_value = "/fake/cache/model"
@@ -78,7 +78,7 @@ def test_non_hf_paths_unchanged(config_data):
 
 
 # Cache behavior tests
-@patch("forge.cli.config.snapshot_download")
+@patch("forge.util.config.snapshot_download")
 def test_cache_hit_scenario(mock_download):
     """Test behavior when model is already cached."""
     mock_download.return_value = "/fake/cache/model"
@@ -93,7 +93,7 @@ def test_cache_hit_scenario(mock_download):
     assert result.model == "/fake/cache/model"
 
 
-@patch("forge.cli.config.snapshot_download")
+@patch("forge.util.config.snapshot_download")
 def test_cache_miss_scenario(mock_download):
     """Test behavior when model is not cached."""
     from huggingface_hub.utils import LocalEntryNotFoundError
@@ -145,7 +145,7 @@ def test_invalid_hf_urls(invalid_hf_url, expected_error):
     assert expected_error in str(exc_info.value)
 
 
-@patch("forge.cli.config.snapshot_download")
+@patch("forge.util.config.snapshot_download")
 def test_download_failure_handling(mock_download):
     """Test error handling when download fails."""
     mock_download.side_effect = Exception("Network error: Repository not found")
@@ -159,7 +159,7 @@ def test_download_failure_handling(mock_download):
 
 
 # Integration test with mixed data types
-@patch("forge.cli.config.snapshot_download")
+@patch("forge.util.config.snapshot_download")
 def test_complex_real_world_config(mock_download):
     """Test with a realistic complex configuration."""
     mock_download.return_value = "/fake/cache/model"

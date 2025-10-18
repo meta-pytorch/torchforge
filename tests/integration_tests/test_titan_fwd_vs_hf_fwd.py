@@ -25,9 +25,9 @@ import numpy as np
 import torch
 
 from forge.actors.reference_model import ReferenceModel
-from forge.cli.config import _resolve_hf_model_path
 from forge.controller import ForgeActor
 from forge.controller.provisioner import shutdown
+from forge.util.config import _resolve_hf_model_path
 from monarch.actor import endpoint
 from torchtitan.config.job_config import Checkpoint, Compile, Model, Parallelism
 from transformers import AutoModelForCausalLM, AutoTokenizer
