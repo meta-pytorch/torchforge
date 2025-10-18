@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import torch
 import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint.metadata import Metadata as DcpMeta
+from torchstore.transport.buffers import rdma_available
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -69,3 +70,8 @@ def extract_param_name(key: str) -> str:
 
 def get_dcp_whole_state_dict_key(policy_version: int) -> str:
     return f"{get_param_prefix(policy_version)}{KEY_DELIM}{DCP_WHOLE_STATE_TAG}"
+
+
+def rdma_enabled() -> bool:
+    """Return if TorchStore thinks we're using RDMA"""
+    return rdma_available()
