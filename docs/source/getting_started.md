@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 # Getting Started
 
 This guide will walk you through installing TorchForge, understanding its dependencies, verifying your setup, and running your first training job.
@@ -147,8 +143,7 @@ cd forge
 ./scripts/install.sh
 
 # Download a model
-uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
-  --output-dir /tmp/Meta-Llama-3.1-8B-Instruct
+hf download meta-llama/Meta-Llama-3.1-8B-Instruct --local-dir /tmp/Meta-Llama-3.1-8B-Instruct --exclude "original/consolidated.00.pth"
 
 # Run SFT training (requires 2+ GPUs)
 uv run forge run --nproc_per_node 2 \
@@ -177,9 +172,7 @@ Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
 2. **Run Training**
 
    ```bash
-   uv run forge run --nproc_per_node 2 \
-     apps/sft/main.py \
-     --config apps/sft/llama3_8b.yaml
+    python -m apps.sft.main --config apps/sft/llama3_8b.yaml
    ```
 
    **What's Happening:**
@@ -189,13 +182,7 @@ Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
    - **TorchTitan** handles model sharding across the 2 GPUs
    - **Monarch** coordinates the distributed training
 
-   **Expected Output:**
-   ```
-   Initializing process group...
-   Loading model from /tmp/Meta-Llama-3.1-8B-Instruct...
-   Starting training...
-   Epoch 1/10 | Step 100 | Loss: 2.45 | LR: 0.0001
-   ...
+
    ```
 
 ### Example 2: GRPO Training
@@ -244,15 +231,14 @@ checkpointing:
 - **distributed**: Multi-GPU strategy (FSDP, tensor parallel, etc.) handled by TorchTitan
 - **checkpointing**: Where and when to save model checkpoints
 
-See the configuration examples in your training scripts for detailed options.
-
 ## Next Steps
 
 Now that you have TorchForge installed and verified:
 
-1. **Explore Examples**: Check the `apps/` directory for more training examples
-2. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
-3. **API Documentation**: Explore {doc}`api` for detailed API reference
+1. **Learn the Concepts**: Read {doc}`concepts` to understand TorchForge's architecture, including Monarch, Services, and TorchStore
+2. **Explore Examples**: Check the `apps/` directory for more training examples
+4. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
+5. **API Documentation**: Explore {doc}`api` for detailed API reference
 
 ## Getting Help
 
