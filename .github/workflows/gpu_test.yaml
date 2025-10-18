@@ -37,9 +37,8 @@ jobs:
 
           # Install dependencies
           # - jq, squashfs-tools, parallel: core enroot dependencies
-          # - fuse-overlayfs: for container filesystem operations
           # - curl, pigz, zstd: for image import operations
-          sudo dnf install -y jq squashfs-tools parallel fuse-overlayfs curl pigz zstd
+          sudo dnf install -y jq squashfs-tools parallel curl pigz zstd
 
           # Download pre-built packages
           curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v${version}/enroot-${version}-1.el8.x86_64.rpm
