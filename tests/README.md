@@ -5,8 +5,8 @@ This directory contains tests for the forge project, including unit tests and in
 ## Test Structure
 
 - `unit_tests/`: Contains unit tests for individual components
-- `integration_tests.py`: Contains integration tests that test multiple components together
-- `integration_tests_h100.py`: Contains integration tests specifically designed for H100 GPUs, which utilize symmetric memory and float8.
+- `integration_tests/`: Contains integration tests that test multiple components together
+- `sandbox/`: Contains experimental adhoc scripts used for development and debugging
 - `assets/`: Contains test assets and fixtures used by the tests
 
 ## Running Tests
@@ -21,50 +21,49 @@ pip install .[dev]
 
 ### Running Integration Tests
 
-To run the integration tests:
+To run all integration tests:
 
 ```bash
-python ./tests/integration_tests.py <output_dir> [--config_dir CONFIG_DIR] [--test TEST] [--ngpu NGPU]
+pytest -s tests/integration_tests/
 ```
 
-Arguments:
-- `output_dir`: (Required) Directory where test outputs will be stored
-- `--config_dir`: (Optional) Directory containing configuration files (default: "./torchtitan/models/llama3/train_configs")
-- `--test`: (Optional) Specific test to run, use test names from the `build_test_list()` function (default: "all")
-- `--ngpu`: (Optional) Number of GPUs to use for testing (default: 8)
+To run a specific integration test file:
 
-Examples:
 ```bash
-# Run all integration tests with 8 GPUs
-python ./tests/integration_tests.py ./test_output
+pytest -s tests/integration_tests/test_vllm_policy_correctness.py
+```
 
-# Run a specific test with 4 GPUs
-python ./tests/integration_tests.py ./test_output --test default --ngpu 4
+To run a specific integration test function:
 
-# Run all tests with a custom config directory
-python ./tests/integration_tests.py ./test_output --config_dir ./my_configs
+```bash
+pytest -s tests/integration_tests/test_vllm_policy_correctness.py::test_same_output
+```
+
+Integration tests support custom options defined in `conftest.py`:
+- `--config`: Path to YAML config file for sanity check tests
+- `--use_dcp`: Override the YAML config `trainer.use_dcp` field (true/false)
+
+Example with options:
+```bash
+pytest -s tests/integration_tests/ --config ./path/to/config.yaml --use_dcp true
 ```
 
 ### Running Unit Tests
 
-To run only the unit tests:
+To run all unit tests:
 
 ```bash
 pytest -s tests/unit_tests/
 ```
 
-### Running Specific Unit Test Files
-
-To run a specific test file:
+To run a specific unit test file:
 
 ```bash
-pytest -s tests/unit_tests/test_job_config.py
+pytest -s tests/unit_tests/test_config.py
 ```
 
-### Running Specific Test Functions in Unit Tests
-
-To run a specific test function:
+To run a specific unit test function:
 
 ```bash
-pytest -s tests/unit_tests/test_job_config.py::TestJobConfig::test_command_line_args
+pytest -s tests/unit_tests/test_config.py::test_cache_hit_scenario
 ```
