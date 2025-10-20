@@ -328,16 +328,11 @@ class Generator(ForgeActor):
         hf_param_names = dcp_handle.param_names
         checkpoint_id = dcp_handle.checkpoint_id
 
-        state_dict = await self._fetch_weights_parallel(
+        return await self._fetch_weights_parallel(
             param_names=hf_param_names,
             checkpoint_id=checkpoint_id,
             tracer_name="generator_perf/_fetch_weights_dcp",
         )
-
-        # Clean up the DCP handle after fetching to shared memory
-        dcp_handle.drop()
-
-        return state_dict
 
     @endpoint
     async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
