@@ -109,3 +109,56 @@ class TestComputeLogprobs:
 
         result = compute_logprobs(logits, input_ids)
         assert result.shape == (batch_size, 0)
+
+    @pytest.mark.timeout(10)
+    def test_align_parameter_false(self):
+        """Test with align=False (pre-aligned logits)."""
+        # When align=False, logits are already aligned with input_ids
+        # logits[:, i] predicts input_ids[:, i]
+        batch_size, seq_len, vocab_size = 2, 3, 5
+        logits = torch.randn(batch_size, seq_len, vocab_size)
+        input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+
+        result = compute_logprobs(logits, input_ids, align=False)
+
+        # Manual calculation without slicing
+        expected = _textbook_log_softmax(logits, input_ids)
+
+        assert torch.allclose(result, expected, atol=1e-5)
+        assert result.shape == input_ids.shape
+
+    @pytest.mark.timeout(10)
+    def test_align_parameter_true(self):
+        """Test with align=True (default, needs slicing)."""
+        # When align=True, logits need to be sliced to align with input_ids
+        batch_size, full_seq_len, vocab_size = 2, 6, 5
+        logits = torch.randn(batch_size, full_seq_len, vocab_size)
+
+        # We want log probs for just the last 3 tokens
+        target_len = 3
+        input_ids = torch.randint(0, vocab_size, (batch_size, target_len))
+
+        result = compute_logprobs(logits, input_ids, align=True)
+
+        # Manual calculation: align=True slices logits[:, -target_len-1:-1]
+        sliced_logits = logits[:, -target_len - 1 : -1, :]
+        expected = _textbook_log_softmax(sliced_logits, input_ids)
+
+        assert torch.allclose(result, expected, atol=1e-5)
+        assert result.shape == input_ids.shape
+
+    @pytest.mark.timeout(10)
+    def test_align_comparison(self):
+        """Test that align=True properly slices logits."""
+        batch_size, seq_len, vocab_size = 1, 4, 10
+        logits = torch.randn(batch_size, seq_len, vocab_size)
+        input_ids = torch.randint(0, vocab_size, (batch_size, 2))
+
+        result_aligned = compute_logprobs(logits, input_ids, align=True)
+
+        # Manually slice the same way align=True does
+        sliced_logits = logits[:, -input_ids.size(1) - 1 : -1, :]
+        result_manual = compute_logprobs(sliced_logits, input_ids, align=False)
+
+        # Both should give the same result
+        assert torch.allclose(result_aligned, result_manual, atol=1e-5)
