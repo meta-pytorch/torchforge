@@ -13,6 +13,10 @@ import os
 import socket
 import uuid
 
+from forge.controller.launcher import BaseLauncher, get_launcher
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.types import ProcessConfig, ProvisionerConfig
+
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
@@ -28,10 +32,6 @@ from monarch.actor import (
 from monarch.tools import commands
 
 from monarch.utils import setup_env_for_distributed
-
-from forge.controller.launcher import BaseLauncher, get_launcher
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
-from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -191,7 +191,7 @@ class Provisioner(Actor):
         """
         return self._host_mesh_map[name]
 
-    # @endpoint
+    @endpoint
     async def get_proc_mesh(
         self,
         num_procs: int,
@@ -478,7 +478,7 @@ async def get_proc_mesh(
 
     """
     provisioner = await get_or_create_provisioner()
-    return await provisioner.get_proc_mesh(
+    return await provisioner.get_proc_mesh.call_one(
         num_procs=process_config.procs,
         with_gpus=process_config.with_gpus,
         num_hosts=process_config.hosts,
