@@ -157,16 +157,12 @@ python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
 
-1. **Download the Model**
-
-   ```bash
-   uv run forge download meta-llama/Meta-Llama-3.1-8B-Instruct \
-     --output-dir /tmp/Meta-Llama-3.1-8B-Instruct \
-     --ignore-patterns "original/consolidated.00.pth"
-   ```
+1. **Access the Model**
 
    ```{note}
-   Model downloads require Hugging Face authentication. Run `huggingface-cli login` first if you haven't already.
+   Model downloads are no longer required, but Hugging Face authentication is required to access the models.
+
+    Run `huggingface-cli login` first if you haven't already.
    ```
 
 2. **Run Training**
