@@ -22,8 +22,7 @@ class AlpacaToMessages(Transform):
     (or equivalent fields specified in column_map) columns. User messages are formed from the
     instruction + input columns and assistant messages are formed from the output column. Prompt
     templating is conditional on the presence of the "input" column, and thus is handled directly
-    in this transform class instead of a dedicated :class:`~torchtune.data.PromptTemplate` class
-    due to this custom logic.
+    in this transform class.
 
     Args:
         column_map (dict[str, str] | None): a mapping to change the expected "instruction", "input",

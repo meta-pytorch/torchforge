@@ -7,48 +7,45 @@
 import logging
 from typing import Optional
 
-from monarch.actor import context
+from monarch.actor import context, current_rank
 
 logger = logging.getLogger(__name__)
 
 
 def get_proc_name_with_rank(proc_name: Optional[str] = None) -> str:
     """
-    Returns a unique process identifier from Monarch actor context.
+    Returns a unique identifier for the current rank from Monarch actor context.
 
-    Format: "ActorName_wxyz_r{rank}" where:
-    - ActorName: The actor class name (e.g., "TrainActor")
-    - wxyz: Last 4 chars of world_name (unique replica hash)
-    - rank: Local rank within the replica (0, 1, 2, ...)
+    Multiple ranks from the same ProcMesh will share the same ProcMesh hash suffix,
+    but have different rank numbers.
 
-    Note: If called from a direct proccess, defaults to "client_DPROC_r0".
+    Format: "{ProcessName}_{ProcMeshHash}_r{rank}" where:
+    - ProcessName: The provided proc_name (e.g., "TrainActor") or extracted from actor_name if None.
+    - ProcMeshHash: Hash suffix identifying the ProcMesh (e.g., "1abc2def")
+    - rank: Local rank within the ProcMesh (0, 1, 2, ...)
+
+    Note: If called from the main process (e.g. main.py), returns "client_r0".
 
     Args:
-        proc_name: Optional override for actor name. If None, uses actor_id.actor_name.
+        proc_name: Optional override for process name. If None, uses actor_id.actor_name.
 
     Returns:
-        str: Unique identifier or fallback name if no context available.
+        str: Unique identifier per rank (e.g., "TrainActor_1abc2def_r0" or "client_r0").
     """
     ctx = context()
     actor_id = ctx.actor_instance.actor_id
+    actor_name = actor_id.actor_name
+    rank = current_rank().rank
 
-    # Use actor_name from actor_id if not provided
-    if proc_name is None:
-        proc_name = actor_id.actor_name
+    # If proc_name provided, extract procmesh hash from actor_name and combine
+    if proc_name is not None:
+        parts = actor_name.split("_")
+        if len(parts) > 1:
+            replica_hash = parts[-1]  # (e.g., "MyActor_1abc2def" -> "1abc2def")
+            return f"{proc_name}_{replica_hash}_r{rank}"
+        else:
+            # if a direct process (e.g. called from main), actor_name == "client" -> len(parts) == 1
+            return f"{proc_name}_r{rank}"
 
-    # Try to get world_name. Each replica has a unique value.
-    try:
-        world_name = actor_id.world_name
-        replica_id = world_name[-4:] if len(world_name) >= 4 else world_name
-    except BaseException:  # Catches pyo3_runtime.PanicException from Rust
-        # Direct proc (e.g., client) - no world_name available
-        replica_id = "DPROC"
-
-    # Get rank within the replica. NOT a global rank.
-    try:
-        rank = actor_id.rank
-    except BaseException:  # Catches pyo3_runtime.PanicException from Rust
-        # Direct proc - no rank available
-        rank = 0
-
-    return f"{proc_name}_{replica_id}_r{rank}"
+    # No proc_name override - use full actor_name with rank
+    return f"{actor_name}_r{rank}"

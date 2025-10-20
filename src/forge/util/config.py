@@ -56,22 +56,22 @@ def _merge_yaml_and_cli_args(yaml_args: Namespace, cli_args: list[str]) -> DictC
     cli args, respectively) and merges them into a single OmegaConf DictConfig.
 
     If a cli arg overrides a yaml arg with a _component_ field, the cli arg can
-    be specified with the parent field directly, e.g., model=torchtune.models.lora_llama2_7b
-    instead of model._component_=torchtune.models.lora_llama2_7b. Nested fields within the
+    be specified with the parent field directly, e.g., model=my_module.models.my_model
+    instead of model._component_=my_module.models.my_model. Nested fields within the
     component should be specified with dot notation, e.g., model.lora_rank=16.
 
     Example:
         >>> config.yaml:
         >>>     a: 1
         >>>     b:
-        >>>       _component_: torchtune.models.my_model
+        >>>       _component_: my_module.models.my_model
         >>>       c: 3
 
-        >>> tune full_finetune --config config.yaml b=torchtune.models.other_model b.c=4
+        >>> python main.py --config config.yaml b=my_module.models.other_model b.c=4
         >>> yaml_args, cli_args = parser.parse_known_args()
         >>> conf = _merge_yaml_and_cli_args(yaml_args, cli_args)
         >>> print(conf)
-        >>> {"a": 1, "b": {"_component_": "torchtune.models.other_model", "c": 4}}
+        >>> {"a": 1, "b": {"_component_": "my_module.models.other_model", "c": 4}}
 
     Args:
         yaml_args (Namespace): Namespace containing args from yaml file, components

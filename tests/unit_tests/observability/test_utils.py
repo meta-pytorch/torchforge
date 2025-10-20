@@ -6,55 +6,49 @@
 
 """Tests for observability utility functions."""
 
-import pytest
+from forge.controller.actor import ForgeActor
 
 from forge.observability.utils import get_proc_name_with_rank
-from monarch.actor import Actor, endpoint, this_host
+from monarch.actor import endpoint
 
 
-class UtilActor(Actor):
+class UtilActor(ForgeActor):
     """Actor for testing get_proc_name_with_rank in spawned context."""
 
     @endpoint
     async def get_name(self) -> str:
         return get_proc_name_with_rank()
 
-    @endpoint
-    async def get_name_with_override(self, name: str) -> str:
-        return get_proc_name_with_rank(proc_name=name)
-
 
 class TestGetProcNameWithRank:
     """Tests for get_proc_name_with_rank utility."""
 
     def test_direct_proc(self):
-        """Direct proc (test process) should return client_DPROC_r0."""
-        result = get_proc_name_with_rank()
-        assert result == "client_DPROC_r0"
+        """Direct proc should return 'client_r0'."""
+        assert get_proc_name_with_rank() == "client_r0"
 
     def test_direct_proc_with_override(self):
         """Direct proc with override should use provided name."""
         result = get_proc_name_with_rank(proc_name="MyProcess")
-        assert result == "MyProcess_DPROC_r0"
+        assert result == "MyProcess_r0"
 
-    @pytest.mark.timeout(10)
-    @pytest.mark.asyncio
-    async def test_spawned_actor(self):
-        """Spawned actor should return ActorName_replica_rank format."""
-        p = this_host().spawn_procs(per_host={"cpus": 2})
-        actor = p.spawn("UtilActor", UtilActor)
+    # TODO (felipemello): currently not working with CI wheel, but passes locally
+    # reactive once wheel is updated with new monarch version
+    # @pytest.mark.timeout(10)
+    # @pytest.mark.asyncio
+    # async def test_replicas(self):
+    #     """Test service with replicas returns unique names and hashes per replica."""
+    #     actor = await UtilActor.options(
+    #         procs=1, num_replicas=2, with_gpus=False
+    #     ).as_service()
+    #     results = await actor.get_name.fanout()
 
-        # no override
-        results = await actor.get_name.call()
+    #     assert len(results) == 2
+    #     assert len(set(results)) == 2  # All names are unique
+    #     for name in results:
+    #         assert name.startswith("UtilActor")
+    #         assert name.endswith("_r0")
 
-        assert len(results) == 2
-        for i, (rank_info, result) in enumerate(results):
-            replica_id = result.split("_")[1]
-            assert result == f"UtilActor_{replica_id}_r{i}"
-
-        # override name
-        results = await actor.get_name_with_override.call("CustomName")
-
-        for i, (rank_info, result) in enumerate(results):
-            replica_id = result.split("_")[1]
-            assert result == f"CustomName_{replica_id}_r{i}"
+    #     # Extract hashes from names (format: ActorName_replicaIdx_hash_r0)
+    #     hashes = [name.split("_")[-2] for name in results]
+    #     assert hashes[0] != hashes[1]  # Hashes are different between replicas

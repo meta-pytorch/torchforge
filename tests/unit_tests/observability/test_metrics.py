@@ -427,23 +427,26 @@ class TestMetricActorDisabling:
 
         # Get results to check
         proc_has_fetcher = hasattr(procs, "_local_fetcher")
-        global_has_fetcher = await global_logger.has_fetcher.call_one(procs)
+        proc_id = procs._uid if hasattr(procs, "_uid") else None
+        global_has_fetcher = (
+            await global_logger.has_fetcher.call_one(proc_id) if proc_id else False
+        )
 
         # Assert based on expected behavior
         if should_register_fetchers:
             assert (
                 proc_has_fetcher
-            ), f"Expected process to have _local_fetcher when {env_var_value=}"
+            ), f"Expected process to have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
             assert (
                 global_has_fetcher
-            ), f"Expected global logger to have fetcher registered when {env_var_value=}"
+            ), f"Expected global logger to have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
         else:
             assert (
                 not proc_has_fetcher
-            ), f"Expected process to NOT have _local_fetcher when {env_var_value=}"
+            ), f"Expected process to NOT have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
             assert (
                 not global_has_fetcher
-            ), f"Expected global logger to NOT have fetcher registered when {env_var_value=}"
+            ), f"Expected global logger to NOT have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

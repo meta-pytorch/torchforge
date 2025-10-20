@@ -39,7 +39,6 @@ class TestGeneratorConfig(unittest.TestCase):
         # Default factories
         self.assertIsInstance(generator.engine_args, EngineArgs)
         self.assertIsInstance(generator.sampling_params, SamplingParams)
-        self.assertIsNone(generator.available_devices)
 
         # Worker defaults
         self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
@@ -58,46 +57,43 @@ class TestGeneratorConfig(unittest.TestCase):
         reason="Import error, likely due to missing dependencies on CI.",
     )
     def test_generator_with_dict_configs(self):
-        """Generator accepts dicts for engine_config and sampling_config, including nested dicts."""
         from forge.actors.generator import Generator
         from vllm.engine.arg_utils import EngineArgs
         from vllm.sampling_params import SamplingParams
 
-        # Test with nested dict structure
         engine_dict = {
-            "model": "test-model-6789",
-            "tensor_parallel_size": 7777,
-            "pipeline_parallel_size": 8888,
+            "model": "Qwen/Qwen3-0.6B",
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
             "enforce_eager": True,
-            "gpu_memory_utilization": 0.9,
-            "max_model_len": 4096,
+            "gpu_memory_utilization": 0.1,
+            "max_model_len": 1024,
         }
 
         sampling_dict = {
-            "n": 1357,
-            "max_tokens": 2468,
+            "n": 2,
+            "max_tokens": 32,
         }
 
         generator = Generator(
             engine_args=engine_dict,
             sampling_params=sampling_dict,
-            available_devices="test-gpu-device-abcd",
         )
 
         self.assertIsInstance(generator.engine_args, EngineArgs)
         self.assertIsInstance(generator.sampling_params, SamplingParams)
 
         # Test basic fields
-        self.assertEqual(generator.engine_args.model, "test-model-6789")
-        self.assertEqual(generator.engine_args.tensor_parallel_size, 7777)
-        self.assertEqual(generator.engine_args.pipeline_parallel_size, 8888)
-        self.assertEqual(generator.engine_args.gpu_memory_utilization, 0.9)
-        self.assertEqual(generator.engine_args.max_model_len, 4096)
+        self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
+        self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
+        self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
+        self.assertEqual(generator.engine_args.gpu_memory_utilization, 0.1)
+        self.assertEqual(generator.engine_args.max_model_len, 1024)
         self.assertTrue(generator.engine_args.enforce_eager)
         self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
-        self.assertEqual(generator.sampling_params.n, 1357)
-        self.assertEqual(generator.sampling_params.max_tokens, 2468)
+        self.assertEqual(generator.sampling_params.n, 2)
+        self.assertEqual(generator.sampling_params.max_tokens, 32)
 
     @pytest.mark.skipif(
         _import_error(),
@@ -109,16 +105,14 @@ class TestGeneratorConfig(unittest.TestCase):
 
         yaml_content = """
         engine_args:
-          model: "yaml-test-model-9876"
-          tensor_parallel_size: 1234
-          pipeline_parallel_size: 5678
+          model: "Qwen/Qwen3-0.6B"
+          tensor_parallel_size: 1
+          pipeline_parallel_size: 1
           enforce_eager: true
 
         sampling_params:
-          n: 2468
-          max_tokens: 1357
-
-        available_devices: "yaml-test-device-xyz"
+          n: 2
+          max_tokens: 32
         """
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -129,16 +123,14 @@ class TestGeneratorConfig(unittest.TestCase):
                 config = yaml.safe_load(yaml_file)
 
             generator = Generator(**config)
-            self.assertEqual(generator.engine_args.model, "yaml-test-model-9876")
-            self.assertEqual(generator.engine_args.tensor_parallel_size, 1234)
-            self.assertEqual(generator.engine_args.pipeline_parallel_size, 5678)
+            self.assertEqual(generator.engine_args.model, "Qwen/Qwen3-0.6B")
+            self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
+            self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
             self.assertTrue(generator.engine_args.enforce_eager)
             self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
-            self.assertEqual(generator.sampling_params.n, 2468)
-            self.assertEqual(generator.sampling_params.max_tokens, 1357)
-
-            self.assertEqual(generator.available_devices, "yaml-test-device-xyz")
+            self.assertEqual(generator.sampling_params.n, 2)
+            self.assertEqual(generator.sampling_params.max_tokens, 32)
 
 
 if __name__ == "__main__":

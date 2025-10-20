@@ -169,7 +169,7 @@ class ForgeActor(Actor):
         }
         cfg = ServiceConfig(**cfg_kwargs)
 
-        logger.info("Spawning Service for %s", cls.__name__)
+        logger.info(f"Spawning service {cls.__name__}")
         service = Service(cfg, cls, actor_args, actor_kwargs)
         await service.__initialize__()
         service_interface = ServiceInterface(service, cls)
@@ -231,7 +231,7 @@ class ForgeActor(Actor):
         `procs`) are used to construct a ProcessConfig instance.
         If no configuration was stored, defaults to a single process with no GPU.
         """
-        logger.info("Spawning single actor %s", cls.__name__)
+        logger.info(f"Spawning actor {cls.__name__}")
         actor = await cls.launch(*args, **actor_kwargs)
         # Register this actor with the provisioner so it can cleanly shut this down
         await register_actor(actor)

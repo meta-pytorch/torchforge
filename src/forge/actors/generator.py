@@ -13,16 +13,17 @@ import sys
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
+from typing import Optional
 
 import torch
 import torchstore as ts
-from monarch.actor import current_rank, endpoint, ProcMesh
+from monarch.actor import current_rank, endpoint, ProcMesh, this_host
+
 from vllm.config import VllmConfig
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
 from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
-from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput, RequestOutput
 from vllm.sampling_params import RequestOutputKind, SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
@@ -47,24 +48,29 @@ from forge.actors._torchstore_utils import (
     get_param_key,
     get_param_prefix,
     load_tensor_from_dcp,
+    rdma_available,
 )
 
-from forge.controller import ForgeActor, get_proc_mesh, stop_proc_mesh
+from forge.controller import (
+    ForgeActor,
+    get_proc_mesh,
+    host_mesh_from_proc,
+    stop_proc_mesh,
+)
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
-from forge.env import TORCHSTORE_USE_RDMA
-from forge.interfaces import Policy as GeneratorInterface
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import ProcessConfig
+from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
 @dataclass
-class Generator(GeneratorInterface):
-    """Instance of a vLLM-based Generator.
+class Generator(ForgeActor):
+    """Instance of a vLLM-based generator.
 
     This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
     main difference is that all communications are controlled here via Monarch's proc meshes.
@@ -72,11 +78,10 @@ class Generator(GeneratorInterface):
     Args:
         engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
-        available_devices (str): The available devices to use for the vLLM engine.
-        use_dcp (bool): Whether to use DCP for NFS-based weight sync.
+        use_dcp_for_weight_sync (bool): Whether to use DCP for NFS-based weight sync. Default depends on
+            whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled.
 
     Example:
-
     >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
     ...     engine_args=EngineArgs(...),
     ...     sampling_params=SamplingParams(...),
@@ -89,50 +94,52 @@ class Generator(GeneratorInterface):
 
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
-    available_devices: str | None = None
-    use_dcp: bool = (
-        TORCHSTORE_USE_RDMA.get_value() == 0
-    )  # torchstore currently only accepts 0 or 1
-    # Remaining variables are initialized in self.setup()
-    lora_request: LoRARequest | None = None
-    tokenization_kwargs: dict = field(default_factory=dict)
-    generator_worker: GeneratorWorker | None = None
+    use_dcp_for_weight_sync: bool | None = None
+    prefetch_weights_to_shm: bool = True
+    n_fetcher_procs: int = 8
 
     def __post_init__(self):
         super().__init__()
         self._run_task: asyncio.Task | None = None
         self._generator_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
+        self.worker: GeneratorWorker | None = None
         self.running = False
         self.generator_version: int = 0
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
         self.engine_args._is_v1_supported_oracle = lambda *_: True
+        self.vllm_config = self.engine_args.create_engine_config(UsageContext.LLM_CLASS)
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
+        if self.use_dcp_for_weight_sync is None:
+            self.use_dcp_for_weight_sync = not rdma_available()
+        logger.debug(f"{self.use_dcp_for_weight_sync=}")
+
+    @endpoint
+    async def get_vllm_config(self) -> VllmConfig:
+        return self.vllm_config
+
+    @endpoint
+    async def register_worker(self, worker: GeneratorWorker) -> None:
+        self.worker = worker
+        logger.debug("Registered GeneratorWorker on Generator.")
+
     @classmethod
     async def launch(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Generator"],
-        *,
-        engine_args: EngineArgs | Mapping = EngineArgs(),
-        sampling_params: SamplingParams | Mapping = SamplingParams(),
-        available_devices: str | None = None,
-        use_dcp: bool = (
-            TORCHSTORE_USE_RDMA.get_value() == 0
-        ),  # torchstore currently only accepts 0 or 1
+        *args,
         **kwargs,
     ) -> "Generator":
-        """Launch the Generator with its workers.
+        """Custom launch for the Generator service with its workers.
 
         We overwrite the default Service launch method in order to setup Actors (GeneratorWorker) within this "coordinating" Actor.
         We first create a proc_mesh for the workers, then a proc_mesh for the generator, and then we spawn the workers
         and the generator in setup.
-
-        The args here generally should match those in the `__init__` method of the Generator class.
         """
         # Note: get_proc_mesh will set MASTER_ADDR, MASTER_PORT and CUDA_VISIBLE_DEVICES
         process_config: ProcessConfig = ProcessConfig(
@@ -141,60 +148,50 @@ class Generator(GeneratorInterface):
             with_gpus=cls.with_gpus,
             mesh_name=cls.mesh_name,
         )
+
+        # First, spawn the worker processes which may or may not be
+        # on remote hosts.
         worker_procs = await get_proc_mesh(process_config=process_config)
 
-        # TODO - issues/144 we will want to ensure colocation with workers
-        # We're currently locating the Generator on the local host proc mesh
-        # vLLM initialization without setting env variables at proc_mesh creation
-        # level leads to issues.
-        # Once we can create multiple proc meshes on a host mesh, we can ensure
-        # host colocation
+        # Then, grab a single host from the workers...
+        host_mesh = await host_mesh_from_proc(worker_procs)
+        singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
+        host_mesh = host_mesh.slice(**singleton_slice)
+
+        # We ask the provisioner for a single process on a single host
         generator_proc_config = copy(process_config)
         generator_proc_config.procs = 1
-        generator_proc_config.hosts = None
         generator_proc_config.with_gpus = False
-        generator_proc = await get_proc_mesh(process_config=generator_proc_config)
-
-        if isinstance(engine_args, Mapping):
-            engine_args = EngineArgs(**engine_args)
-            engine_args._is_v1_supported_oracle = lambda *_: True  # Always default on
-            logger.debug(f"Resolved engine args: {engine_args}")
-
-        vllm_config = engine_args.create_engine_config(UsageContext.LLM_CLASS)
-        workers = worker_procs.spawn(
-            "vllm_worker", GeneratorWorker, vllm_config=vllm_config, use_dcp=use_dcp
+        generator_proc = await get_proc_mesh(
+            process_config=generator_proc_config, host_mesh=host_mesh
         )
-
-        if isinstance(sampling_params, Mapping):
-            sampling_params = SamplingParams.from_optional(**sampling_params)
-            sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
-            logger.debug(f"Resolved sampling params: {sampling_params}")
-
         # TODO - expand support so name can stick within kwargs
         actor_name = kwargs.pop("name", cls.__name__)
         generator = generator_proc.spawn(
             actor_name,
             cls,
-            engine_args=engine_args,
-            sampling_params=sampling_params,
-            available_devices=available_devices,
-            generator_worker=workers,
+            *args,
             **kwargs,
         )
+
+        vllm_config = (
+            await generator.get_vllm_config.call_one()
+        )  # Config should be the same across all actors
+        worker = worker_procs.spawn(
+            "vllm_worker", GeneratorWorker, vllm_config=vllm_config
+        )
+        await worker.setup.call()
+        await generator.register_worker.call(worker)
+
         generator._generator_proc = generator_proc
         generator._worker_procs = worker_procs
         await generator.setup.call()
+
         return generator
 
     @endpoint
     async def setup(self):
         """Mirrors the __init__ of vLLM's LLMEngine."""
-        if self.generator_worker is None:
-            raise RuntimeError(
-                "Geneator worker should not be None. Usually it would be attached to Generator in the ``launch`` method."
-            )
-        await self.generator_worker.setup.call()
-
         self.request_id = 0
         self.requests: dict[str, tuple[ParentRequest | None, asyncio.Future]] = {}
 
@@ -204,45 +201,90 @@ class Generator(GeneratorInterface):
         self.request_lock = asyncio.Condition()  # Guard for accepting_requests
         self.update_lock = asyncio.Condition()  # Guard for updating requests
 
-        vllm_config: VllmConfig = self.engine_args.create_engine_config(
-            UsageContext.LLM_CLASS
-        )
-        self.max_model_len = vllm_config.model_config.max_model_len
-
         # Setup processors
         # TODO: move all processing to the Environment
         # TODO: add support for `log_stats` and `mm_registry`
         tokenizer = init_tokenizer_from_configs(
-            model_config=vllm_config.model_config,
-            scheduler_config=vllm_config.scheduler_config,
-            lora_config=vllm_config.lora_config,
+            model_config=self.vllm_config.model_config,
+            scheduler_config=self.vllm_config.scheduler_config,
+            lora_config=self.vllm_config.lora_config,
         )
         self.processor = Processor(
-            vllm_config=vllm_config, tokenizer=tokenizer, mm_registry=None
+            vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
         # Configure KV caches
-        kv_cache_configs = await self.generator_worker.setup_kv_cache.call()
+        kv_cache_configs = await self.worker.setup_kv_cache.call()
         _, kv_cache_config = next(kv_cache_configs.items())
-        vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
-        vllm_config.cache_config.num_cpu_blocks = 0
+        self.vllm_config.cache_config.num_gpu_blocks = kv_cache_config.num_blocks
+        self.vllm_config.cache_config.num_cpu_blocks = 0
 
         # Setup scheduler
         # TODO: Add support for `log_stats`
-        structured_output_manager = StructuredOutputManager(vllm_config)
+        structured_output_manager = StructuredOutputManager(self.vllm_config)
         self.scheduler = Scheduler(
-            vllm_config=vllm_config,
+            vllm_config=self.vllm_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
             include_finished_set=False,
             log_stats=None,
         )
         self._start_processing()
+        if self.prefetch_weights_to_shm:
+            self._spawn_fetchers()
+
+    def _spawn_fetchers(self):
+        """Spawn weight fetchers that prefetch weights from torchstore to shared memory."""
+        # TODO: this assumes the generator is on the same host as the worker
+        # and only works for single host generators. Figure out how to support
+        # generators with workers spanned across multiple hosts.
+        fetcher_procs = this_host().spawn_procs(
+            per_host={"procs": self.n_fetcher_procs}
+        )
+        self._fetcher_procs = fetcher_procs
+        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
 
     def _start_processing(self):
         if self._run_task is None or self._run_task.done():
             self._run_task = asyncio.create_task(self.run())
+
+    async def _drop_shared_memory(self, state_dict: dict[str, SharedTensorHandle]):
+        for handle in state_dict.values():
+            handle.drop()
+
+    async def _fetch_weights(
+        self,
+        version: int,
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("generator_perf/_fetch_weights")
+        t.start()
+        prefix = get_param_prefix(version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+
+        n_fetchers = self.weight_fetchers.size()
+
+        def split_keys(keys):
+            return [keys[i::n_fetchers] for i in range(n_fetchers)]
+
+        futures = []
+        for i, names in enumerate(split_keys(hf_param_names)):
+            fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
+                version=version, param_names=names
+            )
+            futures.append(fut)
+
+        sub_state_dicts = [await fut for fut in futures]
+
+        state_dict = {}
+        for sd in sub_state_dicts:
+            state_dict.update(sd)
+
+        t.stop()
+
+        return state_dict
 
     @endpoint
     async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
@@ -262,11 +304,11 @@ class Generator(GeneratorInterface):
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)
 
-        tokenization_kwargs = self.tokenization_kwargs or {}
+        tokenization_kwargs = {}
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
         truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
         _validate_truncation_size(
-            self.max_model_len,
+            self.vllm_config.model_config.max_model_len,
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
@@ -275,7 +317,6 @@ class Generator(GeneratorInterface):
             prompt={"prompt": prompt},
             params=self.sampling_params,
             arrival_time=None,
-            lora_request=self.lora_request,
             tokenization_kwargs=tokenization_kwargs,
             trace_headers=None,
             priority=priority,
@@ -360,9 +401,7 @@ class Generator(GeneratorInterface):
         self.running = True
         while self.running:
             scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.generator_worker.execute_model.call(
-                scheduler_output
-            )
+            worker_outputs = await self.worker.execute_model.call(scheduler_output)
 
             # The results of `execute_model` are gathered on the driver rank (rank 0)
             _, worker_output = next(worker_outputs.items())
@@ -400,6 +439,12 @@ class Generator(GeneratorInterface):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
+        # TODO: enable shared memory prefetch for DCP-based weight sync
+        if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
+            logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
+            fetch_fut = asyncio.create_task(self._fetch_weights(version))
+        else:
+            fetch_fut = None
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -431,8 +476,19 @@ class Generator(GeneratorInterface):
             )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
-            # Call update_weights on every generator_worker
-            await self.generator_worker.update_weights.call(version=version)
+
+            if fetch_fut is not None:
+                t = Tracer("generator_perf/waiting_for_fetch_weights")
+                t.start()
+                fetched_weights = await fetch_fut
+                t.stop()
+                # Call update_weights on every policy_worker
+                await self.worker.update_weights.call(
+                    shared_memory_state_dict=fetched_weights
+                )
+                await self._drop_shared_memory(fetched_weights)
+            else:
+                await self.worker.update_weights.call(version=version)
             self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
@@ -506,18 +562,19 @@ class Generator(GeneratorInterface):
         await actor.stop.call()
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._generator_proc)
+        await stop_proc_mesh(actor._fetcher_procs)
 
     @endpoint
     async def _test_save_model_params(self):
         """Save model parameters before weight update, used for tesing purposes only."""
         logger.info("[Generator] save model parameters for testing.")
-        await self.generator_worker._test_save_model_params.call()
+        await self.worker._test_save_model_params.call()
 
     @endpoint
     async def _test_validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[Generator] start validating model parameters.")
-        return await self.generator_worker._test_validate_model_params.call(validate_fn)
+        return await self.worker._test_validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -530,16 +587,8 @@ class GeneratorWorker(ForgeActor):
     """
 
     vllm_config: VllmConfig
-    state_dict_key: str = "model_state_dict"
-    # TODO: remove this later since no plumbing exists to change this value.
-    # Also, whether to use dcp or not can be inferred from torchstore get() call.
-    use_dcp: bool = True
-
-    # used for tesing purposes only
+    # TODO: Remove below param
     _test_prev_params = {}
-
-    def __post_init__(self):
-        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -597,16 +646,45 @@ class GeneratorWorker(ForgeActor):
         return self.worker.execute_model(schedule)
 
     @endpoint
-    async def update_weights(self, version: int) -> None:
+    async def update_weights(
+        self,
+        version: Optional[int] = None,
+        *,
+        shared_memory_state_dict: Optional[dict[str, SharedTensorHandle]] = None,
+    ) -> None:
         model = self.worker.model_runner.model
+        if shared_memory_state_dict is not None:
+            logger.info("[PolicyWorker] update weights from shared memory.")
+            t = Tracer(
+                "generator_worker_perf/update_weights_from_shared_memory", timer="gpu"
+            )
+            t.start()
+            loaded_weights = set()
+            for name, param_handle in shared_memory_state_dict.items():
+                # Use context manager for automatic cleanup
+                with param_handle.to_shared_tensor() as shared_tensor:
+                    param = shared_tensor.tensor
+                    loaded = model.load_weights([(name, param)])
+                    del param
+                    loaded_weights.update(loaded)
+            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
+            t.stop()
+            return
+        # normal update_weights without shared memory prefetching
+        if version is None:
+            raise ValueError(
+                "version must be provided if not using shared_memory_state_dict"
+            )
+        logger.info("[PolicyWorker] update weights from torchstore.")
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
         loaded_weights = set()
-        t = Tracer("worker_perf/update_weights", timer="gpu")
+        t = Tracer("generator_worker_perf/update_weights_from_torchstore", timer="gpu")
         t.start()
-        # Entire state dict is stored in a single DCP handle
-        if dcp_whole_state_dict_key in matching_keys:
+
+        if use_dcp_for_weight_sync:
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
             hf_param_names = dcp_handle.param_names
             for name in hf_param_names:
@@ -614,7 +692,7 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
-        else:  # Load each parameter from torchstore directly without DCP
+        else:
             hf_param_names = [extract_param_name(key) for key in matching_keys]
             # We can't pass a generator since vllm load_weights is not async.
             # Instead, we just call load_weights with one parameter at a time.
@@ -624,6 +702,7 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
+
         t.stop()
 
     @endpoint
@@ -644,3 +723,27 @@ class GeneratorWorker(ForgeActor):
         return validate_fn(
             self._test_prev_params, self.worker.model_runner.model, logger
         )
+
+
+class _WeightFetcher(ForgeActor):
+    """Fetches weights from torchstore and loads them into shared memory.
+    This has to be colocated with the GeneratorWorker."""
+
+    @endpoint
+    async def fetch(
+        self,
+        *,
+        version: int,
+        param_names: list[str],
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and load them into shared memory."""
+        sd = {}
+        for name in param_names:
+            param_key = get_param_key(version, name)
+            param = await ts.get(param_key)
+            # Use context manager to ensure cleanup after getting handle
+            with SharedTensor(tensor=param) as shared_tensor:
+                handle = shared_tensor.get_handle()
+                sd[name] = handle
+            del param  # Explicitly free the tensor after copying to shared memory
+        return sd

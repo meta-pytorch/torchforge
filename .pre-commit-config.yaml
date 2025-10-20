@@ -47,3 +47,9 @@ repos:
   hooks:
     - id: pydoclint
       args: [--config=pyproject.toml]
+
+- repo: https://github.com/fastai/nbdev.git
+  rev: 2.4.5
+  hooks:
+    - id: nbdev_clean
+      args: [--clear_all]
