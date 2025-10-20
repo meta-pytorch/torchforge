@@ -1,1 +1,0 @@
-CHANNEL="test"
