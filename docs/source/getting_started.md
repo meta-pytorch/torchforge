@@ -178,9 +178,6 @@ Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
    - **TorchTitan** handles model sharding across the 2 GPUs
    - **Monarch** coordinates the distributed training
 
-
-   ```
-
 ### Example 2: GRPO Training
 
 Train a model using reinforcement learning with GRPO. **Requires: 3+ GPUs**
