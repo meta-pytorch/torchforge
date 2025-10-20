@@ -9,7 +9,10 @@ import torch.nn.functional as F
 
 
 def compute_logprobs(
-    logits: torch.Tensor, input_ids: torch.Tensor, temperature: float = 1.0, align: bool = True
+    logits: torch.Tensor,
+    input_ids: torch.Tensor,
+    temperature: float = 1.0,
+    align: bool = True,
 ) -> torch.Tensor:
     """
     Computes the log probabilities of the input tokens given the model logits and temperature.
