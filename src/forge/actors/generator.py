@@ -258,15 +258,15 @@ class Generator(ForgeActor):
         param_names: list[str],
         *,
         version: int | None = None,
-        checkpoint_id: str | None = None,
+        dcp_key: str | None = None,
         tracer_name: str,
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights in parallel using multiple fetcher processes.
 
         Args:
             param_names: List of parameter names to fetch
-            version: Version number for individual tensor loading (mutually exclusive with checkpoint_id)
-            checkpoint_id: DCP checkpoint ID for DCP loading (mutually exclusive with version)
+            version: Version number for individual tensor loading (mutually exclusive with dcp_key)
+            dcp_key: Torchstore key for DCP handle (mutually exclusive with version)
             tracer_name: Name for the performance tracer
 
         Returns:
@@ -282,9 +282,9 @@ class Generator(ForgeActor):
 
         futures = []
         for i, names in enumerate(split_keys(param_names)):
-            if checkpoint_id is not None:
+            if dcp_key is not None:
                 fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
-                    checkpoint_id=checkpoint_id, param_names=names
+                    dcp_key=dcp_key, param_names=names
                 )
             else:
                 fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
@@ -322,15 +322,15 @@ class Generator(ForgeActor):
         version: int,
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights from DCP checkpoint and return a dict of {name: SharedTensorHandle}."""
-        # Get the DCP handle from torchstore
+        # Get the DCP handle from torchstore to access param names
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         dcp_handle = await ts.get(dcp_whole_state_dict_key)
         hf_param_names = dcp_handle.param_names
-        checkpoint_id = dcp_handle.checkpoint_id
 
+        # Pass the DCP torchstore key so each fetcher can get the handle
         return await self._fetch_weights_parallel(
             param_names=hf_param_names,
-            checkpoint_id=checkpoint_id,
+            dcp_key=dcp_whole_state_dict_key,
             tracer_name="generator_perf/_fetch_weights_dcp",
         )
 
@@ -795,45 +795,29 @@ class _WeightFetcher(ForgeActor):
         self,
         *,
         version: int | None = None,
-        checkpoint_id: str | None = None,
+        dcp_key: str | None = None,
         param_names: list[str],
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights and load them into shared memory.
 
         Args:
-            version: Version number for individual tensor loading (mutually exclusive with checkpoint_id)
-            checkpoint_id: DCP checkpoint ID for DCP loading (mutually exclusive with version)
+            version: Version number for individual tensor loading (mutually exclusive with dcp_key)
+            dcp_key: Torchstore key for DCP handle (mutually exclusive with version)
             param_names: List of parameter names to fetch
 
         Returns:
             Dictionary mapping parameter names to SharedTensorHandles
         """
-        from torch.distributed.checkpoint.metadata import load_metadata
-
-        from forge.actors._torchstore_utils import DcpHandle
-
         sd = {}
 
-        # Setup for DCP loading if checkpoint_id is provided
-        if checkpoint_id is not None:
-            # Load metadata if not already cached for this checkpoint
-            if (
-                not hasattr(self, "_dcp_metadata")
-                or getattr(self, "_dcp_checkpoint_id", None) != checkpoint_id
-            ):
-                self._dcp_metadata = load_metadata(checkpoint_id)
-                self._dcp_checkpoint_id = checkpoint_id
-
-            # Create a DCP handle with the loaded metadata
-            dcp_handle = DcpHandle(
-                checkpoint_id=checkpoint_id,
-                metadata=self._dcp_metadata,
-                param_names=param_names,
-            )
+        # Setup for DCP loading if dcp_key is provided
+        if dcp_key is not None:
+            # Get the DCP handle from torchstore - this gives us the metadata and checkpoint path
+            dcp_handle = await ts.get(dcp_key)
 
         # Fetch each parameter
         for name in param_names:
-            if checkpoint_id is not None:
+            if dcp_key is not None:
                 # Load tensor from DCP checkpoint
                 param = load_tensor_from_dcp(dcp_handle, name)
             else:
