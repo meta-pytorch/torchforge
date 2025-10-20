@@ -25,7 +25,7 @@ graph TD
         Coordinates failures"]
     end
 
-    subgraph MonarchLayer["3. Monarch Actor Layer"]
+    subgraph MonarchLayer["(3) Monarch Actor Layer"]
         ActorMesh["ActorMesh Policy Actor:
         4 instances
         Different GPUs
@@ -36,7 +36,7 @@ graph TD
         Network interconnect"]
     end
 
-    subgraph Hardware["4. Physical Hardware"]
+    subgraph Hardware["(4) Physical Hardware"]
         GPU0["GPU 0:
         Policy Actor #1
         vLLM Engine
