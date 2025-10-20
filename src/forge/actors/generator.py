@@ -286,6 +286,45 @@ class Generator(ForgeActor):
 
         return state_dict
 
+    async def _fetch_weights_dcp(
+        self,
+        version: int,
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from DCP checkpoint and return a dict of {name: SharedTensorHandle}."""
+        t = Tracer("generator_perf/_fetch_weights_dcp")
+        t.start()
+
+        # Get the DCP handle from torchstore
+        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+        dcp_handle = await ts.get(dcp_whole_state_dict_key)
+        hf_param_names = dcp_handle.param_names
+        checkpoint_id = dcp_handle.checkpoint_id
+
+        n_fetchers = self.weight_fetchers.size()
+
+        def split_keys(keys):
+            return [keys[i::n_fetchers] for i in range(n_fetchers)]
+
+        futures = []
+        for i, names in enumerate(split_keys(hf_param_names)):
+            fut = self.weight_fetchers.slice(procs=i).fetch_dcp.call_one(
+                checkpoint_id=checkpoint_id, param_names=names
+            )
+            futures.append(fut)
+
+        sub_state_dicts = [await fut for fut in futures]
+
+        state_dict = {}
+        for sd in sub_state_dicts:
+            state_dict.update(sd)
+
+        # Clean up the DCP handle after fetching to shared memory
+        dcp_handle.drop()
+
+        t.stop()
+
+        return state_dict
+
     @endpoint
     async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
         """Generate a response for the given prompt
@@ -439,12 +478,25 @@ class Generator(ForgeActor):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
-        # TODO: enable shared memory prefetch for DCP-based weight sync
-        if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
-            logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
-            fetch_fut = asyncio.create_task(self._fetch_weights(version))
-        else:
-            fetch_fut = None
+        # Prefetch weights to shared memory if enabled
+        fetch_fut = None
+        if self.prefetch_weights_to_shm:
+            # Check if DCP is being used for this version
+            prefix = get_param_prefix(version)
+            matching_keys = await ts.keys(prefix)
+            dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
+            use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
+
+            if use_dcp_for_weight_sync:
+                logger.info(
+                    f"[Generator] Fetching weights for v{version} from DCP to shared memory"
+                )
+                fetch_fut = asyncio.create_task(self._fetch_weights_dcp(version))
+            else:
+                logger.info(
+                    f"[Generator] Fetching weights for v{version} to shared memory"
+                )
+                fetch_fut = asyncio.create_task(self._fetch_weights(version))
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
@@ -746,4 +798,48 @@ class _WeightFetcher(ForgeActor):
                 handle = shared_tensor.get_handle()
                 sd[name] = handle
             del param  # Explicitly free the tensor after copying to shared memory
+        return sd
+
+    @endpoint
+    async def fetch_dcp(
+        self,
+        *,
+        checkpoint_id: str,
+        param_names: list[str],
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from DCP checkpoint and load them into shared memory."""
+        from forge.actors._torchstore_utils import DcpHandle
+
+        sd = {}
+        # Create a minimal DCP handle for loading tensors
+        # We only need checkpoint_id and metadata, which load_tensor_from_dcp will fetch
+        for name in param_names:
+            # Load tensor from DCP using the checkpoint_id
+            # Note: load_tensor_from_dcp handles reading from the DCP checkpoint directory
+            from torch.distributed.checkpoint.metadata import load_metadata
+
+            # Load metadata if not already loaded (first time)
+            if (
+                not hasattr(self, "_dcp_metadata")
+                or getattr(self, "_dcp_checkpoint_id", None) != checkpoint_id
+            ):
+                self._dcp_metadata = load_metadata(checkpoint_id)
+                self._dcp_checkpoint_id = checkpoint_id
+
+            # Create a DCP handle with the loaded metadata
+            dcp_handle = DcpHandle(
+                checkpoint_id=checkpoint_id,
+                metadata=self._dcp_metadata,
+                param_names=param_names,
+            )
+
+            # Load the tensor from DCP
+            param = load_tensor_from_dcp(dcp_handle, name)
+
+            # Use context manager to ensure cleanup after getting handle
+            with SharedTensor(tensor=param) as shared_tensor:
+                handle = shared_tensor.get_handle()
+                sd[name] = handle
+            del param  # Explicitly free the tensor after copying to shared memory
+
         return sd
