@@ -13,11 +13,11 @@ from enum import Enum
 from typing import Any
 
 import pytz
-from monarch.actor import context, current_rank
 
 from forge.observability.utils import get_proc_name_with_rank
 
 from forge.util.logging import log_once
+from monarch.actor import context, current_rank
 
 logger = logging.getLogger(__name__)
 
@@ -686,12 +686,16 @@ class WandbBackend(LoggerBackend):
         share_run_id (bool, default False): Only used if reduce_across_ranks=False.
             True -> shared run across ranks; False -> separate runs per rank.
         project (str): WandB project name
+        entity (str, optional): WandB entity (username or team name)
         group (str, optional): WandB group name for organizing runs. Defaults to "experiment_group"
+
+        Any additional keyword arguments will be passed directly to wandb.init() as native kwargs.
     """
 
     def __init__(self, logger_backend_config: dict[str, Any]) -> None:
         super().__init__(logger_backend_config)
         self.project = logger_backend_config["project"]
+        self.entity = logger_backend_config.get("entity", None)
         self.group = logger_backend_config.get("group", "experiment_group")
         self.name = None
         self.run = None
@@ -699,6 +703,18 @@ class WandbBackend(LoggerBackend):
             "reduce_across_ranks", True
         )
         self.share_run_id = logger_backend_config.get("share_run_id", False)
+
+        # Extract additional kwargs for wandb.init(), excluding our internal config keys
+        internal_keys = {
+            "project",
+            "entity",
+            "group",
+            "reduce_across_ranks",
+            "share_run_id",
+        }
+        self.wandb_kwargs = {
+            k: v for k, v in logger_backend_config.items() if k not in internal_keys
+        }
 
     async def init(
         self,
@@ -734,12 +750,23 @@ class WandbBackend(LoggerBackend):
     async def _init_global(self):
         import wandb
 
-        self.run = wandb.init(project=self.project, group=self.group)
+        self.run = wandb.init(
+            project=self.project,
+            entity=self.entity,
+            group=self.group,
+            **self.wandb_kwargs,
+        )
 
     async def _init_per_rank(self):
         import wandb
 
-        self.run = wandb.init(project=self.project, group=self.group, name=self.name)
+        self.run = wandb.init(
+            project=self.project,
+            entity=self.entity,
+            group=self.group,
+            name=self.name,
+            **self.wandb_kwargs,
+        )
 
     async def _init_shared_global(self):
         import wandb
@@ -747,7 +774,13 @@ class WandbBackend(LoggerBackend):
         settings = wandb.Settings(
             mode="shared", x_primary=True, x_label="controller_primary"
         )
-        self.run = wandb.init(project=self.project, group=self.group, settings=settings)
+        self.run = wandb.init(
+            project=self.project,
+            entity=self.entity,
+            group=self.group,
+            settings=settings,
+            **self.wandb_kwargs,
+        )
 
     async def _init_shared_local(self, primary_metadata: dict[str, Any]):
         import wandb
@@ -770,8 +803,10 @@ class WandbBackend(LoggerBackend):
         self.run = wandb.init(
             id=shared_id,
             project=self.project,
+            entity=self.entity,
             group=self.group,
             settings=settings,
+            **self.wandb_kwargs,
         )
 
     async def log(self, metrics: list[Metric], global_step: int) -> None:
