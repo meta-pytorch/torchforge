@@ -253,16 +253,27 @@ class Generator(ForgeActor):
         for handle in state_dict.values():
             handle.drop()
 
-    async def _fetch_weights(
+    async def _fetch_weights_parallel(
         self,
-        version: int,
+        param_names: list[str],
+        *,
+        version: int | None = None,
+        checkpoint_id: str | None = None,
+        tracer_name: str,
     ) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("generator_perf/_fetch_weights")
+        """Fetch weights in parallel using multiple fetcher processes.
+
+        Args:
+            param_names: List of parameter names to fetch
+            version: Version number for individual tensor loading (mutually exclusive with checkpoint_id)
+            checkpoint_id: DCP checkpoint ID for DCP loading (mutually exclusive with version)
+            tracer_name: Name for the performance tracer
+
+        Returns:
+            Dictionary mapping parameter names to SharedTensorHandles
+        """
+        t = Tracer(tracer_name)
         t.start()
-        prefix = get_param_prefix(version)
-        matching_keys = await ts.keys(prefix)
-        hf_param_names = [extract_param_name(key) for key in matching_keys]
 
         n_fetchers = self.weight_fetchers.size()
 
@@ -270,10 +281,15 @@ class Generator(ForgeActor):
             return [keys[i::n_fetchers] for i in range(n_fetchers)]
 
         futures = []
-        for i, names in enumerate(split_keys(hf_param_names)):
-            fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
-                version=version, param_names=names
-            )
+        for i, names in enumerate(split_keys(param_names)):
+            if checkpoint_id is not None:
+                fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
+                    checkpoint_id=checkpoint_id, param_names=names
+                )
+            else:
+                fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
+                    version=version, param_names=names
+                )
             futures.append(fut)
 
         sub_state_dicts = [await fut for fut in futures]
@@ -286,42 +302,40 @@ class Generator(ForgeActor):
 
         return state_dict
 
+    async def _fetch_weights(
+        self,
+        version: int,
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
+        prefix = get_param_prefix(version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+
+        return await self._fetch_weights_parallel(
+            param_names=hf_param_names,
+            version=version,
+            tracer_name="generator_perf/_fetch_weights",
+        )
+
     async def _fetch_weights_dcp(
         self,
         version: int,
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights from DCP checkpoint and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("generator_perf/_fetch_weights_dcp")
-        t.start()
-
         # Get the DCP handle from torchstore
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         dcp_handle = await ts.get(dcp_whole_state_dict_key)
         hf_param_names = dcp_handle.param_names
         checkpoint_id = dcp_handle.checkpoint_id
 
-        n_fetchers = self.weight_fetchers.size()
-
-        def split_keys(keys):
-            return [keys[i::n_fetchers] for i in range(n_fetchers)]
-
-        futures = []
-        for i, names in enumerate(split_keys(hf_param_names)):
-            fut = self.weight_fetchers.slice(procs=i).fetch_dcp.call_one(
-                checkpoint_id=checkpoint_id, param_names=names
-            )
-            futures.append(fut)
-
-        sub_state_dicts = [await fut for fut in futures]
-
-        state_dict = {}
-        for sd in sub_state_dicts:
-            state_dict.update(sd)
+        state_dict = await self._fetch_weights_parallel(
+            param_names=hf_param_names,
+            checkpoint_id=checkpoint_id,
+            tracer_name="generator_perf/_fetch_weights_dcp",
+        )
 
         # Clean up the DCP handle after fetching to shared memory
         dcp_handle.drop()
-
-        t.stop()
 
         return state_dict
 
@@ -785,40 +799,29 @@ class _WeightFetcher(ForgeActor):
     async def fetch(
         self,
         *,
-        version: int,
+        version: int | None = None,
+        checkpoint_id: str | None = None,
         param_names: list[str],
     ) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from torchstore and load them into shared memory."""
-        sd = {}
-        for name in param_names:
-            param_key = get_param_key(version, name)
-            param = await ts.get(param_key)
-            # Use context manager to ensure cleanup after getting handle
-            with SharedTensor(tensor=param) as shared_tensor:
-                handle = shared_tensor.get_handle()
-                sd[name] = handle
-            del param  # Explicitly free the tensor after copying to shared memory
-        return sd
+        """Fetch weights and load them into shared memory.
 
-    @endpoint
-    async def fetch_dcp(
-        self,
-        *,
-        checkpoint_id: str,
-        param_names: list[str],
-    ) -> dict[str, SharedTensorHandle]:
-        """Fetch weights from DCP checkpoint and load them into shared memory."""
+        Args:
+            version: Version number for individual tensor loading (mutually exclusive with checkpoint_id)
+            checkpoint_id: DCP checkpoint ID for DCP loading (mutually exclusive with version)
+            param_names: List of parameter names to fetch
+
+        Returns:
+            Dictionary mapping parameter names to SharedTensorHandles
+        """
+        from torch.distributed.checkpoint.metadata import load_metadata
+
         from forge.actors._torchstore_utils import DcpHandle
 
         sd = {}
-        # Create a minimal DCP handle for loading tensors
-        # We only need checkpoint_id and metadata, which load_tensor_from_dcp will fetch
-        for name in param_names:
-            # Load tensor from DCP using the checkpoint_id
-            # Note: load_tensor_from_dcp handles reading from the DCP checkpoint directory
-            from torch.distributed.checkpoint.metadata import load_metadata
 
-            # Load metadata if not already loaded (first time)
+        # Setup for DCP loading if checkpoint_id is provided
+        if checkpoint_id is not None:
+            # Load metadata if not already cached for this checkpoint
             if (
                 not hasattr(self, "_dcp_metadata")
                 or getattr(self, "_dcp_checkpoint_id", None) != checkpoint_id
@@ -833,8 +836,15 @@ class _WeightFetcher(ForgeActor):
                 param_names=param_names,
             )
 
-            # Load the tensor from DCP
-            param = load_tensor_from_dcp(dcp_handle, name)
+        # Fetch each parameter
+        for name in param_names:
+            if checkpoint_id is not None:
+                # Load tensor from DCP checkpoint
+                param = load_tensor_from_dcp(dcp_handle, name)
+            else:
+                # Load tensor from torchstore
+                param_key = get_param_key(version, name)
+                param = await ts.get(param_key)
 
             # Use context manager to ensure cleanup after getting handle
             with SharedTensor(tensor=param) as shared_tensor:
