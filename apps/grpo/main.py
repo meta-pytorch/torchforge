@@ -120,6 +120,7 @@ def collate(
     return inputs, targets
 
 
+# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
@@ -128,12 +129,7 @@ def simple_grpo_loss(
     padding_mask: torch.Tensor,
     beta: float = 0.1,
 ) -> torch.Tensor:
-    """
-    Example GRPO Loss Function for RLTrainer
-    """
     logprobs: torch.Tensor = compute_logprobs(logits, response)
-
-    # Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
     per_token_loss = -(per_token_policy_loss - beta * kl)
@@ -146,7 +142,6 @@ def simple_grpo_loss(
 
 @dataclass
 class RewardActor(ForgeActor):
-    """Reward actor that uses a list of scoring functions."""
 
     reward_functions: list[Callable]
 
@@ -178,14 +173,12 @@ class RewardActor(ForgeActor):
                 Reduce.STD,
             )
 
-            # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
                 Reduce.MEAN,
             )
 
-            # count fn calls
             record_metric(
                 f"reward/evaluate_response/count_{reward_fn_name}_calls",
                 1,
@@ -198,8 +191,6 @@ class RewardActor(ForgeActor):
 
 @dataclass
 class ComputeAdvantages(ForgeActor):
-    """Compute advantages for GRPO using reward signals."""
-
     @endpoint
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
@@ -255,7 +246,6 @@ class DatasetActor(ForgeActor):
         try:
             sample = next(self._iterator)
 
-            # Record dataset metrics
             record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
             record_metric(
                 "dataset/sample/avg_sample_len",
@@ -406,13 +396,11 @@ async def main(cfg: DictConfig):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logprobs, input_ids
 
-            # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.call_one(episodes)
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
 
-            # Log metrics
             rollout_count += 1
             record_metric(
                 "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
