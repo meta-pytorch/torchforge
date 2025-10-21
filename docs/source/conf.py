@@ -140,8 +140,8 @@ html_theme_options = {
     "navbar_center": "navbar-nav",
     "canonical_url": "https://meta-pytorch.org/forge/",
     "header_links_before_dropdown": 7,
-    "show_nav_level": 2,
     "show_toc_level": 2,
+    "navigation_depth": 3,
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
@@ -173,10 +173,35 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "html_image",
+    "substitution",
 ]
 
 # Configure MyST parser to treat mermaid code blocks as mermaid directives
 myst_fence_as_directive = ["mermaid"]
+
+# Disable D3 zoom (we'll use lightbox instead)
+mermaid_d3_zoom = False
+
+# Global Mermaid theme configuration - applies to all diagrams
+mermaid_init_js = """
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+        primaryColor: '#4CAF50',
+        primaryTextColor: '#000',
+        primaryBorderColor: '#fff',
+        lineColor: '#555',
+        secondaryColor: '#FF9800',
+        tertiaryColor: '#ffffde'
+    },
+    flowchart: {
+        curve: 'basis'
+    },
+    themeCSS: '.edgePath .path { stroke-width: 4px; stroke: #555; }'
+});
+"""
 
 autodoc_default_options = {
     "members": True,
