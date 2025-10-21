@@ -18,7 +18,6 @@ from forge.data.dataset_metrics import (
     Metric,
     MetricTransform,
 )
-from forge.interfaces import Transform
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -37,10 +36,10 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
       - Returning an infinite iterator over the dataset
 
     Args:
-        message_transform (Transform | None): Transforms raw data into a `Message`.
-        model_transform (Transform | None): Prepares messages for the model,
+        message_transform (Callable | None): Transforms raw data into a `Message`.
+        model_transform (Callable | None): Prepares messages for the model,
             usually by tokenizing them.
-        output_transform (Transform | None): Prepares tokenized inputs for the
+        output_transform (Callable | None): Prepares tokenized inputs for the
             recipe, often by manipulating labels (e.g., setting an ignore index).
             This transform is recipe-dependent (e.g., SFT, DPO, etc.).
         metric_transform (MetricTransform | None): Computes metrics from a
@@ -64,9 +63,9 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
     def __init__(
         self,
         *,
-        message_transform: Transform | None = None,
-        model_transform: Transform | None = None,
-        output_transform: Transform | None = None,
+        message_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        model_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        output_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         metric_transform: MetricTransform | None = None,
         shuffle_buffer_size: int | None = 1000,
         weight: float | None = 1.0,
