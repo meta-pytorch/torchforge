@@ -7,7 +7,7 @@
 import torch
 from torch import nn
 
-from forge.util.ops import selective_log_softmax
+from forge.util.ops import compute_logprobs
 
 
 class ReinforceLoss(nn.Module):
@@ -29,7 +29,7 @@ class ReinforceLoss(nn.Module):
     def forward(
         self, trainer_logits, target_ids, target_mask, target_weights, target_log_probs
     ):
-        trainer_log_probs = selective_log_softmax(trainer_logits, target_ids)
+        trainer_log_probs = compute_logprobs(trainer_logits, target_ids, align=False)
         target_mask = target_mask.detach()
         target_weights = target_weights
         target_mask_sum = target_mask.sum()
