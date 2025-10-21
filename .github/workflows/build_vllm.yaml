@@ -5,6 +5,7 @@ on:
     branches:
       - nightly
   workflow_dispatch:
+  pull_request: # Remove this before landing
 
 permissions:
   id-token: write
@@ -25,6 +26,7 @@ jobs:
       wheel-nightly-policy: gha_workflow_preview_build_wheels
       wheel-upload-path: whl/preview/forge/
       package-name: forge
+      channel: test # Hack here to make sure stable pytorch is used
       build-matrix: |
         {
           "include": [
@@ -35,12 +37,12 @@ jobs:
               "desired_cuda": "cu128",
               "container_image": "pytorch/manylinux2_28-builder:cuda12.8",
               "package_type": "manywheel",
-              "build_name": "manywheel-py3_10-cuda12_8",
+              "build_name": "manywheel-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
               "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
               "channel": "nightly",
               "upload_to_base_bucket": "no",
-              "stable_version": "2.8.0",
+              "stable_version": "2.9.0",
               "use_split_build": false
             }
           ]
