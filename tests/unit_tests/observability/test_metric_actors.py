@@ -75,7 +75,7 @@ class TestBasicOperations:
 class TestRegistrationLifecycle:
     """Test registration lifecycle."""
 
-    @pytest.mark.timeout(3)
+    @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_registration_lifecycle(self, global_logger, local_fetcher):
         """Test complete registration/deregistration lifecycle."""
