@@ -8,8 +8,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-10-15T22:45:06+00:00" />
-    <title>Welcome to TorchForge documentation! &#8212; torchforge 0.1 documentation</title>
+    <meta property="article:modified_time" content="2025-10-21T15:53:23+00:00" />
+    <title>TorchForge Documentation &#8212; torchforge 0.1 documentation</title>
   
   
   
@@ -53,11 +53,11 @@
     <link rel="icon" href="_static/logo-icon.svg"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Get Started" href="getting_started.html" />
+    <link rel="next" title="Getting Started" href="getting_started.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -207,7 +207,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2025"/>
 
   </head>
 
@@ -303,14 +303,7 @@
     
 <li class="nav-item ">
   <a class="nav-link nav-internal" href="getting_started.html">
-    Get Started
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="concepts.html">
-    Concepts
+    Getting Started
   </a>
 </li>
 
@@ -461,14 +454,7 @@ document.write(`
     
 <li class="nav-item ">
   <a class="nav-link nav-internal" href="getting_started.html">
-    Get Started
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="concepts.html">
-    Concepts
+    Getting Started
   </a>
 </li>
 
@@ -609,7 +595,7 @@ document.write(`
     <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <meta itemprop="name" content="Welcome to TorchForge documentation!">
+        <meta itemprop="name" content="TorchForge Documentation">
         <meta itemprop="position" content="1">
       </div>
     </div>
@@ -648,12 +634,226 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="welcome-to-torchforge-documentation">
-<h1>Welcome to TorchForge documentation!<a class="headerlink" href="#welcome-to-torchforge-documentation" title="Link to this heading">#</a></h1>
-<p><strong>TorchForge</strong> is a PyTorch-native platform specifically designed
-for post-training generative AI models.</p>
-<section id="key-features">
-<h2>Key Features<a class="headerlink" href="#key-features" title="Link to this heading">#</a></h2>
+  <section id="torchforge-documentation">
+<h1>TorchForge Documentation<a class="headerlink" href="#torchforge-documentation" title="Link to this heading">#</a></h1>
+<p><strong>TorchForge</strong> is a PyTorch-native library for RL post-training and agentic development. Built on the principle that <strong>researchers should write algorithms, not infrastructure</strong>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Experimental Status:</strong> TorchForge is currently in early development. Expect bugs, incomplete features, and API changes. Please file issues on <a class="reference external" href="https://github.com/meta-pytorch/forge">GitHub</a> for bug reports and feature requests.</p>
+</div>
+<section id="why-torchforge">
+<h2>Why TorchForge?<a class="headerlink" href="#why-torchforge" title="Link to this heading">#</a></h2>
+<p>Reinforcement Learning has become essential to frontier AI - from instruction following and reasoning to complex research capabilities. But infrastructure complexity often dominates the actual research.</p>
+<p>TorchForge lets you <strong>express RL algorithms as naturally as pseudocode</strong>, while powerful infrastructure handles distribution, fault tolerance, and optimization underneath.</p>
+<section id="core-design-principles">
+<h3>Core Design Principles<a class="headerlink" href="#core-design-principles" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>Algorithms, Not Infrastructure</strong>: Write your RL logic without distributed systems code</p></li>
+<li><p><strong>Any Degree of Asynchrony</strong>: From fully synchronous PPO to fully async off-policy training</p></li>
+<li><p><strong>Composable Components</strong>: Mix and match proven frameworks (vLLM, TorchTitan) with custom logic</p></li>
+<li><p><strong>Built on Solid Foundations</strong>: Leverages Monarch’s single-controller model for simplified distributed programming</p></li>
+</ul>
+</section>
+</section>
+<section id="foundation-the-technology-stack">
+<h2>Foundation: The Technology Stack<a class="headerlink" href="#foundation-the-technology-stack" title="Link to this heading">#</a></h2>
+<p>TorchForge is built on carefully selected, battle-tested components:</p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-2 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<strong>Monarch</strong></div>
+<p class="sd-card-text">Single-controller distributed programming framework that orchestrates clusters like you’d program a single machine. Provides actor meshes, fault tolerance, and RDMA-based data transfers.</p>
+<p class="sd-card-text"><strong>Why it matters:</strong> Eliminates SPMD complexity, making distributed RL tractable</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference external" href="https://meta-pytorch.org/monarch"><span>https://meta-pytorch.org/monarch</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<strong>vLLM</strong></div>
+<p class="sd-card-text">High-throughput, memory-efficient inference engine with PagedAttention and continuous batching.</p>
+<p class="sd-card-text"><strong>Why it matters:</strong> Handles policy generation efficiently at scale</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference external" href="https://docs.vllm.ai"><span>https://docs.vllm.ai</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<strong>TorchTitan</strong></div>
+<p class="sd-card-text">Meta’s production-grade LLM training platform with FSDP, pipeline parallelism, and tensor parallelism.</p>
+<p class="sd-card-text"><strong>Why it matters:</strong> Battle-tested training infrastructure proven at scale</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference external" href="https://github.com/pytorch/torchtitan"><span>https://github.com/pytorch/torchtitan</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<strong>TorchStore</strong></div>
+<p class="sd-card-text">Distributed, in-memory key-value store for PyTorch tensors built on Monarch, optimized for weight synchronization with automatic DTensor resharding.</p>
+<p class="sd-card-text"><strong>Why it matters:</strong> Solves the weight transfer bottleneck in async RL</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference external" href="https://github.com/meta-pytorch/torchstore"><span>https://github.com/meta-pytorch/torchstore</span></a></div>
+</div>
+</div>
+</div>
+</section>
+<section id="what-you-can-build">
+<h2>What You Can Build<a class="headerlink" href="#what-you-can-build" title="Link to this heading">#</a></h2>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-3 sd-g-2 sd-g-xs-2 sd-g-sm-2 sd-g-md-2 sd-g-lg-2 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Supervised Fine-Tuning</div>
+<p class="sd-card-text">Adapt foundation models to specific tasks using labeled data with efficient multi-GPU training.</p>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+GRPO Training</div>
+<p class="sd-card-text">Train models with Generalized Reward Policy Optimization for aligning with human preferences.</p>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Asynchronous RL</div>
+<p class="sd-card-text">Continuous rollout generation with non-blocking training for maximum throughput.</p>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Code Execution</div>
+<p class="sd-card-text">Safe, sandboxed code execution environments for RL on coding tasks (RLVR).</p>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Tool Integration</div>
+<p class="sd-card-text">Extensible environment system for agents that interact with tools and APIs.</p>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Custom Workflows</div>
+<p class="sd-card-text">Build your own components and compose them naturally with existing infrastructure.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="requirements-at-a-glance">
+<h2>Requirements at a Glance<a class="headerlink" href="#requirements-at-a-glance" title="Link to this heading">#</a></h2>
+<p>Before diving in, check out <a class="reference internal" href="getting_started.html"><span class="doc">Getting Started</span></a> and ensure your system meets the requirements.</p>
+</section>
+<section id="writing-rl-code">
+<h2>Writing RL Code<a class="headerlink" href="#writing-rl-code" title="Link to this heading">#</a></h2>
+<p>With TorchForge, your RL logic looks like pseudocode:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">generate_episode</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">replay_buffer</span><span class="p">):</span>
+    <span class="c1"># Sample a prompt</span>
+    <span class="n">prompt</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="k">await</span> <span class="n">dataloader</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">route</span><span class="p">()</span>
+
+    <span class="c1"># Generate response</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">policy</span><span class="o">.</span><span class="n">generate</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span>
+
+    <span class="c1"># Score the response</span>
+    <span class="n">reward_value</span> <span class="o">=</span> <span class="k">await</span> <span class="n">reward</span><span class="o">.</span><span class="n">evaluate_response</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+        <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+        <span class="n">response</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+        <span class="n">target</span><span class="o">=</span><span class="n">target</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Store for training</span>
+    <span class="k">await</span> <span class="n">replay_buffer</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">route</span><span class="p">(</span>
+        <span class="n">Episode</span><span class="p">(</span><span class="n">prompt_ids</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">prompt_ids</span><span class="p">,</span>
+                <span class="n">response_ids</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=</span><span class="n">reward_value</span><span class="p">)</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>No retry logic, no resource management, no synchronization code - just your algorithm.</p>
+</section>
+<section id="documentation-paths">
+<h2>Documentation Paths<a class="headerlink" href="#documentation-paths" title="Link to this heading">#</a></h2>
+<p>Choose your learning path:</p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-2 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+🚀 Getting Started</div>
+<p class="sd-card-text">Installation, prerequisites, verification, and your first training run.</p>
+<p class="sd-card-text"><strong>Time to first run: ~15 minutes</strong></p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="getting_started.html"><span class="doc">Getting Started</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+💻 Tutorials</div>
+<p class="sd-card-text">Step-by-step guides and practical examples for training with TorchForge.</p>
+<p class="sd-card-text"><strong>For hands-on development</strong></p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="tutorials.html"><span class="doc">Tutorials</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+📖 API Reference</div>
+<p class="sd-card-text">Complete API documentation for customization and extension.</p>
+<p class="sd-card-text"><strong>For deep integration</strong></p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="api.html"><span class="doc">API Reference</span></a></div>
+</div>
+</div>
+</div>
+</section>
+<section id="validation-partnerships">
+<h2>Validation &amp; Partnerships<a class="headerlink" href="#validation-partnerships" title="Link to this heading">#</a></h2>
+<p>TorchForge has been validated in real-world deployments:</p>
+<ul class="simple">
+<li><p><strong>Stanford Collaboration</strong>: Integration with the Weaver weak verifier project, training models that hill-climb on challenging reasoning benchmarks (MATH, GPQA)</p></li>
+<li><p><strong>CoreWeave</strong>: Large-scale training on 512 H100 GPU clusters with smooth, efficient performance</p></li>
+<li><p><strong>Scale</strong>: Tested across hundreds of GPUs with continuous rollouts and asynchronous training</p></li>
+</ul>
+</section>
+<section id="community">
+<h2>Community<a class="headerlink" href="#community" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>GitHub</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge">meta-pytorch/forge</a></p></li>
+<li><p><strong>Issues</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge/issues">Report bugs and request features</a></p></li>
+<li><p><strong>Contributing</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></p></li>
+<li><p><strong>Code of Conduct</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge/blob/main/CODE_OF_CONDUCT.md">CODE_OF_CONDUCT.md</a></p></li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Before starting significant work, signal your intention in the issue tracker to coordinate with maintainers.</p>
+</div>
 <ul class="simple">
 <li><p><strong>Post-Training Focus</strong>: Specializes in techniques
 like Supervised Fine-Tuning (SFT) and Group Relative Policy Optimization (GRPO)</p></li>
@@ -667,22 +867,39 @@ with minimum 3 GPU requirement for GRPO training</p></li>
 like Llama3 8B and Qwen3.1 7B</p></li>
 </ul>
 <div class="toctree-wrapper compound">
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Documentation</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Get Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="concepts.html">Concepts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#system-requirements">System Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#verifying-your-setup">Verifying Your Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#quick-start-examples">Quick Start Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#understanding-configuration-files">Understanding Configuration Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#getting-help">Getting Help</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started.html#additional-resources">Additional Resources</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="zero-to-forge-intro.html">Zero to TorchForge: From RL Theory to Production-Scale Implementation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#overview">Overview</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
-<section id="indices-and-tables">
-<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading">#</a></h2>
+<section id="indices">
+<h2>Indices<a class="headerlink" href="#indices" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a> - Index of all documented objects</p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a> - Python module index</p></li>
 </ul>
+<hr class="docutils" />
+<p><strong>License</strong>: BSD 3-Clause | <strong>GitHub</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge">meta-pytorch/forge</a></p>
 </section>
 </section>
 
@@ -703,7 +920,7 @@ like Llama3 8B and Qwen3.1 7B</p></li>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Get Started</p>
+        <p class="prev-next-title">Getting Started</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -725,8 +942,18 @@ like Llama3 8B and Qwen3.1 7B</p></li>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#key-features">Key Features</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#indices-and-tables">Indices and tables</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-torchforge">Why TorchForge?</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#core-design-principles">Core Design Principles</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#foundation-the-technology-stack">Foundation: The Technology Stack</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-you-can-build">What You Can Build</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements-at-a-glance">Requirements at a Glance</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#writing-rl-code">Writing RL Code</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-paths">Documentation Paths</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validation-partnerships">Validation &amp; Partnerships</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#community">Community</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#indices">Indices</a></li>
 </ul>
   </nav></div>
     
@@ -857,11 +1084,11 @@ like Llama3 8B and Qwen3.1 7B</p></li>
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Welcome to TorchForge documentation!",
-       "headline": "Welcome to TorchForge documentation!",
+       "name": "TorchForge Documentation",
+       "headline": "TorchForge Documentation",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/index.html",
-       "articleBody": "Welcome to TorchForge documentation!# TorchForge is a PyTorch-native platform specifically designed for post-training generative AI models. Key Features# Post-Training Focus: Specializes in techniques like Supervised Fine-Tuning (SFT) and Group Relative Policy Optimization (GRPO) PyTorch Integration: Built natively on PyTorch with dependencies on PyTorch nightly, Monarch, vLLM, and TorchTitan. Multi-GPU Support: Designed for distributed training with minimum 3 GPU requirement for GRPO training Model Support: Includes pre-configured setups for popular models like Llama3 8B and Qwen3.1 7B Contents: Get Started Concepts Tutorials API Reference Indices and tables# Index Module Index Search Page",
+       "articleBody": "TorchForge Documentation# TorchForge is a PyTorch-native library for RL post-training and agentic development. Built on the principle that researchers should write algorithms, not infrastructure. Note Experimental Status: TorchForge is currently in early development. Expect bugs, incomplete features, and API changes. Please file issues on GitHub for bug reports and feature requests. Why TorchForge?# Reinforcement Learning has become essential to frontier AI - from instruction following and reasoning to complex research capabilities. But infrastructure complexity often dominates the actual research. TorchForge lets you express RL algorithms as naturally as pseudocode, while powerful infrastructure handles distribution, fault tolerance, and optimization underneath. Core Design Principles# Algorithms, Not Infrastructure: Write your RL logic without distributed systems code Any Degree of Asynchrony: From fully synchronous PPO to fully async off-policy training Composable Components: Mix and match proven frameworks (vLLM, TorchTitan) with custom logic Built on Solid Foundations: Leverages Monarch\u2019s single-controller model for simplified distributed programming Foundation: The Technology Stack# TorchForge is built on carefully selected, battle-tested components: Monarch Single-controller distributed programming framework that orchestrates clusters like you\u2019d program a single machine. Provides actor meshes, fault tolerance, and RDMA-based data transfers. Why it matters: Eliminates SPMD complexity, making distributed RL tractable https://meta-pytorch.org/monarch vLLM High-throughput, memory-efficient inference engine with PagedAttention and continuous batching. Why it matters: Handles policy generation efficiently at scale https://docs.vllm.ai TorchTitan Meta\u2019s production-grade LLM training platform with FSDP, pipeline parallelism, and tensor parallelism. Why it matters: Battle-tested training infrastructure proven at scale https://github.com/pytorch/torchtitan TorchStore Distributed, in-memory key-value store for PyTorch tensors built on Monarch, optimized for weight synchronization with automatic DTensor resharding. Why it matters: Solves the weight transfer bottleneck in async RL https://github.com/meta-pytorch/torchstore What You Can Build# Supervised Fine-Tuning Adapt foundation models to specific tasks using labeled data with efficient multi-GPU training. GRPO Training Train models with Generalized Reward Policy Optimization for aligning with human preferences. Asynchronous RL Continuous rollout generation with non-blocking training for maximum throughput. Code Execution Safe, sandboxed code execution environments for RL on coding tasks (RLVR). Tool Integration Extensible environment system for agents that interact with tools and APIs. Custom Workflows Build your own components and compose them naturally with existing infrastructure. Requirements at a Glance# Before diving in, check out Getting Started and ensure your system meets the requirements. Writing RL Code# With TorchForge, your RL logic looks like pseudocode: async def generate_episode(dataloader, policy, reward, replay_buffer): # Sample a prompt prompt, target = await dataloader.sample.route() # Generate response response = await policy.generate.route(prompt) # Score the response reward_value = await reward.evaluate_response.route( prompt=prompt, response=response.text, target=target ) # Store for training await replay_buffer.add.route( Episode(prompt_ids=response.prompt_ids, response_ids=response.token_ids, reward=reward_value) ) No retry logic, no resource management, no synchronization code - just your algorithm. Documentation Paths# Choose your learning path: \ud83d\ude80 Getting Started Installation, prerequisites, verification, and your first training run. Time to first run: ~15 minutes Getting Started \ud83d\udcbb Tutorials Step-by-step guides and practical examples for training with TorchForge. For hands-on development Tutorials \ud83d\udcd6 API Reference Complete API documentation for customization and extension. For deep integration API Reference Validation \u0026 Partnerships# TorchForge has been validated in real-world deployments: Stanford Collaboration: Integration with the Weaver weak verifier project, training models that hill-climb on challenging reasoning benchmarks (MATH, GPQA) CoreWeave: Large-scale training on 512 H100 GPU clusters with smooth, efficient performance Scale: Tested across hundreds of GPUs with continuous rollouts and asynchronous training Community# GitHub: meta-pytorch/forge Issues: Report bugs and request features Contributing: CONTRIBUTING.md Code of Conduct: CODE_OF_CONDUCT.md Tip Before starting significant work, signal your intention in the issue tracker to coordinate with maintainers. Post-Training Focus: Specializes in techniques like Supervised Fine-Tuning (SFT) and Group Relative Policy Optimization (GRPO) PyTorch Integration: Built natively on PyTorch with dependencies on PyTorch nightly, Monarch, vLLM, and TorchTitan. Multi-GPU Support: Designed for distributed training with minimum 3 GPU requirement for GRPO training Model Support: Includes pre-configured setups for popular models like Llama3 8B and Qwen3.1 7B Documentation Getting Started System Requirements Prerequisites Installation Verifying Your Setup Quick Start Examples Understanding Configuration Files Next Steps Getting Help Additional Resources Tutorials Zero to TorchForge: From RL Theory to Production-Scale Implementation API Reference Overview Indices# Index - Index of all documented objects Module Index - Python module index License: BSD 3-Clause | GitHub: meta-pytorch/forge",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

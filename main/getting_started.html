@@ -8,8 +8,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2025-10-15T22:45:06+00:00" />
-    <title>Get Started &#8212; torchforge 0.1 documentation</title>
+    <meta property="article:modified_time" content="2025-10-21T15:53:23+00:00" />
+    <title>Getting Started &#8212; torchforge 0.1 documentation</title>
   
   
   
@@ -53,12 +53,12 @@
     <link rel="icon" href="_static/logo-icon.svg"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Concepts" href="concepts.html" />
-    <link rel="prev" title="Welcome to TorchForge documentation!" href="index.html" />
+    <link rel="next" title="Tutorials" href="tutorials.html" />
+    <link rel="prev" title="TorchForge Documentation" href="index.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2025"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -208,7 +208,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Oct 15, 2025"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2025"/>
 
   </head>
 
@@ -304,14 +304,7 @@
     
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="#">
-    Get Started
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="concepts.html">
-    Concepts
+    Getting Started
   </a>
 </li>
 
@@ -460,14 +453,7 @@ document.write(`
     
 <li class="nav-item current active">
   <a class="nav-link nav-internal" href="#">
-    Get Started
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="concepts.html">
-    Concepts
+    Getting Started
   </a>
 </li>
 
@@ -624,7 +610,7 @@ document.write(`
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">Get Started</li>
+    <li class="breadcrumb-item active" aria-current="page">Getting Started</li>
   </ul>
 </nav>
 </div>
@@ -666,7 +652,7 @@ document.write(`
     <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <meta itemprop="name" content="Get Started">
+        <meta itemprop="name" content="Getting Started">
         <meta itemprop="position" content="1">
       </div>
     </div>
@@ -705,15 +691,335 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="get-started">
-<h1>Get Started<a class="headerlink" href="#get-started" title="Link to this heading">#</a></h1>
-<p>Welcome to TorchForge! This guide will help you get up and running with TorchForge, a PyTorch-native platform specifically designed for post-training generative AI models.</p>
-<p>TorchForge specializes in post-training techniques for large language models, including:</p>
+  <section id="getting-started">
+<h1>Getting Started<a class="headerlink" href="#getting-started" title="Link to this heading">#</a></h1>
+<p>This guide will walk you through installing TorchForge, understanding its dependencies, verifying your setup, and running your first training job.</p>
+<section id="system-requirements">
+<h2>System Requirements<a class="headerlink" href="#system-requirements" title="Link to this heading">#</a></h2>
+<p>Before installing TorchForge, ensure your system meets the following requirements.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Requirement</p></th>
+<th class="head"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Operating System</strong></p></td>
+<td><p>Linux (Fedora/Ubuntu/Debian)</p></td>
+<td><p>MacOS and Windows not currently supported</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Python</strong></p></td>
+<td><p>3.10 or higher</p></td>
+<td><p>Python 3.11 recommended</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>GPU</strong></p></td>
+<td><p>NVIDIA with CUDA support</p></td>
+<td><p>AMD GPUs not currently supported</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Minimum GPUs</strong></p></td>
+<td><p>2+ for SFT, 3+ for GRPO</p></td>
+<td><p>More GPUs enable larger models</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>CUDA</strong></p></td>
+<td><p>12.8</p></td>
+<td><p>Required for GPU training</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>RAM</strong></p></td>
+<td><p>32GB+ recommended</p></td>
+<td><p>Depends on model size</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Disk Space</strong></p></td>
+<td><p>50GB+ free</p></td>
+<td><p>For models, datasets, and checkpoints</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>PyTorch</strong></p></td>
+<td><p>Nightly build</p></td>
+<td><p>Latest distributed features (DTensor, FSDP)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Monarch</strong></p></td>
+<td><p>Pre-packaged wheel</p></td>
+<td><p>Distributed orchestration and actor system</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>vLLM</strong></p></td>
+<td><p>v0.10.0+</p></td>
+<td><p>Fast inference with PagedAttention</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>TorchTitan</strong></p></td>
+<td><p>Latest</p></td>
+<td><p>Production training infrastructure</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><strong>Supervised Fine-Tuning (SFT)</strong>: Adapt pre-trained models to specific tasks using labeled data</p></li>
-<li><p><strong>Group Relative Policy Optimization (GRPO)</strong>: Advanced reinforcement learning for model alignment</p></li>
-<li><p><strong>Multi-GPU Distributed Training</strong>: Efficient scaling across multiple GPUs and nodes</p></li>
+<li><p><strong>Conda or Miniconda</strong>: For environment management</p>
+<ul>
+<li><p>Download from <a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html">conda.io</a></p></li>
 </ul>
+</li>
+<li><p><strong>GitHub CLI (gh)</strong>: Required for downloading pre-packaged dependencies</p>
+<ul>
+<li><p>Install instructions: <a class="reference external" href="https://github.com/cli/cli#installation">github.com/cli/cli#installation</a></p></li>
+<li><p>After installing, authenticate with: <code class="docutils literal notranslate"><span class="pre">gh</span> <span class="pre">auth</span> <span class="pre">login</span></code></p></li>
+<li><p>You can use either HTTPS or SSH as the authentication protocol</p></li>
+</ul>
+</li>
+<li><p><strong>Git</strong>: For cloning the repository</p>
+<ul>
+<li><p>Usually pre-installed on Linux systems</p></li>
+<li><p>Verify with: <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">--version</span></code></p></li>
+</ul>
+</li>
+</ul>
+<p><strong>Installation note:</strong> The installation script provides pre-built wheels with PyTorch nightly already included.</p>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
+<p>TorchForge uses pre-packaged wheels for all dependencies, making installation faster and more reliable.</p>
+<ol class="arabic">
+<li><p><strong>Clone the Repository</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/meta-pytorch/forge.git
+<span class="nb">cd</span><span class="w"> </span>forge
+</pre></div>
+</div>
+</li>
+<li><p><strong>Create Conda Environment</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>forge<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.10
+conda<span class="w"> </span>activate<span class="w"> </span>forge
+</pre></div>
+</div>
+</li>
+<li><p><strong>Run Installation Script</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./scripts/install.sh
+</pre></div>
+</div>
+<p>The installation script will:</p>
+<ul class="simple">
+<li><p>Install system dependencies using DNF (or your package manager)</p></li>
+<li><p>Download pre-built wheels for PyTorch nightly, Monarch, vLLM, and TorchTitan</p></li>
+<li><p>Install TorchForge and all Python dependencies</p></li>
+<li><p>Configure the environment for GPU training</p></li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><strong>Using sudo instead of conda</strong>: If you prefer installing system packages directly rather than through conda, use:
+<code class="docutils literal notranslate"><span class="pre">./scripts/install.sh</span> <span class="pre">--use-sudo</span></code></p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>When adding packages to <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>, use <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span> <span class="pre">--inexact</span></code> to avoid removing Monarch and vLLM.</p>
+</div>
+</li>
+</ol>
+</section>
+<section id="verifying-your-setup">
+<h2>Verifying Your Setup<a class="headerlink" href="#verifying-your-setup" title="Link to this heading">#</a></h2>
+<p>After installation, verify that all components are working correctly:</p>
+<ol class="arabic">
+<li><p><strong>Check GPU Availability</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import torch; print(f&#39;GPUs available: {torch.cuda.device_count()}&#39;)&quot;</span>
+</pre></div>
+</div>
+<p>Expected output: <code class="docutils literal notranslate"><span class="pre">GPUs</span> <span class="pre">available:</span> <span class="pre">2</span></code> (or more)</p>
+</li>
+<li><p><strong>Check CUDA Version</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import torch; print(f&#39;CUDA version: {torch.version.cuda}&#39;)&quot;</span>
+</pre></div>
+</div>
+<p>Expected output: <code class="docutils literal notranslate"><span class="pre">CUDA</span> <span class="pre">version:</span> <span class="pre">12.8</span></code></p>
+</li>
+<li><p><strong>Check All Dependencies</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Check core components</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import torch, forge, monarch, vllm; print(&#39;All imports successful&#39;)&quot;</span>
+
+<span class="c1"># Check specific versions</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">import torch</span>
+<span class="s2">import forge</span>
+<span class="s2">import vllm</span>
+
+<span class="s2">print(f&#39;PyTorch: {torch.__version__}&#39;)</span>
+<span class="s2">print(f&#39;TorchForge: {forge.__version__}&#39;)</span>
+<span class="s2">print(f&#39;vLLM: {vllm.__version__}&#39;)</span>
+<span class="s2">print(f&#39;CUDA: {torch.version.cuda}&#39;)</span>
+<span class="s2">print(f&#39;GPUs: {torch.cuda.device_count()}&#39;)</span>
+<span class="s2">&quot;</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Verify Monarch</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">from monarch.actor import Actor, this_host</span>
+
+<span class="s2"># Test basic Monarch functionality</span>
+<span class="s2">procs = this_host().spawn_procs({&#39;gpus&#39;: 1})</span>
+<span class="s2">print(&#39;Monarch: Process spawning works&#39;)</span>
+<span class="s2">&quot;</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+<section id="quick-start-examples">
+<h2>Quick Start Examples<a class="headerlink" href="#quick-start-examples" title="Link to this heading">#</a></h2>
+<p>Now that TorchForge is installed, let’s run some training examples.</p>
+<p>Here’s what training looks like with TorchForge:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install dependencies</span>
+conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>forge<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.10
+conda<span class="w"> </span>activate<span class="w"> </span>forge
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/meta-pytorch/forge
+<span class="nb">cd</span><span class="w"> </span>forge
+./scripts/install.sh
+
+<span class="c1"># Download a model</span>
+hf<span class="w"> </span>download<span class="w"> </span>meta-llama/Meta-Llama-3.1-8B-Instruct<span class="w"> </span>--local-dir<span class="w"> </span>/tmp/Meta-Llama-3.1-8B-Instruct<span class="w"> </span>--exclude<span class="w"> </span><span class="s2">&quot;original/consolidated.00.pth&quot;</span>
+
+<span class="c1"># Run SFT training (requires 2+ GPUs)</span>
+uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>run<span class="w"> </span>--nproc_per_node<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>apps/sft/main.py<span class="w"> </span>--config<span class="w"> </span>apps/sft/llama3_8b.yaml
+
+<span class="c1"># Run GRPO training (requires 3+ GPUs)</span>
+python<span class="w"> </span>-m<span class="w"> </span>apps.grpo.main<span class="w"> </span>--config<span class="w"> </span>apps/grpo/qwen3_1_7b.yaml
+</pre></div>
+</div>
+<section id="example-1-supervised-fine-tuning-sft">
+<h3>Example 1: Supervised Fine-Tuning (SFT)<a class="headerlink" href="#example-1-supervised-fine-tuning-sft" title="Link to this heading">#</a></h3>
+<p>Fine-tune Llama 3 8B on your data. <strong>Requires: 2+ GPUs</strong></p>
+<ol class="arabic">
+<li><p><strong>Access the Model</strong></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Model downloads are no longer required, but Hugging Face authentication is required to access the models.</p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">huggingface-cli</span> <span class="pre">login</span></code> first if you haven’t already.</p>
+</div>
+</li>
+<li><p><strong>Run Training</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>apps.sft.main<span class="w"> </span>--config<span class="w"> </span>apps/sft/llama3_8b.yaml
+</pre></div>
+</div>
+<p><strong>What’s Happening:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--nproc_per_node</span> <span class="pre">2</span></code>: Use 2 GPUs for training</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">apps/sft/main.py</span></code>: SFT training script</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">apps/sft/llama3_8b.yaml</span></code>: Configuration file with hyperparameters</p></li>
+<li><p><strong>TorchTitan</strong> handles model sharding across the 2 GPUs</p></li>
+<li><p><strong>Monarch</strong> coordinates the distributed training</p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="example-2-grpo-training">
+<h3>Example 2: GRPO Training<a class="headerlink" href="#example-2-grpo-training" title="Link to this heading">#</a></h3>
+<p>Train a model using reinforcement learning with GRPO. <strong>Requires: 3+ GPUs</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>apps.grpo.main<span class="w"> </span>--config<span class="w"> </span>apps/grpo/qwen3_1_7b.yaml
+</pre></div>
+</div>
+<p><strong>What’s Happening:</strong></p>
+<ul class="simple">
+<li><p>GPU 0: Trainer model (being trained, powered by TorchTitan)</p></li>
+<li><p>GPU 1: Reference model (frozen baseline, powered by TorchTitan)</p></li>
+<li><p>GPU 2: Policy model (scoring outputs, powered by vLLM)</p></li>
+<li><p><strong>Monarch</strong> orchestrates all three components</p></li>
+<li><p><strong>TorchStore</strong> handles weight synchronization from training to inference</p></li>
+</ul>
+</section>
+</section>
+<section id="understanding-configuration-files">
+<h2>Understanding Configuration Files<a class="headerlink" href="#understanding-configuration-files" title="Link to this heading">#</a></h2>
+<p>TorchForge uses YAML configuration files to manage training parameters. Let’s examine a typical config:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example: apps/sft/llama3_8b.yaml</span>
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">meta-llama/Meta-Llama-3.1-8B-Instruct</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/Meta-Llama-3.1-8B-Instruct</span>
+
+<span class="nt">training</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="w">  </span><span class="nt">learning_rate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-5</span>
+<span class="w">  </span><span class="nt">num_epochs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<span class="w">  </span><span class="nt">gradient_accumulation_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+
+<span class="nt">distributed</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fsdp</span><span class="w">  </span><span class="c1"># Managed by TorchTitan</span>
+<span class="w">  </span><span class="nt">precision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bf16</span>
+
+<span class="nt">checkpointing</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">save_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+<span class="w">  </span><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/checkpoints</span>
+</pre></div>
+</div>
+<p><strong>Key Sections:</strong></p>
+<ul class="simple">
+<li><p><strong>model</strong>: Model path and settings</p></li>
+<li><p><strong>training</strong>: Hyperparameters like batch size and learning rate</p></li>
+<li><p><strong>distributed</strong>: Multi-GPU strategy (FSDP, tensor parallel, etc.) handled by TorchTitan</p></li>
+<li><p><strong>checkpointing</strong>: Where and when to save model checkpoints</p></li>
+</ul>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading">#</a></h2>
+<p>Now that you have TorchForge installed and verified:</p>
+<ol class="arabic simple">
+<li><p><strong>Explore Examples</strong>: Check the <code class="docutils literal notranslate"><span class="pre">apps/</span></code> directory for more training examples</p></li>
+<li><p><strong>Read Tutorials</strong>: Follow <a class="reference internal" href="tutorials.html"><span class="doc">Tutorials</span></a> for step-by-step guides</p></li>
+<li><p><strong>API Documentation</strong>: Explore <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> for detailed API reference</p></li>
+</ol>
+</section>
+<section id="getting-help">
+<h2>Getting Help<a class="headerlink" href="#getting-help" title="Link to this heading">#</a></h2>
+<p>If you encounter issues:</p>
+<ol class="arabic simple">
+<li><p><strong>Search Issues</strong>: Look through <a class="reference external" href="https://github.com/meta-pytorch/forge/issues">GitHub Issues</a></p></li>
+<li><p><strong>File a Bug Report</strong>: Create a new issue with:</p>
+<ul class="simple">
+<li><p>Your system configuration (output of diagnostic command below)</p></li>
+<li><p>Full error message</p></li>
+<li><p>Steps to reproduce</p></li>
+<li><p>Expected vs actual behavior</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Diagnostic command:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">import torch</span>
+<span class="s2">import forge</span>
+
+<span class="s2">try:</span>
+<span class="s2">    import monarch</span>
+<span class="s2">    monarch_status = &#39;OK&#39;</span>
+<span class="s2">except Exception as e:</span>
+<span class="s2">    monarch_status = str(e)</span>
+
+<span class="s2">try:</span>
+<span class="s2">    import vllm</span>
+<span class="s2">    vllm_version = vllm.__version__</span>
+<span class="s2">except Exception as e:</span>
+<span class="s2">    vllm_version = str(e)</span>
+
+<span class="s2">print(f&#39;PyTorch: {torch.__version__}&#39;)</span>
+<span class="s2">print(f&#39;TorchForge: {forge.__version__}&#39;)</span>
+<span class="s2">print(f&#39;Monarch: {monarch_status}&#39;)</span>
+<span class="s2">print(f&#39;vLLM: {vllm_version}&#39;)</span>
+<span class="s2">print(f&#39;CUDA: {torch.version.cuda}&#39;)</span>
+<span class="s2">print(f&#39;GPUs: {torch.cuda.device_count()}&#39;)</span>
+<span class="s2">&quot;</span>
+</pre></div>
+</div>
+<p>Include this output in your bug reports!</p>
+</section>
+<section id="additional-resources">
+<h2>Additional Resources<a class="headerlink" href="#additional-resources" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Contributing Guide</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></p></li>
+<li><p><strong>Code of Conduct</strong>: <a class="reference external" href="https://github.com/meta-pytorch/forge/blob/main/CODE_OF_CONDUCT.md">CODE_OF_CONDUCT.md</a></p></li>
+<li><p><strong>Monarch Documentation</strong>: <a class="reference external" href="https://meta-pytorch.org/monarch">meta-pytorch.org/monarch</a></p></li>
+<li><p><strong>vLLM Documentation</strong>: <a class="reference external" href="https://docs.vllm.ai">docs.vllm.ai</a></p></li>
+<li><p><strong>TorchTitan</strong>: <a class="reference external" href="https://github.com/pytorch/torchtitan">github.com/pytorch/torchtitan</a></p></li>
+</ul>
+</section>
 </section>
 
 
@@ -764,15 +1070,15 @@ document.write(`
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Welcome to TorchForge documentation!</p>
+        <p class="prev-next-title">TorchForge Documentation</p>
       </div>
     </a>
     <a class="right-next"
-       href="concepts.html"
+       href="tutorials.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Concepts</p>
+        <p class="prev-next-title">Tutorials</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -803,15 +1109,15 @@ document.write(`
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Welcome to TorchForge documentation!</p>
+        <p class="prev-next-title">TorchForge Documentation</p>
       </div>
     </a>
     <a class="right-next"
-       href="concepts.html"
+       href="tutorials.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Concepts</p>
+        <p class="prev-next-title">Tutorials</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -824,6 +1130,30 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#system-requirements">System Requirements</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verifying-your-setup">Verifying Your Setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start-examples">Quick Start Examples</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-1-supervised-fine-tuning-sft">Example 1: Supervised Fine-Tuning (SFT)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-2-grpo-training">Example 2: GRPO Training</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#understanding-configuration-files">Understanding Configuration Files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#next-steps">Next Steps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#getting-help">Getting Help</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#additional-resources">Additional Resources</a></li>
+</ul>
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -952,11 +1282,11 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "Get Started",
-       "headline": "Get Started",
+       "name": "Getting Started",
+       "headline": "Getting Started",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/getting_started.html",
-       "articleBody": "Get Started# Welcome to TorchForge! This guide will help you get up and running with TorchForge, a PyTorch-native platform specifically designed for post-training generative AI models. TorchForge specializes in post-training techniques for large language models, including: Supervised Fine-Tuning (SFT): Adapt pre-trained models to specific tasks using labeled data Group Relative Policy Optimization (GRPO): Advanced reinforcement learning for model alignment Multi-GPU Distributed Training: Efficient scaling across multiple GPUs and nodes",
+       "articleBody": "Getting Started# This guide will walk you through installing TorchForge, understanding its dependencies, verifying your setup, and running your first training job. System Requirements# Before installing TorchForge, ensure your system meets the following requirements. Component Requirement Notes Operating System Linux (Fedora/Ubuntu/Debian) MacOS and Windows not currently supported Python 3.10 or higher Python 3.11 recommended GPU NVIDIA with CUDA support AMD GPUs not currently supported Minimum GPUs 2+ for SFT, 3+ for GRPO More GPUs enable larger models CUDA 12.8 Required for GPU training RAM 32GB+ recommended Depends on model size Disk Space 50GB+ free For models, datasets, and checkpoints PyTorch Nightly build Latest distributed features (DTensor, FSDP) Monarch Pre-packaged wheel Distributed orchestration and actor system vLLM v0.10.0+ Fast inference with PagedAttention TorchTitan Latest Production training infrastructure Prerequisites# Conda or Miniconda: For environment management Download from conda.io GitHub CLI (gh): Required for downloading pre-packaged dependencies Install instructions: github.com/cli/cli#installation After installing, authenticate with: gh auth login You can use either HTTPS or SSH as the authentication protocol Git: For cloning the repository Usually pre-installed on Linux systems Verify with: git --version Installation note: The installation script provides pre-built wheels with PyTorch nightly already included. Installation# TorchForge uses pre-packaged wheels for all dependencies, making installation faster and more reliable. Clone the Repository git clone https://github.com/meta-pytorch/forge.git cd forge Create Conda Environment conda create -n forge python=3.10 conda activate forge Run Installation Script ./scripts/install.sh The installation script will: Install system dependencies using DNF (or your package manager) Download pre-built wheels for PyTorch nightly, Monarch, vLLM, and TorchTitan Install TorchForge and all Python dependencies Configure the environment for GPU training Tip Using sudo instead of conda: If you prefer installing system packages directly rather than through conda, use: ./scripts/install.sh --use-sudo Warning When adding packages to pyproject.toml, use uv sync --inexact to avoid removing Monarch and vLLM. Verifying Your Setup# After installation, verify that all components are working correctly: Check GPU Availability python -c \"import torch; print(f\u0027GPUs available: {torch.cuda.device_count()}\u0027)\" Expected output: GPUs available: 2 (or more) Check CUDA Version python -c \"import torch; print(f\u0027CUDA version: {torch.version.cuda}\u0027)\" Expected output: CUDA version: 12.8 Check All Dependencies # Check core components python -c \"import torch, forge, monarch, vllm; print(\u0027All imports successful\u0027)\" # Check specific versions python -c \" import torch import forge import vllm print(f\u0027PyTorch: {torch.__version__}\u0027) print(f\u0027TorchForge: {forge.__version__}\u0027) print(f\u0027vLLM: {vllm.__version__}\u0027) print(f\u0027CUDA: {torch.version.cuda}\u0027) print(f\u0027GPUs: {torch.cuda.device_count()}\u0027) \" Verify Monarch python -c \" from monarch.actor import Actor, this_host # Test basic Monarch functionality procs = this_host().spawn_procs({\u0027gpus\u0027: 1}) print(\u0027Monarch: Process spawning works\u0027) \" Quick Start Examples# Now that TorchForge is installed, let\u2019s run some training examples. Here\u2019s what training looks like with TorchForge: # Install dependencies conda create -n forge python=3.10 conda activate forge git clone https://github.com/meta-pytorch/forge cd forge ./scripts/install.sh # Download a model hf download meta-llama/Meta-Llama-3.1-8B-Instruct --local-dir /tmp/Meta-Llama-3.1-8B-Instruct --exclude \"original/consolidated.00.pth\" # Run SFT training (requires 2+ GPUs) uv run forge run --nproc_per_node 2 \\ apps/sft/main.py --config apps/sft/llama3_8b.yaml # Run GRPO training (requires 3+ GPUs) python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml Example 1: Supervised Fine-Tuning (SFT)# Fine-tune Llama 3 8B on your data. Requires: 2+ GPUs Access the Model Note Model downloads are no longer required, but Hugging Face authentication is required to access the models. Run huggingface-cli login first if you haven\u2019t already. Run Training python -m apps.sft.main --config apps/sft/llama3_8b.yaml What\u2019s Happening: --nproc_per_node 2: Use 2 GPUs for training apps/sft/main.py: SFT training script --config apps/sft/llama3_8b.yaml: Configuration file with hyperparameters TorchTitan handles model sharding across the 2 GPUs Monarch coordinates the distributed training Example 2: GRPO Training# Train a model using reinforcement learning with GRPO. Requires: 3+ GPUs python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml What\u2019s Happening: GPU 0: Trainer model (being trained, powered by TorchTitan) GPU 1: Reference model (frozen baseline, powered by TorchTitan) GPU 2: Policy model (scoring outputs, powered by vLLM) Monarch orchestrates all three components TorchStore handles weight synchronization from training to inference Understanding Configuration Files# TorchForge uses YAML configuration files to manage training parameters. Let\u2019s examine a typical config: # Example: apps/sft/llama3_8b.yaml model: name: meta-llama/Meta-Llama-3.1-8B-Instruct path: /tmp/Meta-Llama-3.1-8B-Instruct training: batch_size: 4 learning_rate: 1e-5 num_epochs: 10 gradient_accumulation_steps: 4 distributed: strategy: fsdp # Managed by TorchTitan precision: bf16 checkpointing: save_interval: 1000 output_dir: /tmp/checkpoints Key Sections: model: Model path and settings training: Hyperparameters like batch size and learning rate distributed: Multi-GPU strategy (FSDP, tensor parallel, etc.) handled by TorchTitan checkpointing: Where and when to save model checkpoints Next Steps# Now that you have TorchForge installed and verified: Explore Examples: Check the apps/ directory for more training examples Read Tutorials: Follow Tutorials for step-by-step guides API Documentation: Explore API Reference for detailed API reference Getting Help# If you encounter issues: Search Issues: Look through GitHub Issues File a Bug Report: Create a new issue with: Your system configuration (output of diagnostic command below) Full error message Steps to reproduce Expected vs actual behavior Diagnostic command: python -c \" import torch import forge try: import monarch monarch_status = \u0027OK\u0027 except Exception as e: monarch_status = str(e) try: import vllm vllm_version = vllm.__version__ except Exception as e: vllm_version = str(e) print(f\u0027PyTorch: {torch.__version__}\u0027) print(f\u0027TorchForge: {forge.__version__}\u0027) print(f\u0027Monarch: {monarch_status}\u0027) print(f\u0027vLLM: {vllm_version}\u0027) print(f\u0027CUDA: {torch.version.cuda}\u0027) print(f\u0027GPUs: {torch.cuda.device_count()}\u0027) \" Include this output in your bug reports! Additional Resources# Contributing Guide: CONTRIBUTING.md Code of Conduct: CODE_OF_CONDUCT.md Monarch Documentation: meta-pytorch.org/monarch vLLM Documentation: docs.vllm.ai TorchTitan: github.com/pytorch/torchtitan",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
