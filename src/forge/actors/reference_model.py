@@ -132,7 +132,7 @@ class ReferenceModel(ForgeActor):
         Args:
             input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
             max_req_tokens (int): maximum request length.
-            return_logprobs (bool): whether to return og probabilities instead of raw logits.
+            return_logprobs (bool): whether to return log probabilities instead of raw logits.
 
             return_logprobs flag significantly impacts the amount of data transferred to the caller:
             - When False: Returns logits with shape [group_size, req + res_length, vocab_size].

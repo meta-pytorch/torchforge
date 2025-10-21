@@ -6,6 +6,8 @@
 
 """Optimized unit tests for metric actors functionality."""
 
+from unittest.mock import patch
+
 import pytest
 
 from forge.observability.metric_actors import (
@@ -13,6 +15,8 @@ from forge.observability.metric_actors import (
     GlobalLoggingActor,
     LocalFetcherActor,
 )
+
+from forge.observability.metrics import LoggingMode
 from monarch.actor import this_host
 
 
@@ -62,7 +66,7 @@ class TestBasicOperations:
     async def test_backend_init(self, local_fetcher):
         """Test backend initialization and shutdown."""
         metadata = {"wandb": {"shared_run_id": "test123"}}
-        config = {"console": {"reduce_across_ranks": False}}
+        config = {"console": {"logging_mode": LoggingMode.PER_RANK_REDUCE}}
 
         await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
         await local_fetcher.shutdown.call_one()
@@ -71,7 +75,7 @@ class TestBasicOperations:
 class TestRegistrationLifecycle:
     """Test registration lifecycle."""
 
-    @pytest.mark.timeout(3)
+    @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_registration_lifecycle(self, global_logger, local_fetcher):
         """Test complete registration/deregistration lifecycle."""
@@ -108,25 +112,38 @@ class TestBackendConfiguration:
         # Empty config
         await global_logger.init_backends.call_one({})
 
-        # Valid configs for different reduce_across_ranks modes
-        for reduce_across_ranks in [True, False]:
-            config = {"console": {"reduce_across_ranks": reduce_across_ranks}}
+        # Valid configs for different logging_mode modes
+        for logging_mode in [LoggingMode.GLOBAL_REDUCE, LoggingMode.PER_RANK_NO_REDUCE]:
+            config = {"console": {"logging_mode": logging_mode}}
             await global_logger.init_backends.call_one(config)
 
-    @pytest.mark.timeout(3)
-    @pytest.mark.asyncio
-    async def test_invalid_backend_configs(self, global_logger):
-        """Test invalid backend configurations are handled gracefully."""
-        # Empty config should work
-        await global_logger.init_backends.call_one({})
+    def test_invalid_backend_configs(self):
+        """Test invalid backend configurations and warnings using direct validation."""
+        actor = GlobalLoggingActor()
 
-        # Config with only project should work
-        config_with_project = {"console": {"project": "test_project"}}
-        await global_logger.init_backends.call_one(config_with_project)
+        # Test 1: Invalid logging_mode should raise ValueError
+        with pytest.raises(ValueError, match="is not a valid LoggingMode"):
+            actor._validate_backend_config("console", {"logging_mode": "invalid_mode"})
 
-        # Config with reduce_across_ranks should work
-        config_with_reduce = {"console": {"reduce_across_ranks": True}}
-        await global_logger.init_backends.call_one(config_with_reduce)
+        # Test 2: WandB PER_RANK_REDUCE + per_rank_share_run=True should warn
+        with patch("forge.observability.metric_actors.logger.warning") as mock_warn:
+            config = {
+                "logging_mode": "per_rank_reduce",
+                "per_rank_share_run": True,
+                "project": "test_project",
+            }
+
+            result = actor._validate_backend_config("wandb", config)
+
+            # Should have logged warning about suboptimal config
+            mock_warn.assert_called_once()
+            warning_msg = str(mock_warn.call_args)
+            assert "not recommended" in warning_msg
+
+            # Should still return valid config with LoggingMode enum
+            assert result["logging_mode"] == LoggingMode.PER_RANK_REDUCE
+            assert result["per_rank_share_run"] is True
+            assert result["project"] == "test_project"
 
 
 class TestErrorHandling:

@@ -32,7 +32,9 @@ async def run(cfg: DictConfig):
         await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
-    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
+    metric_logging_cfg = cfg.get(
+        "metric_logging", {"console": {"logging_mode": "global_reduce"}}
+    )
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
