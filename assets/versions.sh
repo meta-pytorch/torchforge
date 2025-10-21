@@ -8,7 +8,7 @@
 # This file contains all pinned versions and commits for dependencies
 
 # PyTorch version
-PYTORCH_VERSION="2.9.0.dev20250905"
+PYTORCH_VERSION="2.9.0"
 
 # vLLM branch
 VLLM_BRANCH="v0.10.0"

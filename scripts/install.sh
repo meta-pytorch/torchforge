@@ -95,128 +95,6 @@ detect_os_family() {
     esac
 }
 
-# Install required system packages
-install_system_packages() {
-    local use_sudo=${1:-false}
-
-    log_info "Installing required system packages..."
-
-    if [ "$use_sudo" = "true" ]; then
-        # User explicitly requested sudo installation
-        if sudo -n true 2>/dev/null; then
-            # Detect OS family using /etc/os-release
-            local os_family
-            os_family=$(detect_os_family)
-
-            case "$os_family" in
-                "rhel_fedora")
-                    log_info "Detected RHEL/Fedora-based OS - using system package manager"
-                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
-                    ;;
-                "debian")
-                    log_info "Detected Debian-based OS - using system package manager"
-                    sudo apt-get update
-                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
-                    ;;
-                "unknown")
-                    log_error "Unsupported OS for automatic system package installation"
-                    log_info "Supported distributions: RHEL/Fedora-based (rhel fedora) and Debian-based (debian)"
-                    exit 1
-                    ;;
-            esac
-            log_info "System packages installed successfully via system package manager"
-        else
-            log_error "Sudo installation requested but no sudo access available"
-            log_info "Either run with sudo privileges or remove the --use-sudo flag to use conda"
-            exit 1
-        fi
-    else
-        # Default to conda installation
-        log_info "Installing system packages via conda (default method)"
-        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 -y
-        log_info "Conda package installation completed. Packages installed in conda environment."
-    fi
-}
-
-# Check to see if gh is installed, if not, it will be installed via conda-forge channel
-check_gh_install() {
-  if ! command -v gh &> /dev/null; then
-    log_warning "GitHub CLI (gh) not found. Installing via Conda..."
-    conda install gh --channel conda-forge -y
-    log_info "GitHub CLI (gh) installed successfully."
-    log_info "Please run 'gh auth login' to authenticate with GitHub."
-  else
-    log_info "GitHub CLI (gh) already installed."
-  fi
-}
-
-# Check wheels exist
-check_wheels() {
-    if [ ! -d "$WHEEL_DIR" ]; then
-        log_error "Wheels directory not found: $WHEEL_DIR"
-        exit 1
-    fi
-
-    local wheel_count=$(ls -1 "$WHEEL_DIR"/*.whl 2>/dev/null | wc -l)
-    log_info "Found $wheel_count local wheels"
-}
-
-# Download vLLM wheel from GitHub releases
-download_vllm_wheel() {
-    log_info "Downloading vLLM wheel from GitHub releases..."
-
-    # Check if gh is installed
-    if ! command -v gh &> /dev/null; then
-        log_error "GitHub CLI (gh) is required to download vLLM wheel"
-        log_info "Install it with: sudo dnf install gh"
-        log_info "Then run: gh auth login"
-        exit 1
-    fi
-
-    # Get the vLLM wheel filename from the release
-    local vllm_wheel_name
-    vllm_wheel_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPO" --json assets --jq '.assets[] | select(.name | contains("vllm")) | .name' | head -1)
-
-    if [ -z "$vllm_wheel_name" ]; then
-        log_error "Could not find vLLM wheel in release $RELEASE_TAG"
-        log_info "Make sure the vLLM wheel has been uploaded to the GitHub release"
-        exit 1
-    fi
-    for f in assets/wheels/vllm-*; do
-        [ -e "$f" ] || continue  # skip if glob didn't match
-        if [ "$(basename "$f")" != "$vllm_wheel_name" ]; then
-            log_info "Removing stale vLLM wheel: $(basename "$f")"
-            rm -f "$f"
-        fi
-    done
-
-    local local_path="$WHEEL_DIR/$vllm_wheel_name"
-
-    if [ -f "$local_path" ]; then
-        log_info "vLLM wheel already downloaded: $vllm_wheel_name"
-        return 0
-    fi
-
-    log_info "Downloading: $vllm_wheel_name"
-
-    # Save current directory and change to wheel directory
-    local original_dir=$(pwd)
-    cd "$WHEEL_DIR"
-    gh release download "$RELEASE_TAG" --repo "$GITHUB_REPO" --pattern "*vllm*"
-    local download_result=$?
-
-    # Always return to original directory
-    cd "$original_dir"
-
-    if [ $download_result -eq 0 ]; then
-        log_info "Successfully downloaded vLLM wheel"
-    else
-        log_error "Failed to download vLLM wheel"
-        exit 1
-    fi
-}
-
-
 # Parse command line arguments
 parse_args() {
     USE_SUDO=false
@@ -255,30 +133,24 @@ main() {
     echo "======================"
     echo ""
     echo "Note: Run this from the root of the forge repository"
-    echo "This script requires GitHub CLI (gh) to download large wheels"
-    if [ "$USE_SUDO" = "true" ]; then
-        echo "System packages will be installed via system package manager (requires sudo)"
-        check_sudo
-    else
-        echo "System packages will be installed via conda (default, safer)"
-    fi
     echo ""
-
-    check_conda_env
-    check_wheels
 
     # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
     conda install -y openssl
 
-    install_system_packages "$USE_SUDO"
-    check_gh_install
-    download_vllm_wheel
-
     log_info "Installing PyTorch nightly..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/nightly/cu129
+    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/cu128
 
-    log_info "Installing all wheels (local + downloaded)..."
-    pip install "$WHEEL_DIR"/*.whl
+    # Install vLLM and its requirements
+    pip install -r .github/packaging/vllm_reqs_12_9.txt
+    pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+
+    # Install monarch
+    pip install torchmonarch==0.1.0rc7
+
+    # Install torchtitan and torchstore
+    pip install torchtitan==0.2.0
+    pip install torchstore==0.0.1rc2
 
     log_info "Installing Forge from source..."
     pip install -e ".[dev]"
@@ -301,7 +173,7 @@ main() {
     local cuda_activation_script="${conda_env_dir}/etc/conda/activate.d/cuda_env.sh"
     cat > "$cuda_activation_script" << 'EOF'
 # CUDA environment for Forge
-export CUDA_VERSION=12.9
+export CUDA_VERSION=12.8
 export NVCC=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_NVCC_EXECUTABLE=/usr/local/cuda-${CUDA_VERSION}/bin/nvcc
 export CUDA_HOME=/usr/local/cuda-${CUDA_VERSION}

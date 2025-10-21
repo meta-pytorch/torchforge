@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Update pip
         run: python -m pip install --upgrade pip
-      - name: Install forge
+      - name: Install torchforge
         run: ./scripts/install.sh
       - name: Run unit tests with coverage
         # TODO add all tests
