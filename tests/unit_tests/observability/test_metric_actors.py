@@ -112,9 +112,9 @@ class TestBackendConfiguration:
         # Empty config
         await global_logger.init_backends.call_one({})
 
-        # Valid configs for different reduce_across_ranks modes
-        for reduce_across_ranks in [True, False]:
-            config = {"console": {"reduce_across_ranks": reduce_across_ranks}}
+        # Valid configs for different logging_mode modes
+        for logging_mode in [LoggingMode.GLOBAL_REDUCE, LoggingMode.PER_RANK_NO_REDUCE]:
+            config = {"console": {"logging_mode": logging_mode}}
             await global_logger.init_backends.call_one(config)
 
     def test_invalid_backend_configs(self):
