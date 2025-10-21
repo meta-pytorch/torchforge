@@ -5,6 +5,7 @@ on:
     branches:
       - nightly
   workflow_dispatch:
+  pull_request:
 
 permissions:
   id-token: write
