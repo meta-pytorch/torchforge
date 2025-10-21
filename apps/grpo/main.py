@@ -29,7 +29,7 @@ from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
-from forge.observability.metrics import record_metric, Reduce
+from forge.observability.metrics import record_episode_sample, record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
 from forge.types import LauncherConfig, ProvisionerConfig
@@ -51,6 +51,7 @@ class Episode:
     completion: Completion | None = None
     ref_logprobs: torch.Tensor | None = None
     reward: float | None = None
+    reward_breakdown: dict[str, float] | None = None
     advantage: float | None = None
 
     @property
@@ -144,8 +145,11 @@ class RewardActor(ForgeActor):
     reward_functions: list[Callable]
 
     @endpoint
-    async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
+    async def evaluate_response(
+        self, prompt: str, response: str, target: str
+    ) -> dict[str, float]:
         total_rewards = 0.0
+        reward_breakdown = {}  # reward breakdown by function
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
             total_rewards += reward
@@ -154,6 +158,7 @@ class RewardActor(ForgeActor):
             reward_fn_name = getattr(
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
+            reward_breakdown[reward_fn_name] = reward
             # per function reward
             record_metric(
                 f"reward/evaluate_response/sum_{reward_fn_name}_reward",
@@ -184,7 +189,8 @@ class RewardActor(ForgeActor):
             )
 
         avg_reward = total_rewards / len(self.reward_functions)
-        return avg_reward
+        reward_breakdown["reward"] = avg_reward
+        return reward_breakdown
 
 
 @dataclass
@@ -383,9 +389,10 @@ async def main(cfg: DictConfig):
                     target=target,
                     completion=response,
                 )
-                episode.reward = await reward_actor.evaluate_response.route(
+                episode.reward_breakdown = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
+                episode.reward = episode.reward_breakdown["reward"]
                 episodes.append(episode)
 
                 # Build input_ids for reference logprobs
@@ -407,6 +414,7 @@ async def main(cfg: DictConfig):
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
+                record_episode_sample("rollout/sample", episode)
 
             rollout_count += 1
             record_metric(

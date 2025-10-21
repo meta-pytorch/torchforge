@@ -15,11 +15,11 @@ from enum import Enum
 from typing import Any, Dict, List
 
 import pytz
-from monarch.actor import current_rank
 
 from forge.observability.utils import get_proc_name_with_rank
 
 from forge.util.logging import get_logger, log_once
+from monarch.actor import current_rank
 
 logger = get_logger("INFO")
 
@@ -139,12 +139,32 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
         list[Metric]: List of reduced metrics
 
     Example:
-        states = [
-            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
-            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
-        ]
-        reduce_metrics_states(states)
-        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
+        >>> states = [
+        ...     {
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": "mean"},
+        ...         "reward/sample": {
+        ...             "reduction_type": "sample",
+        ...             "samples": [{"episode_id": 1, "reward": 0.5}],
+        ...         },
+        ...     },
+        ...     {
+        ...         "loss": {"count": 10, "sum": 16, "reduction_type": "mean"},
+        ...         "reward/sample": {
+        ...             "reduction_type": "sample",
+        ...             "samples": [{"episode_id": 2, "reward": 1.0}],
+        ...         },
+        ...     },
+        ... ]
+        >>> metrics = reduce_metrics_states(states)
+        >>> for m in metrics:
+        ...     print(m)
+        Metric(key='loss', value=2.0, reduction=Reduce.MEAN)
+        Metric(
+            key='reward/sample',
+            value=[{'episode_id': 1, 'reward': 0.5},
+                   {'episode_id': 2, 'reward': 1.0}],
+            reduction=Reduce.SAMPLE,
+        )
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
@@ -184,6 +204,31 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
         reduced_metrics.append(metric)
 
     return reduced_metrics
+
+
+def record_episode_sample(table_name: str, episode):
+    """
+    Record a structured sample-level log for a single episode.
+    Args:
+        table_name (str): logging prefix (e.g. "rollout/sample").
+        episode (Episode): episode object with filled attributes.
+    """
+    sample = {
+        "episode_id": episode.episode_id,
+        "policy_version": episode.policy_version,
+        "prompt": episode.request,
+        "response": episode.response,
+        "target": str(episode.target),
+        **(
+            episode.reward_breakdown or {}
+        ),  # per-fn breakdown including the average reward
+        "advantage": episode.advantage,
+        "request_len": episode.request_len,
+        "response_len": episode.response_len,
+        "pad_id": episode.pad_id,
+    }
+
+    record_metric(table_name, sample, Reduce.SAMPLE)
 
 
 #################
@@ -656,7 +701,12 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: stream without reduce
         for backend in self.per_rank_no_reduce_backends:
-            backend.log_stream(metric=metric, global_step=self.global_step)
+            if metric.reduction == Reduce.SAMPLE:
+                # Wrap singleton Metric into expected {key: [list_of_dicts]} format
+                sample = {metric.key: [metric.value]}
+                asyncio.create_task(backend.log_samples(sample, self.global_step))
+            else:
+                backend.log_stream(metric=metric, global_step=self.global_step)
 
         # Always accumulate for reduction and state return
         key = metric.key
@@ -711,8 +761,21 @@ class MetricCollector:
         if self.per_rank_reduce_backends:
             metrics_for_backends = reduce_metrics_states([states])
 
+            # Split into scalar metrics and sample metrics
+            scalar_metrics = [
+                m for m in metrics_for_backends if m.reduction != Reduce.SAMPLE
+            ]
+            sample_metrics = {
+                m.key: m.value
+                for m in metrics_for_backends
+                if m.reduction == Reduce.SAMPLE
+            }
+
             for backend in self.per_rank_reduce_backends:
-                await backend.log_batch(metrics_for_backends, global_step)
+                if scalar_metrics:
+                    await backend.log_batch(scalar_metrics, global_step)
+                if sample_metrics:
+                    await backend.log_samples(sample_metrics, global_step)
 
         # Update step counter for streaming backends
         # Note: This is incremented AFTER flush completes, so metrics recorded between
@@ -847,6 +910,16 @@ class ConsoleBackend(LoggerBackend):
     async def finish(self) -> None:
         pass
 
+    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+        """Pretty-print sample-level logs to console."""
+        import json
+
+        logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
+        for table_name, table_rows in samples.items():
+            logger.info(f"[{table_name}] ({len(table_rows)} samples)")
+            logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
+        logger.info("==============================================\n")
+
 
 class WandbBackend(LoggerBackend):
     """
@@ -883,6 +956,7 @@ class WandbBackend(LoggerBackend):
         )
         self.run = None
         self.process_name = None
+        self._tables: dict[str, "wandb.Table"] = {}
 
     async def init(
         self,
@@ -993,13 +1067,58 @@ class WandbBackend(LoggerBackend):
         # note: here we dont use step since wandb keeps only the latest value for each step
         self.run.log(log_data)
 
+    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+        """Log sample-level data incrementally to persistent WandB Tables."""
+        import wandb
+
+        if not self.run:
+            return
+
+        for table_name, table_rows in samples.items():
+            if not table_rows:
+                continue
+
+            # If table doesn't exist yet, create it in INCREMENTAL mode
+            if table_name not in self._tables:
+                columns = list(table_rows[0].keys())
+                table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
+                self._tables[table_name] = table
+                logger.info(
+                    f"WandbBackend: Created new incremental table: {table_name}"
+                )
+            else:
+                table = self._tables[table_name]
+
+            # Add rows (fill missing columns with None)
+            for s in table_rows:
+                values = [s.get(c) for c in table.columns]
+                table.add_data(*values)
+
+            # Log the same table object (INCREMENTAL update)
+            self.run.log({f"{table_name}_table": table})
+            logger.info(
+                f"WandbBackend: Appended {len(table_rows)} rows to incremental table '{table_name}' at step {step}"
+            )
+
     def get_metadata_for_secondary_ranks(self) -> dict[str, Any]:
         if self.run and self.per_rank_share_run:
             return {"shared_run_id": self.run.id}
         return {}
 
     async def finish(self) -> None:
+        import wandb
+
         if self.run:
+            # Convert each incremental table to immutable before finishing
+            for table_name, incr_table in self._tables.items():
+                final_table = wandb.Table(
+                    columns=incr_table.columns,
+                    data=incr_table.data,
+                    log_mode="IMMUTABLE",
+                )
+                self.run.log({table_name: final_table})
+                logger.info(f"WandbBackend: Finalized table {table_name}")
+
             self.run.finish()
             logger.info(f"WandbBackend {self.process_name}: Finished run")
 
