@@ -58,11 +58,14 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx_autodoc_typehints",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_gallery.gen_gallery",
 ]
+
+html_favicon = "_static/logo-icon.svg"
 
 html_baseurl = (
     f"https://meta-pytorch.org/forge/{version_path}"  # needed for sphinx-sitemap
@@ -74,11 +77,24 @@ sitemap_excludes = [
 ]
 sitemap_url_scheme = "{link}"
 
+# Ensure static files use relative paths
+html_static_path = ["_static"]
+
 templates_path = [
     "_templates",
     os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
 ]
-exclude_patterns = ["tutorials/index.rst"]
+
+exclude_patterns = [
+    "tutorials/index.rst",
+    "tutorials/template_tutorial.rst",
+    "tutorials/**/index.rst",
+    "tutorial_sources/**/*.md",  # Exclude all markdown files from tutorial_sources
+    "tutorial_sources/**/*.MD",  # Also exclude uppercase .MD files
+]
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_js_files = ["custom.js"]
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -124,6 +140,8 @@ html_theme_options = {
     "navbar_center": "navbar-nav",
     "canonical_url": "https://meta-pytorch.org/forge/",
     "header_links_before_dropdown": 7,
+    "show_toc_level": 2,
+    "navigation_depth": 3,
 }
 
 theme_variables = pytorch_sphinx_theme2.get_theme_variables()
@@ -155,27 +173,128 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "html_image",
+    "substitution",
 ]
+
+# Configure MyST parser to treat mermaid code blocks as mermaid directives
+myst_fence_as_directive = ["mermaid"]
+
+# Disable D3 zoom (we'll use lightbox instead)
+mermaid_d3_zoom = False
+
+# Global Mermaid theme configuration - applies to all diagrams
+mermaid_init_js = """
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+        primaryColor: '#4CAF50',
+        primaryTextColor: '#000',
+        primaryBorderColor: '#fff',
+        lineColor: '#555',
+        secondaryColor: '#FF9800',
+        tertiaryColor: '#ffffde'
+    },
+    flowchart: {
+        curve: 'basis'
+    },
+    themeCSS: '.edgePath .path { stroke-width: 4px; stroke: #555; }'
+});
+"""
 
 autodoc_default_options = {
     "members": True,
-    "member-order": "bysource",
-    "special-members": "__init__",
     "undoc-members": True,
-    "exclude-members": "__weakref__",
+    "private-members": False,
+    "inherited-members": False,
 }
+
+# Autodoc configuration for cleaner signatures
+autodoc_preserve_defaults = True  # Preserves default values without expansion
+autodoc_typehints = "description"  # Move type hints to description instead of signature
+autodoc_typehints_description_target = (
+    "documented_params"  # Only add types to documented params
+)
+
+# Disable docstring inheritance
+autodoc_inherit_docstrings = False
+autodoc_typehints = "none"
+
+
+# Removed suppress_warnings to make the build stricter
+# All warnings will now be treated as errors when -W is passed to sphinx-build
+
+# Be strict about references to catch broken links and references
+nitpicky = False
+
+# Napoleon settings for Google-style docstrings (from torchtitan and other dependencies)
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_use_param = True
+napoleon_use_rtype = True
+napoleon_use_ivar = True
 
 
 # -- Sphinx Gallery configuration -------------------------------------------
 sphinx_gallery_conf = {
     "examples_dirs": "tutorial_sources",  # Path to examples directory
     "gallery_dirs": "tutorials",  # Path to generate gallery
-    "filename_pattern": ".*",  # Include all files
+    "filename_pattern": r".*\.py$",  # Only process .py files, not .md files
     "download_all_examples": False,
     "first_notebook_cell": "%matplotlib inline",
     "plot_gallery": "True",
     "promote_jupyter_magic": True,
     "backreferences_dir": None,
-    "write_computation_times": True,
     "show_signature": False,
+    "write_computation_times": False,
+    "ignore_pattern": r".*\.md$|.*\.MD$",  # Explicitly ignore markdown files
 }
+
+
+def clean_docstring_indentation(app, what, name, obj, options, lines):
+    if name and name.startswith("torchtitan."):
+        lines[:] = [line.lstrip() for line in lines]
+        if lines and lines[-1].strip():
+            lines.append("")
+
+
+def copy_markdown_tutorials(app):
+    """Copy markdown files from tutorial_sources to tutorials directory.
+
+    This runs after the builder is initialized but before sphinx-gallery processes files,
+    ensuring markdown files are available alongside generated .py tutorials.
+    """
+    import shutil
+    from pathlib import Path
+
+    source_dir = Path(app.srcdir) / "tutorial_sources"
+    target_dir = Path(app.srcdir) / "tutorials"
+
+    # Ensure target directory exists
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Walk through tutorial_sources and copy all .md files
+    for md_file in source_dir.rglob("*.md"):
+        # Skip README files
+        if md_file.name.lower() in ["readme.md", "readme.txt"]:
+            continue
+
+        # Calculate relative path from tutorial_sources
+        rel_path = md_file.relative_to(source_dir)
+
+        # Create target path in tutorials directory
+        target_path = target_dir / rel_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Copy the file
+        shutil.copy2(md_file, target_path)
+        print(
+            f"[Forge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}"
+        )
+
+
+def setup(app):
+    app.connect("autodoc-process-docstring", clean_docstring_indentation)
+    # Use builder-inited to ensure it runs before source files are read
+    app.connect("builder-inited", copy_markdown_tutorials)

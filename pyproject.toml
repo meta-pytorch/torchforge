@@ -42,16 +42,13 @@ dev = [
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
+    "multiprocess",
 ]
 oss = [
     "torch",
     "torchmonarch-nightly==2025.8.1",
     "torchstore",
 ]
-
-[project.scripts]
-forge = "forge.cli.forge:main"
-
 
 # ---- Explicit project build information ---- #
 [build-system]

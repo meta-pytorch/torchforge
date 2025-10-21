@@ -99,15 +99,9 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
     description="Sets the maximum frame length for Monarch's actor message delivery in bytes.",
 )
 
-MONARCH_HOSTMESH_V1 = EnvVar(
-    name="MONARCH_HOSTMESH_V1",
-    default=False,
-    description="Whether or not to use Monarch's experimental hostmesh v1 APIs",
-)
-
 TORCHSTORE_USE_RDMA = EnvVar(
     name="TORCHSTORE_RDMA_ENABLED",
-    default=0,
+    default=1,
     description="Whether or not to use RDMA in TorchStore.",
 )
 

@@ -63,19 +63,19 @@ class TestBasicOperations:
         await global_logger.flush.call_one(global_step=1)
 
     @pytest.mark.asyncio
-    async def test_backend_init(self, global_logger):
-        """Test backend initialization and shutdown through proper validation flow."""
-        # Use global_logger to ensure proper validation flow (string -> enum conversion)
-        config = {"console": {"logging_mode": "per_rank_reduce"}}
+    async def test_backend_init(self, local_fetcher):
+        """Test backend initialization and shutdown."""
+        metadata = {"wandb": {"shared_run_id": "test123"}}
+        config = {"console": {"logging_mode": LoggingMode.PER_RANK_REDUCE}}
 
-        await global_logger.init_backends.call_one(config)
-        await global_logger.shutdown.call_one()
+        await local_fetcher.init_backends.call_one(metadata, config, global_step=5)
+        await local_fetcher.shutdown.call_one()
 
 
 class TestRegistrationLifecycle:
     """Test registration lifecycle."""
 
-    @pytest.mark.timeout(3)
+    @pytest.mark.timeout(10)
     @pytest.mark.asyncio
     async def test_registration_lifecycle(self, global_logger, local_fetcher):
         """Test complete registration/deregistration lifecycle."""
@@ -112,9 +112,9 @@ class TestBackendConfiguration:
         # Empty config
         await global_logger.init_backends.call_one({})
 
-        # Valid configs for all logging modes
-        for mode in ["per_rank_reduce", "per_rank_no_reduce", "global_reduce"]:
-            config = {"console": {"logging_mode": mode}}
+        # Valid configs for different logging_mode modes
+        for logging_mode in [LoggingMode.GLOBAL_REDUCE, LoggingMode.PER_RANK_NO_REDUCE]:
+            config = {"console": {"logging_mode": logging_mode}}
             await global_logger.init_backends.call_one(config)
 
     def test_invalid_backend_configs(self):
@@ -169,7 +169,7 @@ class TestGetOrCreateMetricLogger:
     @pytest.mark.asyncio
     async def test_get_or_create_functionality(self):
         """Test get_or_create_metric_logger basic functionality."""
-        result = await get_or_create_metric_logger()
+        result = await get_or_create_metric_logger(process_name="TestController")
 
         # Should return a GlobalLoggingActor mesh
         assert result is not None

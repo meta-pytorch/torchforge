@@ -11,7 +11,6 @@ import asyncio
 import torch
 import torchstore as ts
 from forge.actors.trainer import RLTrainer
-from forge.cli.config import parse
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
@@ -23,6 +22,7 @@ from forge.types import (
     ProvisionerConfig,
     ServiceConfig,
 )
+from forge.util.config import parse
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -232,9 +232,7 @@ async def main(cfg: DictConfig):
     except KeyboardInterrupt:
         print("Training interrupted by user")
     finally:
-        print("Shutting down trainer...")
-        await RLTrainer.shutdown(trainer)
-        await mlogger.shutdown.call_one()
+        print("Shutting down...")
         await shutdown()
         print("Trainer shutdown complete.")
 

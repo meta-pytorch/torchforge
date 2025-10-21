@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import math
 import os
 import shutil
 
@@ -18,7 +17,7 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from monarch.actor import current_rank, current_size, endpoint
+from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
 from torchtitan.config.job_config import (
@@ -42,11 +41,11 @@ from forge.actors._torchstore_utils import (
     DcpHandle,
     get_dcp_whole_state_dict_key,
     get_param_key,
+    rdma_available,
 )
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
-from forge.env import TORCHSTORE_USE_RDMA
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
@@ -95,6 +94,26 @@ def cleanup_old_weight_versions(
 
 @dataclass
 class RLTrainer(ForgeActor):
+    """A reinforcement learning trainer actor for policy optimization training.
+
+    Built on top of TorchTitan's training engine, this actor provides a complete training
+    loop for reinforcement learning. It performs forward and backward passes with gradient
+    computation, optimization steps, and checkpoint management. Unlike the ReferenceModel
+    actor which only runs forward passes, RLTrainer actively updates the policy model
+    parameters through gradient descent.
+
+    The trainer supports the same distributed training strategies that TorchTitan does,
+    including but not limited to, tensor parallelism, data parallelism, and FSDP
+    (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel
+    for policy optimization algorithms like GRPO (Group Relative Policy Optimization),
+    where it optimizes the policy against a loss that includes KL divergence penalties
+    from the reference model.
+
+    The trainer handles:
+    - Forward and backward propagation with automatic mixed precision (AMP)
+    - Optimizer steps with learning rate scheduling
+    """
+
     job: Job = field(default_factory=Job)
     model: Model = field(default_factory=Model)
     optimizer: Optimizer = field(default_factory=Optimizer)
@@ -112,9 +131,7 @@ class RLTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = (
-        TORCHSTORE_USE_RDMA.get_value() == 0
-    )  # torchstore currently only accepts 0 or 1
+    use_dcp: bool = not rdma_available()
     dcp_path: str = "forge_dcp_tmp"
 
     def __post_init__(self):
@@ -143,22 +160,7 @@ class RLTrainer(ForgeActor):
         self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
-        self.rank = current_rank().rank
-        self.size = math.prod(current_size().values())
-
-        env = {
-            "RANK": str(self.rank),
-            "LOCAL_RANK": str(self.rank),
-            "LOCAL_WORLD_SIZE": str(self.size),
-            "GROUP_RANK": str(self.size),
-            "GROUP_WORLD_SIZE": str(self.size),
-            "ROLE_RANK": str(self.rank),
-            "ROLE_WORLD_SIZE": str(self.size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self.size),
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         logger.info("Compiling loss")
         self.loss = torch.compile(self.loss)
 

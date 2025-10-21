@@ -10,104 +10,118 @@ Unit tests for forge.actors.coder.SandboxedPythonCoder.
 import os
 import tempfile
 import uuid
-from contextlib import asynccontextmanager
 from unittest.mock import Mock, patch
 
 import pytest
-from forge.actors.coder import SandboxedPythonCoder
 
-from monarch.actor import this_proc
+from forge.actors.coder import _SandboxedPythonCoder
 
 
-@asynccontextmanager
-async def create_mock_coder(
-    execute_stdout="hello world\n",
-    execute_returncode=0,
-    execute_stderr="",
-    import_fails=False,
-    create_fails=False,
-):
-    """Context manager that creates a mocked SandboxedPythonCoder."""
+@pytest.mark.asyncio
+async def test_coder_success():
+    """Test successful execution."""
     unique_id = str(uuid.uuid4())[:8]
     container_name = f"test_sandbox_{unique_id}"
 
     with tempfile.NamedTemporaryFile(suffix=".sqsh", delete=False) as temp_image:
         image_path = temp_image.name
 
-    coder = None
+    def mock_subprocess_run(*args, **kwargs):
+        """Mock subprocess.run for testing."""
+        cmd = args[0] if args else kwargs.get("args", [])
+        cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+
+        if "import" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            result.stderr = ""
+            return result
+        elif "remove" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            return result
+        elif "create" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            result.stderr = ""
+            return result
+        elif "start" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            result.stdout = "Hello World\n"
+            result.stderr = ""
+            return result
+        else:
+            raise ValueError(f"Unexpected subprocess call: {cmd_str}")
+
     try:
-        with patch("subprocess.run") as mock_run:
-
-            def mock_subprocess_run(*args, **kwargs):
-                cmd = args[0]
-                if "import" in cmd:
-                    result = Mock()
-                    if import_fails:
-                        result.returncode = 1
-                        result.stderr = "Failed to import image: network error"
-                    else:
-                        result.returncode = 0
-                        result.stderr = ""
-                    return result
-                elif "remove" in cmd:
-                    result = Mock()
-                    result.returncode = 0
-                    return result
-                elif "create" in cmd:
-                    result = Mock()
-                    if create_fails:
-                        result.returncode = 1
-                        result.stderr = "Failed to create container: no space"
-                    else:
-                        result.returncode = 0
-                        result.stderr = ""
-                    return result
-                elif "start" in cmd:
-                    result = Mock()
-                    result.returncode = execute_returncode
-                    result.stdout = execute_stdout
-                    result.stderr = execute_stderr
-                    return result
-                else:
-                    raise ValueError(f"Unexpected subprocess call: {cmd}")
-
-            mock_run.side_effect = mock_subprocess_run
-
-            coder = this_proc().spawn(
-                f"coder_{uuid.uuid1()}",
-                SandboxedPythonCoder,
-                "docker://python:3.10",
-                image_path,
-                container_name,
+        with patch(
+            "forge.actors.coder.subprocess.run", side_effect=mock_subprocess_run
+        ):
+            coder = _SandboxedPythonCoder(
+                docker_image="docker://python:3.10",
+                sqsh_image_path=image_path,
+                container_name=container_name,
             )
 
-            yield coder, mock_run
-
+            await coder.setup()
+            result, _ = await coder.execute(code="print('Hello World')")
+            assert result == "Hello World\n"
     finally:
-        if coder:
-            await SandboxedPythonCoder.shutdown(coder)
-
         if os.path.exists(image_path):
             os.unlink(image_path)
 
 
-@pytest.mark.timeout(10)
-@pytest.mark.asyncio
-async def test_coder_success():
-    """Test successful execution."""
-    async with create_mock_coder(execute_stdout="Hello World\n") as (coder, _):
-        await coder.setup.call_one()
-        result, _ = await coder.execute.call_one(code="print('Hello World')")
-        assert result == "Hello World\n"
-
-
-@pytest.mark.timeout(10)
 @pytest.mark.asyncio
 async def test_coder_execution_failure():
     """Test execution failure."""
-    async with create_mock_coder(
-        execute_returncode=1, execute_stderr="SyntaxError: invalid syntax"
-    ) as (coder, _):
-        await coder.setup.call_one()
-        output, err = await coder.execute.call_one(code="invalid syntax")
-        assert "SyntaxError" in err
+    unique_id = str(uuid.uuid4())[:8]
+    container_name = f"test_sandbox_{unique_id}"
+
+    with tempfile.NamedTemporaryFile(suffix=".sqsh", delete=False) as temp_image:
+        image_path = temp_image.name
+
+    def mock_subprocess_run(*args, **kwargs):
+        """Mock subprocess.run for testing."""
+        cmd = args[0] if args else kwargs.get("args", [])
+        cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+
+        if "import" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            result.stderr = ""
+            return result
+        elif "remove" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            return result
+        elif "create" in cmd_str:
+            result = Mock()
+            result.returncode = 0
+            result.stderr = ""
+            return result
+        elif "start" in cmd_str:
+            result = Mock()
+            result.returncode = 1
+            result.stdout = ""
+            result.stderr = "SyntaxError: invalid syntax"
+            return result
+        else:
+            raise ValueError(f"Unexpected subprocess call: {cmd_str}")
+
+    try:
+        with patch(
+            "forge.actors.coder.subprocess.run", side_effect=mock_subprocess_run
+        ):
+            coder = _SandboxedPythonCoder(
+                docker_image="docker://python:3.10",
+                sqsh_image_path=image_path,
+                container_name=container_name,
+            )
+
+            await coder.setup()
+            output, err = await coder.execute(code="invalid syntax")
+            assert "SyntaxError" in err
+    finally:
+        if os.path.exists(image_path):
+            os.unlink(image_path)

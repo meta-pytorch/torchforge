@@ -11,19 +11,17 @@ import torch
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.metric_transform import DefaultDatasetMetricTransform
 from forge.data.utils import mask_messages, TuneMessage
-from forge.interfaces import Transform
 
 from .hf_dataset import HfIterableDataset
 
 
-class AlpacaToMessages(Transform):
+class AlpacaToMessages:
     """
     Message transform class for Alpaca-style datasets with "instruction", "input", and "output"
     (or equivalent fields specified in column_map) columns. User messages are formed from the
     instruction + input columns and assistant messages are formed from the output column. Prompt
     templating is conditional on the presence of the "input" column, and thus is handled directly
-    in this transform class instead of a dedicated :class:`~torchtune.data.PromptTemplate` class
-    due to this custom logic.
+    in this transform class.
 
     Args:
         column_map (dict[str, str] | None): a mapping to change the expected "instruction", "input",
@@ -154,10 +152,10 @@ class SFTOutputTransform:
 
 
 def sft_iterable_dataset(
-    model_transform: Transform,
+    model_transform: Callable[[dict[str, Any]], dict[str, Any]],
     *,
     weight: int = 1,
-    message_transform: Transform,
+    message_transform: Callable[[dict[str, Any]], dict[str, Any]],
     shuffle_buffer_size: int | None = 1000,
     seed: int = 42,
     num_shards_per_rank: int = 64,
@@ -170,9 +168,9 @@ def sft_iterable_dataset(
     Creates an SFT-ready iterable dataset with appropriate output transform.
 
     Args:
-        model_transform (Transform): Usually the tokenizer
+        model_transform (Callable): Usually the tokenizer
         weight (int): Weight of the dataset. Used for sampling when interleaving datasets.
-        message_transform (Transform): Transform to convert raw data to messages
+        message_transform (Callable): Transform to convert raw data to messages
         shuffle_buffer_size (int | None): Buffer size for shuffling
         seed (int): Random seed for shuffling
         num_shards_per_rank (int): Target shards per worker
