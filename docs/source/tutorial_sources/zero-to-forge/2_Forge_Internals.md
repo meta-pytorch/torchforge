@@ -12,22 +12,35 @@ When you call `await policy_service.generate(question)`, here's what actually ha
 
 ```mermaid
 graph TD
-    Call["Your Code:<br/>await policy_service.generate"]
+    Call["Your Code:
+    await policy_service
+    .generate.route"]
 
     subgraph ServiceLayer["Service Layer"]
-        Proxy["Service Proxy: Load balancing, Health checking"]
-        LB["Load Balancer: Replica selection, Circuit breaker"]
+        Proxy["Service Proxy:
+        Load balancing
+        Health checking"]
+        LB["Load Balancer:
+        Replica selection
+        Circuit breaker"]
     end
 
     subgraph Replicas["Replica Management"]
-        R1["Replica 1: GPU 0, Healthy"]
-        R2["Replica 2: GPU 1, Overloaded"]
-        R3["Replica 3: GPU 2, Failed"]
-        R4["Replica 4: GPU 3, Healthy"]
+        R1["Replica 1:
+        GPU 0, Healthy"]
+        R2["Replica 2:
+        GPU 1, Overloaded"]
+        R3["Replica 3:
+        GPU 2, Failed"]
+        R4["Replica 4:
+        GPU 3, Healthy"]
     end
 
     subgraph Compute["Actual Computation"]
-        Actor["Policy Actor: vLLM engine, Model weights, KV cache"]
+        Actor["Policy Actor:
+        vLLM engine,
+        Model weights,
+        KV cache"]
     end
 
     Call --> Proxy
@@ -126,13 +139,17 @@ responses = await policy.generate.route(prompt=prompt)
 ```mermaid
 graph LR
     subgraph Request["Your Request"]
-        Code["await service.method.ADVERB()"]
+        Code["await service
+        .method.ADVERB()"]
     end
 
     subgraph Patterns["Communication Patterns"]
-        Route[".route()<br/>→ One healthy replica"]
-        CallOne[".call_one()<br/>→ Single actor"]
-        Fanout[".fanout()<br/>→ ALL replicas"]
+        Route[".route()
+        → One healthy replica"]
+        CallOne[".call_one()
+        → Single actor"]
+        Fanout[".fanout()
+        → ALL replicas"]
     end
 
     subgraph Replicas["Replicas/Actors"]
