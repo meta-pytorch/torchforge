@@ -228,10 +228,9 @@ checkpointing:
 
 Now that you have TorchForge installed and verified:
 
-1. **Learn the Concepts**: Read {doc}`concepts` to understand TorchForge's architecture, including Monarch, Services, and TorchStore
-2. **Explore Examples**: Check the `apps/` directory for more training examples
-4. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
-5. **API Documentation**: Explore {doc}`api` for detailed API reference
+1. **Explore Examples**: Check the `apps/` directory for more training examples
+2. **Read Tutorials**: Follow {doc}`tutorials` for step-by-step guides
+3. **API Documentation**: Explore {doc}`api` for detailed API reference
 
 ## Getting Help
 
