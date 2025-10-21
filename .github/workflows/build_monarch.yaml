@@ -1,4 +1,4 @@
-name: Build nightly wheels and publish to PyTorch Index
+name: Build Monarch against PyTorch nightly and upload to PyTorch index
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: forge-cu129-nightly
+    name: forge-cu128-nightly
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     strategy:
       fail-fast: false
@@ -31,16 +31,16 @@ jobs:
             {
               "python_version": "3.10",
               "gpu_arch_type": "cuda",
-              "gpu_arch_version": "12.9",
-              "desired_cuda": "cu129",
-              "container_image": "pytorch/manylinux2_28-builder:cuda12.9",
+              "gpu_arch_version": "12.8",
+              "desired_cuda": "cu128",
+              "container_image": "pytorch/manylinux2_28-builder:cuda12.8",
               "package_type": "manywheel",
-              "build_name": "manywheel-py3_10-cuda12_9",
+              "build_name": "manywheel-py3_10-cuda12_8",
               "validation_runner": "linux.4xlarge.nvidia.gpu",
-              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu129",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128",
               "channel": "nightly",
               "upload_to_base_bucket": "no",
-              "stable_version": "2.8.0",
+              "stable_version": "2.9.0",
               "use_split_build": false
             }
           ]
