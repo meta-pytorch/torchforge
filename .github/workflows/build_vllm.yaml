@@ -5,7 +5,6 @@ on:
     branches:
       - nightly
   workflow_dispatch:
-  pull_request:
 
 permissions:
   id-token: write
@@ -40,7 +39,7 @@ jobs:
               "build_name": "manywheel-py3_10-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
               "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
-              "channel": "nightly",
+              "channel": "test",
               "upload_to_base_bucket": "no",
               "stable_version": "2.9.0",
               "use_split_build": false
@@ -55,7 +54,7 @@ jobs:
               "build_name": "manywheel-py3_11-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
               "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
-              "channel": "nightly",
+              "channel": "test",
               "upload_to_base_bucket": "no",
               "stable_version": "2.9.0",
               "use_split_build": false
@@ -70,7 +69,7 @@ jobs:
               "build_name": "manywheel-py3_12-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
               "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
-              "channel": "nightly",
+              "channel": "test",
               "upload_to_base_bucket": "no",
               "stable_version": "2.9.0",
               "use_split_build": false
