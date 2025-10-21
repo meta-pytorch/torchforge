@@ -498,7 +498,7 @@ async def register_service(service: "ServiceInterface") -> None:
 async def register_actor(actor: "ForgeActor") -> None:
     """Registers an actor allocation with the global provisioner."""
     provisioner = await get_or_create_provisioner()
-    provisioner.register_actor.call_one(actor)
+    await provisioner.register_actor.call_one(actor)
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):

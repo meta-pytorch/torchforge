@@ -25,7 +25,7 @@ from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.controller.actor import ForgeActor
-from forge.controller.provisioner import init_provisioner, shutdown
+from forge.controller.provisioner import get_or_create_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
@@ -298,11 +298,11 @@ async def main(cfg: DictConfig):
     # ---- Global setups ---- #
     provisioner = None
     if cfg.get("provisioner", None) is not None:
-        provisioner = await init_provisioner(
+        provisioner = await get_or_create_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     else:
-        provisioner = await init_provisioner()
+        provisioner = await get_or_create_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
