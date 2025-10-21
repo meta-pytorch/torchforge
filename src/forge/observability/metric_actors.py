@@ -217,11 +217,14 @@ class GlobalLoggingActor(ForgeActor):
     ) -> dict[str, Any]:
         """Validate and normalize backend configuration."""
         if "logging_mode" not in config:
-            logger.debug(
-                f"logging_mode not provided for backend {backend_name}. Defaulting to global_reduce."
+            raise ValueError(
+                f"logging_mode is required for backend '{backend_name}' but was not provided. "
+                f"Please specify a logging_mode in your config. "
+                f"See forge.observability.metrics.LoggingMode for available options: "
+                f"{', '.join([mode.value for mode in LoggingMode])}."
             )
 
-        mode_str = config.get("logging_mode", "global_reduce")
+        mode_str = config["logging_mode"]
         mode = LoggingMode(mode_str)
 
         # Validate per_rank_share_run configuration
