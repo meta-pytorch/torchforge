@@ -246,6 +246,22 @@ class TestMetricsAggregator:
         assert len(caplog.records) == 1
         assert "Replacing handler for AggregationType.SUM" in caplog.records[0].message
 
+    def test_sample_accumulator_with_topbottom_filter(self):
+        """Ensure SampleAccumulator integrates with TopBottomKFilter correctly."""
+        from forge.observability.metrics import Reduce, SampleAccumulator
+
+        acc = SampleAccumulator(Reduce.SAMPLE)
+
+        rewards = [0.1, 0.9, 0.5, 0.7, 0.3]
+        for r in rewards:
+            acc.append({"reward": r, "prompt": "Q", "response": "A"})
+
+        result = acc.get_value()
+        result_rewards = sorted(s["reward"] for s in result)
+
+        # Expect bottom-1 (0.1) and top-2 (0.7, 0.9)
+        assert result_rewards == [0.1, 0.9]
+
 
 class TestDistributedMetricsAggregator(FSDPTest):
     """Distributed tests for MetricsAggregator using FSDPTest infrastructure."""
