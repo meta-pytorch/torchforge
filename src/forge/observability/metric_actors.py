@@ -10,13 +10,14 @@ import uuid
 from typing import Any, Union
 
 from monarch.actor import (
-    Actor,
     context,
     endpoint,
     get_or_spawn_controller,
     ProcMesh,
     this_proc,
 )
+
+from forge.controller.actor import ForgeActor
 
 from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metrics import (
@@ -127,7 +128,7 @@ async def get_or_create_metric_logger(
     return global_logger
 
 
-class LocalFetcherActor(Actor):
+class LocalFetcherActor(ForgeActor):
     """Actor spawned once per ProcMesh that, when called, runs on every rank in that ProcMesh
     and accesses each rank's local MetricCollector.
 
@@ -142,7 +143,6 @@ class LocalFetcherActor(Actor):
     ) -> None:
         self.global_logger = global_logger
         self.process_name = process_name
-        _is_initialized = False
 
     @endpoint
     async def flush(
@@ -191,14 +191,14 @@ class LocalFetcherActor(Actor):
         await collector.shutdown()
 
 
-class GlobalLoggingActor(Actor):
+class GlobalLoggingActor(ForgeActor):
     """Coordinates metric logging across all ProcMeshes and their ranks.
 
     Supports multiple logging backends (e.g., WandB, TensorBoard, etc.),
     with per-rank and/or global reduction logging modes.
 
     This GlobalLoggingActor should be spawned once in the controller. A LocalFetcherActor
-    is automatically spawned per-rank in `forge.controller.provisioner.py` and registered
+    is automatically spawned per-procmesh in `forge.controller.provisioner.py` and registered
     with this actor. The LocalFetcherActor is responsible for instantiating
     the per-rank MetricCollector and working as a bridge between GlobalLoggingActor and processes.
 
@@ -255,18 +255,16 @@ class GlobalLoggingActor(Actor):
 
     @endpoint
     async def init_backends(self, config: dict[str, Any]) -> None:
-        """Sets config in global actor, initializes controller backends and eagerly initializes MetricCollectors
-        in all registered fetchers.
+        """Sets config in global actor and initializes existing backends and collectors. Later spawned actors
+        are initialized in `register_fetcher` endpoint.
 
-        The backend instantiation is controlled by the logging_mode field. Controller backends
-        (instantiated in the controller) can provide metadata to be shared with rank backends,
+        Controller backends (instantiated in the controller) can provide metadata to be shared with rank backends,
         e.g. shared run IDs for WandB. For details on logging modes, see `forge.observability.metrics.LoggingMode`.
 
         Args:
             config (dict[str, Any]): Config for metric logging where keys are backend names.
                 Each backend config supports:
-                - logging_mode (str | LoggingMode, default "global_reduce"): One of "global_reduce",
-                  "per_rank_reduce", or "per_rank_no_reduce". Can be specified as a string or LoggingMode enum.
+                - logging_mode (str | LoggingMode): Check LoggingMode for options. Defaults to "global_reduce".
                 - per_rank_share_run (bool, default False): For per-rank modes only. Whether ranks
                   share a single run/logger instance. Ignored for "global_reduce" mode.
                 - Additional backend-specific options (e.g., "project" for WandB)
@@ -286,10 +284,11 @@ class GlobalLoggingActor(Actor):
         """
         self.config = {}
 
-        # Validate and normalize each backend config
+        # Skip initialization if disabled by environment flag
         if FORGE_DISABLE_METRICS.get_value():
             return
 
+        # Validate and normalize each backend config
         for backend_name, backend_config in config.items():
             self.config[backend_name] = self._validate_backend_config(
                 backend_name, backend_config
@@ -299,19 +298,23 @@ class GlobalLoggingActor(Actor):
         for backend_name, backend_config in self.config.items():
             mode = backend_config["logging_mode"]
 
-            backend = get_logger_backend_class(backend_name)(backend_config)
-            await backend.init(role=BackendRole.GLOBAL, name="global_reduce")
+            backend: LoggerBackend = get_logger_backend_class(backend_name)(
+                backend_config
+            )
+            await backend.init(role=BackendRole.GLOBAL, process_name="global_reduce")
 
             # Extract metadata from controller logger to be shared with per-rank loggers
             if mode != LoggingMode.GLOBAL_REDUCE:
-                controller_metadata = backend.get_metadata_for_secondary_ranks() or {}
+                controller_metadata: dict[str, Any] = (
+                    backend.get_metadata_for_secondary_ranks() or {}
+                )
                 self.metadata_per_controller_backend[backend_name] = controller_metadata
 
             # Store global logger backends for later flush
             if mode == LoggingMode.GLOBAL_REDUCE:
                 self.global_logger_backends[backend_name] = backend
 
-        # Eager init collectors on all registered fetchers in parallel, passing controller states and config
+        # Init collectors on all registered fetchers
         if self.fetchers:
             tasks = [
                 fetcher.init_backends.call(
@@ -370,8 +373,8 @@ class GlobalLoggingActor(Actor):
             )
             return
 
-        # Check if need to do reduce and retrieve states from fetchers
-        requires_reduce = any(
+        # Check if need to collect states from fetchers for global reduction
+        needs_state_collection = any(
             backend_config["logging_mode"] == LoggingMode.GLOBAL_REDUCE
             for backend_config in config.values()
         )
@@ -383,13 +386,13 @@ class GlobalLoggingActor(Actor):
         # Broadcast flush to all fetchers
         results = await asyncio.gather(
             *[
-                f.flush.call(global_step, return_state=requires_reduce)
+                f.flush.call(global_step, return_state=needs_state_collection)
                 for f in self.fetchers.values()
             ],
             return_exceptions=True,
         )
 
-        if requires_reduce:
+        if needs_state_collection:
 
             def extract_values_from_valuemesh(results) -> list[dict[str, Any]]:
                 all_local_states = []
