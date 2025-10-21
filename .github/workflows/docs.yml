@@ -65,7 +65,7 @@ jobs:
 
           # Verify dependencies can be imported before building docs
           echo "Verifying dependencies..."
-          python -c "import forge; print('✓ forge imported successfully')"
+          python -c "import torchforge; print('✓ torchforge imported successfully')"
           python -c "import monarch; print('✓ monarch imported successfully')"
 
           # Build docs with -W (warnings as errors) and --keep-going to see all issues
@@ -112,7 +112,7 @@ jobs:
           s3-bucket: doc-previews
           if-no-files-found: error
           path: docs
-          s3-prefix: meta-pytorch/forge/${{ github.event.pull_request.number }}
+          s3-prefix: meta-pytorch/torchforge/${{ github.event.pull_request.number }}
 
   upload:
     runs-on: ubuntu-latest
@@ -120,7 +120,7 @@ jobs:
       # Grant write permission here so that the doc can be pushed to gh-pages branch
       contents: write
     needs: build-docs
-    if: github.repository == 'meta-pytorch/forge' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'meta-pytorch/torchforge' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
