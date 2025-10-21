@@ -16,7 +16,14 @@ import uuid
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import (
+    Actor,
+    endpoint,
+    get_or_spawn_controller,
+    HostMesh,
+    ProcMesh,
+    this_host,
+)
 
 from monarch.tools import commands
 
@@ -95,7 +102,7 @@ class GpuManager:
             self.available_gpus.add(int(gpu_id))
 
 
-class Provisioner:
+class Provisioner(Actor):
     """A global resource provisioner."""
 
     def __init__(self, cfg: ProvisionerConfig | None = None):
@@ -138,11 +145,13 @@ class Provisioner:
         self._registered_actors: list["ForgeActor"] = []
         self._registered_services: list["ServiceInterface"] = []
 
+    @endpoint
     async def initialize(self):
         """Call this after creating the instance"""
         if self.launcher is not None:
             await self.launcher.initialize()
 
+    @endpoint
     async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
         """Creates a remote server and a HostMesh on it."""
         # no need to lock here because this is already locked behind `get_proc_mesh`
@@ -172,6 +181,7 @@ class Provisioner:
         )
         return host_mesh, server_name
 
+    @endpoint
     def get_host_mesh(self, name: str) -> HostMesh:
         """Returns the host mesh given its associated name.
 
@@ -181,6 +191,7 @@ class Provisioner:
         """
         return self._host_mesh_map[name]
 
+    @endpoint
     async def get_proc_mesh(
         self,
         num_procs: int,
@@ -225,7 +236,7 @@ class Provisioner:
                     created_hosts = len(self._server_names)
                     mesh_name = f"alloc_{created_hosts}"
                 if host_mesh is None:
-                    host_mesh, server_name = await self.create_host_mesh(
+                    host_mesh, server_name = await self.create_host_mesh.call_one(
                         name=mesh_name,
                         num_hosts=num_hosts,
                     )
@@ -318,6 +329,7 @@ class Provisioner:
             _ = await get_or_create_metric_logger(procs, process_name=mesh_name)
         return procs
 
+    @endpoint
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
         if proc_mesh not in self._proc_host_map:
             raise ValueError(
@@ -325,6 +337,7 @@ class Provisioner:
             )
         return self._proc_host_map[proc_mesh]
 
+    @endpoint
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""
         if proc_mesh not in self._proc_host_map:
@@ -352,6 +365,7 @@ class Provisioner:
                 commands.kill(server_name)
             del self._proc_host_map[proc_mesh]
 
+    @endpoint
     def register_service(self, service: "ServiceInterface") -> None:
         """Registers a service allocation for cleanup."""
         # Import ServiceInterface here instead of at top-level to avoid circular import
@@ -364,6 +378,7 @@ class Provisioner:
 
         self._registered_services.append(service)
 
+    @endpoint
     def register_actor(self, actor: "ForgeActor") -> None:
         """Registers a single actor allocation for cleanup."""
 
@@ -372,13 +387,15 @@ class Provisioner:
 
         self._registered_actors.append(actor)
 
+    @endpoint
     async def shutdown_all_allocations(self):
         """Gracefully shut down all tracked actors and services."""
+        global _global_registered_services
         logger.info(
-            f"Shutting down {len(self._registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
+            f"Shutting down {len(_global_registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
         )
         # --- ServiceInterface ---
-        for service in reversed(self._registered_services):
+        for service in reversed(_global_registered_services):
             try:
                 await service.shutdown()
 
@@ -398,29 +415,30 @@ class Provisioner:
         self._registered_actors.clear()
         self._registered_services.clear()
 
+    @endpoint
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
-        await self.shutdown_all_allocations()
+        await self.shutdown_all_allocations.call_one()
         async with self._lock:
             for server_name in self._server_names:
                 commands.kill(server_name)
 
 
-_provisioner: Provisioner | None = None
+_global_provisioner: Provisioner | None = None
+_global_registered_services: list["ServiceInterface"] = []
 
 
-async def init_provisioner(cfg: ProvisionerConfig | None = None):
-    global _provisioner
-    if not _provisioner:
-        _provisioner = Provisioner(cfg)
-        await _provisioner.initialize()
-    return _provisioner
-
-
-async def _get_provisioner():
-    if not _provisioner:
-        await init_provisioner()
-    return _provisioner
+async def get_or_create_provisioner(
+    cfg: ProvisionerConfig | None = None,
+) -> Provisioner:
+    """Gets or spawns the global Provisioner controller actor."""
+    global _global_provisioner
+    if _global_provisioner is None:
+        _global_provisioner = await get_or_spawn_controller(
+            "provisioner_controller", Provisioner, cfg
+        )
+        await _global_provisioner.initialize.call_one()
+    return _global_provisioner
 
 
 async def get_proc_mesh(
@@ -445,8 +463,8 @@ async def get_proc_mesh(
         A proc mesh.
 
     """
-    provisioner = await _get_provisioner()
-    return await provisioner.get_proc_mesh(
+    provisioner = await get_or_create_provisioner()
+    return await provisioner.get_proc_mesh.call_one(
         num_procs=process_config.procs,
         with_gpus=process_config.with_gpus,
         num_hosts=process_config.hosts,
@@ -465,25 +483,27 @@ async def host_mesh_from_proc(proc_mesh: ProcMesh):
     API.
 
     """
-    provisioner = await _get_provisioner()
-    return await provisioner.host_mesh_from_proc(proc_mesh)
+    provisioner = await get_or_create_provisioner()
+    return await provisioner.host_mesh_from_proc.call_one(proc_mesh)
 
 
 async def register_service(service: "ServiceInterface") -> None:
     """Registers a service allocation with the global provisioner."""
-    provisioner = await _get_provisioner()
-    provisioner.register_service(service)
+
+    # TODO: This is a temporary hack. Change this back once Services are actors
+    global _global_registered_services
+    _global_registered_services.append(service)
 
 
 async def register_actor(actor: "ForgeActor") -> None:
     """Registers an actor allocation with the global provisioner."""
-    provisioner = await _get_provisioner()
-    provisioner.register_actor(actor)
+    provisioner = await get_or_create_provisioner()
+    provisioner.register_actor.call_one(actor)
 
 
 async def stop_proc_mesh(proc_mesh: ProcMesh):
-    provisioner = await _get_provisioner()
-    return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
+    provisioner = await get_or_create_provisioner()
+    return await provisioner.stop_proc_mesh.call_one(proc_mesh=proc_mesh)
 
 
 async def shutdown_metric_logger():
@@ -504,8 +524,8 @@ async def shutdown():
 
     logger.info("Shutting down provisioner..")
 
-    provisioner = await _get_provisioner()
-    result = await provisioner.shutdown()
+    provisioner = await get_or_create_provisioner()
+    result = await provisioner.shutdown.call_one()
 
     logger.info("Shutdown completed successfully")
     return result
