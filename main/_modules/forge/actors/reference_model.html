@@ -34,7 +34,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=a8c4d769" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=b61afe48" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
@@ -47,14 +47,32 @@
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
     <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
     <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
-    <script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";import elkLayouts from "https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs";mermaid.registerLayoutLoaders(elkLayouts);mermaid.initialize({startOnLoad:false});</script>
+    <script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+        primaryColor: '#4CAF50',
+        primaryTextColor: '#000',
+        primaryBorderColor: '#fff',
+        lineColor: '#555',
+        secondaryColor: '#FF9800',
+        tertiaryColor: '#ffffde'
+    },
+    flowchart: {
+        curve: 'basis'
+    },
+    themeCSS: '.edgePath .path { stroke-width: 4px; stroke: #555; }'
+});
+</script>
     <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
     <script type="module">
 import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
 window.addEventListener("load", () => mermaid.run());
 </script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/forge/actors/reference_model';</script>
-    <script src="../../../_static/custom.js?v=b1073d4a"></script>
+    <script src="../../../_static/custom.js?v=0065d487"></script>
     <link rel="canonical" href="https://meta-pytorch.org/forge/main/_modules/forge/actors/reference_model.html" />
     <link rel="icon" href="../../../_static/logo-icon.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
