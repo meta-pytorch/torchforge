@@ -270,16 +270,15 @@ class Generator(ForgeActor):
             return [keys[i::n_fetchers] for i in range(n_fetchers)]
 
         futures = []
-        async with asyncio.TaskGroup() as tg:
-            for i, names in enumerate(split_keys(hf_param_names)):
+        for i, names in enumerate(split_keys(hf_param_names)):
 
-                async def fetch_coro():
-                    return self.weight_fetchers.slice(procs=i).fetch.call_one(
-                        version=version, param_names=names
-                    )
+            async def fetch_coro():
+                return self.weight_fetchers.slice(procs=i).fetch.call_one(
+                    version=version, param_names=names
+                )
 
-                fut = tg.create_task(fetch_coro())
-                futures.append(fut)
+            fut = asyncio.create_task(fetch_coro())
+            futures.append(fut)
 
         sub_state_dicts = [await fut for fut in futures]
 
