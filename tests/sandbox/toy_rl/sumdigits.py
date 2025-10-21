@@ -25,7 +25,7 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
 from forge.util.config import parse
-from forge.util.ops import selective_log_softmax
+from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 
@@ -241,7 +241,8 @@ class RefModel(ForgeActor):
         with torch.inference_mode():
             logits = self.model(input_ids=input_ids, attention_mask=mask).logits
 
-        return selective_log_softmax(logits, target_ids).squeeze(0)
+        log_probs = compute_logprobs(logits, target_ids, align=False)
+        return log_probs.squeeze(0)
 
 
 @dataclass
@@ -325,7 +326,7 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        trainer_log_probs = selective_log_softmax(logits, target_ids)
+        trainer_log_probs = compute_logprobs(logits, target_ids, align=False)
         # Compute loss only on response tokens
         # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
         loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
