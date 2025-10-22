@@ -231,6 +231,8 @@ def record_episode_sample(table_name: str, episode):
     print(
         "[DEBUG] Adding sample to table via record_metric, episode_id: ",
         episode.episode_id,
+        # "episode: ",
+        # episode,
     )
     record_metric(table_name, sample, Reduce.SAMPLE)
     print(
