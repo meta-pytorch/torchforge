@@ -401,14 +401,16 @@ class TestInterleavedDataset:
             resume_dataloader=loader2,
         )
 
+        # Verify checkpointing and resumption work correctly
+        # After loading a checkpoint, training should continue identically
         orig_post_ids = [b["id"].tolist() for b in result["post_checkpoint_batches"]]
         resumed_ids = [b["id"].tolist() for b in result["resumed_batches"]]
         assert (
             orig_post_ids == resumed_ids
         ), "Resumed batches should be identical for deterministic run"
         assert (
-            result["final_metrics"] == result["resumed_metrics"]
-        ), "Final metrics should match"
+            result["post_checkpoint_metrics"] == result["resumed_metrics"]
+        ), "Resumed training should produce same metrics as original training"
 
         # Test sampling log functionality
         # Check that sampling log contains tuples of (iteration_count, dataset_name)
@@ -581,8 +583,8 @@ class TestDistributedInterleavedDataset(FSDPTest):
                 f"This indicates sampling state is not properly preserved."
             )
             assert (
-                result["final_metrics"] == result["resumed_metrics"]
-            ), "Final metrics don't match resumed metrics - aggregator state issue"
+                result["post_checkpoint_metrics"] == result["resumed_metrics"]
+            ), "Resumed training should produce same metrics as original training"
 
             # Verify sampling ratio is approximately maintained for nested structure
             all_ids = []

@@ -6,11 +6,10 @@
 
 from typing import Any
 
-from forge.interfaces import Transform
 from forge.observability.metrics import Metric, Reduce
 
 
-class MetricTransform(Transform):
+class MetricTransform:
     """
     Base class for transforms that collect observability metrics from dataset samples.
 
@@ -71,7 +70,7 @@ class DefaultDatasetMetricTransform(MetricTransform):
         if "metrics" not in sample:
             sample["metrics"] = []
 
-        source_name = self.source or "dataset"
+        source_name = self.source or "unnamed_ds"
 
         # Add samples_processed metric
         sample["metrics"].append(

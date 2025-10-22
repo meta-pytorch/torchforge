@@ -101,6 +101,9 @@ def generate_ckpt(
     pre_checkpoint_batches = batches[:steps_before_checkpoint]
     post_checkpoint_batches = batches[steps_before_checkpoint:]
 
+    # Compute metrics for post-checkpoint batches only
+    post_checkpoint_metrics = all_metrics[len(checkpoint_metrics) :]
+
     # Resume with new instance if provided
     resumed_batches = []
     resumed_metrics = []
@@ -127,24 +130,28 @@ def generate_ckpt(
         # Original run
         "pre_checkpoint_batches": pre_checkpoint_batches,
         "post_checkpoint_batches": post_checkpoint_batches,
-        "metrics_at_checkpoint": keep_last_metric(checkpoint_metrics),
-        "final_metrics": keep_last_metric(all_metrics),
+        "metrics_at_checkpoint": aggregate_metrics(checkpoint_metrics),
+        "post_checkpoint_metrics": aggregate_metrics(post_checkpoint_metrics),
+        "final_metrics": aggregate_metrics(all_metrics),
         # Resumed run
         "resumed_batches": resumed_batches,
-        "resumed_metrics": keep_last_metric(resumed_metrics),
+        "resumed_metrics": aggregate_metrics(resumed_metrics),
         # Internal state for loading - only if someone needs to manually load
         "_checkpoint_state": checkpoint_state,
     }
 
 
-def keep_last_metric(metrics_list: list) -> dict[str, Any]:
-    result = {}
+def aggregate_metrics(metrics_list: list) -> dict[str, Any]:
+    """Aggregate metrics according to their reduction types (SUM, MEAN, MAX, MIN, STD)."""
+    if not metrics_list:
+        return {}
+
+    accumulators = {}
+
     for metric in metrics_list:
-        # Expect observability.Metric objects only
         key = metric.key
-        value = metric.value
+        if key not in accumulators:
+            accumulators[key] = metric.reduction.accumulator_class(metric.reduction)
+        accumulators[key].append(metric.value)
 
-        # For test purposes, just keep the last value of each metric
-        result[key] = value
-
-    return result
+    return {key: acc.get_value() for key, acc in accumulators.items()}

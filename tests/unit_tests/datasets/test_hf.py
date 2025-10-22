@@ -181,9 +181,10 @@ class TestHfIterableDataset:
         assert (
             orig_post_ids == resumed_ids
         ), "Resumed batches should be identical for deterministic run"
+
         assert (
-            result["final_metrics"] == result["resumed_metrics"]
-        ), "Final metrics should match"
+            result["post_checkpoint_metrics"] == result["resumed_metrics"]
+        ), "Resumed training should produce same metrics as original training"
 
     def test_shuffling_behavior(self, dataset_factory, small_dataset_file):
         """Tests that shuffling changes data order between epochs but preserves the set of samples."""
