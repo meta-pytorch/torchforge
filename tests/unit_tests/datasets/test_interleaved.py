@@ -299,7 +299,7 @@ class TestInterleavedDataset:
             [child_interleaved, ds3], seed=SEED, dataset_name="parent"
         )
 
-        # Collect metrics manually instead of using old MetricsAggregator
+        # Collect metrics
         collected_metrics = []
 
         # Process some samples
