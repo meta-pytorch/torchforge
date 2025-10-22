@@ -212,8 +212,6 @@ await mlogger.init_backends.call_one({
 
 Extend `LoggerBackend` for custom logging, such as saving data to JSONL files, sending Slack notifications when a metric hits a threshold, or supporting tools like MLFlow or Grafana. After writing your backend, register it with `forge.observability.metrics.get_logger_backend_class`.
 
-TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_backend_type(my_custom_backend_type)
-
 ```python
 # Example of a custom backend
 class ConsoleBackend(LoggerBackend):
@@ -236,7 +234,6 @@ class ConsoleBackend(LoggerBackend):
 
 Metrics are accumulated each time `record_metric` is called. The following example implements the `Reduce.MEAN` accumulator. Users can extend this by adding custom reduce types, such as `WordCounterAccumulator` or `SampleAccumulator`, and registering them with `forge.observability.metrics.Reduce`. For details on how this is used, see `forge.observability.metrics.MetricCollector`.
 
-TODO: we need a better solution here that doesn't involve commiting to forge, e.g. register_new_reduce_type(my_custom_reduce_type)
 
 ```python
 # Example of a custom reduce type
@@ -245,6 +242,7 @@ class MeanAccumulator(MetricAccumulator):
         super().__init__(reduction)
         self.sum = 0.0
         self.count = 0
+        self.is_reset = True
 
     def append(self, value: Any) -> None:
         # Called after record_metric(key, value, reduce.TYPE)
@@ -268,6 +266,7 @@ class MeanAccumulator(MetricAccumulator):
     def reset(self) -> None:
         self.sum = 0.0
         self.count = 0
+        self.is_reset = True
 ```
 
 ## 5. Behind the Scenes
@@ -278,9 +277,12 @@ We have two main requirements:
 
 To address #1, we use a `MetricCollector` per process to store state. For example, with 10 ranks, there are 10 `MetricCollector` instances. Within each rank, `MetricCollector` is a singleton, ensuring the same object is returned after the first call. This eliminates the need to pass dictionaries between functions.
 
-To address #2, we automatically spawn a `LocalFetcherActor` for each process and register it with the `GlobalLoggingActor`. This allows the `GlobalLoggingActor` to know which actors to call, and each `LocalFetcherActor` can access the local `MetricCollector`. This spawning and registration occurs in `forge.controller.provisioner.py::get_proc_mesh`.
+To address #2, we automatically spawn a `LocalFetcherActor` for each process mesh and register it with the `GlobalLoggingActor`. This allows the `GlobalLoggingActor` to know which processes to call, and each `LocalFetcherActor` can access the local `MetricCollector`. This spawning and registration occurs in `forge.controller.provisioner.py::get_proc_mesh`.
 
-So you may ask: "what about the backends"? They live in two places:
+The flow is generally:
+GlobalLoggingActor.method() -> per-procmesh LocalFetcherActor.method() -> per-rank MetricCollector.method() -> logger
+
+So you may ask: "what about the logging backends"? They live in two places:
 - In each MetricCollector if the backend is marked as per_rank.
 - In the GlobalLoggingActor if the backend is marked as global_reduce.
 
