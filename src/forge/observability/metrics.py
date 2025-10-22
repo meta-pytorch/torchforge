@@ -228,7 +228,15 @@ def record_episode_sample(table_name: str, episode):
         "pad_id": episode.pad_id,
     }
 
+    print(
+        "[DEBUG] Adding sample to table via record_metric, episode_id: ",
+        episode.episode_id,
+    )
     record_metric(table_name, sample, Reduce.SAMPLE)
+    print(
+        "[DEBUG] Added sample to table via record_metric, episode_id: ",
+        episode.episode_id,
+    )
 
 
 #################
@@ -499,11 +507,13 @@ class SampleAccumulator(MetricAccumulator):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
         self.filter = TopBottomKFilter()
+        self.is_reset = True
 
     def append(self, value: dict) -> None:
         if not isinstance(value, dict):
             raise ValueError(f"Expected dict, got {type(value)}")
 
+        self.is_reset = False
         # Only keep the sample if filter_append returns True
         if self.filter.filter_append(value):
             self.samples.append(value)
@@ -511,7 +521,8 @@ class SampleAccumulator(MetricAccumulator):
     def get_value(self) -> list[dict]:
         """Return locally collected (and optionally filtered) samples."""
         # Apply flush-time filter (e.g. heap selection, threshold trimming)
-        return self.filter.filter_flush(self.samples)
+        results = self.filter.filter_flush(self.samples)
+        return results
 
     def get_state(self) -> Dict[str, Any]:
         """Serialize accumulator state for cross-rank reduction."""
@@ -530,6 +541,7 @@ class SampleAccumulator(MetricAccumulator):
 
     def reset(self) -> None:
         """Clear local samples and reset filter state."""
+        self.is_reset = True
         self.samples.clear()
         self.filter.reset()
 
@@ -701,12 +713,12 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: stream without reduce
         for backend in self.per_rank_no_reduce_backends:
-            if metric.reduction == Reduce.SAMPLE:
-                # Wrap singleton Metric into expected {key: [list_of_dicts]} format
-                sample = {metric.key: [metric.value]}
-                asyncio.create_task(backend.log_samples(sample, self.global_step))
-            else:
-                backend.log_stream(metric=metric, global_step=self.global_step)
+            # if metric.reduction == Reduce.SAMPLE:
+            #     # Wrap singleton Metric into expected {key: [list_of_dicts]} format
+            #     sample = {metric.key: [metric.value]}
+            #     asyncio.create_task(backend.log_samples(sample, self.global_step))
+            # else:
+            backend.log_stream(metric=metric, global_step=self.global_step)
 
         # Always accumulate for reduction and state return
         key = metric.key
@@ -773,6 +785,7 @@ class MetricCollector:
 
             for backend in self.per_rank_reduce_backends:
                 if scalar_metrics:
+                    print(f"[DEBUG] calling log_batch from MetricCollector")
                     await backend.log_batch(scalar_metrics, global_step)
                 if sample_metrics:
                     await backend.log_samples(sample_metrics, global_step)
@@ -896,6 +909,7 @@ class ConsoleBackend(LoggerBackend):
     async def log_batch(
         self, metrics: list[Metric], global_step: int, *args, **kwargs
     ) -> None:
+        print(f"[DEBUG] calling log_batch with {len(metrics)} metrics")
         metrics_str = "\n".join(
             f"  {metric.key}: {metric.value}"
             for metric in sorted(metrics, key=lambda m: m.key)
@@ -913,6 +927,8 @@ class ConsoleBackend(LoggerBackend):
     async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
         """Pretty-print sample-level logs to console."""
         import json
+
+        print(f"[DEBUG] calling log_samples with {len(samples)} samples")
 
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for table_name, table_rows in samples.items():
