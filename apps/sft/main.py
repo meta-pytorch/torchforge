@@ -247,6 +247,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
+        loss = loss.item()
 
         record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
         logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
@@ -295,7 +296,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     async def cleanup(self) -> None:
         if self.checkpointer:
             self.checkpointer.close()
-        if hasattr(self, "mlogger") and self.mlogger:
+        if getattr(self, "mlogger", None):
             await self.mlogger.shutdown.call_one()
 
     def __repr__(self) -> str:
