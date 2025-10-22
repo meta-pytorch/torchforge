@@ -47,6 +47,8 @@ class Episode:
     request_len: int
     response_len: int
     target: Any | None = None
+    request: str | None = None
+    response: str | None = None
     # Processed data
     completion: Completion | None = None
     ref_logprobs: torch.Tensor | None = None
@@ -387,6 +389,8 @@ async def main(cfg: DictConfig):
                     request_len=max_req_tokens,
                     response_len=max_res_tokens,
                     target=target,
+                    request=prompt,
+                    response=response.text,
                     completion=response,
                 )
                 episode.reward_breakdown = await reward_actor.evaluate_response.route(
