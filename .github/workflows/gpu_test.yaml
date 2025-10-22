@@ -27,7 +27,7 @@ jobs:
     runs-on: linux.g5.12xlarge.nvidia.gpu
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.11']
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
