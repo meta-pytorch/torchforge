@@ -497,29 +497,33 @@ class TestDistributedInterleavedDataset(FSDPTest):
         tmp_path = Path(temp_dir)
 
         try:
+            # ============================================
+            # SETUP: Create test files ONCE at the start
+            # ============================================
+            file1 = tmp_path / "ds1.json"
+            file2 = tmp_path / "ds2.json"
+            file3 = tmp_path / "ds3.json"
 
+            # Only rank 0 creates the data files
+            if rank == 0:
+                create_test_json_file(file1, SMALL_DATASET_SIZE, offset=0)
+                create_test_json_file(file2, MEDIUM_DATASET_SIZE, offset=100)
+                create_test_json_file(file3, LARGE_DATASET_SIZE, offset=1000)
+
+            # Wait for all ranks to reach this point
+            dist.barrier()
+
+            # ============================================
+            # TEST LOGIC: Functions that use the files
+            # ============================================
             def create_dataset():
-                file1 = tmp_path / "ds1.json"
-                file2 = tmp_path / "ds2.json"
-                file3 = tmp_path / "ds3.json"
-
-                # Only rank 0 creates the data files
-                if rank == 0:
-                    create_test_json_file(file1, SMALL_DATASET_SIZE)  # IDs 0-22
-                    create_test_json_file(
-                        file2, MEDIUM_DATASET_SIZE, offset=100
-                    )  # IDs 100-134
-                    create_test_json_file(
-                        file3, LARGE_DATASET_SIZE, offset=1000
-                    )  # IDs 1000-1046
-                dist.barrier()  # Wait for file creation
-
+                """Create interleaved dataset from pre-created files."""
                 ds1 = HfIterableDataset(
                     path="json",
                     data_files=str(file1),
                     split="train",
                     dataset_name="ds1",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
+                    shuffle_buffer_size=0,
                     metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=0.3,
@@ -529,7 +533,7 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     data_files=str(file2),
                     split="train",
                     dataset_name="ds2",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
+                    shuffle_buffer_size=0,
                     metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=0.7,
@@ -539,7 +543,7 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     data_files=str(file3),
                     split="train",
                     dataset_name="ds3",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
+                    shuffle_buffer_size=0,
                     metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=1.0,
