@@ -26,6 +26,7 @@ from forge.observability.metrics import (
     LoggerBackend,
     LoggingMode,
     MetricCollector,
+    Reduce,
     reduce_metrics_states,
 )
 
@@ -423,6 +424,7 @@ class GlobalLoggingActor(ForgeActor):
             # Reduce metrics from states
             reduced_metrics = reduce_metrics_states(all_local_states)
 
+            print(f"[DEBUG] reduced_metrics: {reduced_metrics}")
             # Split into scalar metrics and sample metrics
             scalar_metrics = [
                 m for m in reduced_metrics if m.reduction != Reduce.SAMPLE
@@ -434,6 +436,7 @@ class GlobalLoggingActor(ForgeActor):
             # Log to global backends
             for backend_name, backend in self.global_logger_backends.items():
                 if scalar_metrics:
+                    print(f"[DEBUG] calling log_batch from GlobalLoggerActor")
                     await backend.log_batch(scalar_metrics, global_step)
                 if sample_metrics:
                     await backend.log_samples(sample_metrics, global_step)
