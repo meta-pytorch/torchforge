@@ -35,12 +35,12 @@ jobs:
       - name: Update pip
         shell: bash -l {0}
         run: python -m pip install --upgrade pip
-      - name: Install pytorch
-        shell: bash -l {0}
-        run: pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 --force-reinstall
-      - name: Install monarch
-        shell: bash -l {0}
-        run: pip install assets/ci/monarch_no_torch-0.1.0.dev20251010-py3-none-any.whl
+      # - name: Install pytorch
+      #   shell: bash -l {0}
+      #   run: pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130 --force-reinstall
+      # - name: Install monarch
+      #   shell: bash -l {0}
+      #   run: pip install assets/ci/monarch_no_torch-0.1.0.dev20251010-py3-none-any.whl
       - name: Install torchforge
         shell: bash -l {0}
         env:

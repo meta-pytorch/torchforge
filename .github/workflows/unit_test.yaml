@@ -23,6 +23,7 @@ jobs:
           miniconda-version: "latest"
           activate-environment: test
           python-version: ${{ matrix.python-version }}
+          auto-activate: false
       # - name: Update pip
       #   run: python -m pip install --upgrade pip
       - name: Install torchforge
