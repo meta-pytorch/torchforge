@@ -47,11 +47,6 @@ After install, you can run the following command and should see output confirmin
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
-If you need to re-build the wheels for whatever reason, you can do so with:
-```bash
-./scripts/build_wheels.sh
-```
-
 ## Quick Start
 
 To run SFT on a Llama3 8B model, run
