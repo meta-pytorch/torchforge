@@ -85,12 +85,12 @@ class TestMetricCreation:
     async def test_backend_role_usage(self):
         """Test that BackendRole constants are actually used instead of string literals."""
         # Test ConsoleBackend
-        console_backend = ConsoleBackend({})
+        console_backend = ConsoleBackend(logging_mode=LoggingMode.GLOBAL_REDUCE)
         await console_backend.init(role=BackendRole.LOCAL)
 
         # Test WandbBackend role validation without WandB initialization
         wandb_backend = WandbBackend(
-            {"project": "test", "logging_mode": "global_reduce"}
+            logging_mode=LoggingMode.GLOBAL_REDUCE, project="test"
         )
 
         # Mock all the WandB init methods to focus only on role validation
@@ -298,15 +298,15 @@ class TestCriticalFixes:
     def test_wandb_backend_creation(self):
         """Test WandbBackend creation and basic setup without WandB dependency."""
 
-        config = {
-            "project": "test_project",
-            "group": "test_group",
-            "logging_mode": "global_reduce",
-        }
-        backend = WandbBackend(config)
+        backend = WandbBackend(
+            logging_mode=LoggingMode.GLOBAL_REDUCE,
+            project="test_project",
+            group="test_group",
+        )
 
-        assert backend.project == "test_project"
-        assert backend.group == "test_group"
+        # Test backend kwargs storage
+        assert backend.backend_kwargs["project"] == "test_project"
+        assert backend.backend_kwargs["group"] == "test_group"
         assert backend.logging_mode == LoggingMode.GLOBAL_REDUCE
         assert backend.per_rank_share_run is False  # default
 
@@ -317,7 +317,7 @@ class TestCriticalFixes:
     @pytest.mark.asyncio
     async def test_console_backend(self):
         """Test ConsoleBackend basic operations."""
-        backend = ConsoleBackend({})
+        backend = ConsoleBackend(logging_mode=LoggingMode.GLOBAL_REDUCE)
 
         await backend.init(role=BackendRole.LOCAL)
 
