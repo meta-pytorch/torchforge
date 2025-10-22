@@ -154,7 +154,7 @@ class Generator(ForgeActor):
         worker_procs = await get_proc_mesh(process_config=process_config)
 
         # Then, grab a single host from the workers...
-        host_mesh = await host_mesh_from_proc(worker_procs)
+        host_mesh = await host_mesh_from_proc(worker_procs._uid)
         singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()}
         host_mesh = host_mesh.slice(**singleton_slice)
 

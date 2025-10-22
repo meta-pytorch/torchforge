@@ -15,7 +15,7 @@ from forge.controller.launcher import (
     MastLauncher,
     mount_mnt_directory,
 )
-from forge.controller.provisioner import init_provisioner
+from forge.controller.provisioner import get_or_create_provisioner
 
 from forge.types import (
     Launcher,
@@ -68,7 +68,9 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
     else:
         # In remote mode, we're already running inside MAST, so mount directory, init provisioner and run training
         mount_mnt_directory("/mnt/wsfuse")
-        await init_provisioner(ProvisionerConfig(launcher_config=launcher_config))
+        await get_or_create_provisioner(
+            ProvisionerConfig(launcher_config=launcher_config)
+        )
         await grpo_main(cfg)
 
 
