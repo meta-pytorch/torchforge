@@ -46,7 +46,7 @@ parallelism:
 checkpoint:
   enable: true
   folder: ./checkpoint              # The folder to save checkpoints to.
-  initial_load_path: hf://${model}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
+  initial_load_path: hf://${model_name}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
   initial_load_in_hf: true          # If true, interpret initial_load_path as a HuggingFace model repo
   last_save_in_hf: true
   interval: 500
