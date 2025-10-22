@@ -34,7 +34,7 @@ torchforge requires the PyTorch 2.9.0 with [Monarch](https://github.com/meta-pyt
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
 ```bash
-conda create -n forge python=3.10
+conda create -n forge python=3.12
 conda activate forge
 ./scripts/install.sh
 ```
