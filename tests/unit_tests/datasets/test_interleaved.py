@@ -484,40 +484,29 @@ class TestDistributedInterleavedDataset(FSDPTest):
         """
         rank = dist.get_rank()
 
-        # Create shared temp directory (only rank 0 creates it)
-        if rank == 0:
-            temp_dir = tempfile.mkdtemp(prefix="interleaved_test_")
-        else:
-            temp_dir = None
-
-        # Broadcast temp directory to all ranks
-        temp_dir_list = [temp_dir] if temp_dir is not None else [""]
-        dist.broadcast_object_list(temp_dir_list, src=0)
-        temp_dir = temp_dir_list[0]
+        # Each rank creates its own local temp dir and files (no broadcast/barrier needed for creation)
+        temp_dir = tempfile.mkdtemp(prefix=f"interleaved_test_rank{rank}_")
         tmp_path = Path(temp_dir)
 
         try:
             # ============================================
-            # SETUP: Create test files ONCE at the start
+            # SETUP: Each rank creates its own test files
             # ============================================
             file1 = tmp_path / "ds1.json"
             file2 = tmp_path / "ds2.json"
             file3 = tmp_path / "ds3.json"
 
-            # Only rank 0 creates the data files
-            if rank == 0:
-                create_test_json_file(file1, SMALL_DATASET_SIZE, offset=0)
-                create_test_json_file(file2, MEDIUM_DATASET_SIZE, offset=100)
-                create_test_json_file(file3, LARGE_DATASET_SIZE, offset=1000)
+            create_test_json_file(file1, SMALL_DATASET_SIZE, offset=0)
+            create_test_json_file(file2, MEDIUM_DATASET_SIZE, offset=100)
+            create_test_json_file(file3, LARGE_DATASET_SIZE, offset=1000)
 
-            # Wait for all ranks to reach this point
-            dist.barrier()
+            # No barrier needed since files are local to each rank
 
             # ============================================
             # TEST LOGIC: Functions that use the files
             # ============================================
-            def create_dataset():
-                """Create interleaved dataset from pre-created files."""
+            def create_dataset() -> InterleavedDataset:
+                """Create interleaved dataset from local files."""
                 ds1 = HfIterableDataset(
                     path="json",
                     data_files=str(file1),
@@ -631,6 +620,5 @@ class TestDistributedInterleavedDataset(FSDPTest):
                 ), f"ds3 ratio {ds3_ratio:.2f} should be ~{expected_ds3_ratio}"
 
         finally:
-            # Clean up temp directory (only rank 0)
-            if rank == 0:
-                shutil.rmtree(temp_dir)
+            # Each rank cleans its own temp dir
+            shutil.rmtree(temp_dir)

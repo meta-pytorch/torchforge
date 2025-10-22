@@ -287,25 +287,15 @@ class TestDistributedHfIterableDataset(FSDPTest):
         """
         rank = dist.get_rank()
 
-        # Create shared temp directory (only rank 0 creates it)
-        if rank == 0:
-            temp_dir = tempfile.mkdtemp(prefix="epoch_test_")
-        else:
-            temp_dir = ""
-
-        # Broadcast temp directory path to all ranks
-        temp_dir_list = [temp_dir]
-        dist.broadcast_object_list(temp_dir_list, src=0)
-        temp_dir = temp_dir_list[0]
+        # Each rank creates its own local temp dir and files
+        temp_dir = tempfile.mkdtemp(prefix=f"epoch_test_rank{rank}_")
         tmp_path = Path(temp_dir)
 
         try:
             medium_dataset_file = tmp_path / "medium_data.json"
 
-            # Only rank 0 creates the data file, all ranks read from it
-            if rank == 0:
-                create_test_json_file(medium_dataset_file, MEDIUM_DATASET_SIZE)
-            dist.barrier()  # Wait for file creation
+            # Each rank creates its own file
+            create_test_json_file(medium_dataset_file, MEDIUM_DATASET_SIZE)
 
             # Test multiple epoch boundaries
             for num_epochs in [0.9, 1.0, 2.5]:
@@ -373,6 +363,4 @@ class TestDistributedHfIterableDataset(FSDPTest):
                 ), f"Epoch count incorrect for {num_epochs} epochs test scenario"
 
         finally:
-            # Clean up temp directory (only rank 0)
-            if rank == 0:
-                shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_dir)
