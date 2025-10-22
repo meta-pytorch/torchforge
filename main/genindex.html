@@ -745,6 +745,8 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.create_seed_checkpoint">create_seed_checkpoint (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Job.custom_config_module">custom_config_module (torchtitan.config.job_config.Job attribute)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -763,6 +765,8 @@ document.write(`
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Training.debug_moe_force_load_balance">debug_moe_force_load_balance (torchtitan.config.job_config.Training attribute)</a>
+</li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Job.description">description (torchtitan.config.job_config.Job attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.deterministic">deterministic (torchtitan.config.job_config.Training attribute)</a>
@@ -790,6 +794,8 @@ document.write(`
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.enable_cpu_offload">enable_cpu_offload (torchtitan.config.job_config.Training attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.enable_first_step_checkpoint">enable_first_step_checkpoint (torchtitan.config.job_config.Checkpoint attribute)</a>
+</li>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.enable_ft_dataloader_checkpoints">enable_ft_dataloader_checkpoints (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -877,6 +883,8 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.initial_load_in_hf">initial_load_in_hf (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.initial_load_in_hf_quantized">initial_load_in_hf_quantized (torchtitan.config.job_config.Checkpoint attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.initial_load_model_only">initial_load_model_only (torchtitan.config.job_config.Checkpoint attribute)</a>
@@ -917,10 +925,12 @@ document.write(`
 </li>
       <li><a href="api_actors.html#forge.controller.actor.ForgeActor.launch">launch() (forge.controller.actor.ForgeActor class method)</a>
 </li>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.load_step">load_step (torchtitan.config.job_config.Checkpoint attribute)</a>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.load_only">load_only (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.load_step">load_step (torchtitan.config.job_config.Checkpoint attribute)</a>
+</li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.local_batch_size">local_batch_size (torchtitan.config.job_config.Training attribute)</a>
 </li>
       <li><a href="api_trainer.html#forge.actors.trainer.RLTrainer.loss">loss() (forge.actors.trainer.RLTrainer method)</a>
@@ -1011,21 +1021,19 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_layers_per_stage">pipeline_parallel_layers_per_stage (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size">pipeline_parallel_microbatch_size (torchtitan.config.job_config.Parallelism attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_microbatch_size">pipeline_parallel_microbatch_size (torchtitan.config.job_config.Parallelism attribute)</a>
+</li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule">pipeline_parallel_schedule (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv">pipeline_parallel_schedule_csv (torchtitan.config.job_config.Parallelism attribute)</a>
-</li>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_split_points">pipeline_parallel_split_points (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
       <li><a href="api_generator.html#forge.actors.generator.Generator.prefetch_weights_to_shm">prefetch_weights_to_shm (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.print_after_conversion">print_after_conversion (torchtitan.config.job_config.Model attribute)</a>
 </li>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Job.print_args">print_args (torchtitan.config.job_config.Job attribute)</a>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Job.print_config">print_config (torchtitan.config.job_config.Job attribute)</a>
 </li>
       <li><a href="api_actors.html#forge.controller.actor.ForgeActor.procs">procs (forge.controller.actor.ForgeActor attribute)</a>
 </li>
