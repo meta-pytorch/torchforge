@@ -194,7 +194,7 @@ main() {
 
     # Install vLLM and its requirements
     pip install -r .github/packaging/vllm_reqs_12_8.txt
-    pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+    python3.10 -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
 
     # Install monarch
     pip install torchmonarch==$MONARCH_VERSION
