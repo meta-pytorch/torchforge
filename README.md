@@ -3,6 +3,7 @@
 #### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
 [![Unit Tests](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml?query=branch%3Amain)
 [![GPU Tests](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml?query=branch%3Amain)
+[![Documentation](https://img.shields.io/badge/Docs-meta--pytorch.org-blue?style=flat&logo=readthedocs&logoColor=white)](https://meta-pytorch.org/torchforge/)
 [![Discord](https://img.shields.io/badge/Discord-OpenEnv-7289da?style=flat&logo=discord&logoColor=white)](https://discord.gg/YsTYBh6PD9)
 
 ## Overview
