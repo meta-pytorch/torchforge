@@ -142,7 +142,6 @@ def generate_ckpt(
 
 
 def aggregate_metrics(metrics_list: list) -> dict[str, Any]:
-    """Aggregate metrics according to their reduction types (SUM, MEAN, MAX, MIN, STD)."""
     if not metrics_list:
         return {}
 

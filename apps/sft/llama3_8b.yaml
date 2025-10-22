@@ -61,7 +61,6 @@ metric_logging:
     project: sft-training
     group: sft_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
-    per_rank_share_run: False
 
 # profiling:
 #   enable_profiling: false
