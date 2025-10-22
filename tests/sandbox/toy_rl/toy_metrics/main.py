@@ -82,25 +82,27 @@ async def main():
     group = f"grpo_exp_{int(time.time())}"
 
     # Config format: {backend_name: backend_config_dict}
-    # Each backend can specify reduce_across_ranks to control distributed logging behavior
     config = {
-        "console": {"reduce_across_ranks": True},
+        "console": {"logging_mode": "global_reduce"},
         "wandb": {
-            "project": "my_project",
+            "project": "toy_metrics",
             "group": group,
-            "reduce_across_ranks": False,
-            # Only useful if NOT reduce_across_ranks.
-            "share_run_id": False,  # Share run ID across ranks -- Not recommended.
+            "logging_mode": "per_rank_reduce",  # global_reduce, per_rank_reduce, per_rank_no_reduce
+            "per_rank_share_run": True,
         },
     }
 
     service_config = {"procs": 2, "num_replicas": 2, "with_gpus": False}
-    mlogger = await get_or_create_metric_logger()
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(config)
 
     # Spawn services first (triggers registrations via provisioner hook)
-    trainer = await TrainActor.options(**service_config).as_service()
-    generator = await GeneratorActor.options(**service_config).as_service()
+    trainer = await TrainActor.options(
+        **service_config, mesh_name="TrainActor"
+    ).as_service()
+    generator = await GeneratorActor.options(
+        **service_config, mesh_name="GeneratorActor"
+    ).as_service()
 
     for i in range(3):
         print(f"\n=== Global Step {i} ===")
@@ -110,14 +112,6 @@ async def main():
         await mlogger.flush.call_one(i)
 
     # shutdown
-    await mlogger.shutdown.call_one()
-    await asyncio.sleep(2)
-
-    await asyncio.gather(
-        trainer.shutdown(),
-        generator.shutdown(),
-    )
-
     await shutdown()
 
 

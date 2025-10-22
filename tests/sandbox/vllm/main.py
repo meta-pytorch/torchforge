@@ -13,14 +13,14 @@ import asyncio
 
 import os
 
-from forge.actors.policy import Policy
-from forge.cli.config import parse
+from forge.actors.generator import Generator
 
 from forge.controller.provisioner import init_provisioner, shutdown
 
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import parse
 from omegaconf import DictConfig
 
 os.environ["HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS"] = "600"
@@ -32,16 +32,17 @@ async def run(cfg: DictConfig):
         await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
-    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    metric_logging_cfg = cfg.get(
+        "metric_logging", {"console": {"logging_mode": "global_reduce"}}
+    )
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     if (prompt := cfg.get("prompt")) is None:
-        gd = cfg.policy.get("sampling_config", {}).get("guided_decoding", False)
-        prompt = "What is 3+5?" if gd else "Tell me a joke"
+        prompt = "Tell me a joke"
 
     print("Spawning service...")
-    policy = await Policy.options(**cfg.services.policy).as_service(**cfg.policy)
+    policy = await Generator.options(**cfg.services.policy).as_service(**cfg.policy)
 
     import time
 
@@ -67,7 +68,6 @@ async def run(cfg: DictConfig):
         print("-" * 80)
 
     print("\nShutting down...")
-    await policy.shutdown()
     await shutdown()
 
 

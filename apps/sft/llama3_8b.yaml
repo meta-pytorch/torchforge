@@ -1,21 +1,22 @@
+# >>> python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 
-# profiling:
-#   enable_profiling: false
-
-metrics:
-  logger: tensorboard
-  freq:
-    loss: 10
+# Config for supervised full finetuning using a Llama3.1 8B Instruct model
 
 # TODO: required by torchtitan
 # https://github.com/pytorch/torchtitan/blob/2f1c814da071cc8ad165d00be6f9c1a66f8e1cce/torchtitan/distributed/utils.py#L265
 comm:
   trace_buf_size: 0
 
+model_name: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
 model:
   name: llama3
   flavor: 8B
-  hf_assets_path: /tmp/Meta-Llama-3.1-8B-Instruct
+  hf_assets_path: hf://${model_name}
+
+processes:
+  procs: 8
+  with_gpus: true
 
 optimizer:
   name: AdamW
@@ -31,19 +32,7 @@ training:
   max_norm: 1.0
   steps: 1000
   compile: false
-
-validation:
-  local_batch_size: 1
-  freq: -1  # Change to a positive number to enable validation
-  steps: 200  # Max steps to run validation. Validation disabled if negative.
-
-dataset:
-  path: yahma/alpaca-cleaned
-  split: train[:95%]
-
-dataset_val:
-  path: yahma/alpaca-cleaned
-  split: train[95%:]
+  dataset: "c4"
 
 parallelism:
   data_parallel_replicate_degree: 1
@@ -56,9 +45,9 @@ parallelism:
 
 checkpoint:
   enable: true
-  folder: /tmp/Meta-Llama-3.1-8B-Instruct/saved_checkpoints
-  initial_load_path:  /tmp/Meta-Llama-3.1-8B-Instruct/
-  initial_load_in_hf: true
+  folder: ./checkpoint              # The folder to save checkpoints to.
+  initial_load_path: hf://${model}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
+  initial_load_in_hf: true          # If true, interpret initial_load_path as a HuggingFace model repo
   last_save_in_hf: true
   interval: 500
   async_mode: "disabled"
@@ -66,3 +55,11 @@ checkpoint:
 activation_checkpoint:
   mode: selective
   selective_ac_option: op
+
+# profiling:
+#   enable_profiling: false
+
+# metrics:
+#   log_freq: 10
+#   enable_tensorboard: true
+#   save_tb_folder: "tb"

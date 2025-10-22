@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 import jinja2
 from jinja2 import StrictUndefined
@@ -20,7 +20,7 @@ from forge.types import Message
 class HuggingFaceBaseTokenizer(BaseTokenizer):
     """
     A wrapper around Hugging Face tokenizers. See https://github.com/huggingface/tokenizers
-    This can be used to load from a Hugging Face tokenizer.json file into a torchtune BaseTokenizer.
+    This can be used to load from a Hugging Face tokenizer.json file into a forge BaseTokenizer.
 
     This class will load the tokenizer.json file from tokenizer_json_path. It will
     attempt to infer BOS and EOS token IDs from config.json if possible, and if not
@@ -61,7 +61,7 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
         self._infer_bos_eos_tokens()
         self._infer_should_add_bos_eos()
 
-    def _get_token_from_config(self, config: dict[str, Any], key: str) -> str:
+    def _get_token_from_config(self, config: dict[str, Any], key: str) -> Optional[str]:
         """
         HF BOS/EOS tokens are either stored as e.g. {'bos_token': 5}
         or {'bos_token': {'content': 5, ...}}. This utility handles both.
@@ -72,7 +72,7 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
                 raise ValueError(f"Could not parse {key} from config")
             token = token["content"]
         else:
-            if not isinstance(token, str):
+            if token is not None and not isinstance(token, str):
                 raise ValueError(f"Could not parse {key} from config")
         return token
 
@@ -137,7 +137,12 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
             list[int]: The list of token ids.
         """
         token_ids = self.tokenizer.encode(text).ids
-        if add_bos and not self.hf_adds_bos and self.bos_token not in text:
+        if (
+            add_bos
+            and not self.hf_adds_bos
+            and self.bos_token is not None
+            and self.bos_token not in text
+        ):
             token_ids.insert(0, self.bos_id)
         if add_eos and not self.hf_adds_eos:
             token_ids.append(self.eos_id)
@@ -205,7 +210,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
     Then, it will load all special tokens and chat template from tokenizer config file.
 
     It can be used to tokenize messages with correct chat template, and it eliminates the requirement of
-    the specific ModelTokenizer and custom PromptTemplate.
+    the specific ModelTokenizer.
 
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file
@@ -262,8 +267,14 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
     def render_template(
         self, messages: list[dict[str, str]], add_eos: bool = True
     ) -> str:
+        # Need to set tool_calls to something for qwen chat_template
+        if self.base_tokenizer.config["tokenizer_class"] == "Qwen2Tokenizer":
+            for message in messages:
+                if "tool_calls" not in message:
+                    message["tool_calls"] = {}
         rendered = self.template.render(
             messages=messages,
+            tools=None,
             add_generation_prompt=add_eos,
             **self.special_tokens_mapping,  # We assume that the naming is consistent
             **self.top_level_variables,
@@ -291,10 +302,13 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
                 add_eos=add_eos if i == len(messages) - 1 else False,
             )
 
-            current_tokens = self.base_tokenizer.encode(rendered, add_eos=False)
+            current_tokens = self.base_tokenizer.encode(
+                rendered, add_bos=False, add_eos=False
+            )
 
             if (
-                self.base_tokenizer.bos_token in rendered
+                self.base_tokenizer.bos_token is not None
+                and self.base_tokenizer.bos_token in rendered
                 and self.base_tokenizer.hf_adds_bos
             ):
                 del current_tokens[0]

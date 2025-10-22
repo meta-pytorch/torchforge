@@ -16,16 +16,16 @@ import torch
 import torch.nn.functional as F
 import torchstore as ts
 from forge.actors._torchstore_utils import get_param_key
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
 from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
-from forge.util.ops import selective_log_softmax
+from forge.util.config import parse
+from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 
@@ -241,7 +241,8 @@ class RefModel(ForgeActor):
         with torch.inference_mode():
             logits = self.model(input_ids=input_ids, attention_mask=mask).logits
 
-        return selective_log_softmax(logits, target_ids).squeeze(0)
+        log_probs = compute_logprobs(logits, target_ids, align=False)
+        return log_probs.squeeze(0)
 
 
 @dataclass
@@ -325,7 +326,7 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        trainer_log_probs = selective_log_softmax(logits, target_ids)
+        trainer_log_probs = compute_logprobs(logits, target_ids, align=False)
         # Compute loss only on response tokens
         # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
         loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
@@ -427,8 +428,6 @@ async def main(cfg: DictConfig):
     group_size = cfg.group_size
     max_req_tokens = cfg.max_req_tokens
     max_res_tokens = cfg.max_res_tokens
-    # TODO: delete this logic after we are confident on the vllm weight sync long term fix PR #184
-    policy_tp_size = cfg.policy.engine_config.tensor_parallel_size
 
     # ---- Setup services ---- #
     print(f"{cfg.policy=}")
@@ -447,7 +446,7 @@ async def main(cfg: DictConfig):
         ref_model,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
         Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
         RewardActor.options(**cfg.services.reward_actor).as_service(),
@@ -535,15 +534,6 @@ async def main(cfg: DictConfig):
         training_task.cancel()
     finally:
         print("Shutting down...")
-        await asyncio.gather(
-            DatasetActor.shutdown(dataloader),
-            policy.shutdown(),
-            Trainer.shutdown(trainer),
-            ReplayBuffer.shutdown(replay_buffer),
-            reward_actor.shutdown(),
-        )
-        # TODO - add a global shutdown that implicitly shuts down all services
-        # and remote allocations
         await shutdown()
 
 

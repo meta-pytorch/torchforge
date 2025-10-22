@@ -6,10 +6,8 @@
 
 import re
 
-from forge.interfaces import Reward
 
-
-class MathReward(Reward):
+class MathReward:
     """Reward class for evaluating math correctness."""
 
     def __init__(self, tolerance: float = 1e-6, partial_credit: float = 0.1):
@@ -58,7 +56,7 @@ class MathReward(Reward):
             return None
 
 
-class ThinkingReward(Reward):
+class ThinkingReward:
     """Reward class for evaluating use of <think> tags in reasoning."""
 
     def __init__(self, partial_reward: float = 0.2, full_reward: float = 1.0):

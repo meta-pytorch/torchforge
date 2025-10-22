@@ -1,14 +1,13 @@
 # >>> python -m tests.sandbox.vllm.main --config tests/sandbox/vllm/qwen2_5_32b.yaml
 
 policy:
-  engine_config:
+  engine_args:
     model: "Qwen/Qwen2.5-32B"
     tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: true
-  sampling_config:
+  sampling_params:
     n: 2
-    guided_decoding: false
     max_tokens: 512
 
 services:

@@ -13,14 +13,17 @@ import os
 import socket
 import uuid
 
-from monarch._src.actor.shape import NDSlice, Shape
+from monarch._src.actor.actor_mesh import ActorMesh
+from monarch._src.actor.shape import Extent
+
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+
 from monarch.tools import commands
 
+from monarch.utils import setup_env_for_distributed
+
 from forge.controller.launcher import BaseLauncher, get_launcher
-
 from forge.env import all_env_vars, FORGE_DISABLE_METRICS
-
 from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
@@ -125,11 +128,15 @@ class Provisioner:
             self._this_host_id: GpuManager(available_local_devices),
         }
         self._proc_host_map = {}
+        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
         if not self.launcher:
             logger.warning("Launcher not provided, remote allocations will not work.")
+
+        self._registered_actors: list["ForgeActor"] = []
+        self._registered_services: list["ServiceInterface"] = []
 
     async def initialize(self):
         """Call this after creating the instance"""
@@ -148,14 +155,31 @@ class Provisioner:
         alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
             name, num_hosts
         )
-        return (
-            HostMesh(
-                Shape(["hosts"], NDSlice.new_row_major([num_hosts])),
-                allocator=alloc,
-                alloc_constraints=alloc_constraints,
-            ),
-            server_name,
+
+        # We are asking Monarch to allocate a single process on
+        # every host, reflected in the Extent we provide below.
+
+        # Technically, this is ["hosts", "procs"] but to reduce
+        # confusion on its relationship with procs elsewhere,
+        # we call it "no_dim".
+
+        # TODO - remove this once Monarch supports HostMesh without it.
+        host_mesh = HostMesh.allocate_nonblocking(
+            name=name,
+            extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
+            allocator=alloc,
+            alloc_constraints=alloc_constraints,
         )
+        return host_mesh, server_name
+
+    def get_host_mesh(self, name: str) -> HostMesh:
+        """Returns the host mesh given its associated name.
+
+        This is currently an experimental API for HostMesh v1 and
+        should not be relied on longer term.
+
+        """
+        return self._host_mesh_map[name]
 
     async def get_proc_mesh(
         self,
@@ -256,9 +280,17 @@ class Provisioner:
                     env_vars[env_var.name] = str(env_var.get_value())
 
             procs = host_mesh.spawn_procs(
-                per_host={"gpus": num_procs},
+                per_host={"procs": num_procs},
                 bootstrap=functools.partial(bootstrap, env=env_vars),
             )
+
+            if with_gpus:
+                # Set up environment variables for PyTorch distributed...
+                await setup_env_for_distributed(
+                    procs,
+                    master_addr=addr,
+                    master_port=port,
+                )
 
             if is_remote:
                 await self.launcher.remote_setup(procs)
@@ -267,6 +299,8 @@ class Provisioner:
             if with_gpus:
                 # Applies any launcher specific remote setup.
                 procs._gpu_ids = gpu_ids
+
+            self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
 
             # If we created a server, track so we can tear it down later.
@@ -276,11 +310,12 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local fetcher actor on each process and register with global logger
+        # Spawn LocalFetcherActor for this ProcMesh and register with GlobalLoggingActor.
+        # When called, the LocalFetcherActor is broadcast by Monarch to all ranks in the ProcMesh.
         if not FORGE_DISABLE_METRICS.get_value():
             from forge.observability.metric_actors import get_or_create_metric_logger
 
-            _ = await get_or_create_metric_logger(procs)
+            _ = await get_or_create_metric_logger(procs, process_name=mesh_name)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -299,14 +334,14 @@ class Provisioner:
             )
             return
         async with self._lock:
-            # Deregister local logger from global logger
-            if hasattr(proc_mesh, "_local_fetcher"):
+            # Deregister LocalFetcherActor from GlobalLoggingActor
+            if hasattr(proc_mesh, "_local_fetcher") and hasattr(proc_mesh, "_uid"):
                 from forge.observability.metric_actors import (
                     get_or_create_metric_logger,
                 )
 
                 global_logger = await get_or_create_metric_logger(proc_mesh)
-                await global_logger.deregister_fetcher.call_one(proc_mesh)
+                await global_logger.deregister_fetcher.call_one(proc_mesh._uid)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
@@ -317,8 +352,55 @@ class Provisioner:
                 commands.kill(server_name)
             del self._proc_host_map[proc_mesh]
 
+    def register_service(self, service: "ServiceInterface") -> None:
+        """Registers a service allocation for cleanup."""
+        # Import ServiceInterface here instead of at top-level to avoid circular import
+        from forge.controller.service import ServiceInterface
+
+        if not isinstance(service, ServiceInterface):
+            raise TypeError(
+                f"register_service expected ServiceInterface, got {type(service)}"
+            )
+
+        self._registered_services.append(service)
+
+    def register_actor(self, actor: "ForgeActor") -> None:
+        """Registers a single actor allocation for cleanup."""
+
+        if not isinstance(actor, ActorMesh):
+            raise TypeError(f"register_actor expected ActorMesh, got {type(actor)}")
+
+        self._registered_actors.append(actor)
+
+    async def shutdown_all_allocations(self):
+        """Gracefully shut down all tracked actors and services."""
+        logger.info(
+            f"Shutting down {len(self._registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
+        )
+        # --- ServiceInterface ---
+        for service in reversed(self._registered_services):
+            try:
+                await service.shutdown()
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {service}: {e}")
+
+        # --- Actor instance (ForgeActor or underlying ActorMesh) ---
+        for actor in reversed(self._registered_actors):
+            try:
+                # Get the class to call shutdown on (ForgeActor or its bound class)
+                actor_cls = getattr(actor, "_class", None) or actor.__class__
+                await actor_cls.shutdown(actor)
+
+            except Exception as e:
+                logger.warning(f"Failed to shut down {actor}: {e}")
+
+        self._registered_actors.clear()
+        self._registered_services.clear()
+
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
+        await self.shutdown_all_allocations()
         async with self._lock:
             for server_name in self._server_names:
                 commands.kill(server_name)
@@ -387,12 +469,43 @@ async def host_mesh_from_proc(proc_mesh: ProcMesh):
     return await provisioner.host_mesh_from_proc(proc_mesh)
 
 
+async def register_service(service: "ServiceInterface") -> None:
+    """Registers a service allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_service(service)
+
+
+async def register_actor(actor: "ForgeActor") -> None:
+    """Registers an actor allocation with the global provisioner."""
+    provisioner = await _get_provisioner()
+    provisioner.register_actor(actor)
+
+
 async def stop_proc_mesh(proc_mesh: ProcMesh):
     provisioner = await _get_provisioner()
     return await provisioner.stop_proc_mesh(proc_mesh=proc_mesh)
 
 
+async def shutdown_metric_logger():
+    """Shutdown the global metric logger and all its backends."""
+    from forge.observability.metric_actors import get_or_create_metric_logger
+
+    logger.info("Shutting down metric logger...")
+    try:
+        mlogger = await get_or_create_metric_logger()
+        await mlogger.shutdown.call_one()
+    except Exception as e:
+        logger.warning(f"Failed to shutdown metric logger: {e}")
+
+
 async def shutdown():
+
+    await shutdown_metric_logger()
+
     logger.info("Shutting down provisioner..")
+
     provisioner = await _get_provisioner()
-    return await provisioner.shutdown()
+    result = await provisioner.shutdown()
+
+    logger.info("Shutdown completed successfully")
+    return result

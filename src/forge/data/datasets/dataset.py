@@ -61,7 +61,7 @@ class DatasetInfo:
 
 
 class TuneIterableDataset(IterableDataset, ABC):
-    """Base class for all torchtune iterable datasets.
+    """Base class for all forge iterable datasets.
 
     Datasets are composable, enabling complex structures such as:
     ``PackedDataset(InterleavedDataset([InterleavedDataset([ds1, ds2]), ds3]))``

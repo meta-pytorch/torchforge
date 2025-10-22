@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class SandboxedPythonCoder(ForgeActor):
+class _SandboxedPythonCoder:
     """A sandboxed code execution environment using enroot containers.
 
     This is a proof of concept of using enroot to provided a sandboxed
@@ -57,13 +57,12 @@ class SandboxedPythonCoder(ForgeActor):
         self.container_name = container_name
         self._initialized = False
 
-    @endpoint
     async def setup(self):
+        """Setup the sandboxed environment."""
         logging.debug("Setting up sandboxed actor")
         await self._maybe_create_image()
         self._recreate()
 
-    @endpoint
     async def recreate(self):
         """Recreates the container instance from the base image."""
         self._recreate()
@@ -110,7 +109,6 @@ class SandboxedPythonCoder(ForgeActor):
         self._initialized = True
         logging.debug("Successfully initialized container")
 
-    @endpoint
     async def execute(self, code: str) -> tuple[str, str]:
         """Executes Python code inside the container and returns the output.
 
@@ -149,3 +147,51 @@ class SandboxedPythonCoder(ForgeActor):
             output = result.stdout
             error = result.stderr
             return output, error
+
+
+class SandboxedPythonCoder(ForgeActor):
+    """Monarch actor wrapper for _SandboxedPythonCoder.
+
+    This is a thin wrapper that makes the sandboxed Python coder available
+    as a distributed Monarch actor. All business logic is in _SandboxedPythonCoder.
+
+    Args:
+        docker_image: Docker image URL to import (e.g., "docker://python:3.10").
+        sqsh_image_path: Local filesystem path where the enroot .sqsh image will be stored.
+        container_name: Unique name for the enroot container instance.
+    """
+
+    def __init__(
+        self,
+        docker_image: str = "docker://python:3.10",
+        sqsh_image_path: str = "python-image.sqsh",
+        container_name: str = "sandbox",
+    ):
+        self._coder = _SandboxedPythonCoder(
+            docker_image=docker_image,
+            sqsh_image_path=sqsh_image_path,
+            container_name=container_name,
+        )
+
+    @endpoint
+    async def setup(self):
+        """Setup the sandboxed environment."""
+        return await self._coder.setup()
+
+    @endpoint
+    async def recreate(self):
+        """Recreate the container instance from the base image."""
+        return await self._coder.recreate()
+
+    @endpoint
+    async def execute(self, code: str) -> tuple[str, str]:
+        """Execute Python code inside the container.
+
+        Args:
+            code: Python source code string to execute.
+
+        Returns:
+            The captured stdout and stderr from the execution, as a
+            (stdout, stderr) tuple of strings.
+        """
+        return await self._coder.execute(code)

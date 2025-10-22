@@ -9,32 +9,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from forge.observability.metrics import LoggerBackend, MetricCollector
-
-
-class MockBackend(LoggerBackend):
-    """Mock backend for testing metrics logging without external dependencies."""
-
-    def __init__(self, logger_backend_config=None):
-        super().__init__(logger_backend_config or {})
-        self.logged_metrics = []
-        self.init_called = False
-        self.finish_called = False
-        self.metadata = {}
-
-    async def init(self, role="local", primary_logger_metadata=None):
-        self.init_called = True
-        self.role = role
-        self.primary_logger_metadata = primary_logger_metadata or {}
-
-    async def log(self, metrics, step):
-        self.logged_metrics.append((metrics, step))
-
-    async def finish(self):
-        self.finish_called = True
-
-    def get_metadata_for_secondary_ranks(self):
-        return self.metadata
+from forge.observability.metrics import MetricCollector
 
 
 @pytest.fixture(autouse=True)

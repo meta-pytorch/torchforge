@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Union
 
-from forge.interfaces import Transform
-
 
 @dataclass(frozen=True)
 class Metric:
@@ -35,7 +33,7 @@ class AggregationType(Enum):
     MIN = "min"
 
 
-class MetricTransform(Transform, ABC):
+class MetricTransform(ABC):
     """Applied to each dataset sample to generate per-sample metrics for training tracking.
 
     Creates Metric objects that are later aggregated by MetricsAggregator. This separation
