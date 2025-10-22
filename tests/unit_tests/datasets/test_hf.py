@@ -113,7 +113,7 @@ class TestHfIterableDataset:
             split="train",
             # dataset_name not provided - should auto-generate
             seed=SEED,
-            metric_transform=None,  # Now using new observability system
+            metric_transform=DefaultDatasetMetricTransform(),
             num_shards_per_rank=4,
         )
 
@@ -131,7 +131,7 @@ class TestHfIterableDataset:
             dataset_name="my_dataset",
             weight=custom_weight,
             seed=SEED,
-            metric_transform=None,  # Now using new observability system
+            metric_transform=DefaultDatasetMetricTransform(),
             num_shards_per_rank=4,
         )
 
@@ -317,7 +317,7 @@ class TestDistributedHfIterableDataset(FSDPTest):
                         dataset_name="epoch_test",
                         seed=SEED,
                         shuffle_buffer_size=0,  # No shuffle for determinism
-                        metric_transform=None,  # Now using new observability system
+                        metric_transform=DefaultDatasetMetricTransform(),
                         num_shards_per_rank=2,
                     )
                     loader = StatefulDataLoader(

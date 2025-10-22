@@ -28,7 +28,6 @@ from forge.observability.metrics import (
     MetricCollector,
     reduce_metrics_states,
 )
-from forge.observability.utils import detect_actor_name_from_call_stack
 
 
 logger = logging.getLogger(__name__)
@@ -83,9 +82,6 @@ async def get_or_create_metric_logger(
         # Shutdown
         await mlogger.shutdown.call_one()
     """
-
-    if process_name is None:
-        process_name = detect_actor_name_from_call_stack()
 
     # Get or create the singleton global logger
     global _global_logger

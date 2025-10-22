@@ -16,7 +16,6 @@ import logging
 import math
 import os
 import sys
-import warnings
 from functools import partial
 from typing import Any
 
@@ -117,7 +116,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         return mlogger
 
     def record_batch_metrics(self, data_metrics: list):
-        """Record dataset metrics using the observability system."""
+        """Since the dataloader creates new processes, we dont call `record_metric` in the dataset.
+        Instead, pop the metrics from the batch and record them here."""
         for metric in data_metrics:
             record_metric(metric.key, metric.value, metric.reduction)
 
@@ -125,6 +125,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     async def setup(self):
         self.train_dataloader = self.setup_data()
         self.mlogger = await self.setup_metric_logger()
+
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -268,9 +269,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
             # Pop and record metrics from batch before moving to device
             self.record_batch_metrics(batch.pop("metrics", []))
-            record_metric(
-                "ForgeSFTRecipe/train_step/step", self.current_step, Reduce.MEAN
-            )
+            record_metric("ForgeSFTRecipe/train/step", self.current_step, Reduce.MEAN)
 
             # Move tensors to the appropriate device
             for k, v in batch.items():
@@ -306,23 +305,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
 async def run(cfg: DictConfig) -> None:
 
-    # TODO (allenwang28) Required for metric logging to work. Should be removed when V1 becomes default
-    MONARCH_HOSTMESH_V1 = os.getenv("MONARCH_HOSTMESH_V1")
-    if MONARCH_HOSTMESH_V1 != "1":
-        warnings.warn(
-            "MONARCH_HOSTMESH_V1 is set to {MONARCH_HOSTMESH_V1}. Setting it to '1' for SFT v2 to work properly. ",
-            UserWarning,
-            stacklevel=2,
-        )
-    os.environ["MONARCH_HOSTMESH_V1"] = "1"
-
     logging.info("Spawning recipe...")
     process_cfg = cfg.pop("processes")
 
     # Initialize metric logger in main process
-    metric_logging_cfg = cfg.get(
-        "metric_logging", {"console": {"logging_mode": "global_reduce"}}
-    )
+    metric_logging_cfg = cfg.get("metric_logging", {})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
@@ -337,8 +324,6 @@ async def run(cfg: DictConfig) -> None:
     logging.info("Done training. Clean up")
     await recipe.cleanup.call()
 
-    # Shutdown metric logger
-    await mlogger.shutdown.call_one()
     await recipe.mesh.stop()
     logging.info("All done!")
 

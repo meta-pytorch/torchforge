@@ -128,11 +128,11 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
     states is more precise than merging locally reduced metrics.
 
     Args:
-        states (list[dict[str, dict[str, Any]]]): list of state of one or more metrics,
+        states (list[dict[str, dict[str, Any]]]): List of state of one or more metrics,
             normally retrieved using `forge.observability.metrics.MetricAccumulator.get_state()`.
 
     Returns:
-        list[Metric]: list of reduced metrics
+        list[Metric]: List of reduced metrics
 
     Example:
         states = [

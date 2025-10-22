@@ -308,7 +308,7 @@ class TestInterleavedDataset:
             if "metrics" in sample:
                 collected_metrics.extend(sample["metrics"])
 
-        # Count metrics by dataset name (using new metric key)
+        # Count metrics by dataset name
         ds1_samples_processed = sum(
             1
             for m in collected_metrics

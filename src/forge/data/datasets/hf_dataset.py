@@ -232,8 +232,9 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     # .map is applied lazily and the advantage would be to leverage caching.
                     sample = self._apply_transforms(sample)
 
-                    # Track the number of epochs completed for each dataset.
-                    # This is especially useful when interleaving multiple datasets.
+                    # Track the number of epochs completed for each dataset. This is
+                    # especially useful when interleaving multiple datasets, but
+                    # also necessary to track dataset-level metrics.
                     if "metrics" not in sample:
                         sample["metrics"] = []
 
