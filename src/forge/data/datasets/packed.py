@@ -16,7 +16,7 @@ from torch.nn.attention.flex_attention import (
 from torchdata.stateful_dataloader import Stateful
 
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
-from forge.observability.metrics import Metric, Reduce
+from forge.data.dataset_metrics import AggregationType, Metric
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -605,13 +605,13 @@ class TextPacker(Packer[SampleDict]):
         # Add padding percentage metric
         if target_tokens_per_pack > 0:
             padding_pct = round(num_padding * 100 / target_tokens_per_pack, 2)
-            pack["metrics"].append(
-                Metric(
-                    key=f"dataset/{self.dataset_name}/pct_of_tokens_padded",
-                    value=padding_pct,
-                    reduction=Reduce.MEAN,
-                )
+            padding_metric = Metric(
+                source=self.dataset_name,
+                metric_name="pct_of_tokens_padded",
+                value=padding_pct,
+                agg_type=AggregationType.MEAN,
             )
+            pack["metrics"].append(padding_metric)
 
         # Concatenate tensor lists and handle other keys
         result = {
@@ -635,7 +635,7 @@ class TextPacker(Packer[SampleDict]):
                 if pack["input_pos"]
                 else torch.empty(0, dtype=torch.long)
             ),
-            "metrics": pack["metrics"],
+            # "metrics": pack["metrics"],
         }
 
         # Handle arbitrary keys that aren't tensors - keep as lists
@@ -853,13 +853,13 @@ class DPOPacker(Packer[SampleDict]):
         # Add padding percentage metric
         if target_tokens_per_pack > 0:
             padding_pct = round(num_padding * 100 / target_tokens_per_pack, 2)
-            pack["metrics"].append(
-                Metric(
-                    key=f"dataset/{self.dataset_name}/pct_of_tokens_padded",
-                    value=padding_pct,
-                    reduction=Reduce.MEAN,
-                )
+            padding_metric = Metric(
+                source=self.dataset_name,
+                metric_name="pct_of_tokens_padded",
+                value=padding_pct,
+                agg_type=AggregationType.MEAN,
             )
+            pack["metrics"].append(padding_metric)
 
         # Concatenate tensor lists and handle other keys
         result = {

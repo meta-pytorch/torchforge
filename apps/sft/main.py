@@ -27,7 +27,6 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
-from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
 
 from monarch.actor import current_rank, current_size, endpoint
@@ -78,6 +77,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
+        self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
@@ -109,22 +109,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         os.environ.update(env)
         logger.info("env: {}".format(env))
 
-    async def setup_metric_logger(self):
-        """Initialization happens in the main process. Here we just retrieve it"""
-        mlogger = await get_or_create_metric_logger()
-        return mlogger
-
-    def record_batch_metrics(self, data_metrics: list):
-        """Since the dataloader creates new processes, we dont call `record_metric` in the dataset.
-        Instead, pop the metrics from the batch and record them here."""
-        for metric in data_metrics:
-            record_metric(metric.key, metric.value, metric.reduction)
-
     @endpoint
     async def setup(self):
         self.train_dataloader = self.setup_data()
-        self.mlogger = await self.setup_metric_logger()
-
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -247,9 +234,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
-        loss = loss.item()
 
-        record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
         logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
@@ -266,24 +251,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         while self.current_step < self.num_training_steps:
             batch = next(dataloader)
-
-            # Pop and record metrics from batch before moving to device
-            self.record_batch_metrics(batch.pop("metrics", []))
-            record_metric("ForgeSFTRecipe/train/step", self.current_step, Reduce.MEAN)
-
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to("cuda")  # TODO: hardcoded for now
-
             self.train_step(batch)
             # self.profiler.step()
             self.current_step += 1
-
-            # Flush metrics
-            if self._rank == 0:
-                logger.debug(f"Flushing metrics at step {self.current_step}")
-                await self.mlogger.flush.call_one(global_step=self.current_step)
 
             self.checkpointer.save(
                 curr_step=self.current_step,
@@ -296,23 +270,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     async def cleanup(self) -> None:
         if self.checkpointer:
             self.checkpointer.close()
-        if getattr(self, "mlogger", None):
-            await self.mlogger.shutdown.call_one()
+        if self.metric_logger:
+            self.metric_logger.close()
 
     def __repr__(self) -> str:
         return "Trainer"
 
 
 async def run(cfg: DictConfig) -> None:
-
-    logging.info("Spawning recipe...")
+    logging.info("Spawing recipe...")
     process_cfg = cfg.pop("processes")
-
-    # Initialize metric logger in main process
-    metric_logging_cfg = cfg.get("metric_logging", {})
-    mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(metric_logging_cfg)
-
     recipe = await ForgeSFTRecipe.options(**process_cfg).as_actor(cfg)
 
     logging.info("Created recipe, running setup.")
@@ -323,7 +290,6 @@ async def run(cfg: DictConfig) -> None:
 
     logging.info("Done training. Clean up")
     await recipe.cleanup.call()
-
     await recipe.mesh.stop()
     logging.info("All done!")
 

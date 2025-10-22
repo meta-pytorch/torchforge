@@ -9,7 +9,7 @@ from typing import Any, Callable
 import torch
 
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
-from forge.data.metric_transform import DefaultDatasetMetricTransform
+from forge.data.dataset_metrics import DefaultTrainingMetricTransform
 from forge.data.utils import mask_messages, TuneMessage
 
 from .hf_dataset import HfIterableDataset
@@ -198,7 +198,7 @@ def sft_iterable_dataset(
         message_transform=message_transform,
         model_transform=model_transform,
         output_transform=output_transform,
-        metric_transform=DefaultDatasetMetricTransform(),
+        metric_transform=DefaultTrainingMetricTransform(),
         shuffle_buffer_size=shuffle_buffer_size,
         weight=weight,
         seed=seed,

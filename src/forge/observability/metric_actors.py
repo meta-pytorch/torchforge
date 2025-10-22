@@ -82,7 +82,6 @@ async def get_or_create_metric_logger(
         # Shutdown
         await mlogger.shutdown.call_one()
     """
-
     # Get or create the singleton global logger
     global _global_logger
 
