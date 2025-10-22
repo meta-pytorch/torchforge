@@ -1,7 +1,6 @@
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> torchforge
 
 #### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
-[![Unit Tests](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/unit_test.yaml?query=branch%3Amain)
 [![GPU Tests](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml/badge.svg?branch=main)](https://github.com/meta-pytorch/forge/actions/workflows/gpu_test.yaml?query=branch%3Amain)
 
 ## Overview
@@ -31,7 +30,7 @@ You can also find our notebook tutorials (coming soon)
 
 ### Basic
 
-torchforge requires the latest PyTorch nightly with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). (Note that the basic install script
+torchforge requires the PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
 ```bash
