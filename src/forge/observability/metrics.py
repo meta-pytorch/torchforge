@@ -544,7 +544,7 @@ class MetricCollector:
                     " Metric logging backends (e.g. wandb) were not initialized."
                     " This happens when you try to use `record_metric` before calling `init_backends`."
                     " To disable this warning, please call in your main file:\n"
-                    "`mlogger = await get_or_create_metric_logger()`\n"
+                    "`mlogger = await get_or_create_metric_logger(process_name='Controller')`\n"
                     "`await mlogger.init_backends.call_one(logging_config)`\n"
                     "or set env variable `FORGE_DISABLE_METRICS=True`"
                 ),

@@ -12,12 +12,8 @@ import torch.distributed as dist
 from datasets import load_dataset
 from datasets.distributed import split_dataset_by_node
 
-from forge.data.dataset_metrics import (
-    AggregationType,
-    DefaultTrainingMetricTransform,
-    Metric,
-    MetricTransform,
-)
+from forge.data.metric_transform import DefaultDatasetMetricTransform, MetricTransform
+from forge.observability.metrics import Metric, Reduce
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -85,7 +81,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._weight = weight if weight is not None else 1.0
 
         # Create default transform if not provided
-        self._metric_transform = metric_transform or DefaultTrainingMetricTransform()
+        self._metric_transform = metric_transform or DefaultDatasetMetricTransform()
 
         # Auto-generate dataset name if not provided
         if dataset_name is None:
@@ -239,15 +235,16 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                     # Track the number of epochs completed for each dataset. This is
                     # especially useful when interleaving multiple datasets, but
                     # also necessary to track dataset-level metrics.
-                    metric_num_epochs = Metric(
-                        source=self.info.name,
-                        metric_name="num_epochs",
-                        value=self._num_epochs,
-                        agg_type=AggregationType.MAX,
-                    )
                     if "metrics" not in sample:
                         sample["metrics"] = []
-                    sample["metrics"].append(metric_num_epochs)
+
+                    sample["metrics"].append(
+                        Metric(
+                            key=f"dataset/{self.info.name}/num_epochs",
+                            value=self._num_epochs,
+                            reduction=Reduce.MAX,
+                        )
+                    )
 
                     samples_yielded += 1
                     yield sample
