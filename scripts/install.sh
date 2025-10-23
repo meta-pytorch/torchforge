@@ -190,23 +190,23 @@ main() {
     install_system_packages "$USE_SUDO"
 
     log_info "Installing PyTorch ..."
-    pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/cu128
+    uv pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/cu128
 
     # Install vLLM and its requirements
-    pip install -r .github/packaging/vllm_reqs_12_8.txt
-    pip install six
-    pip install "setuptools<80"
-    python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+    uv pip install -r .github/packaging/vllm_reqs_12_8.txt
+    uv pip install six
+    uv pip install "setuptools<80"
+    uv python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
 
     # Install monarch
-    pip install torchmonarch==$MONARCH_VERSION
+    uv pip install torchmonarch==$MONARCH_VERSION
 
     # Install torchtitan and torchstore
-    pip install torchtitan==$TORCHTITAN_VERSION
-    pip install torchstore==$TORCHSTORE_VERSION
+    uv pip install torchtitan==$TORCHTITAN_VERSION
+    uv pip install torchstore==$TORCHSTORE_VERSION
 
     log_info "Installing Forge from source..."
-    pip install -e ".[dev]"
+    uv pip install -e ".[dev]"
 
     # Set up environment
     log_info "Setting up environment..."
