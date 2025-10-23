@@ -196,7 +196,7 @@ main() {
     uv pip install -r .github/packaging/vllm_reqs_12_8.txt
     uv pip install six
     uv pip install "setuptools<80"
-    uv python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+    python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
 
     # Install monarch
     uv pip install torchmonarch==$MONARCH_VERSION
