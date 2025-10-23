@@ -58,7 +58,9 @@ async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     # Fetcher should be a singleton at this point - call_one() will fail otherwise
 
     host, port = await fetcher.get_info.call_one()
-    await throwaway_procs.stop()
+
+    # Stopping this proc is the right thing to do, but Monarch does not yet handle manual stops well.
+    # await throwaway_procs.stop()
     return host, port
 
 

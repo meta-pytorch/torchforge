@@ -59,8 +59,7 @@ class Episode:
 
     @property
     def request_tensor(self) -> torch.Tensor:
-        request_tokens: torch.Tensor = self.completion.prompt_ids
-        tensor = torch.tensor(request_tokens, dtype=torch.long)
+        tensor: torch.Tensor = self.completion.prompt_ids.to(torch.long)
         if tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
             tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
@@ -68,8 +67,7 @@ class Episode:
 
     @property
     def response_tensor(self) -> torch.Tensor:
-        response_tokens: torch.Tensor = self.completion.token_ids
-        tensor = torch.tensor(response_tokens, dtype=torch.long)
+        tensor: torch.Tensor = self.completion.token_ids.to(torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)

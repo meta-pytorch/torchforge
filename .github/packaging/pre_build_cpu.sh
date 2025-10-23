@@ -24,7 +24,7 @@ echo "wheel dir is $WHL_DIR"
 build_vllm() {
     cd "$BUILD_DIR"
 
-    git clone https://github.com/vllm-project/vllm.git --branch $VLLM_BRANCH
+    git clone https://github.com/vllm-project/vllm.git --branch $VLLM_VERSION
     cd "$BUILD_DIR/vllm"
 
     python use_existing_torch.py
