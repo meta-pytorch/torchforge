@@ -15,7 +15,7 @@ dependencies = [
     "torchdata>=0.8.0",
     "torchtitan==0.2.0",
     "torchmonarch==0.1.2",
-    "torchstore==0.1.1",
+    "torchstore==0.1.2",
     # vLLM
     "vllm",
     # Hugging Face integrations
