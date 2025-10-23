@@ -36,7 +36,7 @@ trainer:
     warmup_steps: 1
   training:
     local_batch_size: ${batch_size}
-    seq_len: 2048
+    seq_len: ${sum:${max_req_tokens},${max_res_tokens}}  # seq_len >= max_req_tokens + max_res_tokens
     max_norm: 1.0
     steps: 1000000
     dtype: bfloat16
