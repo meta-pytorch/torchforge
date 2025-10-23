@@ -22,7 +22,7 @@ Key features:
 
 ## 📖 Documentation (Coming Soon)
 
-View torchforge's hosted documentation (coming soon)
+View torchforge's hosted documentation: https://meta-pytorch.org/torchforge. 
 
 ## Tutorials
 
