@@ -1,0 +1,1293 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <meta property="article:modified_time" content="2025-10-23T14:06:57+00:00" />
+    <title>Metric Logging in Forge &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=b61afe48" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'metric_logging';</script>
+    <script src="_static/custom.js?v=0065d487"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/forge/main/metric_logging.html" />
+    <link rel="icon" href="_static/logo-icon.svg"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Part 3: The TorchForge-Monarch Connection" href="tutorials/zero-to-forge/3_Monarch_101.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 23, 2025"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/forge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/forge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+    <meta name="docbuild:last-update" content="Oct 23, 2025"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="getting_started.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="getting_started.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/forge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="zero-to-forge-intro.html">Zero to TorchForge: From RL Theory to Production-Scale Implementation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/zero-to-forge/1_RL_and_Forge_Fundamentals.html">Part 1: RL Fundamentals - Using TorchForge Terminology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/zero-to-forge/2_Forge_Internals.html">Part 2: Peeling Back the Abstraction - What Are Services?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/zero-to-forge/3_Monarch_101.html">Part 3: The TorchForge-Monarch Connection</a></li>
+
+</ul>
+</details></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Metric Logging in Forge</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="tutorials.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">Metric...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="tutorials.html">
+        <meta itemprop="name" content="Tutorials">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="Metric Logging in Forge">
+        <meta itemprop="position" content="2">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">metric_logging</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="metric-logging-in-forge">
+<h1>Metric Logging in Forge<a class="headerlink" href="#metric-logging-in-forge" title="Link to this heading">#</a></h1>
+<p>We aim to make distributed observability effortless. You can call <code class="docutils literal notranslate"><span class="pre">record_metric(key,</span> <span class="pre">val,</span> <span class="pre">reduce_type)</span></code> from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. You can visualize aggregated results globally, per-rank or as a stream. No boilerplate required - just call, flush, and visualize. Disable with <code class="docutils literal notranslate"><span class="pre">FORGE_DISABLE_METRICS=true</span></code>.</p>
+<section id="your-superpowers">
+<h2>1. Your Superpowers<a class="headerlink" href="#your-superpowers" title="Link to this heading">#</a></h2>
+<section id="call-record-metric-from-anywhere">
+<h3>1.1 Call <code class="docutils literal notranslate"><span class="pre">record_metric</span></code> from Anywhere<a class="headerlink" href="#call-record-metric-from-anywhere" title="Link to this heading">#</a></h3>
+<p>Simple to use, with no need to pass dictionaries around. For example, users can simply write:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">my_fn</span><span class="p">():</span>
+    <span class="n">record_metric</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">reduce</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Instead of:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">my_fn</span><span class="p">(</span><span class="n">my_metrics</span><span class="p">):</span>
+    <span class="n">my_metrics</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">my_metrics</span>
+</pre></div>
+</div>
+<p>Simple example (for a distributed one, check the next section)</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_or_create_metric_logger</span><span class="p">,</span> <span class="n">record_metric</span><span class="p">,</span> <span class="n">Reduce</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+    <span class="c1"># Setup logger</span>
+    <span class="n">mlogger</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_or_create_metric_logger</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="s2">&quot;Controller&quot;</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">init_backends</span><span class="o">.</span><span class="n">call_one</span><span class="p">({</span><span class="s2">&quot;console&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;logging_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;global_reduce&quot;</span><span class="p">}})</span>
+
+    <span class="c1"># Have this in any process</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">my_fn</span><span class="p">(</span><span class="n">number</span><span class="p">):</span>
+        <span class="n">record_metric</span><span class="p">(</span><span class="s2">&quot;my_sum_metric&quot;</span><span class="p">,</span> <span class="n">number</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>   <span class="c1"># sum(1,2,3)</span>
+        <span class="n">record_metric</span><span class="p">(</span><span class="s2">&quot;my_max_metric&quot;</span><span class="p">,</span> <span class="n">number</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">MAX</span><span class="p">)</span>   <span class="c1"># max(1,2,3)</span>
+        <span class="n">record_metric</span><span class="p">(</span><span class="s2">&quot;my_mean_metric&quot;</span><span class="p">,</span> <span class="n">number</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">MEAN</span><span class="p">)</span> <span class="c1"># mean(1,2,3)</span>
+
+    <span class="c1"># Accumulate metrics</span>
+    <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">):</span> <span class="c1"># 1, 2, 3</span>
+        <span class="n">my_fn</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+
+    <span class="c1"># Flush</span>
+    <span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">flush</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">global_step</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Shutdown when done</span>
+    <span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">shutdown</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="o">===</span><span class="w"> </span><span class="o">[</span>GlobalReduce<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_metric:<span class="w">  </span><span class="m">6</span>.0
+my_max_metric:<span class="w">  </span><span class="m">3</span>.0
+my_mean_metric:<span class="w"> </span><span class="m">2</span>.0
+</pre></div>
+</div>
+</section>
+<section id="track-performance-timing-and-memory">
+<h3>1.2 Track Performance: Timing and Memory<a class="headerlink" href="#track-performance-timing-and-memory" title="Link to this heading">#</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">Tracer</span></code> for tracking durations and memory usage. Overhead is minimal, and GPU timing is non-blocking. Set <code class="docutils literal notranslate"><span class="pre">timer=&quot;gpu&quot;</span></code> for kernel-level precision. Tracer leverages <code class="docutils literal notranslate"><span class="pre">record_metric</span></code> in the backend.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability.perf_tracker</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tracer</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="c1"># ... Initialize logger (as shown in previous example)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">my_fn</span><span class="p">():</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+
+    <span class="n">t</span> <span class="o">=</span> <span class="n">Tracer</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;my_cuda_loop&quot;</span><span class="p">,</span> <span class="n">track_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="s2">&quot;gpu&quot;</span><span class="p">)</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">mm</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="s2">&quot;my_metric_mm&quot;</span><span class="p">)</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+
+<span class="c1"># Accumulate metrics</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">my_fn</span><span class="p">()</span>
+
+<span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">flush</span><span class="p">(</span><span class="n">global_step</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="c1"># Flush and reset</span>
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="o">===</span><span class="w"> </span><span class="o">[</span>GlobalReduce<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_cuda_loop/memory_delta_end_start_avg_gb:<span class="w">   </span><span class="m">0</span>.015
+my_cuda_loop/memory_peak_max_gb:<span class="w">              </span><span class="m">0</span>.042
+my_cuda_loop/my_metric_mm/duration_avg_s:<span class="w">     </span><span class="m">0</span>.031
+my_cuda_loop/my_metric_mm/duration_max_s:<span class="w">     </span><span class="m">0</span>.186
+my_cuda_loop/total_duration_avg_s:<span class="w">            </span><span class="m">0</span>.094
+my_cuda_loop/total_duration_max_s:<span class="w">            </span><span class="m">0</span>.187
+</pre></div>
+</div>
+<p>For convenience, you can also use <code class="docutils literal notranslate"><span class="pre">Tracer</span></code> as a context manager or decorator:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability.perf_tracker</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace</span>
+
+<span class="k">with</span> <span class="n">trace</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;train_step&quot;</span><span class="p">,</span> <span class="n">track_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="s2">&quot;gpu&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">t</span><span class="p">:</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="s2">&quot;fwd&quot;</span><span class="p">)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="s2">&quot;bwd&quot;</span><span class="p">)</span>
+    <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+
+<span class="nd">@trace</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;my_reward_fn&quot;</span><span class="p">,</span> <span class="n">track_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">reward_fn</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>  <span class="c1"># Supports both sync/async functions</span>
+    <span class="k">return</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="logging-modes">
+<h2>2. Logging Modes<a class="headerlink" href="#logging-modes" title="Link to this heading">#</a></h2>
+<p>Defined per backend. You have three options:</p>
+<ul class="simple">
+<li><p><strong>global_reduce</strong>: N ranks = 1 chart. Reduces metrics across all ranks. Ideal for a single aggregated view (e.g., average loss chart).</p></li>
+<li><p><strong>per_rank_reduce</strong>: N ranks = N charts. Each rank reduces locally and logs to its own logger. Ideal for per-rank performance debugging (e.g., GPU utilization).</p></li>
+<li><p><strong>per_rank_no_reduce</strong>: N ranks = N charts.  Each rank streams to its own logger without reduction. Ideal for real-time streams.</p></li>
+</ul>
+<p>Consider an example with an actor running on 2 replicas, each with 2 processes, for a total of 4 ranks. We will record the sum of the rank values. For example, rank_0 records 0, and rank_1 records 1.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.controller.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForgeActor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_or_create_metric_logger</span><span class="p">,</span> <span class="n">record_metric</span><span class="p">,</span> <span class="n">Reduce</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">current_rank</span><span class="p">,</span> <span class="n">endpoint</span>
+
+<span class="c1"># Your distributed actor</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MyActor</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rank</span> <span class="o">=</span> <span class="n">current_rank</span><span class="p">()</span><span class="o">.</span><span class="n">rank</span> <span class="c1"># 0 or 1 per replica</span>
+        <span class="n">record_metric</span><span class="p">(</span><span class="s2">&quot;my_sum_rank_metric&quot;</span><span class="p">,</span> <span class="n">rank</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span> <span class="c1"># &lt;--- your metric</span>
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+    <span class="c1"># Setup logger</span>
+    <span class="n">mlogger</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_or_create_metric_logger</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="s2">&quot;Controller&quot;</span><span class="p">)</span>
+    <span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">init_backends</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;console&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;logging_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;global_reduce&quot;</span><span class="p">}}</span> <span class="c1">#  &lt;--- Define logging_mode here</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Setup actor</span>
+    <span class="n">service_config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;procs&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;num_replicas&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;with_gpus&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+    <span class="n">my_actor</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MyActor</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="o">**</span><span class="n">service_config</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">()</span>
+
+    <span class="c1"># Accumulate metrics</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>  <span class="c1"># 2 steps</span>
+        <span class="k">await</span> <span class="n">my_actor</span><span class="o">.</span><span class="n">my_fn</span><span class="o">.</span><span class="n">fanout</span><span class="p">()</span>
+
+    <span class="c1"># Flush</span>
+    <span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">flush</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span><span class="n">global_step</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Flush and reset</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Output when <code class="docutils literal notranslate"><span class="pre">&quot;logging_mode&quot;:</span> <span class="pre">&quot;global_reduce&quot;</span></code></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="o">===</span><span class="w"> </span><span class="o">[</span>GlobalReduce<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_rank_metric:<span class="w"> </span><span class="m">4</span>.0<span class="w"> </span><span class="c1"># (0 + 1) * 2 steps * 2 replicas</span>
+<span class="o">===============</span>
+</pre></div>
+</div>
+<p>Now, let’s set <code class="docutils literal notranslate"><span class="pre">&quot;logging_mode&quot;:</span> <span class="pre">&quot;per_rank_reduce&quot;</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># replica 1</span>
+<span class="o">===</span><span class="w"> </span><span class="o">[</span>MyActor_661W_r0<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>.0<span class="w"> </span><span class="c1"># (rank_0) * 2 steps</span>
+<span class="o">===============</span>
+<span class="o">===</span><span class="w"> </span><span class="o">[</span>MyActor_661W_r1<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_rank_metric:<span class="w"> </span><span class="m">2</span>.0<span class="w"> </span><span class="c1"># (rank_1) * 2 steps</span>
+<span class="o">===============</span>
+
+<span class="c1"># replica 2</span>
+<span class="o">===</span><span class="w"> </span><span class="o">[</span>MyActor_wQ1g_r0<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>.0<span class="w"> </span><span class="c1"># (rank_0) * 2 steps</span>
+<span class="o">===============</span>
+<span class="o">===</span><span class="w"> </span><span class="o">[</span>MyActor_wQ1g_r1<span class="o">]</span><span class="w"> </span>-<span class="w"> </span>METRICS<span class="w"> </span>STEP<span class="w"> </span><span class="nv">0</span><span class="w"> </span><span class="o">===</span>
+my_sum_rank_metric:<span class="w"> </span><span class="m">2</span>.0<span class="w"> </span><span class="c1"># (rank_1) * 2 steps</span>
+<span class="o">===============</span>
+</pre></div>
+</div>
+<p>Finally, with <code class="docutils literal notranslate"><span class="pre">&quot;logging_mode&quot;:</span> <span class="pre">&quot;per_rank_no_reduce&quot;</span></code>, we have a stream with no reduction:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-0/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>
+<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-0/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>
+<span class="o">[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-1/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">1</span>
+<span class="o">[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-1/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">1</span>
+<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-0/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>
+<span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-0/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">0</span>
+<span class="o">[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-1/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">1</span>
+<span class="o">[</span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>MyActor-1/2<span class="o">]</span><span class="w"> </span><span class="m">2025</span>-10-10<span class="w"> </span><span class="m">12</span>:21:09<span class="w"> </span>INFO<span class="w"> </span>my_sum_rank_metric:<span class="w"> </span><span class="m">1</span>
+</pre></div>
+</div>
+</section>
+<section id="using-multiple-backends">
+<h2>3. Using Multiple Backends<a class="headerlink" href="#using-multiple-backends" title="Link to this heading">#</a></h2>
+<p>For example, you can do <code class="docutils literal notranslate"><span class="pre">global_reduce</span></code> with Weights &amp; Biases while using <code class="docutils literal notranslate"><span class="pre">per_rank_no_reduce</span></code> for debugging logs on the console.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mlogger</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_or_create_metric_logger</span><span class="p">(</span><span class="n">process_name</span><span class="o">=</span><span class="s2">&quot;Controller&quot;</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">mlogger</span><span class="o">.</span><span class="n">init_backends</span><span class="o">.</span><span class="n">call_one</span><span class="p">({</span>
+    <span class="s2">&quot;console&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;logging_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;per_rank_no_reduce&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;wandb&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;logging_mode&quot;</span><span class="p">:</span> <span class="s2">&quot;global_reduce&quot;</span><span class="p">}</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+<section id="adding-a-new-backend">
+<h3>3.1 Adding a New Backend<a class="headerlink" href="#adding-a-new-backend" title="Link to this heading">#</a></h3>
+<p>Extend <code class="docutils literal notranslate"><span class="pre">LoggerBackend</span></code> for custom logging, such as saving data to JSONL files, sending Slack notifications when a metric hits a threshold, or supporting tools like MLFlow or Grafana. After writing your backend, register it with <code class="docutils literal notranslate"><span class="pre">forge.observability.metrics.get_logger_backend_class</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example of a custom backend</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConsoleBackend</span><span class="p">(</span><span class="n">LoggerBackend</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logger_backend_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">logger_backend_config</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">process_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">process_name</span> <span class="o">=</span> <span class="n">process_name</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">log_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metrics</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Metric</span><span class="p">],</span> <span class="n">global_step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Called on flush</span>
+        <span class="nb">print</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process_name</span><span class="p">,</span> <span class="n">metrics</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metric</span><span class="p">:</span> <span class="n">Metric</span><span class="p">,</span> <span class="n">global_step</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Called on `record_metric` if &quot;logging_mode&quot;: &quot;per_rank_no_reduce&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">metric</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="adding-a-new-reduce-type">
+<h2>4. Adding a New Reduce Type<a class="headerlink" href="#adding-a-new-reduce-type" title="Link to this heading">#</a></h2>
+<p>Metrics are accumulated each time <code class="docutils literal notranslate"><span class="pre">record_metric</span></code> is called. The following example implements the <code class="docutils literal notranslate"><span class="pre">Reduce.MEAN</span></code> accumulator. Users can extend this by adding custom reduce types, such as <code class="docutils literal notranslate"><span class="pre">WordCounterAccumulator</span></code> or <code class="docutils literal notranslate"><span class="pre">SampleAccumulator</span></code>, and registering them with <code class="docutils literal notranslate"><span class="pre">forge.observability.metrics.Reduce</span></code>. For details on how this is used, see <code class="docutils literal notranslate"><span class="pre">forge.observability.metrics.MetricCollector</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example of a custom reduce type</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MeanAccumulator</span><span class="p">(</span><span class="n">MetricAccumulator</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reduction</span><span class="p">:</span> <span class="n">Reduce</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">reduction</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sum</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_reset</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">append</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Called after record_metric(key, value, reduce.TYPE)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;item&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sum</span> <span class="o">+=</span> <span class="n">v</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_value</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">sum</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;reduction_type&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">reduction_type</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">sum</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="p">}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_reduced_value_from_states</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="c1"># Useful for global reduce; called before flush</span>
+        <span class="n">total_sum</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;sum&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">)</span>
+        <span class="n">total_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">total_sum</span> <span class="o">/</span> <span class="n">total_count</span> <span class="k">if</span> <span class="n">total_count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sum</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_reset</span> <span class="o">=</span> <span class="kc">True</span>
+</pre></div>
+</div>
+</section>
+<section id="behind-the-scenes">
+<h2>5. Behind the Scenes<a class="headerlink" href="#behind-the-scenes" title="Link to this heading">#</a></h2>
+<p>We have two main requirements:</p>
+<ol class="arabic simple">
+<li><p>Metrics must be accumulated somewhere.</p></li>
+<li><p>Metrics must be collected from all ranks.</p></li>
+</ol>
+<p>To address #1, we use a <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code> per process to store state. For example, with 10 ranks, there are 10 <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code> instances. Within each rank, <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code> is a singleton, ensuring the same object is returned after the first call. This eliminates the need to pass dictionaries between functions.</p>
+<p>To address #2, we automatically spawn a <code class="docutils literal notranslate"><span class="pre">LocalFetcherActor</span></code> for each process mesh and register it with the <code class="docutils literal notranslate"><span class="pre">GlobalLoggingActor</span></code>. This allows the <code class="docutils literal notranslate"><span class="pre">GlobalLoggingActor</span></code> to know which processes to call, and each <code class="docutils literal notranslate"><span class="pre">LocalFetcherActor</span></code> can access the local <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code>. This spawning and registration occurs in <code class="docutils literal notranslate"><span class="pre">forge.controller.provisioner.py::get_proc_mesh</span></code>.</p>
+<p>The flow is generally:
+GlobalLoggingActor.method() -&gt; per-procmesh LocalFetcherActor.method() -&gt; per-rank MetricCollector.method() -&gt; logger</p>
+<p>So you may ask: “what about the logging backends”? They live in two places:</p>
+<ul class="simple">
+<li><p>In each MetricCollector if the backend is marked as per_rank.</p></li>
+<li><p>In the GlobalLoggingActor if the backend is marked as global_reduce.</p></li>
+</ul>
+<p>In summary:</p>
+<ol class="arabic simple">
+<li><p>One <code class="docutils literal notranslate"><span class="pre">GlobalLoggingActor</span></code> serves as the controller.</p></li>
+<li><p>For each process, <code class="docutils literal notranslate"><span class="pre">forge.controller.provisioner.py::get_proc_mesh</span></code> spawns a <code class="docutils literal notranslate"><span class="pre">LocalFetcherActor</span></code>, so N ranks = N <code class="docutils literal notranslate"><span class="pre">LocalFetcherActor</span></code> instances. These are registered with the <code class="docutils literal notranslate"><span class="pre">GlobalLoggingActor</span></code>.</p></li>
+<li><p>Each rank has a singleton <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code>, holding accumulated metrics and per_rank backends.</p></li>
+<li><p>Calling <code class="docutils literal notranslate"><span class="pre">record_metric(key,</span> <span class="pre">value,</span> <span class="pre">reduce_type)</span></code> stores metrics locally in the <code class="docutils literal notranslate"><span class="pre">MetricCollector</span></code>.</p></li>
+<li><p>When GlobalLoggingActor.flush() -&gt; all LocalFetcherActor.flush() –&gt; MetricCollector.flush()</p></li>
+</ol>
+</section>
+</section>
+
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="tutorials/zero-to-forge/3_Monarch_101.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 3: The TorchForge-Monarch Connection</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="tutorials/zero-to-forge/3_Monarch_101.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Part 3: The TorchForge-Monarch Connection</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="api.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#your-superpowers">1. Your Superpowers</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#call-record-metric-from-anywhere">1.1 Call <code class="docutils literal notranslate"><span class="pre">record_metric</span></code> from Anywhere</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#track-performance-timing-and-memory">1.2 Track Performance: Timing and Memory</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging-modes">2. Logging Modes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-multiple-backends">3. Using Multiple Backends</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-new-backend">3.1 Adding a New Backend</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#adding-a-new-reduce-type">4. Adding a New Reduce Type</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#behind-the-scenes">5. Behind the Scenes</a></li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/meta-pytorch/forge/edit/main/docs/source/metric_logging.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="_sources/metric_logging.md.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Metric Logging in Forge",
+       "headline": "Metric Logging in Forge",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/metric_logging.html",
+       "articleBody": "Metric Logging in Forge# We aim to make distributed observability effortless. You can call record_metric(key, val, reduce_type) from anywhere, and it just works. We also provide memory/performance tracers, plug-and-play logging backends, and reduction types. You can visualize aggregated results globally, per-rank or as a stream. No boilerplate required - just call, flush, and visualize. Disable with FORGE_DISABLE_METRICS=true. 1. Your Superpowers# 1.1 Call record_metric from Anywhere# Simple to use, with no need to pass dictionaries around. For example, users can simply write: def my_fn(): record_metric(key, value, reduce) Instead of: def my_fn(my_metrics): my_metrics[key] = value return my_metrics Simple example (for a distributed one, check the next section) import asyncio from forge.observability import get_or_create_metric_logger, record_metric, Reduce async def main(): # Setup logger mlogger = await get_or_create_metric_logger(process_name=\"Controller\") await mlogger.init_backends.call_one({\"console\": {\"logging_mode\": \"global_reduce\"}}) # Have this in any process def my_fn(number): record_metric(\"my_sum_metric\", number, Reduce.SUM) # sum(1,2,3) record_metric(\"my_max_metric\", number, Reduce.MAX) # max(1,2,3) record_metric(\"my_mean_metric\", number, Reduce.MEAN) # mean(1,2,3) # Accumulate metrics for number in range(1, 4): # 1, 2, 3 my_fn(number) # Flush await mlogger.flush.call_one(global_step=0) # Shutdown when done await mlogger.shutdown.call_one() if __name__ == \"__main__\": asyncio.run(main()) Output: === [GlobalReduce] - METRICS STEP 0 === my_sum_metric: 6.0 my_max_metric: 3.0 my_mean_metric: 2.0 1.2 Track Performance: Timing and Memory# Use Tracer for tracking durations and memory usage. Overhead is minimal, and GPU timing is non-blocking. Set timer=\"gpu\" for kernel-level precision. Tracer leverages record_metric in the backend. from forge.observability.perf_tracker import Tracer import torch # ... Initialize logger (as shown in previous example) def my_fn(): a = torch.randn(1000, 1000, device=\"cuda\") t = Tracer(prefix=\"my_cuda_loop\", track_memory=True, timer=\"gpu\") t.start() for _ in range(3): torch.mm(a, a) t.step(\"my_metric_mm\") t.stop() # Accumulate metrics for _ in range(2): my_fn() await mlogger.flush(global_step=0) # Flush and reset Output: === [GlobalReduce] - METRICS STEP 0 === my_cuda_loop/memory_delta_end_start_avg_gb: 0.015 my_cuda_loop/memory_peak_max_gb: 0.042 my_cuda_loop/my_metric_mm/duration_avg_s: 0.031 my_cuda_loop/my_metric_mm/duration_max_s: 0.186 my_cuda_loop/total_duration_avg_s: 0.094 my_cuda_loop/total_duration_max_s: 0.187 For convenience, you can also use Tracer as a context manager or decorator: from forge.observability.perf_tracker import trace with trace(prefix=\"train_step\", track_memory=True, timer=\"gpu\") as t: t.step(\"fwd\") loss = model(x) t.step(\"bwd\") loss.backward() @trace(prefix=\"my_reward_fn\", track_memory=False, timer=\"cpu\") async def reward_fn(x): # Supports both sync/async functions return 1.0 if x \u003e 0 else 0.0 2. Logging Modes# Defined per backend. You have three options: global_reduce: N ranks = 1 chart. Reduces metrics across all ranks. Ideal for a single aggregated view (e.g., average loss chart). per_rank_reduce: N ranks = N charts. Each rank reduces locally and logs to its own logger. Ideal for per-rank performance debugging (e.g., GPU utilization). per_rank_no_reduce: N ranks = N charts. Each rank streams to its own logger without reduction. Ideal for real-time streams. Consider an example with an actor running on 2 replicas, each with 2 processes, for a total of 4 ranks. We will record the sum of the rank values. For example, rank_0 records 0, and rank_1 records 1. import asyncio from forge.controller.actor import ForgeActor from forge.observability import get_or_create_metric_logger, record_metric, Reduce from monarch.actor import current_rank, endpoint # Your distributed actor class MyActor(ForgeActor): @endpoint async def my_fn(self): rank = current_rank().rank # 0 or 1 per replica record_metric(\"my_sum_rank_metric\", rank, Reduce.SUM) # \u003c--- your metric async def main(): # Setup logger mlogger = await get_or_create_metric_logger(process_name=\"Controller\") await mlogger.init_backends.call_one( {\"console\": {\"logging_mode\": \"global_reduce\"}} # \u003c--- Define logging_mode here ) # Setup actor service_config = {\"procs\": 2, \"num_replicas\": 2, \"with_gpus\": False} my_actor = await MyActor.options(**service_config).as_service() # Accumulate metrics for _ in range(2): # 2 steps await my_actor.my_fn.fanout() # Flush await mlogger.flush.call_one(global_step=0) # Flush and reset if __name__ == \"__main__\": asyncio.run(main()) Output when \"logging_mode\": \"global_reduce\" === [GlobalReduce] - METRICS STEP 0 === my_sum_rank_metric: 4.0 # (0 + 1) * 2 steps * 2 replicas =============== Now, let\u2019s set \"logging_mode\": \"per_rank_reduce\": # replica 1 === [MyActor_661W_r0] - METRICS STEP 0 === my_sum_rank_metric: 0.0 # (rank_0) * 2 steps =============== === [MyActor_661W_r1] - METRICS STEP 0 === my_sum_rank_metric: 2.0 # (rank_1) * 2 steps =============== # replica 2 === [MyActor_wQ1g_r0] - METRICS STEP 0 === my_sum_rank_metric: 0.0 # (rank_0) * 2 steps =============== === [MyActor_wQ1g_r1] - METRICS STEP 0 === my_sum_rank_metric: 2.0 # (rank_1) * 2 steps =============== Finally, with \"logging_mode\": \"per_rank_no_reduce\", we have a stream with no reduction: [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0 [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0 [1] [MyActor-1/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 1 [1] [MyActor-1/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 1 [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0 [0] [MyActor-0/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 0 [1] [MyActor-1/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 1 [1] [MyActor-1/2] 2025-10-10 12:21:09 INFO my_sum_rank_metric: 1 3. Using Multiple Backends# For example, you can do global_reduce with Weights \u0026 Biases while using per_rank_no_reduce for debugging logs on the console. mlogger = await get_or_create_metric_logger(process_name=\"Controller\") await mlogger.init_backends.call_one({ \"console\": {\"logging_mode\": \"per_rank_no_reduce\"}, \"wandb\": {\"logging_mode\": \"global_reduce\"} }) 3.1 Adding a New Backend# Extend LoggerBackend for custom logging, such as saving data to JSONL files, sending Slack notifications when a metric hits a threshold, or supporting tools like MLFlow or Grafana. After writing your backend, register it with forge.observability.metrics.get_logger_backend_class. # Example of a custom backend class ConsoleBackend(LoggerBackend): def __init__(self, logger_backend_config: dict[str, Any]) -\u003e None: super().__init__(logger_backend_config) async def init(self, process_name: str | None = None, *args, **kwargs) -\u003e None: self.process_name = process_name async def log_batch(self, metrics: list[Metric], global_step: int, *args, **kwargs) -\u003e None: # Called on flush print(self.process_name, metrics) def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -\u003e None: # Called on `record_metric` if \"logging_mode\": \"per_rank_no_reduce\" print(metric) 4. Adding a New Reduce Type# Metrics are accumulated each time record_metric is called. The following example implements the Reduce.MEAN accumulator. Users can extend this by adding custom reduce types, such as WordCounterAccumulator or SampleAccumulator, and registering them with forge.observability.metrics.Reduce. For details on how this is used, see forge.observability.metrics.MetricCollector. # Example of a custom reduce type class MeanAccumulator(MetricAccumulator): def __init__(self, reduction: Reduce) -\u003e None: super().__init__(reduction) self.sum = 0.0 self.count = 0 self.is_reset = True def append(self, value: Any) -\u003e None: # Called after record_metric(key, value, reduce.TYPE) v = float(value.item() if hasattr(value, \"item\") else value) self.sum += v self.count += 1 def get_value(self) -\u003e float: return self.sum / self.count if self.count \u003e 0 else 0.0 def get_state(self) -\u003e dict[str, Any]: return {\"reduction_type\": self.reduction_type.value, \"sum\": self.sum, \"count\": self.count} @classmethod def get_reduced_value_from_states(cls, states: list[dict[str, Any]]) -\u003e float: # Useful for global reduce; called before flush total_sum = sum(s[\"sum\"] for s in states) total_count = sum(s[\"count\"] for s in states) return total_sum / total_count if total_count \u003e 0 else 0.0 def reset(self) -\u003e None: self.sum = 0.0 self.count = 0 self.is_reset = True 5. Behind the Scenes# We have two main requirements: Metrics must be accumulated somewhere. Metrics must be collected from all ranks. To address #1, we use a MetricCollector per process to store state. For example, with 10 ranks, there are 10 MetricCollector instances. Within each rank, MetricCollector is a singleton, ensuring the same object is returned after the first call. This eliminates the need to pass dictionaries between functions. To address #2, we automatically spawn a LocalFetcherActor for each process mesh and register it with the GlobalLoggingActor. This allows the GlobalLoggingActor to know which processes to call, and each LocalFetcherActor can access the local MetricCollector. This spawning and registration occurs in forge.controller.provisioner.py::get_proc_mesh. The flow is generally: GlobalLoggingActor.method() -\u003e per-procmesh LocalFetcherActor.method() -\u003e per-rank MetricCollector.method() -\u003e logger So you may ask: \u201cwhat about the logging backends\u201d? They live in two places: In each MetricCollector if the backend is marked as per_rank. In the GlobalLoggingActor if the backend is marked as global_reduce. In summary: One GlobalLoggingActor serves as the controller. For each process, forge.controller.provisioner.py::get_proc_mesh spawns a LocalFetcherActor, so N ranks = N LocalFetcherActor instances. These are registered with the GlobalLoggingActor. Each rank has a singleton MetricCollector, holding accumulated metrics and per_rank backends. Calling record_metric(key, value, reduce_type) stores metrics locally in the MetricCollector. When GlobalLoggingActor.flush() -\u003e all LocalFetcherActor.flush() \u2013\u003e MetricCollector.flush()",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/metric_logging.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>
