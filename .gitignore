@@ -166,6 +166,7 @@ docs/src
 *.log
 *.swp
 .DS_Store
+*~
 
 # Translations
 *.mo

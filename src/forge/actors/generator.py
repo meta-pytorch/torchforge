@@ -667,7 +667,7 @@ class GeneratorWorker(ForgeActor):
                     loaded = model.load_weights([(name, param)])
                     del param
                     loaded_weights.update(loaded)
-            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} paremeters")
+            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} parameters")
             t.stop()
             return
         # normal update_weights without shared memory prefetching
