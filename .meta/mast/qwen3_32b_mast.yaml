@@ -61,7 +61,7 @@ trainer:
     warmup_steps: 1
   training:
     local_batch_size: ${local_batch_size}
-    seq_len: 2048
+    seq_len: ${sum:${max_req_tokens},${max_res_tokens}}  # seq_len >= max_req_tokens + max_res_tokens
     max_norm: 1.0
     steps: 1000000
     dtype: bfloat16
@@ -106,6 +106,7 @@ ref_model:
     flavor: 32B
     hf_assets_path: /mnt/wsfuse/teamforge/hf/qwen3_32b
   training:
+    seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
     gc_freq: 1
   compile:
