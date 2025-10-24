@@ -191,7 +191,7 @@ async def _setup_and_teardown(request):
 
     if use_dcp_override is not None:
         trainer_cfg["use_dcp"] = use_dcp_override
-        logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
+        logger.info(f"`trainer.use_dcp` is overridden to {use_dcp_override}")
 
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(
