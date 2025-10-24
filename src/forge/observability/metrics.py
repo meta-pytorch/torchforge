@@ -228,18 +228,7 @@ def record_episode_sample(table_name: str, episode):
         "response_len": episode.response_len,
         "pad_id": episode.pad_id,
     }
-
-    print(
-        "[DEBUG] Adding sample to table via record_metric, episode_id: ",
-        episode.episode_id,
-        # "episode: ",
-        # episode,
-    )
     record_metric(table_name, sample, Reduce.SAMPLE)
-    print(
-        "[DEBUG] Added sample to table via record_metric, episode_id: ",
-        episode.episode_id,
-    )
 
 
 #################
@@ -789,7 +778,6 @@ class MetricCollector:
 
             for backend in self.per_rank_reduce_backends:
                 if scalar_metrics:
-                    print(f"[DEBUG] calling log_batch from MetricCollector")
                     await backend.log_batch(scalar_metrics, global_step)
                 if sample_metrics:
                     await backend.log_samples(sample_metrics, global_step)
@@ -913,7 +901,6 @@ class ConsoleBackend(LoggerBackend):
     async def log_batch(
         self, metrics: list[Metric], global_step: int, *args, **kwargs
     ) -> None:
-        print(f"[DEBUG] calling log_batch with {len(metrics)} metrics")
         metrics_str = "\n".join(
             f"  {metric.key}: {metric.value}"
             for metric in sorted(metrics, key=lambda m: m.key)
@@ -932,12 +919,10 @@ class ConsoleBackend(LoggerBackend):
         """Pretty-print sample-level logs to console."""
         import json
 
-        print(f"[DEBUG] calling log_samples with {len(samples)} samples")
-
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for table_name, table_rows in samples.items():
             logger.info(f"[{table_name}] ({len(table_rows)} samples)")
-            logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
+            logger.info(json.dumps(table_rows))
         logger.info("==============================================\n")
 
 
