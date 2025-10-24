@@ -922,7 +922,7 @@ class ConsoleBackend(LoggerBackend):
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for table_name, table_rows in samples.items():
             logger.info(f"[{table_name}] ({len(table_rows)} samples)")
-            logger.info(json.dumps(table_rows))
+            logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
         logger.info("==============================================\n")
 
 
