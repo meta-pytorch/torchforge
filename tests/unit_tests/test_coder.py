@@ -8,7 +8,6 @@
 Unit tests for forge.actors.coder.SandboxedPythonCoder.
 """
 import os
-import tempfile
 import uuid
 from unittest.mock import Mock, patch
 
@@ -23,8 +22,7 @@ async def test_coder_success():
     unique_id = str(uuid.uuid4())[:8]
     container_name = f"test_sandbox_{unique_id}"
 
-    with tempfile.NamedTemporaryFile(suffix=".sqsh", delete=False) as temp_image:
-        image_path = temp_image.name
+    image_path = f"/tmp/test_mock_image_{unique_id}.sqsh"
 
     def mock_subprocess_run(*args, **kwargs):
         """Mock subprocess.run for testing."""
