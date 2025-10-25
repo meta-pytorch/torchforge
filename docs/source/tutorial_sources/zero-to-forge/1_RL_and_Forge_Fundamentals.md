@@ -155,7 +155,7 @@ async def conceptual_forge_rl_step(services, step):
 
 **Key difference**: Same RL logic, but each component is now a distributed, fault-tolerant, auto-scaling service.
 
-Did you realise-we are not worrying about any Infra code here! TorchForge Automagically handles the details behind the scenes and you can focus on writing your RL Algorthms!
+Did you realise-we are not worrying about any Infra code here! TorchForge Automagically handles the details behind the scenes and you can focus on writing your RL Algorithms!
 
 
 ## Why This Matters: Traditional ML Infrastructure Fails
