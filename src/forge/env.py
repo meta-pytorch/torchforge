@@ -101,7 +101,7 @@ MONARCH_MAX_FRAME_LENGTH = EnvVar(
 
 TORCHSTORE_USE_RDMA = EnvVar(
     name="TORCHSTORE_RDMA_ENABLED",
-    default=0,
+    default=1,
     description="Whether or not to use RDMA in TorchStore.",
 )
 

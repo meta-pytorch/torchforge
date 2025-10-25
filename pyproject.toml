@@ -43,6 +43,7 @@ dev = [
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
+    "multiprocess",
 ]
 
 # ---- Explicit project build information ---- #

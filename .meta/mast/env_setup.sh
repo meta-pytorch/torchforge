@@ -150,10 +150,10 @@ if [ -f "$VERSIONS_FILE" ]; then
     log_info "Sourcing version information from: $VERSIONS_FILE"
     source "$VERSIONS_FILE"
 
-    if [ -n "$TORCHTITAN_COMMIT" ]; then
-        log_info "Installing torchtitan from commit: $TORCHTITAN_COMMIT"
+    if [ -n "$TORCHTITAN_COMMIT_MAST" ]; then
+        log_info "Installing torchtitan from commit: $TORCHTITAN_COMMIT_MAST"
         pip uninstall -y torchtitan
-        pip install "git+https://github.com/pytorch/torchtitan.git@$TORCHTITAN_COMMIT"
+        pip install "git+https://github.com/pytorch/torchtitan.git@$TORCHTITAN_COMMIT_MAST"
 
         if [ $? -eq 0 ]; then
             log_info "Torchtitan installed successfully"
@@ -162,7 +162,7 @@ if [ -f "$VERSIONS_FILE" ]; then
             exit 1
         fi
     else
-        log_error "TORCHTITAN_COMMIT not found in versions.sh"
+        log_error "TORCHTITAN_COMMIT_MAST not found in versions.sh"
         exit 1
     fi
 else

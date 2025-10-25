@@ -7,37 +7,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Mapping
 
-from forge.types import Message, Observation, Scalar
-
-
-class Transform(ABC):
-    """Abstract base class for observation transforms.
-
-    Transforms are first-class citizens that can modify observations,
-    typically to add rewards, compute metrics, or modify state.
-
-    They follow a functional interface where they take an observation
-    and return a (potentially modified) observation.
-    """
-
-    @abstractmethod
-    def __call__(self, observation: Observation) -> Observation:
-        """Transform an observation.
-
-        Args:
-            observation: The input observation to transform
-
-        Returns:
-            The transformed observation (may be the same instance if no changes)
-        """
-        pass
+from forge.types import Message, Scalar
 
 
 class BaseTokenizer(ABC):
     """
     Abstract token encoding model that implements ``encode`` and ``decode`` methods.
-    See :class:`~torchtune.modules.transforms.tokenizers.SentencePieceBaseTokenizer` and
-    :class:`~torchtune.modules.transforms.tokenizers.TikTokenBaseTokenizer` for example implementations of this protocol.
+    See :class:`forge.data.HuggingFaceModelTokenizer for an example implementation of this protocol.
     """
 
     @abstractmethod
@@ -72,7 +48,7 @@ class BaseTokenizer(ABC):
 class ModelTokenizer(ABC):
     """
     Abstract tokenizer that implements model-specific special token logic in
-    the ``tokenize_messages`` method. See :class:`~torchtune.models.llama3.Llama3Tokenizer`
+    the ``tokenize_messages`` method. See :class:`forge.data.HuggingFaceModelTokenizer`
     for an example implementation of this protocol.
     """
 
@@ -140,12 +116,3 @@ class MetricLogger(ABC):
         This will automatically be called via __del__ when the instance goes out of scope.
         Logs should not be written after `close` is called.
         """
-
-
-class Reward(ABC):
-    """Abstract base class for reward models."""
-
-    @abstractmethod
-    def __call__(self, observation: Observation) -> float:
-        """Compute a reward for an observation."""
-        pass

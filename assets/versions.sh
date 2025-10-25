@@ -7,13 +7,12 @@
 # Version Configuration for Forge Wheel Building
 # This file contains all pinned versions and commits for dependencies
 
-# PyTorch version
-PYTORCH_VERSION="2.9.0.dev20250905"
+# Stable versions of upstream libraries for OSS repo
+PYTORCH_VERSION="2.9.0"
+VLLM_VERSION="v0.10.0"
+MONARCH_VERSION="0.1.2"
+TORCHTITAN_VERSION="0.2.0"
+TORCHSTORE_VERSION="0.1.1"
 
-# vLLM branch
-VLLM_BRANCH="v0.10.0"
-
-# Commit hashes
-MONARCH_COMMIT="195503223b5c2896846171f60ac99dc6868f8f2c"
-TORCHTITAN_COMMIT="d0e25450bcac2332359b13fbda430dc701f073d4"
-TORCHSTORE_COMMIT="662299faf4fd50ee30bd9aa3f4ce8c0e2db1d310"
+# Torchtitan commit hash for launching on MAST
+TORCHTITAN_COMMIT_MAST="d0e25450bcac2332359b13fbda430dc701f073d4"

@@ -32,7 +32,7 @@ class TuneMessage:
     """
     This class represents individual messages in a fine-tuning dataset. It supports
     text-only content, text with interleaved images, and tool calls. The
-    :class:`~torchtune.modules.transforms.tokenizers.ModelTokenizer` will tokenize
+    :class:`~forge.interfaces.ModelTokenizer` will tokenize
     the content of the message using ``tokenize_messages`` and attach the appropriate
     special tokens based on the flags set in this class.
 
@@ -61,8 +61,7 @@ class TuneMessage:
             - All ipython messages (tool call returns) should set ``eot=False``.
 
     Note:
-        TuneMessage class expects any image content to be a ``torch.Tensor``, as output
-        by e.g. :func:`~torchtune.data.load_image`
+        TuneMessage class expects any image content to be a ``torch.Tensor``.
     """
 
     def __init__(

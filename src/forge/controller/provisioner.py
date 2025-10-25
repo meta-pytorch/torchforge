@@ -58,7 +58,9 @@ async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     # Fetcher should be a singleton at this point - call_one() will fail otherwise
 
     host, port = await fetcher.get_info.call_one()
-    await throwaway_procs.stop()
+
+    # Stopping this proc is the right thing to do, but Monarch does not yet handle manual stops well.
+    # await throwaway_procs.stop()
     return host, port
 
 
@@ -310,11 +312,12 @@ class Provisioner:
 
             self._proc_host_map[procs] = host_mesh
 
-        # Spawn local fetcher actor on each process and register with global logger
+        # Spawn LocalFetcherActor for this ProcMesh and register with GlobalLoggingActor.
+        # When called, the LocalFetcherActor is broadcast by Monarch to all ranks in the ProcMesh.
         if not FORGE_DISABLE_METRICS.get_value():
             from forge.observability.metric_actors import get_or_create_metric_logger
 
-            _ = await get_or_create_metric_logger(procs)
+            _ = await get_or_create_metric_logger(procs, process_name=mesh_name)
         return procs
 
     async def host_mesh_from_proc(self, proc_mesh: ProcMesh):
@@ -333,14 +336,14 @@ class Provisioner:
             )
             return
         async with self._lock:
-            # Deregister local logger from global logger
-            if hasattr(proc_mesh, "_local_fetcher"):
+            # Deregister LocalFetcherActor from GlobalLoggingActor
+            if hasattr(proc_mesh, "_local_fetcher") and hasattr(proc_mesh, "_uid"):
                 from forge.observability.metric_actors import (
                     get_or_create_metric_logger,
                 )
 
                 global_logger = await get_or_create_metric_logger(proc_mesh)
-                await global_logger.deregister_fetcher.call_one(proc_mesh)
+                await global_logger.deregister_fetcher.call_one(proc_mesh._uid)
 
             if hasattr(proc_mesh, "_gpu_ids"):
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]

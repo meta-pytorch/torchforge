@@ -11,8 +11,10 @@ graph TD
     subgraph Example["Math Tutoring RL Example"]
         Dataset["Dataset: math problems"]
         Policy["Policy: student AI"]
-        Reward["Reward Model: scores answers"]
-        Reference["Reference Model: baseline"]
+        Reward["Reward Model:
+        scores answers"]
+        Reference["Reference Model:
+        baseline"]
         ReplayBuffer["Replay Buffer: stores experiences"]
         Trainer["Trainer: improves student"]
     end
@@ -25,9 +27,11 @@ graph TD
     ReplayBuffer --> Trainer
     Trainer --> Policy
 
-    style Policy fill:#4CAF50
-    style Reward fill:#FF9800
-    style Trainer fill:#E91E63
+    style Policy fill:#4CAF50,stroke:#fff,stroke-width:2px
+    style Reward fill:#FF9800,stroke:#fff,stroke-width:2px
+    style Trainer fill:#E91E63,stroke:#fff,stroke-width:2px
+
+    linkStyle default stroke:#888,stroke-width:2px
 ```
 
 ### RL Components Defined (TorchForge Names)
@@ -76,7 +80,7 @@ Here's the key insight: **Each RL component becomes a TorchForge service**. The 
 ```mermaid
 graph LR
     subgraph Concepts["RL Concepts"]
-        direction TB
+
         C1["Dataset"]
         C2["Policy"]
         C3["Reward Model"]
@@ -86,7 +90,7 @@ graph LR
     end
 
     subgraph Services["TorchForge Services (Real Classes)"]
-        direction TB
+
         S1["DatasetActor"]
         S2["Generator"]
         S3["RewardActor"]
@@ -151,7 +155,7 @@ async def conceptual_forge_rl_step(services, step):
 
 **Key difference**: Same RL logic, but each component is now a distributed, fault-tolerant, auto-scaling service.
 
-Did you realise-we are not worrying about any Infra code here! TorchForge Automagically handles the details behind the scenes and you can focus on writing your RL Algorthms!
+Did you realise-we are not worrying about any Infra code here! TorchForge Automagically handles the details behind the scenes and you can focus on writing your RL Algorithms!
 
 
 ## Why This Matters: Traditional ML Infrastructure Fails
@@ -173,11 +177,20 @@ Our simple RL loop above has complex requirements:
 
 ```mermaid
 graph LR
-    A["Policy: Student AI<br/>'What is 2+2?' → 'The answer is 4'"]
-    B["Reward: Teacher<br/>Scores answer: 0.95"]
-    C["Reference: Original Student<br/>Provides baseline comparison"]
-    D["Replay Buffer: Notebook<br/>Stores: question + answer + score"]
-    E["Trainer: Tutor<br/>Improves student using experiences"]
+    A["Policy: Student AI
+    'What is 2+2?' →
+    'The answer is 4'"]
+    B["Reward: Teacher
+    Scores answer: 0.95"]
+    C["Reference: Original Student
+    Provides baseline comparison"]
+    D["Replay Buffer: Notebook
+    Stores: question
+    + answer
+    + score"]
+    E["Trainer: Tutor
+    Improves student
+    using experiences"]
 
     A --> B
     A --> C

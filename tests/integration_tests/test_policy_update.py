@@ -17,11 +17,11 @@ import torchstore as ts
 from forge.actors.generator import Generator
 
 from forge.actors.trainer import RLTrainer
-from forge.cli.config import resolve_hf_hub_paths
 from forge.controller.provisioner import init_provisioner
 
 from forge.controller.service.service import uuid
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import resolve_hf_hub_paths
 from monarch.actor import endpoint
 
 from omegaconf import DictConfig, OmegaConf
@@ -191,7 +191,7 @@ async def _setup_and_teardown(request):
 
     if use_dcp_override is not None:
         trainer_cfg["use_dcp"] = use_dcp_override
-        logger.info(f"`trainer.use_dcp` is overriden to {use_dcp_override}")
+        logger.info(f"`trainer.use_dcp` is overridden to {use_dcp_override}")
 
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(

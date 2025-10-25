@@ -28,9 +28,9 @@ import pytest
 
 import torch
 import torch.distributed as dist
-
-from forge.data.dataset_metrics import DefaultTrainingMetricTransform, MetricsAggregator
 from forge.data.datasets import HfIterableDataset, InterleavedDataset
+
+from forge.data.metric_transform import DefaultDatasetMetricTransform
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader
 
@@ -114,7 +114,7 @@ def dataset_factory():
             dataset_name=dataset_name,
             seed=SEED,
             shuffle_buffer_size=10 if shuffle else 0,
-            metric_transform=DefaultTrainingMetricTransform(),
+            metric_transform=DefaultDatasetMetricTransform(),
             num_shards_per_rank=2,
             **kwargs,
         )
@@ -299,37 +299,47 @@ class TestInterleavedDataset:
             [child_interleaved, ds3], seed=SEED, dataset_name="parent"
         )
 
-        aggregator = MetricsAggregator()
+        # Collect metrics
+        collected_metrics = []
 
         # Process some samples
         total_samples = 300
         for sample in islice(iter(parent_interleaved), total_samples):
-            aggregator.update(sample["metrics"])
+            if "metrics" in sample:
+                collected_metrics.extend(sample["metrics"])
 
-        metrics = aggregator.get_metrics_for_logging(prefix="train")
-
-        # Should have metrics from all three datasets, with flat keys
-        assert "train_ds1/samples_seen" in metrics
-        assert "train_ds2/samples_seen" in metrics
-        assert "train_ds3/samples_seen" in metrics
+        # Count metrics by dataset name
+        ds1_samples_processed = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds1/samples_processed" in m.key
+        )
+        ds2_samples_processed = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds2/samples_processed" in m.key
+        )
+        ds3_samples_processed = sum(
+            1
+            for m in collected_metrics
+            if hasattr(m, "key") and "dataset/ds3/samples_processed" in m.key
+        )
 
         # All datasets should have contributed samples
-        assert metrics["train_ds1/samples_seen"] > 0
-        assert metrics["train_ds2/samples_seen"] > 0
-        assert metrics["train_ds3/samples_seen"] > 0
+        assert ds1_samples_processed > 0, "ds1 should have contributed samples"
+        assert ds2_samples_processed > 0, "ds2 should have contributed samples"
+        assert ds3_samples_processed > 0, "ds3 should have contributed samples"
 
         # Total samples should equal what we processed
         calculated_total_samples = (
-            metrics["train_ds1/samples_seen"]
-            + metrics["train_ds2/samples_seen"]
-            + metrics["train_ds3/samples_seen"]
+            ds1_samples_processed + ds2_samples_processed + ds3_samples_processed
         )
         assert calculated_total_samples == total_samples
 
         # Test that ratios are approximately correct based on nested weighting
-        ds1_ratio = metrics["train_ds1/samples_seen"] / total_samples
-        ds2_ratio = metrics["train_ds2/samples_seen"] / total_samples
-        ds3_ratio = metrics["train_ds3/samples_seen"] / total_samples
+        ds1_ratio = ds1_samples_processed / total_samples
+        ds2_ratio = ds2_samples_processed / total_samples
+        ds3_ratio = ds3_samples_processed / total_samples
 
         # Expected ratios based on nested weighting:
         # Inner weights: ds1=0.2, ds2=0.8 -> inner total=1.0
@@ -377,32 +387,30 @@ class TestInterleavedDataset:
         loader1 = StatefulDataLoader(
             interleaved1, batch_size=BATCH_SIZE, collate_fn=collate_with_metrics
         )
-        aggregator1 = MetricsAggregator()
 
         # Resumed run
         interleaved2 = create_interleaved()
         loader2 = StatefulDataLoader(
             interleaved2, batch_size=BATCH_SIZE, collate_fn=collate_with_metrics
         )
-        aggregator2 = MetricsAggregator()
 
         result = generate_ckpt(
             loader1,
-            aggregator1,
             steps_before_checkpoint=10,
             steps_after_checkpoint=20,
             resume_dataloader=loader2,
-            resume_aggregator=aggregator2,
         )
 
+        # Verify checkpointing and resumption work correctly
+        # After loading a checkpoint, training should continue identically
         orig_post_ids = [b["id"].tolist() for b in result["post_checkpoint_batches"]]
         resumed_ids = [b["id"].tolist() for b in result["resumed_batches"]]
         assert (
             orig_post_ids == resumed_ids
         ), "Resumed batches should be identical for deterministic run"
         assert (
-            result["final_metrics"] == result["resumed_metrics"]
-        ), "Final metrics should match"
+            result["post_checkpoint_metrics"] == result["resumed_metrics"]
+        ), "Resumed training should produce same metrics as original training"
 
         # Test sampling log functionality
         # Check that sampling log contains tuples of (iteration_count, dataset_name)
@@ -476,43 +484,36 @@ class TestDistributedInterleavedDataset(FSDPTest):
         """
         rank = dist.get_rank()
 
-        # Create shared temp directory (only rank 0 creates it)
-        if rank == 0:
-            temp_dir = tempfile.mkdtemp(prefix="interleaved_test_")
-        else:
-            temp_dir = None
-
-        # Broadcast temp directory to all ranks
-        temp_dir_list = [temp_dir] if temp_dir is not None else [""]
-        dist.broadcast_object_list(temp_dir_list, src=0)
-        temp_dir = temp_dir_list[0]
+        # Each rank creates its own local temp dir and files (no broadcast/barrier needed for creation)
+        temp_dir = tempfile.mkdtemp(prefix=f"interleaved_test_rank{rank}_")
         tmp_path = Path(temp_dir)
 
         try:
+            # ============================================
+            # SETUP: Each rank creates its own test files
+            # ============================================
+            file1 = tmp_path / "ds1.json"
+            file2 = tmp_path / "ds2.json"
+            file3 = tmp_path / "ds3.json"
 
-            def create_dataset():
-                file1 = tmp_path / "ds1.json"
-                file2 = tmp_path / "ds2.json"
-                file3 = tmp_path / "ds3.json"
+            create_test_json_file(file1, SMALL_DATASET_SIZE, offset=0)
+            create_test_json_file(file2, MEDIUM_DATASET_SIZE, offset=100)
+            create_test_json_file(file3, LARGE_DATASET_SIZE, offset=1000)
 
-                # Only rank 0 creates the data files
-                if rank == 0:
-                    create_test_json_file(file1, SMALL_DATASET_SIZE)  # IDs 0-22
-                    create_test_json_file(
-                        file2, MEDIUM_DATASET_SIZE, offset=100
-                    )  # IDs 100-134
-                    create_test_json_file(
-                        file3, LARGE_DATASET_SIZE, offset=1000
-                    )  # IDs 1000-1046
-                dist.barrier()  # Wait for file creation
+            # No barrier needed since files are local to each rank
 
+            # ============================================
+            # TEST LOGIC: Functions that use the files
+            # ============================================
+            def create_dataset() -> InterleavedDataset:
+                """Create interleaved dataset from local files."""
                 ds1 = HfIterableDataset(
                     path="json",
                     data_files=str(file1),
                     split="train",
                     dataset_name="ds1",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
-                    metric_transform=DefaultTrainingMetricTransform(),
+                    shuffle_buffer_size=0,
+                    metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=0.3,
                 )
@@ -521,8 +522,8 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     data_files=str(file2),
                     split="train",
                     dataset_name="ds2",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
-                    metric_transform=DefaultTrainingMetricTransform(),
+                    shuffle_buffer_size=0,
+                    metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=0.7,
                 )
@@ -531,8 +532,8 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     data_files=str(file3),
                     split="train",
                     dataset_name="ds3",
-                    shuffle_buffer_size=0,  # No shuffle for determinism
-                    metric_transform=DefaultTrainingMetricTransform(),
+                    shuffle_buffer_size=0,
+                    metric_transform=DefaultDatasetMetricTransform(),
                     num_shards_per_rank=2,
                     weight=1.0,
                 )
@@ -552,19 +553,17 @@ class TestDistributedInterleavedDataset(FSDPTest):
                     num_workers=0,  # Avoid multiprocessing in distributed tests
                     collate_fn=collate_with_metrics,
                 )
-                return loader, MetricsAggregator()
+                return loader
 
             # Run checkpointing test with small number of steps
-            loader1, aggregator1 = create_dataloader(create_dataset())
-            loader2, aggregator2 = create_dataloader(create_dataset())
+            loader1 = create_dataloader(create_dataset())
+            loader2 = create_dataloader(create_dataset())
 
             result = generate_ckpt(
                 loader1,
-                aggregator1,
-                3,
-                3,  # 3 steps before, 3 steps after checkpoint
+                steps_before_checkpoint=3,
+                steps_after_checkpoint=3,
                 resume_dataloader=loader2,
-                resume_aggregator=aggregator2,
             )
 
             # Verify deterministic resumption
@@ -577,8 +576,8 @@ class TestDistributedInterleavedDataset(FSDPTest):
                 f"This indicates sampling state is not properly preserved."
             )
             assert (
-                result["final_metrics"] == result["resumed_metrics"]
-            ), "Final metrics don't match resumed metrics - aggregator state issue"
+                result["post_checkpoint_metrics"] == result["resumed_metrics"]
+            ), "Resumed training should produce same metrics as original training"
 
             # Verify sampling ratio is approximately maintained for nested structure
             all_ids = []
@@ -621,6 +620,5 @@ class TestDistributedInterleavedDataset(FSDPTest):
                 ), f"ds3 ratio {ds3_ratio:.2f} should be ~{expected_ds3_ratio}"
 
         finally:
-            # Clean up temp directory (only rank 0)
-            if rank == 0:
-                shutil.rmtree(temp_dir)
+            # Each rank cleans its own temp dir
+            shutil.rmtree(temp_dir)
