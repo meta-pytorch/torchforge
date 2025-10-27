@@ -34,9 +34,9 @@ You can also find our notebook tutorials (coming soon)
 
 torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan).
 
-You can install Forge with uv:
+You can install Forge with:
 ```
-$ uv pip install .
+$ uv sync
 ```
 
 For your reference, we also include a basic install script that installs other system dependencies
@@ -53,6 +53,13 @@ conda activate forge
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
 After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
+
+
+```
+uv run apps/grpo/main.py --config apps/grpo/qwen3_1_7b.yaml
+```
+
+or if not using uv:
 
 ```
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
