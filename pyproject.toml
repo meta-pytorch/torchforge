@@ -48,6 +48,8 @@ dev = [
     "pytest-asyncio",
     "multiprocess",
 ]
+
+[project.optional-dependencies]
 oss = [
     "torch",
     "torchmonarch-nightly==2025.8.1",
