@@ -11,6 +11,8 @@ Tests for service.py
 import asyncio
 import logging
 
+import monarch
+
 import pytest
 from forge.controller import ForgeActor
 from forge.controller.service import (
@@ -23,6 +25,11 @@ from forge.controller.service import (
 )
 from forge.types import ProcessConfig
 from monarch.actor import Actor, endpoint
+
+# Temporary workaround - without this, proc_mesh.stop
+# will raise an exit code 1 failing all other tests.
+monarch.actor.unhandled_fault_hook = lambda failure: None
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
