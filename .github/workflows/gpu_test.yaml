@@ -38,7 +38,7 @@ jobs:
       - name: Update pip
         run: python -m pip install --upgrade pip
       - name: Install torchforge
-        run: uv sync
+        run: pip install uv && uv sync
       - name: Run unit tests with coverage
         # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
