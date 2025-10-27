@@ -35,7 +35,7 @@ GitHub = "https://github.com/pytorch-labs/forge"
 Documentation = "https://github.com/pytorch-labs/forge/tree/main/docs"
 Issues = "https://github.com/pytorch-labs/forge/issues"
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pre-commit",
     "pytest",
@@ -48,8 +48,6 @@ dev = [
     "pytest-asyncio",
     "multiprocess",
 ]
-
-[project.optional-dependencies]
 oss = [
     "torch",
     "torchmonarch-nightly==2025.8.1",
