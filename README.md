@@ -20,7 +20,7 @@ Key features:
 > work. It's recommended that you signal your intention to contribute in the
 > issue tracker, either by filing a new issue or by claiming an existing one.
 
-## 📖 Documentation (Coming Soon)
+## 📖 Documentation
 
 View torchforge's hosted documentation: https://meta-pytorch.org/torchforge.
 
