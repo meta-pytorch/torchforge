@@ -11,11 +11,12 @@ authors = [
 keywords = ["pytorch", "training", "llm"]
 dependencies = [
     # PyTorch
+    "torch==2.9.0",
     "torchdata>=0.8.0",
-    "torchtitan",
-    # vLLM
-    # TODO: pin specific vllm version
-    #"vllm==0.10.0",
+    "torchtitan==0.2.0",
+    "torchmonarch==0.1.2",
+    "torchstore==0.1.2",
+    "vllm",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -44,11 +45,6 @@ dev = [
     "pytest-asyncio",
     "multiprocess",
 ]
-oss = [
-    "torch",
-    "torchmonarch-nightly==2025.8.1",
-    "torchstore",
-]
 
 # ---- Explicit project build information ---- #
 [build-system]
@@ -68,24 +64,19 @@ members = [
     "forge",
 ]
 
-# pytorch
-# TODO: get auto backend to work
-[[tool.uv.index]]
-name = "pytorch-nightly-cu129"
-url  = "https://download.pytorch.org/whl/nightly/cu129"
-#explicit = true
-
-# vllm
 # [[tool.uv.index]]
-# name = "vllm-nightly"
-# url = "https://wheels.vllm.ai/nightly"
-# explicit = true
+# name = "pytorch-nightly"
+# url  = "https://download.pytorch.org/whl/nightly"
+
+[[tool.uv.index]]
+name = "forge"
+url = "https://download.pytorch.org/whl/preview/forge/"
 
 [tool.uv.sources]
-torchtitan = { index = "pytorch-nightly-cu129" }
-torch = { index = "pytorch-nightly-cu129" }
-torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git" }
-#vllm = { index = "vllm-nightly" }
+# torchtitan = { index = "pytorch-nightly" }
+# torch = { index = "pytorch-nightly" }
+# torchstore = { git = "ssh://git@github.com/meta-pytorch/torchstore.git"}
+vllm = { index = "forge" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy
@@ -95,4 +86,4 @@ prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
 ]
-# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
+#override-dependencies = ["torch>2.7.1"] # , "torchaudio>=2.7.1", "torchvision>=0.22.0"]

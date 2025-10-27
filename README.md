@@ -30,7 +30,7 @@ You can also find our notebook tutorials (coming soon)
 
 ## Installation
 
-### Basic
+### Build Script
 
 torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). (Note that the basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
