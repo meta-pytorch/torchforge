@@ -22,6 +22,7 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
+from apps.sft.eval_utils import get_dp_process_group, run_evaluation
 from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
@@ -81,6 +82,18 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
+
+        # Evaluation settings - no defaults, must be explicit in config
+        validation_config = job_config.get("validation")
+        if validation_config is not None:
+            self.validation_enabled = validation_config.get("enabled")
+            self.eval_interval = validation_config.get("eval_interval")
+            self.eval_steps = validation_config.get("eval_steps")
+        else:
+            self.validation_enabled = False
+            self.eval_interval = None
+            self.eval_steps = None
+
         self._init_dist()
         super().__init__(job_config)
 
@@ -122,27 +135,54 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
-        self.train_dataloader = self.setup_data()
-        self.mlogger = await self.setup_metric_logger()
+        # Always expect dataset_val.datasets configuration
+        dataset_val_config = self.job_config.get("dataset_val")
 
-        # self.train_dataloader = self.setup_data(
-        #     self.train_config.train_dataset_config,
-        #     self.train_config.train_dataloader_config,
-        #     self.train_config.packing_config,
-        # )
-        # self.val_dataloader = self.setup_data(
-        #     self.train_config.val_dataset_config,
-        #     self.train_config.val_dataloader_config,
-        #     self.train_config.packing_config,
-        # )
+        datasets = dataset_val_config["datasets"]
 
-        # TODO: confirm that this is working properly
-        # Should also use load, not dcp_load
+        # Setup all datasets
+        self.val_dataloaders = {}
+        self.train_dataloader = None
+
+        for i, dataset_spec in enumerate(datasets):
+            dataset_name = dataset_spec.get("name")
+            dataset_path = dataset_spec.get("path")
+            dataset_split = dataset_spec.get("split")
+
+            if not dataset_name or not dataset_path or not dataset_split:
+                raise ValueError(
+                    f"Each dataset must have 'name', 'path', and 'split'. "
+                    f"Got dataset[{i}]: {dataset_spec}"
+                )
+
+            dataloader = self.setup_data(
+                dataset_path=dataset_path,
+                dataset_split=dataset_split,
+            )
+
+            # First dataset with split starting with 'train' is used for training
+            if i == 0 and dataset_split.startswith("train"):
+                self.train_dataloader = dataloader
+                logger.info(
+                    f"Setup training dataset: {dataset_name} (split={dataset_split})"
+                )
+
+            # All datasets can be used for validation
+            self.val_dataloaders[dataset_name] = dataloader
+            logger.info(f"Setup dataset: {dataset_name} (split={dataset_split})")
+
+        # If validation disabled, clear validation dataloaders (but keep training)
+        if not self.validation_enabled:
+            self.val_dataloaders = None
+            logger.info("Validation disabled - only training dataloader will be used")
+
+        # Load checkpoint if resuming
         self.checkpointer.load(step=self.current_step)
-        # self.profiler = self.setup_profiler(self.train_config.profiler_config)
-        # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self):
+    def setup_data(
+        self, dataset_path: str = "yahma/alpaca-cleaned", dataset_split: str = "train"
+    ):
+        """Setup data with configurable dataset path and split."""
         print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
@@ -159,8 +199,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
+            path=dataset_path,
+            split=dataset_split,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -174,17 +214,28 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
+            drop_last=True,  # Ensure consistent batch sizes across DP ranks
         )
 
-        # Ultimately we probably want something like this
-        # packer = build_packing_strategy(packing_config)
-        # dataset = build_dataset(dataset_config)
-        # dataloader = build_dataloader(dataloader_config, dataset, packer)
         return dataloader
 
-    def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
+    def forward(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        labels: torch.Tensor,
+        compute_gradients: bool = True,
     ) -> torch.Tensor:
+        """Forward pass with optional gradient computation.
+
+        Args:
+            input_dict: Input dictionary containing tokens
+            labels: Target labels
+            compute_gradients: If True, compute gradients (training mode).
+                             If False, skip backward pass (evaluation mode).
+
+        Returns:
+            Loss tensor
+        """
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
 
@@ -204,7 +255,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         )
 
         if parallel_dims.pp_enabled:
-            # Pipeline Parallel forward / backward inside step() call
+            # Pipeline Parallel forward (with optional backward)
             with self.train_context(optional_context_parallel_ctx):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
@@ -226,7 +277,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 else torch.tensor([-1.0], device=self.device)
             )
         else:
-            # Non-PP forward / backward
+            # Non-PP forward (with optional backward)
             with self.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.maybe_enable_amp:
@@ -234,7 +285,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     loss = self.loss_fn(pred, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                loss.backward()
+                if compute_gradients:
+                    loss.backward()
 
         return loss
 
@@ -246,7 +298,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         #     self.data_parallel_size,
         # ) as grad_acc:
         labels = batch.pop("labels")
-        loss = self.forward_backward(batch, labels)
+        loss = self.forward(batch, labels, compute_gradients=True)
         loss = loss.item()
 
         record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
@@ -255,6 +307,32 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # self.pbar.update(1)
         self.optimizers.step()
         self.lr_schedulers.step()
+
+    async def evaluate(self) -> dict[str, dict[str, float]]:
+        """Run evaluation with async all_reduce for cross-rank epoch synchronization.
+
+        Evaluates on all configured validation datasets and returns per-dataset metrics.
+
+        Returns:
+            Dict mapping dataset name to metrics dict, e.g.:
+            {
+                "val_in_domain": {"val_loss": 2.5, "val_batches": 100},
+                "val_out_domain": {"val_loss": 3.1, "val_batches": 100}
+            }
+        """
+
+        # Create a wrapper that calls forward with compute_gradients=False
+        def forward_eval(input_dict, labels):
+            return self.forward(input_dict, labels, compute_gradients=False)
+
+        return await run_evaluation(
+            val_dataloaders=self.val_dataloaders,
+            model_parts=self.model_parts,
+            forward_fn=forward_eval,
+            device=self.device,
+            eval_steps=self.eval_steps,
+            dp_process_group=get_dp_process_group(self.parallel_dims),
+        )
 
     @endpoint
     async def train(self) -> None:
@@ -280,10 +358,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            # Flush metrics
-            if self._rank == 0:
-                logger.debug(f"Flushing metrics at step {self.current_step}")
-                await self.mlogger.flush.call_one(global_step=self.current_step)
+            # Run evaluation periodically if enabled
+            if self.validation_enabled and self.current_step % self.eval_interval == 0:
+                eval_metrics = await self.evaluate()
+                logger.info(f"Step {self.current_step} | Eval metrics: {eval_metrics}")
 
             self.checkpointer.save(
                 curr_step=self.current_step,
