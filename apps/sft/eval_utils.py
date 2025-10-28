@@ -35,21 +35,30 @@ def extract_epoch_from_batch(batch: dict) -> int | None:
         Epoch number from metrics, or None if not found
     """
     if "metrics" in batch:
+        # Look for num_epochs in metric keys
+        for metric in batch["metrics"]:
+            # Metrics have a 'key' attribute with paths like:
+            # 'dataset/yahma_alpaca-cleaned_train[:1%]/num_epochs'
+            if hasattr(metric, "key") and "num_epochs" in metric.key:
+                return int(metric.value)
+
+        # Fallback: check for old-style metric_name attribute
         for metric in batch["metrics"]:
             if hasattr(metric, "metric_name") and metric.metric_name == "num_epochs":
-                return metric.value
+                return int(metric.value)
+
     return None
 
 
 def start_epoch_sync(
-    epoch_increment: int,
+    epoch_changed: bool,
     device: torch.device,
     dp_process_group: Any = None,
 ) -> tuple[torch.Tensor | None, Any]:
     """Start async all_reduce for epoch synchronization across ranks.
 
     Args:
-        epoch_increment: Difference between current and starting epoch
+        epoch_changed: Whether the epoch changed on this rank
         device: Device for tensor
         dp_process_group: Data parallel process group (None = default group)
 
@@ -59,7 +68,8 @@ def start_epoch_sync(
     if not torch.distributed.is_initialized():
         return None, None
 
-    epoch_tensor = torch.tensor([epoch_increment], dtype=torch.long, device=device)
+    # Convert bool to tensor: 1 if epoch changed, 0 otherwise
+    epoch_tensor = torch.tensor([int(epoch_changed)], dtype=torch.long, device=device)
     pending_work = torch.distributed.all_reduce(
         epoch_tensor,
         op=torch.distributed.ReduceOp.MAX,
@@ -117,7 +127,7 @@ def eval_loop(
         Tuple of (avg_loss, num_batches)
     """
     total_loss = torch.tensor(0.0, device=device)
-    num_batches, starting_epoch = 0, None
+    num_batches = 0
 
     # Prefetch first batch
     next_batch = next(dataloader_iter)
@@ -142,26 +152,41 @@ def eval_loop(
 
             batch = next_batch
 
-            # Track starting epoch
+            # Get current batch epoch
             current_epoch = extract_epoch_fn(batch)
-            if starting_epoch is None:
-                starting_epoch = current_epoch
 
-            # Prefetch next batch and start async epoch check
+            # Prefetch next batch and check for epoch change
             try:
                 next_batch = next(dataloader_iter)
                 next_epoch = extract_epoch_fn(next_batch)
 
-                # Only check epochs if both are available
-                if next_epoch is not None and starting_epoch is not None:
-                    epoch_increment = next_epoch - starting_epoch
+                # Simple check: did epoch change between consecutive batches?
+                if next_epoch is not None and current_epoch is not None:
+                    epoch_changed = next_epoch > current_epoch
+
+                    if epoch_changed:
+                        logger.info(
+                            f"[{dataset_name}] Epoch change detected: "
+                            f"{current_epoch} → {next_epoch}"
+                        )
+
                     if torch.distributed.is_initialized():
+                        # All-reduce: if ANY rank's epoch changed, all ranks should stop
                         epoch_tensor, pending_work = start_epoch_sync(
-                            epoch_increment, device, dp_process_group
+                            epoch_changed, device, dp_process_group
                         )
                     else:
-                        should_break = epoch_increment > 0
+                        # Single process: stop immediately if epoch changed
+                        should_break = epoch_changed
+                else:
+                    # No epoch tracking available - rely on eval_steps
+                    if num_batches == 0:
+                        logger.info(
+                            f"[{dataset_name}] No epoch tracking available "
+                            f"(current={current_epoch}, next={next_epoch})"
+                        )
             except StopIteration:
+                logger.info(f"[{dataset_name}] StopIteration - dataloader exhausted")
                 should_break = True
 
             # Process current batch (overlaps with async all_reduce)
