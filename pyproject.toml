@@ -48,10 +48,16 @@ dev = [
     "pytest-asyncio",
     "multiprocess",
 ]
-oss = [
-    "torch",
-    "torchmonarch-nightly==2025.8.1",
-    "torchstore",
+docs = [
+    "sphinx==7.2.6",
+    "pytorch-sphinx-theme2==0.1.0",
+    "docutils>=0.18.1,<0.21",
+    "sphinx-design==0.6.1",
+    "sphinxcontrib-mermaid==1.0.0",
+    "sphinx-gallery==0.19.0",
+    "myst-parser",
+    "sphinx-sitemap==2.7.1",
+    "sphinx-autodoc-typehints==1.25.3",
 ]
 
 # ---- Explicit project build information ---- #
