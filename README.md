@@ -36,7 +36,7 @@ torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch
 
 You can install Forge with:
 ```
-$ uv sync
+$ uv pip install .
 ```
 
 For your reference, we also include a basic install script that installs other system dependencies
