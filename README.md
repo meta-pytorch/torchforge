@@ -36,8 +36,12 @@ torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch
 
 You can install Forge with:
 ```
+$ conda create -n forge python=3.10
+$ conda activate forge
 $ uv pip install .
 ```
+
+(conda-less uv install is a wip)
 
 For your reference, we also include a basic install script that installs other system dependencies
 along with torchforge:
