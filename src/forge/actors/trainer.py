@@ -166,11 +166,7 @@ class RLTrainer(ForgeActor):
 
         t.step("forward_backward")
 
-        current_lr = (
-            self.engine.lr_schedulers.get_last_lr()[0]
-            if hasattr(self.engine.lr_schedulers, "get_last_lr")
-            else 0.001
-        )
+        current_lr = self.engine.lr_schedulers.schedulers[0].get_last_lr()[0]
         record_metric("rl_trainer/learning_rate", current_lr, Reduce.MIN)
 
         self.engine.optimizers.step()
