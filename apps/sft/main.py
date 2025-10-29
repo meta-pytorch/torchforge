@@ -154,6 +154,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             generation_config_path=os.path.join(
                 self.job_config.model.hf_assets_path, "generation_config.json"
             ),
+            chat_template_path=os.path.join(
+                self.job_config.model.hf_assets_path, "chat_template.jinja"
+            ),
         )
 
         dataset = sft_iterable_dataset(
