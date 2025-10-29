@@ -239,7 +239,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
             tokenizer_json_path=tokenizer_json_path,
             tokenizer_config_json_path=tokenizer_config_json_path,
             generation_config_path=generation_config_path,
-            chat_template_path=chat_template_path
+            chat_template_path=chat_template_path,
         )
 
         # Contents of the tokenizer_config.json
