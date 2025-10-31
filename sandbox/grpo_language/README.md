@@ -34,8 +34,10 @@ pip install langid
 ## Usage
 
 ```bash
-python -m sandbox.grpo_language.main --config sandbox/grpo_language/qwen3_1_7b.yaml
+python -m sandbox.grpo_language.main --config apps/grpo/qwen3_1_7b.yaml
 ```
+
+You can use any of the config files from `apps/grpo/` (e.g., `qwen3_1_7b.yaml`, `qwen3_8b.yaml`, `qwen3_32b.yaml`).
 
 ## How It Works
 
@@ -70,7 +72,7 @@ To use a different language:
 
 Over the course of training, the model should learn to:
 1. Solve math problems correctly
-2. Use `<think></think>` tags for its reasoning
+2. Use `<思考></思考>` tags for its reasoning
 3. Write its thinking in Japanese (or the configured target language)
 
 ## Metrics
