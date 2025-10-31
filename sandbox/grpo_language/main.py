@@ -241,8 +241,20 @@ class DatasetActor(ForgeActor):
 
         def gsm8k_transform(sample):
             system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags. You must think in Japanese inside the <think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
+あなたは数学の問題を解くAIアシスタントです。以下の重要なルールに従ってください：
+
+CRITICAL RULES:
+1. Put ALL your reasoning inside <think> and </think> tags
+2. You MUST think in Japanese (日本語) inside the <think> tags - use hiragana, katakana, and kanji
+3. NEVER use English inside <think> tags
+4. Put your final numerical answer inside <answer> and </answer> tags
+
+Example:
+Question: What is 12 + 5?
+<think>12と5を足します。12 + 5 = 17です。したがって、答えは17です。</think>
+<answer>17</answer>
+
+Now solve the following problem using Japanese in your <think> tags:
             """
             request: str = sample["question"]
             as_chat = [
@@ -347,7 +359,9 @@ async def main(cfg: DictConfig):
             reward_functions=[
                 MathReward(),
                 ThinkingReward(),
-                LanguageReward(target_language="ja"),  # Japanese language reward
+                LanguageReward(
+                    target_language="ja", debug=True, debug_sample_rate=0.1
+                ),  # Japanese language reward with debug
             ]
         ),
     )

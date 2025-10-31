@@ -94,6 +94,8 @@ class LanguageReward:
         partial_reward: Reward when language matches but format is wrong (multiple blocks)
         fallback_reward: Reward when no valid blocks but response text is in target language
         no_match_reward: Reward when language doesn't match
+        debug: If True, print debug samples showing model outputs and detected language
+        debug_sample_rate: Fraction of calls to debug (e.g., 0.1 = 10% of calls)
 
     Note: Requires langid to be installed. Install with: pip install langid
     """
@@ -105,12 +107,17 @@ class LanguageReward:
         partial_reward: float = 0.5,
         fallback_reward: float = 0.2,
         no_match_reward: float = 0.0,
+        debug: bool = False,
+        debug_sample_rate: float = 0.1,
     ):
         self.target_language = target_language
         self.full_reward = full_reward
         self.partial_reward = partial_reward
         self.fallback_reward = fallback_reward
         self.no_match_reward = no_match_reward
+        self.debug = debug
+        self.debug_sample_rate = debug_sample_rate
+        self._debug_counter = 0
         self._THINK_BLOCK_RE = re.compile(
             r"<\s*think\s*>(.*?)<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
         )
@@ -140,6 +147,14 @@ class LanguageReward:
             fallback_reward if no valid blocks but response text is in target language,
             no_match_reward otherwise (wrong language)
         """
+        # Increment counter for sampling
+        self._debug_counter += 1
+        should_debug = (
+            self.debug
+            and self.debug_sample_rate > 0
+            and (self._debug_counter % int(1 / self.debug_sample_rate)) == 0
+        )
+
         if not response:
             return self.no_match_reward
 
@@ -154,15 +169,34 @@ class LanguageReward:
             ).strip()
 
             if not response_text:
+                if should_debug:
+                    print(
+                        f"\n[LanguageReward] Empty response | Reward: {self.no_match_reward}"
+                    )
                 return self.no_match_reward
 
             # Detect language of general response
             detected_lang, confidence = self._langid.classify(response_text)
 
+            if should_debug:
+                sample = response[:150].replace("\n", " ")
+                print(
+                    f"\n[LanguageReward] No thinking blocks found (FALLBACK mode)"
+                    f"\n  Target: {self.target_language} | Detected: {detected_lang} | "
+                    f"Confidence: {confidence:.2f}"
+                    f"\n  Sample: {sample}..."
+                )
+
             # Give fallback reward if response is in target language
             if detected_lang == self.target_language:
+                if should_debug:
+                    print(
+                        f"  → Reward: {self.fallback_reward} (fallback, correct language)"
+                    )
                 return self.fallback_reward
 
+            if should_debug:
+                print(f"  → Reward: {self.no_match_reward} (wrong language)")
             return self.no_match_reward
 
         # Concatenate all thinking blocks for language detection
@@ -172,18 +206,41 @@ class LanguageReward:
         thinking_content = re.sub(r"\s+", " ", thinking_content).strip()
 
         if not thinking_content:
+            if should_debug:
+                print(
+                    f"\n[LanguageReward] Empty thinking blocks | Reward: {self.no_match_reward}"
+                )
             return self.no_match_reward
 
         # Detect language using langid
         detected_lang, confidence = self._langid.classify(thinking_content)
 
+        if should_debug:
+            sample = thinking_content[:150].replace("\n", " ")
+            print(
+                f"\n[LanguageReward] Found {len(matches)} thinking block(s)"
+                f"\n  Target: {self.target_language} | Detected: {detected_lang} | "
+                f"Confidence: {confidence:.2f}"
+                f"\n  Thinking sample: {sample}..."
+            )
+
         # Check if language matches target
         if detected_lang == self.target_language:
             # Full reward for correct format (single block)
             if len(matches) == 1:
+                if should_debug:
+                    print(
+                        f"  → Reward: {self.full_reward} (single block, correct language) ✓"
+                    )
                 return self.full_reward
             # Partial reward for wrong format (multiple blocks) but correct language
             else:
+                if should_debug:
+                    print(
+                        f"  → Reward: {self.partial_reward} (multiple blocks, correct language)"
+                    )
                 return self.partial_reward
 
+        if should_debug:
+            print(f"  → Reward: {self.no_match_reward} (wrong language) ✗")
         return self.no_match_reward
