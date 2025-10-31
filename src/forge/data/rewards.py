@@ -90,8 +90,10 @@ class LanguageReward:
 
     Args:
         target_language: ISO 639-1 language code (e.g., 'en', 'ja', 'zh', 'es')
-        full_reward: Reward when detected language matches target
-        no_match_reward: Reward when detected language doesn't match target
+        full_reward: Reward when language matches and format is correct (single block)
+        partial_reward: Reward when language matches but format is wrong (multiple blocks)
+        fallback_reward: Reward when no valid blocks but response text is in target language
+        no_match_reward: Reward when language doesn't match
 
     Note: Requires langid to be installed. Install with: pip install langid
     """
@@ -100,10 +102,14 @@ class LanguageReward:
         self,
         target_language: str = "en",
         full_reward: float = 1.0,
+        partial_reward: float = 0.5,
+        fallback_reward: float = 0.2,
         no_match_reward: float = 0.0,
     ):
         self.target_language = target_language
         self.full_reward = full_reward
+        self.partial_reward = partial_reward
+        self.fallback_reward = fallback_reward
         self.no_match_reward = no_match_reward
         self._THINK_BLOCK_RE = re.compile(
             r"<\s*think\s*>(.*?)<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
@@ -129,8 +135,10 @@ class LanguageReward:
             target: Optional target string (unused but kept for signature consistency)
 
         Returns:
-            full_reward if detected language matches target_language and format is correct,
-            no_match_reward otherwise (including when format is wrong or no thinking block)
+            full_reward if language matches and exactly one thinking block is found,
+            partial_reward if language matches but multiple thinking blocks found,
+            fallback_reward if no valid blocks but response text is in target language,
+            no_match_reward otherwise (wrong language)
         """
         if not response:
             return self.no_match_reward
@@ -138,12 +146,27 @@ class LanguageReward:
         # Extract all thinking blocks
         matches = self._THINK_BLOCK_RE.findall(response)
 
-        # Return 0 reward if format is wrong (0 or multiple thinking blocks)
-        if len(matches) != 1:
+        # If no thinking blocks found, check if response text is in target language
+        if len(matches) == 0:
+            # Remove any partial tags that might exist
+            response_text = re.sub(
+                r"<\s*/?\s*think\s*>", "", response, flags=re.IGNORECASE
+            ).strip()
+
+            if not response_text:
+                return self.no_match_reward
+
+            # Detect language of general response
+            detected_lang, confidence = self._langid.classify(response_text)
+
+            # Give fallback reward if response is in target language
+            if detected_lang == self.target_language:
+                return self.fallback_reward
+
             return self.no_match_reward
 
-        # Get the single thinking block content
-        thinking_content = matches[0]
+        # Concatenate all thinking blocks for language detection
+        thinking_content = " ".join(matches)
 
         # Remove extra whitespace
         thinking_content = re.sub(r"\s+", " ", thinking_content).strip()
@@ -154,8 +177,13 @@ class LanguageReward:
         # Detect language using langid
         detected_lang, confidence = self._langid.classify(thinking_content)
 
-        # Return full reward if language matches target
+        # Check if language matches target
         if detected_lang == self.target_language:
-            return self.full_reward
+            # Full reward for correct format (single block)
+            if len(matches) == 1:
+                return self.full_reward
+            # Partial reward for wrong format (multiple blocks) but correct language
+            else:
+                return self.partial_reward
 
         return self.no_match_reward
