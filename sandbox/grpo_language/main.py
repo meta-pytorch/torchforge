@@ -216,20 +216,14 @@ class DatasetActor(ForgeActor):
 
         def gsm8k_transform(sample):
             system_prompt = """
-あなたは数学の問題を解くAIアシスタントです。以下の重要なルールに従ってください：
+You are a helpful AI assistant that solves math problems.
 
-重要なルール (CRITICAL RULES):
-1. すべての思考過程を <思考> と </思考> タグの中に入れてください
-2. <思考> タグの中では必ず日本語で考えてください（ひらがな、カタカナ、漢字を使用）
-3. <思考> タグの中では絶対に英語を使わないでください
-4. 最終的な数値の答えを <answer> と </answer> タグの中に入れてください
+Please show your reasoning inside <思考></思考> tags, then provide your final numerical answer inside <answer></answer> tags.
 
-例 (Example):
+Example:
 Question: What is 12 + 5?
-<思考>12と5を足します。12 + 5 = 17です。したがって、答えは17です。</思考>
+<思考>12と5を足します。12 + 5 = 17です。</思考>
 <answer>17</answer>
-
-以下の問題を <思考> タグの中で日本語を使って解いてください:
             """
             request: str = sample["question"]
             as_chat = [
