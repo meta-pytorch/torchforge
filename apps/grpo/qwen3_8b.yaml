@@ -3,7 +3,7 @@
 
 # Global configuration
 group_size: 8
-local_batch_size: 8 # per-device batch size
+local_batch_size: 12 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 1024
 model: "Qwen/Qwen3-8B"
