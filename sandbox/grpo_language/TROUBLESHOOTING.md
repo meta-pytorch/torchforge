@@ -107,20 +107,7 @@ Check these metrics in Weights & Biases:
 - `reward/evaluate_response/avg_MathReward_reward` - should stay reasonably high
 - `reward/evaluate_response/avg_ThinkingReward_reward` - should increase quickly
 
-### 5. Quick Debug Test
-
-Run the debug script to verify the reward function works:
-```bash
-python sandbox/grpo_language/debug_reward.py
-```
-
-Expected output:
-- Japanese text → reward 1.0
-- English text → reward 0.0
-- Multiple Japanese blocks → reward 0.5
-- No blocks but Japanese response → reward 0.2
-
-### 6. Alternative: Start with English, then transition
+### 5. Alternative: Start with English, then transition
 
 If Japanese isn't working, you could:
 
