@@ -44,10 +44,15 @@ You can use any of the config files from `apps/grpo/` (e.g., `qwen3_1_7b.yaml`, 
 1. The model receives a math problem and is instructed to use `<思考>` tags for reasoning
 2. During training, the model generates responses with thinking blocks
 3. Three rewards are computed:
-   - Math correctness (did it get the right answer?)
-   - Thinking usage (did it use `<思考>` tags properly?)
-   - Language usage (did it think in Japanese?)
+   - **MathReward**: Did it get the right answer?
+   - **ThinkingReward**: Did it use `<思考>` tags properly? (single block = full reward, multiple blocks = partial reward)
+   - **LanguageReward**: Did it use the target language? Detection strategy:
+     - If exactly one thinking block: detect language of block content only
+     - Otherwise (no blocks or multiple blocks): detect language of whole response
+     - Returns match_reward (1.0) if detected language matches target, no_match_reward (0.0) otherwise
 4. The model is trained to maximize all three rewards
+
+**Note**: ThinkingReward enforces format (single vs multiple blocks), while LanguageReward focuses purely on language detection. This separation of concerns allows each reward to specialize in one aspect of the desired behavior.
 
 ## Configuration
 

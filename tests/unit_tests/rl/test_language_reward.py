@@ -20,9 +20,7 @@ class TestLanguageReward(unittest.TestCase):
         self.reward_ja = LanguageReward(target_language="ja")
         self.custom_reward = LanguageReward(
             target_language="ja",
-            full_reward=0.9,
-            partial_reward=0.6,
-            fallback_reward=0.3,
+            match_reward=0.9,
             no_match_reward=0.1,
         )
 
@@ -30,24 +28,18 @@ class TestLanguageReward(unittest.TestCase):
         """Test LanguageReward initialization with default values."""
         reward = self.LanguageReward()
         self.assertEqual(reward.target_language, "en")
-        self.assertEqual(reward.full_reward, 1.0)
-        self.assertEqual(reward.partial_reward, 0.5)
-        self.assertEqual(reward.fallback_reward, 0.2)
+        self.assertEqual(reward.match_reward, 1.0)
         self.assertEqual(reward.no_match_reward, 0.0)
 
     def test_init_custom_values(self):
         """Test LanguageReward initialization with custom values."""
         reward = self.LanguageReward(
             target_language="ja",
-            full_reward=0.9,
-            partial_reward=0.6,
-            fallback_reward=0.3,
+            match_reward=0.9,
             no_match_reward=0.1,
         )
         self.assertEqual(reward.target_language, "ja")
-        self.assertEqual(reward.full_reward, 0.9)
-        self.assertEqual(reward.partial_reward, 0.6)
-        self.assertEqual(reward.fallback_reward, 0.3)
+        self.assertEqual(reward.match_reward, 0.9)
         self.assertEqual(reward.no_match_reward, 0.1)
 
     def test_init_missing_langid(self):
@@ -130,13 +122,13 @@ class TestLanguageReward(unittest.TestCase):
         result = self.reward_en(
             "prompt", "This is just a regular response without any thinking tags."
         )
-        # No thinking blocks but response is in English, should get fallback reward
-        self.assertEqual(result, 0.2)
+        # No thinking blocks -> detect whole response, English detected -> match_reward
+        self.assertEqual(result, 1.0)
 
     def test_call_with_no_thinking_tags_wrong_language(self):
         """Test __call__ with response containing no thinking tags and wrong language."""
         result = self.reward_en("prompt", "これは日本語の応答です。タグはありません。")
-        # No thinking blocks and wrong language, should get no_match_reward
+        # No thinking blocks -> detect whole response, Japanese detected -> no_match_reward
         self.assertEqual(result, 0.0)
 
     def test_call_with_empty_thinking_block(self):
@@ -167,26 +159,26 @@ class TestLanguageReward(unittest.TestCase):
         self.assertEqual(result, 1.0)
 
     def test_call_multiple_thinking_blocks(self):
-        """Test __call__ with multiple thinking blocks (wrong format but correct language)."""
+        """Test __call__ with multiple thinking blocks - detects whole response language."""
         response = """
         <思考>First thought in English.</思考>
         Some text in between.
         <思考>Second thought also in English.</思考>
         """
         result = self.reward_en("prompt", response)
-        # Multiple blocks = wrong format, but language is correct, should return partial_reward
-        self.assertEqual(result, 0.5)
+        # Multiple blocks -> detect whole response, English detected -> match_reward
+        self.assertEqual(result, 1.0)
 
     def test_call_multiple_thinking_blocks_mixed_languages(self):
-        """Test __call__ with multiple thinking blocks in different languages (wrong format)."""
+        """Test __call__ with multiple thinking blocks in different languages."""
         response = """
         <思考>First thought in English with lots of content here.</思考>
         <思考>これは短い日本語。</思考>
         """
         result = self.reward_en("prompt", response)
-        # Multiple blocks with mixed languages - langid will detect dominant language
-        # Should return either partial_reward (if detects English) or no_match_reward (if detects Japanese)
-        self.assertIn(result, [0.0, 0.5])
+        # Multiple blocks -> detect whole response, langid will detect dominant language
+        # Should return match_reward (1.0) if English dominant, or no_match_reward (0.0) if not
+        self.assertIn(result, [0.0, 1.0])
 
     def test_call_multiline_thinking_block(self):
         """Test __call__ with multiline thinking blocks."""
@@ -215,13 +207,13 @@ class TestLanguageReward(unittest.TestCase):
         result = self.reward_en("prompt", response, target="some target")
         self.assertEqual(result, 1.0)
 
-        # Longer English text without tags should get fallback reward
+        # English text without tags -> detect whole response -> match_reward
         result = self.reward_en(
             "prompt",
             "This is a response without thinking tags but in English language.",
             target="some target",
         )
-        self.assertEqual(result, 0.2)
+        self.assertEqual(result, 1.0)
 
     def test_call_custom_reward_values(self):
         """Test __call__ with custom reward values."""
@@ -231,12 +223,12 @@ class TestLanguageReward(unittest.TestCase):
         response_en = "<思考>This is English.</思考>"
         response_none = ""
 
-        # Test custom full reward (single block, correct language)
+        # Test custom match reward (single block, correct language)
         self.assertEqual(self.custom_reward("prompt", response_ja_single), 0.9)
-        # Test custom partial reward (multiple blocks, correct language)
-        self.assertEqual(self.custom_reward("prompt", response_ja_multiple), 0.6)
-        # Test custom fallback reward (no blocks, correct language)
-        self.assertEqual(self.custom_reward("prompt", response_ja_no_tags), 0.3)
+        # Test custom match reward (multiple blocks -> whole response, correct language)
+        self.assertEqual(self.custom_reward("prompt", response_ja_multiple), 0.9)
+        # Test custom match reward (no blocks -> whole response, correct language)
+        self.assertEqual(self.custom_reward("prompt", response_ja_no_tags), 0.9)
         # Test custom no_match reward (wrong language)
         self.assertEqual(self.custom_reward("prompt", response_en), 0.1)
         # Test empty response
@@ -245,7 +237,7 @@ class TestLanguageReward(unittest.TestCase):
     def test_call_zero_custom_values(self):
         """Test __call__ with zero custom values."""
         zero_reward = self.LanguageReward(
-            target_language="en", full_reward=0.0, no_match_reward=0.0
+            target_language="en", match_reward=0.0, no_match_reward=0.0
         )
         result = zero_reward("prompt", "<思考>This is English.</思考>")
         self.assertEqual(result, 0.0)
