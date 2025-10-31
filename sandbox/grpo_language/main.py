@@ -215,7 +215,7 @@ class DatasetActor(ForgeActor):
 
         def gsm8k_transform(sample):
             system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
+            Put all your scratchpad work between <think> and </think> tags. You must think in Japanese inside the <think> tags.
             Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
             """
             request: str = sample["question"]
