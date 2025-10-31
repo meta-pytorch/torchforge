@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source ~/.bashrc)",
+      "Bash(conda activate forge-monarch-0-1-1)",
+      "Bash(pip install:*)",
+      "Bash(https_proxy=http://fwdproxy:8080 http_proxy=http://fwdproxy:8080 pip install:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(https_proxy=http://fwdproxy:8080 http_proxy=http://fwdproxy:8080 git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
