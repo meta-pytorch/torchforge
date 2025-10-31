@@ -243,18 +243,18 @@ class DatasetActor(ForgeActor):
             system_prompt = """
 あなたは数学の問題を解くAIアシスタントです。以下の重要なルールに従ってください：
 
-CRITICAL RULES:
-1. Put ALL your reasoning inside <think> and </think> tags
-2. You MUST think in Japanese (日本語) inside the <think> tags - use hiragana, katakana, and kanji
-3. NEVER use English inside <think> tags
-4. Put your final numerical answer inside <answer> and </answer> tags
+重要なルール (CRITICAL RULES):
+1. すべての思考過程を <思考> と </思考> タグの中に入れてください
+2. <思考> タグの中では必ず日本語で考えてください（ひらがな、カタカナ、漢字を使用）
+3. <思考> タグの中では絶対に英語を使わないでください
+4. 最終的な数値の答えを <answer> と </answer> タグの中に入れてください
 
-Example:
+例 (Example):
 Question: What is 12 + 5?
-<think>12と5を足します。12 + 5 = 17です。したがって、答えは17です。</think>
+<思考>12と5を足します。12 + 5 = 17です。したがって、答えは17です。</思考>
 <answer>17</answer>
 
-Now solve the following problem using Japanese in your <think> tags:
+以下の問題を <思考> タグの中で日本語を使って解いてください:
             """
             request: str = sample["question"]
             as_chat = [
@@ -358,9 +358,9 @@ async def main(cfg: DictConfig):
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[
                 MathReward(),
-                ThinkingReward(),
+                ThinkingReward(tag="思考"),  # Use Japanese tag
                 LanguageReward(
-                    target_language="ja", debug=True, debug_sample_rate=0.1
+                    target_language="ja", tag="思考", debug=True, debug_sample_rate=0.1
                 ),  # Japanese language reward with debug
             ]
         ),

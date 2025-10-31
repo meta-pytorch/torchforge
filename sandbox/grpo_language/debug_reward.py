@@ -15,27 +15,27 @@ reward = LanguageReward(target_language="ja")
 # Test cases mimicking what the model might generate
 test_cases = [
     # Case 1: Perfect - Japanese in single thinking block
-    ("<think>これは数学の問題です。2+2=4です。</think><answer>4</answer>", "Perfect Japanese"),
+    ("<思考>これは数学の問題です。2+2=4です。</思考><answer>4</answer>", "Perfect Japanese"),
     # Case 2: English thinking (most likely during training)
     (
-        "<think>This is a math problem. 2+2=4.</think><answer>4</answer>",
+        "<思考>This is a math problem. 2+2=4.</思考><answer>4</answer>",
         "English thinking",
     ),
     # Case 3: No thinking blocks at all
     ("The answer is 4.<answer>4</answer>", "No thinking blocks"),
     # Case 4: Empty thinking blocks
-    ("<think></think><answer>4</answer>", "Empty thinking block"),
+    ("<思考></思考><answer>4</answer>", "Empty thinking block"),
     # Case 5: Multiple thinking blocks in Japanese
     (
-        "<think>最初の考え。</think><think>次の考え。</think><answer>4</answer>",
+        "<思考>最初の考え。</思考><思考>次の考え。</思考><answer>4</answer>",
         "Multiple Japanese blocks",
     ),
     # Case 6: Just the answer, no thinking
     ("<answer>4</answer>", "Just answer tag"),
     # Case 7: Thinking with mostly numbers/symbols
-    ("<think>2 + 2 = 4</think><answer>4</answer>", "Mostly numbers"),
+    ("<思考>2 + 2 = 4</思考><answer>4</answer>", "Mostly numbers"),
     # Case 8: Mixed English and Japanese
-    ("<think>Let me think... これは簡単です。</think><answer>4</answer>", "Mixed languages"),
+    ("<思考>Let me think... これは簡単です。</思考><answer>4</answer>", "Mixed languages"),
 ]
 
 print("=" * 80)
@@ -51,9 +51,7 @@ for response, description in test_cases:
     import langid
 
     # Extract thinking content if exists
-    think_match = re.findall(
-        r"<\s*think\s*>(.*?)<\s*/\s*think\s*>", response, re.IGNORECASE | re.DOTALL
-    )
+    think_match = re.findall(r"<\s*思考\s*>(.*?)<\s*/\s*思考\s*>", response, re.DOTALL)
 
     if think_match:
         content = " ".join(think_match)
@@ -65,9 +63,7 @@ for response, description in test_cases:
         print(f"  Detected language: {detected_lang} (confidence: {confidence:.3f})")
     else:
         # Check fallback
-        response_text = re.sub(
-            r"<\s*/?\s*think\s*>", "", response, flags=re.IGNORECASE
-        ).strip()
+        response_text = re.sub(r"<\s*/?\s*思考\s*>", "", response).strip()
         if response_text:
             detected_lang, confidence = langid.classify(response_text)
             print(f"\n{description}:")

@@ -81,13 +81,13 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_english_thinking(self):
         """Test __call__ with English text in thinking blocks."""
-        response = "<think>This is English reasoning about math problems.</think>"
+        response = "<思考>This is English reasoning about math problems.</思考>"
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 1.0)
 
     def test_call_with_japanese_thinking(self):
         """Test __call__ with Japanese text in thinking blocks."""
-        response = "<think>これは日本語で考えています。数学の問題を解きます。</think>"
+        response = "<思考>これは日本語で考えています。数学の問題を解きます。</思考>"
         result = self.reward_ja("prompt", response)
         self.assertEqual(result, 1.0)
 
@@ -97,7 +97,7 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_chinese_thinking(self):
         """Test __call__ with Chinese text in thinking blocks."""
-        response = "<think>这是中文思考。我们需要解决这个数学问题。</think>"
+        response = "<思考>这是中文思考。我们需要解决这个数学问题。</思考>"
         reward_zh = self.LanguageReward(target_language="zh")
         result = reward_zh("prompt", response)
         # langid should detect this as Chinese (zh)
@@ -105,7 +105,9 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_spanish_thinking(self):
         """Test __call__ with Spanish text in thinking blocks."""
-        response = "<think>Este es un razonamiento en español sobre problemas matemáticos.</think>"
+        response = (
+            "<思考>Este es un razonamiento en español sobre problemas matemáticos.</思考>"
+        )
         reward_es = self.LanguageReward(target_language="es")
         result = reward_es("prompt", response)
         # langid should detect this as Spanish (es)
@@ -114,12 +116,12 @@ class TestLanguageReward(unittest.TestCase):
     def test_call_language_mismatch(self):
         """Test __call__ when detected language doesn't match target."""
         # Japanese reward with English text
-        response = "<think>This is English reasoning.</think>"
+        response = "<思考>This is English reasoning.</思考>"
         result = self.reward_ja("prompt", response)
         self.assertEqual(result, 0.0)
 
         # English reward with Japanese text
-        response = "<think>これは日本語です。</think>"
+        response = "<思考>これは日本語です。</思考>"
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 0.0)
 
@@ -139,36 +141,37 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_empty_thinking_block(self):
         """Test __call__ with empty thinking block."""
-        result = self.reward_en("prompt", "<think></think>")
+        result = self.reward_en("prompt", "<思考></思考>")
         self.assertEqual(result, 0.0)
 
     def test_call_with_whitespace_only_thinking_block(self):
         """Test __call__ with whitespace-only thinking block."""
-        result = self.reward_en("prompt", "<think>   \n  \t  </think>")
+        result = self.reward_en("prompt", "<思考>   \n  \t  </思考>")
         self.assertEqual(result, 0.0)
 
-    def test_call_case_insensitive(self):
-        """Test __call__ is case insensitive for thinking tags."""
-        response = "<THINK>This is English reasoning.</THINK>"
+    def test_call_with_proper_tags(self):
+        """Test __call__ with properly formatted thinking tags."""
+        response = "<思考>This is English reasoning.</思考>"
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 1.0)
 
-        response = "<Think>This is English reasoning.</Think>"
-        result = self.reward_en("prompt", response)
+        # Japanese content should also work
+        response = "<思考>これは日本語です。</思考>"
+        result = self.reward_ja("prompt", response)
         self.assertEqual(result, 1.0)
 
     def test_call_with_whitespace_in_tags(self):
         """Test __call__ with whitespace in thinking tags."""
-        response = "< think >This is English reasoning.</ think >"
+        response = "< 思考 >This is English reasoning.</ 思考 >"
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 1.0)
 
     def test_call_multiple_thinking_blocks(self):
         """Test __call__ with multiple thinking blocks (wrong format but correct language)."""
         response = """
-        <think>First thought in English.</think>
+        <思考>First thought in English.</思考>
         Some text in between.
-        <think>Second thought also in English.</think>
+        <思考>Second thought also in English.</思考>
         """
         result = self.reward_en("prompt", response)
         # Multiple blocks = wrong format, but language is correct, should return partial_reward
@@ -177,8 +180,8 @@ class TestLanguageReward(unittest.TestCase):
     def test_call_multiple_thinking_blocks_mixed_languages(self):
         """Test __call__ with multiple thinking blocks in different languages (wrong format)."""
         response = """
-        <think>First thought in English with lots of content here.</think>
-        <think>これは短い日本語。</think>
+        <思考>First thought in English with lots of content here.</思考>
+        <思考>これは短い日本語。</思考>
         """
         result = self.reward_en("prompt", response)
         # Multiple blocks with mixed languages - langid will detect dominant language
@@ -187,12 +190,12 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_multiline_thinking_block(self):
         """Test __call__ with multiline thinking blocks."""
-        response = """<think>
+        response = """<思考>
         This is a multiline
         thinking block with
         lots of English content
         about solving problems
-        </think>"""
+        </思考>"""
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 1.0)
 
@@ -208,7 +211,7 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_target_parameter(self):
         """Test __call__ with target parameter (should be ignored)."""
-        response = "<think>This is English reasoning.</think>"
+        response = "<思考>This is English reasoning.</思考>"
         result = self.reward_en("prompt", response, target="some target")
         self.assertEqual(result, 1.0)
 
@@ -222,10 +225,10 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_custom_reward_values(self):
         """Test __call__ with custom reward values."""
-        response_ja_single = "<think>これは日本語です。</think>"
-        response_ja_multiple = "<think>最初の考え。</think><think>次の考え。</think>"
+        response_ja_single = "<思考>これは日本語です。</思考>"
+        response_ja_multiple = "<思考>最初の考え。</思考><思考>次の考え。</思考>"
         response_ja_no_tags = "これはタグなしの日本語です。"
-        response_en = "<think>This is English.</think>"
+        response_en = "<思考>This is English.</思考>"
         response_none = ""
 
         # Test custom full reward (single block, correct language)
@@ -244,13 +247,13 @@ class TestLanguageReward(unittest.TestCase):
         zero_reward = self.LanguageReward(
             target_language="en", full_reward=0.0, no_match_reward=0.0
         )
-        result = zero_reward("prompt", "<think>This is English.</think>")
+        result = zero_reward("prompt", "<思考>This is English.</思考>")
         self.assertEqual(result, 0.0)
 
     def test_call_with_special_characters(self):
         """Test __call__ with special characters in thinking blocks."""
         response = (
-            "<think>English with special chars: @#$%^&*()_+-=[]{}|;':\",./<>?`~</think>"
+            "<思考>English with special chars: @#$%^&*()_+-=[]{}|;':\",./<>?`~</思考>"
         )
         result = self.reward_en("prompt", response)
         self.assertEqual(result, 1.0)
@@ -260,7 +263,7 @@ class TestLanguageReward(unittest.TestCase):
         # Content outside think tags should be ignored
         response = """
         これは日本語のテキストです。
-        <think>But this is English reasoning inside the tags.</think>
+        <思考>But this is English reasoning inside the tags.</思考>
         もっと日本語のテキスト。
         """
         result = self.reward_en("prompt", response)
@@ -269,7 +272,7 @@ class TestLanguageReward(unittest.TestCase):
 
     def test_call_with_numbers_and_symbols(self):
         """Test __call__ with thinking blocks containing mostly numbers."""
-        response = "<think>Calculate: 2 + 2 = 4, then 4 * 3 = 12</think>"
+        response = "<思考>Calculate: 2 + 2 = 4, then 4 * 3 = 12</思考>"
         result = self.reward_en("prompt", response)
         # Should still detect as English due to words like "Calculate" and "then"
         self.assertEqual(result, 1.0)
@@ -277,17 +280,17 @@ class TestLanguageReward(unittest.TestCase):
     def test_call_very_long_thinking_block(self):
         """Test __call__ with very long thinking blocks."""
         long_content = "This is English content. " * 1000
-        result = self.reward_en("prompt", f"<think>{long_content}</think>")
+        result = self.reward_en("prompt", f"<思考>{long_content}</思考>")
         self.assertEqual(result, 1.0)
 
     def test_call_with_code_in_thinking(self):
         """Test __call__ with code snippets in thinking blocks."""
-        response = """<think>
+        response = """<思考>
         Let me write some Python code to solve this:
         def calculate(x):
             return x * 2
         The function doubles the input value.
-        </think>"""
+        </思考>"""
         result = self.reward_en("prompt", response)
         # Should detect as English due to surrounding text
         self.assertEqual(result, 1.0)
@@ -304,7 +307,7 @@ class TestLanguageReward(unittest.TestCase):
 
         for lang_code, text in languages.items():
             reward = self.LanguageReward(target_language=lang_code)
-            response = f"<think>{text}</think>"
+            response = f"<思考>{text}</思考>"
             result = reward("prompt", response)
             # langid should detect these correctly
             self.assertEqual(

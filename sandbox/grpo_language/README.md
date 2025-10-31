@@ -4,18 +4,24 @@ This sandbox app demonstrates using GRPO training with a language reward that en
 
 ## Overview
 
-This app extends the standard GRPO training (from `apps/grpo/`) by adding a `LanguageReward` that evaluates whether the model's thinking (text within `<think></think>` tags) is in the target language.
+This app extends the standard GRPO training (from `apps/grpo/`) by adding a `LanguageReward` that evaluates whether the model's thinking (text within `<思考></思考>` tags) is in the target language.
+
+**Key Insight**: Uses Japanese tags `<思考>` (shikō = "thinking") instead of English `<think>` tags to break the model's association between thinking tags and English language. This helps encourage multilingual thinking.
 
 ## Key Features
 
 - **Multi-objective training**: Combines three rewards:
   - `MathReward`: Evaluates correctness of math answers
-  - `ThinkingReward`: Encourages use of thinking tags
+  - `ThinkingReward`: Encourages use of `<思考>` tags
   - `LanguageReward`: Rewards thinking in target language (Japanese by default)
+
+- **Japanese thinking tags**: Uses `<思考>` instead of `<think>` to encourage non-English reasoning
 
 - **Language detection**: Uses `langid` to detect the language of thinking blocks
 
 - **Configurable target language**: While this app defaults to Japanese (`ja`), the `LanguageReward` can be configured for any ISO 639-1 language code
+
+- **Configurable tags**: Both rewards support custom tag names via the `tag` parameter
 
 ## Requirements
 
@@ -33,25 +39,29 @@ python -m sandbox.grpo_language.main --config sandbox/grpo_language/qwen3_1_7b.y
 
 ## How It Works
 
-1. The model receives a math problem and is instructed to use `<think>` tags for reasoning
+1. The model receives a math problem and is instructed to use `<思考>` tags for reasoning
 2. During training, the model generates responses with thinking blocks
 3. Three rewards are computed:
    - Math correctness (did it get the right answer?)
-   - Thinking usage (did it use thinking tags properly?)
+   - Thinking usage (did it use `<思考>` tags properly?)
    - Language usage (did it think in Japanese?)
 4. The model is trained to maximize all three rewards
 
 ## Configuration
 
-The target language is hardcoded as Japanese in `main.py` (line 321):
+### Target Language
+
+The target language is configured as Japanese in `main.py`:
 
 ```python
-LanguageReward(target_language="ja")
+LanguageReward(target_language="ja", tag="思考")
+ThinkingReward(tag="思考")
 ```
 
-To use a different language, modify this line with the appropriate ISO 639-1 code:
-- English: `"en"`
-- Chinese: `"zh"`
+To use a different language:
+1. Change `target_language` to the appropriate ISO 639-1 code:
+   - English: `"en"`
+   - Chinese: `"zh"`
 - Spanish: `"es"`
 - French: `"fr"`
 - etc.
