@@ -80,3 +80,82 @@ class ThinkingReward:
         elif has_attempt:
             return self.partial_reward
         return 0.0
+
+
+class LanguageReward:
+    """Reward class for evaluating the language used in <think> tags.
+
+    This reward uses langid to detect the language of text within thinking blocks
+    and rewards responses that use the target language.
+
+    Args:
+        target_language: ISO 639-1 language code (e.g., 'en', 'ja', 'zh', 'es')
+        full_reward: Reward when detected language matches target
+        no_match_reward: Reward when detected language doesn't match target
+
+    Note: Requires langid to be installed. Install with: pip install langid
+    """
+
+    def __init__(
+        self,
+        target_language: str = "en",
+        full_reward: float = 1.0,
+        no_match_reward: float = 0.0,
+    ):
+        self.target_language = target_language
+        self.full_reward = full_reward
+        self.no_match_reward = no_match_reward
+        self._THINK_BLOCK_RE = re.compile(
+            r"<\s*think\s*>(.*?)<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
+        )
+
+        # Lazy import langid with helpful error message
+        try:
+            import langid
+
+            self._langid = langid
+        except ImportError:
+            raise ImportError(
+                "langid is required for LanguageReward but is not installed. "
+                "Please install it with: pip install langid"
+            ) from None
+
+    def __call__(self, prompt: str, response: str, target: str | None = None) -> float:
+        """Compute language reward based on thinking block content.
+
+        Args:
+            prompt: The input prompt (unused but kept for signature consistency)
+            response: The model response containing <think> tags
+            target: Optional target string (unused but kept for signature consistency)
+
+        Returns:
+            full_reward if detected language matches target_language and format is correct,
+            no_match_reward otherwise (including when format is wrong or no thinking block)
+        """
+        if not response:
+            return self.no_match_reward
+
+        # Extract all thinking blocks
+        matches = self._THINK_BLOCK_RE.findall(response)
+
+        # Return 0 reward if format is wrong (0 or multiple thinking blocks)
+        if len(matches) != 1:
+            return self.no_match_reward
+
+        # Get the single thinking block content
+        thinking_content = matches[0]
+
+        # Remove extra whitespace
+        thinking_content = re.sub(r"\s+", " ", thinking_content).strip()
+
+        if not thinking_content:
+            return self.no_match_reward
+
+        # Detect language using langid
+        detected_lang, confidence = self._langid.classify(thinking_content)
+
+        # Return full reward if language matches target
+        if detected_lang == self.target_language:
+            return self.full_reward
+
+        return self.no_match_reward
