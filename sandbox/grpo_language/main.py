@@ -155,31 +155,6 @@ class RewardActor(ForgeActor):
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
 
-            # Debug logging for LanguageReward to see what's happening
-            if reward_fn_name == "LanguageReward":
-                import re
-
-                import langid
-
-                think_matches = re.findall(
-                    r"<\s*think\s*>(.*?)<\s*/\s*think\s*>",
-                    response,
-                    re.IGNORECASE | re.DOTALL,
-                )
-                if think_matches:
-                    content = " ".join(think_matches)
-                    detected_lang, confidence = langid.classify(content)
-                    print(
-                        f"[LanguageReward Debug] Reward={reward:.2f} | "
-                        f"Blocks={len(think_matches)} | Lang={detected_lang} | "
-                        f"Sample: {response[:80]}..."
-                    )
-                else:
-                    print(
-                        f"[LanguageReward Debug] Reward={reward:.2f} | "
-                        f"Blocks=0 | Sample: {response[:80]}..."
-                    )
-
             # per function reward
             record_metric(
                 f"reward/evaluate_response/sum_{reward_fn_name}_reward",
