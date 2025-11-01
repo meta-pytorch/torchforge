@@ -329,7 +329,11 @@ async def main(cfg: DictConfig):
                 MathReward(),
                 ThinkingReward(tag="思考"),  # Use Japanese tag
                 LanguageReward(
-                    target_language="ja", tag="思考", debug=True, debug_sample_rate=0.1
+                    target_language="ja",
+                    tag="思考",
+                    match_reward=2.0,
+                    debug=True,
+                    debug_sample_rate=0.1,
                 ),  # Japanese language reward with debug
             ]
         ),
