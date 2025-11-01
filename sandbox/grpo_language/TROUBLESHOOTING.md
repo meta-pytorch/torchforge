@@ -107,21 +107,16 @@ Check these metrics in Weights & Biases:
 - `reward/evaluate_response/avg_MathReward_reward` - should stay reasonably high
 - `reward/evaluate_response/avg_ThinkingReward_reward` - should increase quickly
 
-### 5. Alternative: Start with English, then transition
+### 5. Why Not Train with English?
 
-If Japanese isn't working, you could:
+Training with English thinking won't work well because:
+- Models are already extensively trained on GSM8K and similar datasets with English thinking
+- There's little room for improvement on English math reasoning
+- The RL signal would be weak (model already knows how to do this)
 
-1. Train first with English to get good math performance
-2. Then fine-tune with Japanese language reward
+**That's why we use Japanese** - it provides a novel combination of math reasoning + non-English thinking that the model hasn't been extensively pre-trained on, giving clear RL signal for improvement.
 
-Change line 327 to:
-```python
-LanguageReward(target_language="en")  # Start with English
-```
-
-Once math rewards are good, switch to `"ja"` and continue training.
-
-### 7. Nuclear Option: Much Stronger Prompt
+### 6. Nuclear Option: Much Stronger Prompt
 
 If nothing else works, try this very explicit prompt:
 ```python
