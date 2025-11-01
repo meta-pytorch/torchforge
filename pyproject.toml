@@ -47,6 +47,7 @@ dev = [
     "anyio",
     "pytest-asyncio",
     "multiprocess",
+    "langid",
 ]
 docs = [
     "sphinx==7.2.6",
