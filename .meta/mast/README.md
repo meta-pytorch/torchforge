@@ -5,8 +5,6 @@ This only applies to Meta internal users.
 
 ## Quick Start
 
-⚠️ Important Note: the setup script will clone the forge repository under "/data/users/$USER".
-
 ### 1. Run the Setup Script
 
 The `env_setup.sh` script will automatically:
