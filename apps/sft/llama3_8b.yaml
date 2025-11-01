@@ -26,6 +26,18 @@ optimizer:
 lr_scheduler:
   warmup_steps: 200
 
+# Unified dataset configuration
+# First dataset with split='train' is used for training
+dataset_val:
+  datasets:
+    - name: "train"
+      path: "yahma/alpaca-cleaned"
+      split: "train[:95%]"
+
+    - name: "val"
+      path: "yahma/alpaca-cleaned"
+      split: "train[95%:]"
+
 training:
   local_batch_size: 1
   seq_len: 2048
@@ -61,6 +73,7 @@ metric_logging:
     project: sft-training
     group: sft_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
+
 
 # profiling:
 #   enable_profiling: false
