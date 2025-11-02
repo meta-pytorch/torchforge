@@ -260,7 +260,7 @@ class DatasetActor(ForgeActor):
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
-            self._base_dataset = self._base_dataset.shuffle()
+            self._base_dataset.set_epoch(self._epoch)
             self._iterator = iter(self._base_dataset)
             return await self.sample()
 
