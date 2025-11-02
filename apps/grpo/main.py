@@ -251,6 +251,7 @@ class DatasetActor(ForgeActor):
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
         except StopIteration:
@@ -259,7 +260,6 @@ class DatasetActor(ForgeActor):
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
-            record_metric("dataset/sample/epoch_completed", self._epoch, Reduce.MAX)
             self._iterator = iter(self._base_dataset.shuffle())
             return await self.sample()
 
