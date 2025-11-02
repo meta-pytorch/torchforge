@@ -254,13 +254,13 @@ class DatasetActor(ForgeActor):
 
             return sample
         except StopIteration:
-            # Restart iterator for next epoch
+            # Restart iterator for next epoch with reshuffling
             self._epoch += 1
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
             record_metric("dataset/sample/epoch_completed", self._epoch, Reduce.LAST)
-            self._iterator = iter(self._base_dataset)
+            self._iterator = iter(self._base_dataset.shuffle())
             return await self.sample()
 
     @endpoint
