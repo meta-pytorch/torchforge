@@ -212,6 +212,7 @@ class DatasetActor(ForgeActor):
     @endpoint
     def setup(self):
         self._tokenizer = get_tokenizer(self.model)
+        self._epoch = 0
 
         def gsm8k_transform(sample):
             system_prompt = """
@@ -232,12 +233,12 @@ class DatasetActor(ForgeActor):
             formatted_target = target.split("#### ")[1]
             return {"request": formatted_request, "target": formatted_target}
 
-        ds = load_dataset(
+        self._base_dataset = load_dataset(
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
-        ds = ds.map(gsm8k_transform)
-        ds = ds.shuffle()
-        self._iterator = iter(ds)
+        self._base_dataset = self._base_dataset.map(gsm8k_transform)
+        self._base_dataset = self._base_dataset.shuffle()
+        self._iterator = iter(self._base_dataset)
 
     @endpoint
     async def sample(self) -> dict[str, str] | None:
@@ -253,7 +254,14 @@ class DatasetActor(ForgeActor):
 
             return sample
         except StopIteration:
-            return None
+            # Restart iterator for next epoch
+            self._epoch += 1
+            print(
+                f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
+            )
+            record_metric("dataset/sample/epoch_completed", self._epoch, Reduce.LAST)
+            self._iterator = iter(self._base_dataset)
+            return await self.sample()
 
     @endpoint
     async def pad_token(self):
