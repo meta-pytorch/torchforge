@@ -242,28 +242,27 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     async def sample(self) -> dict[str, str] | None:
-        while True:
-            try:
-                sample = next(self._iterator)
+        try:
+            sample = next(self._iterator)
 
-                record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
-                record_metric(
-                    "dataset/sample/avg_sample_len",
-                    len(sample["request"]),
-                    Reduce.MEAN,
-                )
-                record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
+            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
+            record_metric(
+                "dataset/sample/avg_sample_len",
+                len(sample["request"]),
+                Reduce.MEAN,
+            )
+            record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
-                return sample
-            except StopIteration:
-                # Restart iterator for next epoch with reshuffling
-                self._epoch += 1
-                print(
-                    f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
-                )
-                self._base_dataset.set_epoch(self._epoch)
-                self._iterator = iter(self._base_dataset)
-                # Continue loop to get next sample from restarted iterator
+            return sample
+        except StopIteration:
+            # Restart iterator for next epoch with reshuffling
+            self._epoch += 1
+            print(
+                f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
+            )
+            self._base_dataset.set_epoch(self._epoch)
+            self._iterator = iter(self._base_dataset)
+            return next(self._iterator)
 
     @endpoint
     async def pad_token(self):
