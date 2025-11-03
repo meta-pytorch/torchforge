@@ -155,7 +155,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 self.job_config.model.hf_assets_path, "generation_config.json"
             ),
             chat_template_path=(
-                path if os.path.exists(path := os.path.join(self.job_config.model.hf_assets_path, "chat_template.jinja")) else None
+                path
+                if os.path.exists(
+                    path := os.path.join(
+                        self.job_config.model.hf_assets_path, "chat_template.jinja"
+                    )
+                )
+                else None
             ),
         )
 

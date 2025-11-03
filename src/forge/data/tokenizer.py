@@ -42,7 +42,6 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
         *,
         tokenizer_config_json_path: str | None = None,
         generation_config_path: str | None = None,
-        chat_template_path: str | None = None,
     ):
         self.tokenizer = Tokenizer.from_file(tokenizer_json_path)
         if not (tokenizer_config_json_path or generation_config_path):
@@ -52,10 +51,6 @@ class HuggingFaceBaseTokenizer(BaseTokenizer):
         if tokenizer_config_json_path:
             with open(tokenizer_config_json_path, "rb") as f:
                 self.config = json.load(f)
-            if chat_template_path:
-                with open(chat_template_path, "r") as f:
-                    # TODO: warning in the case of overwrite?
-                    self.config["chat_template"] = f.read()
         else:
             self.config = None
         if generation_config_path:
@@ -220,8 +215,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file
         tokenizer_config_json_path (str | None): Path to tokenizer_config.json file. Default: None
-        generation_config_path (str | None): Path to generation_config.json file.
-            Default: None
+        generation_config_path (str | None): Path to generation_config.json file. Default: None
+        chat_template_path (str | None): Path to chat_template.jinja file. Default: None
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
     """
@@ -239,7 +234,6 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
             tokenizer_json_path=tokenizer_json_path,
             tokenizer_config_json_path=tokenizer_config_json_path,
             generation_config_path=generation_config_path,
-            chat_template_path=chat_template_path,
         )
 
         # Contents of the tokenizer_config.json
@@ -252,7 +246,13 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
 
         # It is used sometimes in HF chat_templates
         _env.globals["raise_exception"] = self._raise_helper
-        self.template = _env.from_string(config["chat_template"])
+
+        if chat_template_path:
+            with open(chat_template_path, "r") as f:
+                self.template = _env.from_string(f.read())
+        else:
+            self.template = _env.from_string(config["chat_template"])
+
         self.truncation_type = truncation_type
 
         self.special_tokens_mapping = {}
