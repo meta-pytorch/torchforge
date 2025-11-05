@@ -118,7 +118,17 @@ def distillation_loss(
     padding_mask: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Online distillation loss using reverse KL divergence between student and teacher.
+    Online distillation loss using importance sampling with negative KL as reward.
+
+    Formulation:
+        reward = -reverse_kl = -(sampled_logprobs - teacher_logprobs)
+        loss = -E[importance_weight * reward]
+
+    where importance_weight = exp(logprobs - logprobs.detach()) and the KL term
+    is detached (no backprop through it).
+
+    This is similar to GRPO's policy gradient but without the KL penalty term,
+    treating the negative KL as a reward signal.
 
     Args:
         logits: Student model logits [batch_size, seq_len, vocab_size]
@@ -127,17 +137,26 @@ def distillation_loss(
         padding_mask: Mask for valid (non-padding) tokens [batch_size, seq_len]
 
     Returns:
-        Reverse KL divergence loss averaged over valid tokens
+        Importance sampling loss with negative KL as reward
     """
     student_logprobs: torch.Tensor = compute_logprobs(logits, response)
 
-    # Reverse KL: KL(student || teacher) = E_{x~student}[log student - log teacher]
-    # This is mode-seeking: student focuses on teacher's high-probability modes
-    # Since we sample from student in online distillation, this is the natural choice
-    kl = student_logprobs - teacher_logprobs
+    # Compute reward as negative reverse KL (detached)
+    # reverse_kl = sampled_logprobs - teacher_logprobs
+    # reward = -reverse_kl (higher reward when student matches teacher better)
+    reverse_kl = student_logprobs.detach() - teacher_logprobs
+    reward = -reverse_kl
+
+    # Importance sampling loss (like GRPO policy gradient, but without KL penalty)
+    # importance_weight = exp(current_logprobs - sampled_logprobs)
+    per_token_policy_loss = (
+        torch.exp(student_logprobs - student_logprobs.detach()) * reward
+    )
+
+    # Negative sign because we want to maximize reward
+    per_token_loss = -per_token_policy_loss
 
     # Average over valid (non-padded) tokens
-    per_token_loss = kl
     loss = (
         ((per_token_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
