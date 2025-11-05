@@ -199,55 +199,6 @@ def record_episode_sample(table_name: str, episode):
     record_metric(table_name, sample, Reduce.SAMPLE)
 
 
-#################
-# SampleFilters #
-#################
-
-
-class TopBottomKFilter:
-    """Keep the top-k and bottom-k samples by a given key (e.g., reward)."""
-
-    def __init__(self, top_k=1, bottom_k=1, key="reward"):
-        self.top_k = top_k
-        self.bottom_k = bottom_k
-        self.key = key
-        self._top_heap = []  # min-heap for top-k
-        self._bottom_heap = []  # max-heap for bottom-k (store -value)
-        self._counter = itertools.count()  # tie-breaker id generator
-
-    def filter_append(self, sample: Dict) -> bool:
-        val = sample.get(self.key, 0.0)
-        idx = next(self._counter)  # unique tiebreaker
-
-        # If top_k or bottom_k <= 0, it means "disable" that side of filtering (i.e., keep none).
-        # maintain top-k
-        if self.top_k > 0:
-            if len(self._top_heap) < self.top_k:
-                heapq.heappush(self._top_heap, (val, idx, sample))
-            else:
-                heapq.heappushpop(self._top_heap, (val, idx, sample))
-
-        # maintain bottom-k
-        if self.bottom_k > 0:
-            if len(self._bottom_heap) < self.bottom_k:
-                heapq.heappush(self._bottom_heap, (-val, idx, sample))
-            else:
-                heapq.heappushpop(self._bottom_heap, (-val, idx, sample))
-
-        # always return False here because we don't store in samples list
-        return False
-
-    def filter_flush(self, samples: List[Dict]) -> List[Dict]:
-        tops = [s for _, _, s in self._top_heap]
-        bottoms = [s for _, _, s in self._bottom_heap]
-        return bottoms + tops
-
-    def reset(self):
-        self._top_heap = []
-        self._bottom_heap = []
-        self._counter = itertools.count()
-
-
 ################
 # Accumulators #
 ################
@@ -459,14 +410,23 @@ class StdAccumulator(MetricAccumulator):
 
 
 class SampleAccumulator(MetricAccumulator):
-    """Accumulator for sample-level metrics (e.g., prompt/response/reward dicts).
-    Optionally uses a sample filter to decide what to keep at append/flush time.
+    """Accumulator for sample-level metrics with top-k and bottom-k filtering.
+
+    Keeps the top-k and bottom-k samples by a given key (e.g., reward).
+    Useful for logging only the best and worst samples from a batch.
     """
 
-    def __init__(self, reduction: Reduce):
+    def __init__(
+        self, reduction: Reduce, top_k: int = 1, bottom_k: int = 1, key: str = "reward"
+    ):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
-        self.filter = TopBottomKFilter()
+        self.top_k = top_k
+        self.bottom_k = bottom_k
+        self.key = key
+        self._top_heap = []  # min-heap for top-k
+        self._bottom_heap = []  # max-heap for bottom-k (store -value)
+        self._counter = itertools.count()  # tie-breaker id generator
         self.is_reset = True
 
     def append(self, value: dict) -> None:
@@ -474,15 +434,29 @@ class SampleAccumulator(MetricAccumulator):
             raise ValueError(f"Expected dict, got {type(value)}")
 
         self.is_reset = False
-        # Only keep the sample if filter_append returns True
-        if self.filter.filter_append(value):
-            self.samples.append(value)
+        val = value.get(self.key, 0.0)
+        idx = next(self._counter)  # unique tiebreaker
+
+        # If top_k or bottom_k <= 0, it means "disable" that side of filtering (i.e., keep none).
+        # maintain top-k
+        if self.top_k > 0:
+            if len(self._top_heap) < self.top_k:
+                heapq.heappush(self._top_heap, (val, idx, value))
+            else:
+                heapq.heappushpop(self._top_heap, (val, idx, value))
+
+        # maintain bottom-k
+        if self.bottom_k > 0:
+            if len(self._bottom_heap) < self.bottom_k:
+                heapq.heappush(self._bottom_heap, (-val, idx, value))
+            else:
+                heapq.heappushpop(self._bottom_heap, (-val, idx, value))
 
     def get_value(self) -> list[dict]:
-        """Return locally collected (and optionally filtered) samples."""
-        # Apply flush-time filter (e.g. heap selection, threshold trimming)
-        results = self.filter.filter_flush(self.samples)
-        return results
+        """Return top-k and bottom-k filtered samples."""
+        tops = [s for _, _, s in self._top_heap]
+        bottoms = [s for _, _, s in self._bottom_heap]
+        return bottoms + tops
 
     def get_state(self) -> Dict[str, Any]:
         """Serialize accumulator state for cross-rank reduction."""
@@ -503,7 +477,9 @@ class SampleAccumulator(MetricAccumulator):
         """Clear local samples and reset filter state."""
         self.is_reset = True
         self.samples.clear()
-        self.filter.reset()
+        self._top_heap = []
+        self._bottom_heap = []
+        self._counter = itertools.count()
 
 
 #############
