@@ -28,7 +28,6 @@ from .metrics import (
     SampleAccumulator,
     StdAccumulator,
     SumAccumulator,
-    TopBottomKFilter,
     WandbBackend,
 )
 from .perf_tracker import trace, Tracer
@@ -69,6 +68,4 @@ __all__ = [
     "MinAccumulator",
     "StdAccumulator",
     "SampleAccumulator",
-    # Filter classes
-    "TopBottomKFilter",
 ]
