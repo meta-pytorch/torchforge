@@ -17,6 +17,8 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
+
+from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 
@@ -27,8 +29,6 @@ from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
-
-from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
@@ -125,22 +125,74 @@ class BaseLauncher:
 
 
 class Slurmlauncher(BaseLauncher):
+    def __init__(self, cfg: LauncherConfig | None = None):
+        self.cfg = cfg
+
+    def _infer_from_slurm_env(self) -> tuple[int | None, int | None, int | None]:
+        """Infer SLURM resources from environment variables."""
+        cpu = os.environ.get("SLURM_CPUS_ON_NODE")
+        mem = os.environ.get("SLURM_MEM_PER_NODE")
+        gpu = os.environ.get(
+            "SLURM_GPUS_PER_NODE", os.environ.get("SLURM_GPUS_ON_NODE")
+        )
+
+        if gpu and ":" in gpu:
+            gpu = gpu.split(":")[-1]
+
+        return (
+            int(cpu) if cpu else None,
+            int(mem) if mem else None,
+            int(gpu) if gpu else None,
+        )
+
     async def initialize(self) -> None:
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
         # This can be removed in the future once this has been removed.
-        configure(default_transport=ChannelTransport.Tcp)
+        configure(default_transport=ChannelTransport.TcpWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
             image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
         )
+
+        # Try to infer SLURM resources from environment if not provided in config
+        cpu_count = self.cfg.cpu if self.cfg else None
+        memory_mb = self.cfg.memory_mb if self.cfg else None
+        gpu_count = self.cfg.gpus_per_node if self.cfg else None
+
+        # Infer from SLURM environment variables if values are missing
+        if cpu_count is None or memory_mb is None or gpu_count is None:
+            inferred_cpu, inferred_mem, inferred_gpu = self._infer_from_slurm_env()
+
+            if cpu_count is None:
+                cpu_count = inferred_cpu
+            if memory_mb is None:
+                memory_mb = inferred_mem
+            if gpu_count is None:
+                gpu_count = inferred_gpu
+
+            if cpu_count and memory_mb and gpu_count:
+                print(
+                    f"Inferred SLURM node resources from environment: "
+                    f"{cpu_count} CPUs, {memory_mb} MB memory, {gpu_count} GPUs"
+                )
+        # Will remove this safegaurd - testing only
+        if cpu_count is None or memory_mb is None or gpu_count is None:
+            raise ValueError(
+                f"SLURM launcher requires cpu, memory_mb, and gpus_per_node. "
+                f"Add to YAML config or run inside SLURM allocation. "
+                f"Got: cpu={cpu_count}, memory_mb={memory_mb}, gpus_per_node={gpu_count}"
+            )
+
+        print(
+            f"Using SLURM node resources: {cpu_count} CPUs, {memory_mb} MB memory, {gpu_count} GPUs"
+        )
+
         for role in appdef.roles:
-            # Note - this is hardcoded to SLURM
-            # We got this with sinfo
-            role.resource.memMB = 2062607
-            role.resource.cpu = 128
-            role.resource.gpu = 8
+            role.resource.memMB = memory_mb
+            role.resource.cpu = cpu_count
+            role.resource.gpu = gpu_count
 
         # Note - we cannot add in an empty workspace, so we create a fake temporary one
         temp_workspace = tempfile.mkdtemp(prefix="forge_workspace_")
@@ -396,7 +448,7 @@ def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if not cfg:
         return None
     if cfg.launcher == Launcher.SLURM:
-        return Slurmlauncher()
+        return Slurmlauncher(cfg)
     elif cfg.launcher == Launcher.MAST:
         if not _MAST_AVAILABLE:
             raise ValueError(

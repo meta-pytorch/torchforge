@@ -7,7 +7,6 @@
 """To run:
 
 python -m apps.sft.main --config apps/sft/llama3_8b.yaml
-
 """
 
 import asyncio
@@ -23,11 +22,13 @@ import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
+from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
+from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 
 from monarch.actor import current_rank, current_size, endpoint
@@ -40,8 +41,6 @@ from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-# from tqdm import tqdm
 
 # stubs for now
 Checkpointer = Any
@@ -78,10 +77,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
+        self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
+
         self._init_dist()
+
         super().__init__(job_config)
 
     def _init_dist(self):
@@ -94,9 +96,19 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         be explicit for now.
 
         """
+        # Calculate local rank - rank within the node
+        # For multi-node setups, LOCAL_RANK should be rank % gpus_per_node
+        size_info = current_size()
+
+        # size_info = {'hosts': 8, 'procs': 4} for 8 nodes with 4 GPUs each
+        local_world_size = (
+            size_info.get("procs", self._size) if size_info else self._size
+        )
+        local_rank = self._rank % local_world_size
+
         env = {
             "RANK": str(self._rank),
-            "LOCAL_RANK": str(self._rank),
+            "LOCAL_RANK": str(local_rank),
             "LOCAL_WORLD_SIZE": str(self._size),
             "GROUP_RANK": str(self._size),
             "GROUP_WORLD_SIZE": str(self._size),
@@ -105,12 +117,15 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             "ROLE_NAME": "rank",
             "WORLD_SIZE": str(self._size),
             "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+            # Add other environment variables as needed - NCCL related variables, etc
         }
         os.environ.update(env)
         logger.info("env: {}".format(env))
 
     async def setup_metric_logger(self):
-        """Initialization happens in the main process. Here we just retrieve it"""
+        """Retrieve the already-initialized metric logger from main process"""
+        # Don't create new logger - it was already initialized in main process
+        # Just retrieve the existing one
         mlogger = await get_or_create_metric_logger()
         return mlogger
 
@@ -123,8 +138,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     @endpoint
     async def setup(self):
         self.train_dataloader = self.setup_data()
-        self.mlogger = await self.setup_metric_logger()
 
+        self.mlogger = await self.setup_metric_logger()
         # self.train_dataloader = self.setup_data(
         #     self.train_config.train_dataset_config,
         #     self.train_config.train_dataloader_config,
@@ -138,11 +153,16 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
+
+        # Setup training data (first 90% of train split)
+
+        # Load checkpoint if resuming
         self.checkpointer.load(step=self.current_step)
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
     def setup_data(self):
+        """Setup data with configurable dataset path and split."""
         print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
@@ -165,11 +185,26 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
+        # Ultimately we probably want something like this
+        # packer = build_packing_strategy(packing_config)
+        # dataset = build_dataset(dataset_config)
+        # dataloader = build_dataloader(dataloader_config, dataset, packer)
+
+        # Get data config from YAML (num_shards_per_rank, num_dataloader_workers)
+        data_config = getattr(self.job_config, "data", None)
+        num_shards_per_rank = (
+            getattr(data_config, "num_shards_per_rank", 64) if data_config else 64
+        )
+        num_dataloader_workers = (
+            getattr(data_config, "num_dataloader_workers", 0) if data_config else 0
+        )
+
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
             path="yahma/alpaca-cleaned",
             split="train",
+            num_shards_per_rank=num_shards_per_rank,
         )
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
@@ -180,15 +215,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
+            num_workers=num_dataloader_workers,
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
         )
 
-        # Ultimately we probably want something like this
-        # packer = build_packing_strategy(packing_config)
-        # dataset = build_dataset(dataset_config)
-        # dataloader = build_dataloader(dataloader_config, dataset, packer)
         return dataloader
 
     def forward_backward(
@@ -228,7 +260,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     )
 
             # accumulate losses across pipeline microbatches
-            # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
             loss = (
                 torch.mean(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
@@ -258,10 +289,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         loss = self.forward_backward(batch, labels)
         loss = loss.item()
 
+        # Record loss metric
         record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
         logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
+
         self.optimizers.step()
         self.lr_schedulers.step()
 
@@ -283,22 +316,22 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")  # TODO: hardcoded for now
+                    batch[k] = v.to(self.device)  # TODO: hardcoded for now
 
             self.train_step(batch)
             # self.profiler.step()
             self.current_step += 1
 
             # Flush metrics
-            if self._rank == 0:
+            if self._rank == 0 and self.mlogger is not None:
                 logger.debug(f"Flushing metrics at step {self.current_step}")
                 await self.mlogger.flush.call_one(global_step=self.current_step)
 
+            # Save checkpoints
             self.checkpointer.save(
                 curr_step=self.current_step,
                 last_step=self.current_step == self.num_training_steps,
             )
-
         # self.pbar.close()
 
     @endpoint
@@ -313,28 +346,54 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
 
 async def run(cfg: DictConfig) -> None:
+    """Main SFT training loop with provisioner support for multi-node training."""
+    # ---- Global setups ---- #
+    provisioner = None
+    if cfg.get("provisioner", None) is not None:
+        logging.info("Initializing provisioner with launcher configuration...")
+        provisioner = await init_provisioner(
+            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
+        )
+    else:
+        logging.info("Initializing default provisioner...")
+        provisioner = await init_provisioner()
 
-    logging.info("Spawning recipe...")
-    process_cfg = cfg.pop("processes")
-
-    # Initialize metric logger in main process
+    # ---- Initialize metric logger in main process ---- #
     metric_logging_cfg = cfg.get("metric_logging", {})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
-    recipe = await ForgeSFTRecipe.options(**process_cfg).as_actor(cfg)
+    # ---- Setup SFT Recipe Actor ---- #
+    logging.info("Spawning recipe...")
+    actor_cfg = cfg.pop("actors", None)
+
+    if actor_cfg is None:
+        # Fallback to old "processes" config for backward compatibility
+        actor_cfg = cfg.pop("processes", {"procs": 8, "with_gpus": True})
+        logging.warning(
+            "Using legacy 'processes' config. Consider migrating to 'actors' config."
+        )
+
+    recipe_options = actor_cfg.get("trainer", actor_cfg)
+    recipe = await ForgeSFTRecipe.options(**recipe_options).as_actor(cfg)
 
     logging.info("Created recipe, running setup.")
     await recipe.setup.call()
 
     logging.info("Recipe has been setup. Training now.")
-    await recipe.train.call()
 
-    logging.info("Done training. Clean up")
-    await recipe.cleanup.call()
+    try:
+        await recipe.train.call()
+    except KeyboardInterrupt:
+        logging.info("Training interrupted by user")
+    finally:
+        logging.info("Done training. Clean up")
+        await recipe.cleanup.call()
+        await ForgeSFTRecipe.shutdown(recipe)
 
-    await recipe.mesh.stop()
-    logging.info("All done!")
+        # Shutdown provisioner
+        await shutdown()
+        logging.info("All done!")
 
 
 @parse

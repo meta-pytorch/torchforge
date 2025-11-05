@@ -109,6 +109,9 @@ class LauncherConfig:
     job_name: str = ""
     services: dict[str, ServiceConfig] = field(default_factory=dict)
     actors: dict[str, ProcessConfig] = field(default_factory=dict)
+    cpu: int | None = None  # CPUs per node (required for SLURM)
+    memory_mb: int | None = None  # Memory in MB per node (required for SLURM)
+    gpus_per_node: int | None = None  # GPUs per node (required for SLURM)
 
     def __post_init__(self):
         if isinstance(self.launcher, str):
