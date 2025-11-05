@@ -195,7 +195,7 @@ def record_episode_sample(table_name: str, episode):
         table_name (str): logging prefix (e.g. "rollout/sample").
         episode (Episode): episode object with filled attributes.
     """
-    sample = episode.to_dict()
+    sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
     record_metric(table_name, sample, Reduce.SAMPLE)
 
 
@@ -675,9 +675,7 @@ class MetricCollector:
         for backend in self.per_rank_no_reduce_backends:
 
             if metric.reduction == Reduce.SAMPLE:
-                # Wrap singleton Metric into expected {key: [list_of_dicts]} format
-                sample = {metric.key: [metric.value]}
-                asyncio.create_task(backend.log_samples(sample, self.global_step))
+                asyncio.create_task(backend.log_samples([metric], self.global_step))
             else:
                 backend.log_stream(metric=metric, global_step=self.global_step)
 
@@ -883,11 +881,12 @@ class ConsoleBackend(LoggerBackend):
     async def finish(self) -> None:
         pass
 
-    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
         """Pretty-print sample-level logs to console."""
 
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
-        for table_name, table_rows in samples.items():
+        for sample in samples:
+            table_name, table_rows = sample.key, sample.value
             logger.info(f"[{table_name}] ({len(table_rows)} samples)")
             logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
         logger.info("==============================================\n")
@@ -1039,14 +1038,15 @@ class WandbBackend(LoggerBackend):
         # note: here we dont use step since wandb keeps only the latest value for each step
         self.run.log(log_data)
 
-    async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
         """Log sample-level data incrementally to persistent WandB Tables."""
         import wandb
 
         if not self.run:
             return
 
-        for table_name, table_rows in samples.items():
+        for sample in samples:
+            table_name, table_rows = sample.key, sample.value
             if not table_rows:
                 continue
 
