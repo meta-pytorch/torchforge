@@ -204,3 +204,6 @@ demo_top_down.md
 
 # enroot / sqsh
 *.sqsh
+
+# claude magic
+.claude
