@@ -124,6 +124,7 @@ After installation, verify that all components are working correctly:
 
    # Test basic Monarch functionality
    procs = this_host().spawn_procs({'gpus': 1})
+   procs.initialized.get()
    print('Monarch: Process spawning works')
    "
    ```
