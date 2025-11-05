@@ -7,6 +7,7 @@
 import asyncio
 import heapq
 import itertools
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -884,7 +885,6 @@ class ConsoleBackend(LoggerBackend):
 
     async def log_samples(self, samples: Dict[str, List[dict]], step: int) -> None:
         """Pretty-print sample-level logs to console."""
-        import json
 
         logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for table_name, table_rows in samples.items():
@@ -1052,11 +1052,15 @@ class WandbBackend(LoggerBackend):
 
             # If table doesn't exist yet, create it in INCREMENTAL mode
             if table_name not in self._tables:
-                columns = list(table_rows[0].keys())
+                # Collect all unique columns from all rows
+                columns = set()
+                for row in table_rows:
+                    columns.update(row.keys())
+                columns = sorted(columns)  # Sort for consistent column ordering
                 table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
                 self._tables[table_name] = table
                 logger.debug(
-                    f"WandbBackend: Created new incremental table: {table_name}"
+                    f"WandbBackend: Created new incremental table: {table_name} with columns: {columns}"
                 )
             else:
                 table = self._tables[table_name]
