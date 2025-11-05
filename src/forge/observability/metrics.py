@@ -1055,7 +1055,7 @@ class WandbBackend(LoggerBackend):
                 columns = list(table_rows[0].keys())
                 table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
                 self._tables[table_name] = table
-                logger.info(
+                logger.debug(
                     f"WandbBackend: Created new incremental table: {table_name}"
                 )
             else:
@@ -1067,10 +1067,10 @@ class WandbBackend(LoggerBackend):
                 table.add_data(*values)
 
             # Log the same table object (INCREMENTAL update)
+            # table_name has to end with _table to be recognized by wandb
+            if not table_name.endswith("_table"):
+                table_name += "_table"
             self.run.log({f"{table_name}": table})
-            logger.info(
-                f"WandbBackend: Appended {len(table_rows)} rows to incremental table '{table_name}' at step {step}"
-            )
 
     def get_metadata_for_secondary_ranks(self) -> dict[str, Any]:
         if self.run and self.per_rank_share_run:
@@ -1081,7 +1081,11 @@ class WandbBackend(LoggerBackend):
         import wandb
 
         if self.run:
-            # Convert each incremental table to immutable before finishing
+            """
+            Convert each incremental table to immutable before finishing
+            as recommended by wandb:
+            https://docs.wandb.ai/models/tables/log_tables#incremental-mode
+            """
             for table_name, incr_table in self._tables.items():
                 final_table = wandb.Table(
                     columns=incr_table.columns,
@@ -1089,7 +1093,7 @@ class WandbBackend(LoggerBackend):
                     log_mode="IMMUTABLE",
                 )
                 self.run.log({table_name: final_table})
-                logger.info(f"WandbBackend: Finalized table {table_name}")
+                logger.debug(f"WandbBackend: Finalized table {table_name}")
 
             self.run.finish()
             logger.info(f"WandbBackend {self.process_name}: Finished run")
