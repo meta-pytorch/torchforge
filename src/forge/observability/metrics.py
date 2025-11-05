@@ -223,6 +223,7 @@ def record_episode_sample(table_name: str, episode):
         **(
             episode.reward_breakdown or {}
         ),  # per-fn breakdown including the average reward
+        "reward": episode.reward,
         "advantage": episode.advantage,
         "request_len": episode.request_len,
         "response_len": episode.response_len,

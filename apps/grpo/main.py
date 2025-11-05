@@ -149,7 +149,7 @@ class RewardActor(ForgeActor):
     @endpoint
     async def evaluate_response(
         self, prompt: str, response: str, target: str
-    ) -> dict[str, float]:
+    ) -> (dict[str, float], float):
         total_rewards = 0.0
         reward_breakdown = {}  # reward breakdown by function
         for reward_fn in self.reward_functions:
@@ -190,9 +190,8 @@ class RewardActor(ForgeActor):
                 Reduce.SUM,
             )
 
-        avg_reward = total_rewards / len(self.reward_functions)
-        reward_breakdown["reward"] = avg_reward
-        return reward_breakdown
+        avg_reward: float = total_rewards / len(self.reward_functions)
+        return reward_breakdown, avg_reward
 
 
 @dataclass
@@ -393,10 +392,12 @@ async def main(cfg: DictConfig):
                     response=response.text,
                     completion=response,
                 )
-                episode.reward_breakdown = await reward_actor.evaluate_response.route(
+                (
+                    episode.reward_breakdown,
+                    episode.reward,
+                ) = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
-                episode.reward = episode.reward_breakdown["reward"]
                 episodes.append(episode)
 
                 # Build input_ids for reference logprobs
