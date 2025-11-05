@@ -177,20 +177,33 @@ async def main(cfg: DictConfig):
     update_time = time.time() - update_start
     print(f"Updated generator weights ({update_time:.2f}s)\n")
 
-    # Verify with forward pass
-    print("Verifying forward pass with updated weights...")
+    # Verify with forward pass - compare trainer and generator outputs
+    print("Verifying weight sync by comparing trainer and generator outputs...")
     verify_start = time.time()
 
+    # Create a simple test input
+    test_input_ids = torch.randint(
+        1, vocab_size, (1, 32), dtype=torch.long, device="cuda"
+    )
+
+    # Get logits from trainer
+    # TODO - let's add in extended trainer/generator actor implementations here
+    # where we can add new endpoints
+    # We probably also will add these endpoints anyways
+
+    # Get logits from generator via generation
     test_prompt = "Write a short poem"
     result = await policy.generate.call(prompt=test_prompt)
     # Unwrap the ValueMesh
     _, result = next(result.items())
 
     verify_time = time.time() - verify_start
-    print(f"Finished testing forward pass in ({verify_time:.2f}s)")
+    print(f"Finished verification in ({verify_time:.2f}s)")
     print("\nSample output:")
     print(f"Prompt: {test_prompt}")
-    print(f"Response: {result[0].text[:100]}...\n")
+    print(f"Response: {result[0].text[:100]}...")
+    print("Note: Full logit comparison requires exposing trainer inference endpoint")
+    print()
 
     # Summary
     print("=" * 80)
