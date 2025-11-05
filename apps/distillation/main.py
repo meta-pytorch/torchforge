@@ -118,7 +118,7 @@ def distillation_loss(
     padding_mask: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Online distillation loss using KL divergence between student and teacher.
+    Online distillation loss using reverse KL divergence between student and teacher.
 
     Args:
         logits: Student model logits [batch_size, seq_len, vocab_size]
@@ -127,13 +127,14 @@ def distillation_loss(
         padding_mask: Mask for valid (non-padding) tokens [batch_size, seq_len]
 
     Returns:
-        KL divergence loss averaged over valid tokens
+        Reverse KL divergence loss averaged over valid tokens
     """
     student_logprobs: torch.Tensor = compute_logprobs(logits, response)
 
-    # Forward KL: KL(teacher || student) = E_teacher[log(teacher) - log(student)]
-    # This encourages student to cover all modes of teacher
-    kl = teacher_logprobs.exp() * (teacher_logprobs - student_logprobs)
+    # Reverse KL: KL(student || teacher) = E_{x~student}[log student - log teacher]
+    # This is mode-seeking: student focuses on teacher's high-probability modes
+    # Since we sample from student in online distillation, this is the natural choice
+    kl = student_logprobs - teacher_logprobs
 
     # Average over valid (non-padded) tokens
     per_token_loss = kl
