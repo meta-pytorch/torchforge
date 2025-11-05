@@ -194,21 +194,7 @@ def record_episode_sample(table_name: str, episode):
         table_name (str): logging prefix (e.g. "rollout/sample").
         episode (Episode): episode object with filled attributes.
     """
-    sample = {
-        "episode_id": episode.episode_id,
-        "policy_version": episode.policy_version,
-        "prompt": episode.request,
-        "response": episode.response,
-        "target": str(episode.target),
-        **(
-            episode.reward_breakdown or {}
-        ),  # per-fn breakdown including the average reward
-        "reward": episode.reward,
-        "advantage": episode.advantage,
-        "request_len": episode.request_len,
-        "response_len": episode.response_len,
-        "pad_id": episode.pad_id,
-    }
+    sample = episode.to_dict()
     record_metric(table_name, sample, Reduce.SAMPLE)
 
 
