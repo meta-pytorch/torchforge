@@ -1101,7 +1101,7 @@ class WandbBackend(LoggerBackend):
                 table.add_data(*values)
 
             # Log the same table object (INCREMENTAL update)
-            self.run.log({f"{table_name}_table": table})
+            self.run.log({f"{table_name}": table})
             logger.info(
                 f"WandbBackend: Appended {len(table_rows)} rows to incremental table '{table_name}' at step {step}"
             )

@@ -419,7 +419,9 @@ async def main(cfg: DictConfig):
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
-                record_episode_sample("rollout/sample", episode)
+                record_episode_sample(
+                    "main_samples/continuous_rollouts/sample_table", episode
+                )
 
             rollout_count += 1
             record_metric(
