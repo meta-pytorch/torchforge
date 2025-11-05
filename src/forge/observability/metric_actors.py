@@ -438,7 +438,7 @@ class GlobalLoggingActor(ForgeActor):
                 m for m in reduced_metrics if m.reduction != Reduce.SAMPLE
             ]
             sample_metrics = {
-                m.key: m.value for m in reduced_metrics if m.reduction == Reduce.SAMPLE
+                m for m in reduced_metrics if m.reduction == Reduce.SAMPLE
             }
 
             # Log to global backends
