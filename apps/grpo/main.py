@@ -76,6 +76,30 @@ class Episode:
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
 
+    def to_dict(self, exclude: list[str] | None = None) -> dict[str, Any]:
+        """Convert episode to dict, optionally excluding specified fields."""
+        result = {
+            "episode_id": self.episode_id,
+            "policy_version": self.policy_version,
+            "prompt": self.request,
+            "response": self.response,
+            "target": str(self.target),
+            "reward": self.reward,
+            "advantage": self.advantage,
+            "request_len": self.request_len,
+            "response_len": self.response_len,
+            "pad_id": self.pad_id,
+        }
+
+        if self.reward_breakdown is not None:
+            result.update(self.reward_breakdown)
+
+        if exclude:
+            for key in exclude:
+                result.pop(key, None)
+
+        return result
+
 
 # Represents the group (G) of episodes in GRPO
 Group = list[Episode]
