@@ -140,32 +140,12 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
         list[Metric]: List of reduced metrics
 
     Example:
-        >>> states = [
-        ...     {
-        ...         "loss": {"count": 5, "sum": 14, "reduction_type": "mean"},
-        ...         "reward/sample": {
-        ...             "reduction_type": "sample",
-        ...             "samples": [{"episode_id": 1, "reward": 0.5}],
-        ...         },
-        ...     },
-        ...     {
-        ...         "loss": {"count": 10, "sum": 16, "reduction_type": "mean"},
-        ...         "reward/sample": {
-        ...             "reduction_type": "sample",
-        ...             "samples": [{"episode_id": 2, "reward": 1.0}],
-        ...         },
-        ...     },
-        ... ]
-        >>> metrics = reduce_metrics_states(states)
-        >>> for m in metrics:
-        ...     print(m)
-        Metric(key='loss', value=2.0, reduction=Reduce.MEAN)
-        Metric(
-            key='reward/sample',
-            value=[{'episode_id': 1, 'reward': 0.5},
-                   {'episode_id': 2, 'reward': 1.0}],
-            reduction=Reduce.SAMPLE,
-        )
+        states = [
+            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
+            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
+        ]
+        reduce_metrics_states(states)
+        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
