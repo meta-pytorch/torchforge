@@ -1,31 +1,28 @@
 # Weight Sync Sandbox Configuration
 # >>> python -m tests.sandbox.weight_sync.main --config tests/sandbox/weight_sync/qwen3_1_7b.yaml
 
-# Global configuration
 model: "Qwen/Qwen3-1.7B"
-local_batch_size: 4  # Small batch - we only need ONE training step
-max_req_tokens: 64   # Short sequences for fast testing
+local_batch_size: 4
+max_req_tokens: 64
 max_res_tokens: 64
 
-# Observability configuration
 metric_logging:
   console:
     logging_mode: global_reduce
 
-# Generator configuration (as actor, not service)
 policy:
+  prefetch_weights_to_shm: false  # Disable to avoid shared memory warnings in test
   engine_args:
     model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
-    enforce_eager: true  # Faster initialization
+    enforce_eager: true
   sampling_params:
     n: 1
     max_tokens: 32  # Just for verification forward pass
     temperature: 1.0
     top_p: 1.0
 
-# Trainer configuration (minimal setup)
 trainer:
   model:
     name: qwen3
@@ -64,11 +61,6 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
-
-# Replay buffer configuration (needed by trainer)
-replay_buffer:
-  batch_size: ${local_batch_size}
-  dp_size: 1  # Must match trainer's data_parallel_shard_degree
 
 # Resource allocation - both as actors
 actors:

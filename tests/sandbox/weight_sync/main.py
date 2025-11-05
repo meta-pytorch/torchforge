@@ -10,19 +10,11 @@ Weight Sync Sandbox
 A minimal test environment focused exclusively on testing the weight synchronization
 mechanism between RLTrainer and Generator.
 
-This sandbox:
-- Initializes both trainer and generator with the same model
-- Runs ONE training step to create a weight delta
-- Tests push_weights() performance and correctness
-- Tests update_weights() performance and correctness
-- Verifies the sync with a forward pass
-
 Usage:
     python -m tests.sandbox.weight_sync.main --config tests/sandbox/weight_sync/qwen3_1_7b.yaml
 """
 
 import asyncio
-import os
 import time
 
 import torch
@@ -36,49 +28,6 @@ from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
-
-# Suppress resource_tracker warnings about shared memory cleanup
-# These occur because shared memory is cleaned up by one process while the
-# resource tracker in another process tries to clean it up again. The cleanup
-# is working correctly - these are just harmless race condition warnings.
-os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:multiprocessing.resource_tracker"
-
-
-def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
-    beta: float = 0.1,
-) -> torch.Tensor:
-    """
-    Simplified loss function for weight sync testing.
-    Just performs basic tensor operations to create a weight delta.
-    """
-    # Extract dimensions
-    local_batch_size, response_len = response.shape
-    vocab_size = logits.size(-1)
-    full_seq_len = logits.size(1)
-
-    # Extract only the response portion from logits
-    request_len = full_seq_len - response_len
-    response_logits = logits[:, request_len:, :]
-
-    # Flatten logits and response for cross-entropy
-    logits_flat = response_logits.reshape(-1, vocab_size)
-    response_flat = response.reshape(-1)
-
-    # Basic cross-entropy loss
-    loss = torch.nn.functional.cross_entropy(
-        logits_flat, response_flat, reduction="none"
-    ).view(local_batch_size, response_len)
-
-    # Apply padding mask and reduce
-    masked_loss = loss * padding_mask
-    loss = masked_loss.sum() / padding_mask.sum().clamp(min=1.0)
-
-    return loss
 
 
 def generate_random_batch(
@@ -136,18 +85,6 @@ def generate_random_batch(
 
 
 async def main(cfg: DictConfig):
-    """
-    Weight sync sandbox main function.
-
-    Tests the complete weight synchronization pipeline:
-    1. Initialize trainer and generator
-    2. Run one training step
-    3. Push weights from trainer
-    4. Update weights in generator
-    5. Verify with forward pass
-    """
-
-    # Extract configuration
     local_batch_size = cfg.get("local_batch_size", None)
     assert local_batch_size is not None, "local_batch_size must be specified"
 
@@ -155,17 +92,13 @@ async def main(cfg: DictConfig):
     response_len = cfg.get("max_res_tokens", 64)
     model_name = cfg.get("model")
 
-    # Get vocab size from tokenizer
     print(f"Loading tokenizer for model: {model_name}")
     tokenizer = get_tokenizer(model_name)
     vocab_size = tokenizer.vocab_size
     print(f"Detected vocab size: {vocab_size}")
 
-    # Get data parallel size
-    dp_size = cfg.get("replay_buffer", {}).get("dp_size", 1)
-    if dp_size is None:
-        trainer_dp_degree = cfg.trainer.parallelism.get("data_parallel_shard_degree", 1)
-        dp_size = trainer_dp_degree if trainer_dp_degree != -1 else 1
+    trainer_dp_degree = cfg.trainer.parallelism.get("data_parallel_shard_degree", 1)
+    dp_size = trainer_dp_degree if trainer_dp_degree != -1 else 1
 
     # ---- Global setups ---- #
     provisioner = None
@@ -183,8 +116,6 @@ async def main(cfg: DictConfig):
     # Initialize torchstore
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
-    print("\n" + "=" * 80)
-    print("WEIGHT SYNC SANDBOX")
     print("=" * 80)
     print(f"Model: {model_name}")
     print(f"Local batch size: {local_batch_size}")
@@ -192,8 +123,7 @@ async def main(cfg: DictConfig):
         f"Sequence length: {request_len + response_len} ({request_len} + {response_len})"
     )
     print(f"Data parallel size: {dp_size}")
-    print(f"RDMA available: {rdma_enabled()}")
-    print(f"Sync mode: {'Direct (RDMA)' if rdma_enabled() else 'DCP (Filesystem)'}")
+    print(f"Is RDMA available? {rdma_enabled()}")
     print("=" * 80 + "\n")
 
     # Initialize trainer and generator
@@ -202,16 +132,19 @@ async def main(cfg: DictConfig):
 
     trainer, policy = await asyncio.gather(
         RLTrainer.options(**cfg.actors.trainer).as_actor(
-            **cfg.trainer, loss=simple_grpo_loss
+            **cfg.trainer,
+            loss=lambda *args, **kwargs: torch.tensor(
+                1.0, requires_grad=True, device="cuda"
+            ),
         ),
         Generator.options(**cfg.actors.policy).as_actor(**cfg.policy),
     )
 
     init_time = time.time() - init_start
-    print(f"✓ Initialization complete ({init_time:.2f}s)\n")
+    print(f"Finished initialization in ({init_time:.2f}s)")
 
     # Run one training step to create weight delta
-    print("[1/4] Running single training step to create weight delta...")
+    print("Running single training step.....")
     step_start = time.time()
 
     inputs, targets = generate_random_batch(
@@ -224,28 +157,28 @@ async def main(cfg: DictConfig):
 
     await trainer.train_step.call(inputs, targets)
     step_time = time.time() - step_start
-    print(f"✓ Training step complete ({step_time:.2f}s)\n")
+    print(f"Finished train step in ({step_time:.2f}s)\n")
 
     # Test push_weights
-    print("[2/4] Testing push_weights() to torchstore...")
+    print("Pushing weights from trainer to store...")
     push_start = time.time()
 
     await trainer.push_weights.call(policy_version=1)
 
     push_time = time.time() - push_start
-    print(f"✓ Pushed weights to torchstore ({push_time:.2f}s)\n")
+    print(f"Finished weights push in ({push_time:.2f}s)\n")
 
     # Test update_weights
-    print("[3/4] Testing update_weights() from torchstore...")
+    print("Updating generator weights from store...")
     update_start = time.time()
 
     await policy.update_weights.call(version=1)
 
     update_time = time.time() - update_start
-    print(f"✓ Updated weights in generator ({update_time:.2f}s)\n")
+    print(f"Updated generator weights ({update_time:.2f}s)\n")
 
     # Verify with forward pass
-    print("[4/4] Verification: Running forward pass with updated weights...")
+    print("Verifying forward pass with updated weights...")
     verify_start = time.time()
 
     test_prompt = "Write a short poem"
@@ -254,21 +187,18 @@ async def main(cfg: DictConfig):
     _, result = next(result.items())
 
     verify_time = time.time() - verify_start
-    print(f"✓ Forward pass successful ({verify_time:.2f}s)")
+    print(f"Finished testing forward pass in ({verify_time:.2f}s)")
     print("\nSample output:")
     print(f"Prompt: {test_prompt}")
     print(f"Response: {result[0].text[:100]}...\n")
 
     # Summary
     print("=" * 80)
-    print("WEIGHT SYNC TEST COMPLETE")
+    print("Results")
     print("=" * 80)
     print(f"Push time:         {push_time:.2f}s")
     print(f"Update time:       {update_time:.2f}s")
     print(f"Total sync time:   {push_time + update_time:.2f}s")
-    print(
-        f"Sync mode used:    {'Direct (RDMA)' if rdma_enabled() else 'DCP (Filesystem)'}"
-    )
     print("=" * 80 + "\n")
 
     # Cleanup
