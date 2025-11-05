@@ -45,8 +45,9 @@ parallelism:
 
 checkpoint:
   enable: true
-  initial_load_path: hf://${model_name}
-  initial_load_in_hf: true
+  folder: ./checkpoint              # The folder to save checkpoints to.
+  initial_load_path: hf://${model_name}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
+  initial_load_in_hf: true          # If true, interpret initial_load_path as a HuggingFace model repo
   last_save_in_hf: true
   interval: 500
   async_mode: "disabled"
@@ -54,6 +55,12 @@ checkpoint:
 activation_checkpoint:
   mode: selective
   selective_ac_option: op
+
+metric_logging:
+  wandb:
+    project: sft-training
+    group: sft_exp_${oc.env:USER}
+    logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
 
 # profiling:
 #   enable_profiling: false

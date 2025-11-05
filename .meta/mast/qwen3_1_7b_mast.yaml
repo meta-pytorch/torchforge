@@ -3,14 +3,13 @@
 
 # Global configuration
 group_size: 8
-batch_size: 16
+local_batch_size: 16 # per-device batch size
 max_req_tokens: 512
 max_res_tokens: 512
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
 launcher: mast
 job_name: forge-qwen3-1_7b
-checkpoint_folder: /mnt/wsfuse/teamforge/forge_runs/
 
 # Main loop configuration
 rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
@@ -20,13 +19,13 @@ metric_logging:
   wandb:
     project: "grpo-training"
     group: "grpo_exp_${oc.env:USER}"
-    reduce_across_ranks: True
+    logging_mode: global_reduce
   console:
-    reduce_across_ranks: True
+    logging_mode: global_reduce
 
 # Dataset configuration
 dataset:
-  path: "openai/gsm8k"
+  path: /mnt/wsfuse/teamforge/hf/gsm8k
   revision: "main"
   data_split: "train"
   streaming: true
@@ -35,7 +34,7 @@ dataset:
 # Policy configuration
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
-    model: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    model: /mnt/wsfuse/teamforge/hf/qwen3_1.7b
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
     enforce_eager: false
@@ -53,7 +52,8 @@ trainer:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    hf_assets_path: /mnt/wsfuse/teamforge/hf/qwen3_1.7b
+    # hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
     lr: 1e-5
@@ -61,8 +61,8 @@ trainer:
   lr_scheduler:
     warmup_steps: 1
   training:
-    local_batch_size: ${batch_size}
-    seq_len: 2048
+    local_batch_size: ${local_batch_size}
+    seq_len: ${sum:${max_req_tokens},${max_res_tokens}}  # seq_len >= max_req_tokens + max_res_tokens
     max_norm: 1.0
     steps: 1000000
     dtype: bfloat16
@@ -79,8 +79,9 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/teamforge/hf/qwen3_1.7b
     initial_load_in_hf: true
+    folder: ${checkpoint_folder}
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
@@ -95,7 +96,7 @@ trainer:
 
 # Replay buffer configuration
 replay_buffer:
-  batch_size: ${batch_size}
+  batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
   dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
 
@@ -104,8 +105,10 @@ ref_model:
   model:
     name: qwen3
     flavor: 1.7B
-    hf_assets_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    hf_assets_path: /mnt/wsfuse/teamforge/hf/qwen3_1.7b
+    # hf_assets_path: hf://${model}
   training:
+    seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
     gc_freq: 1
   compile:
@@ -119,20 +122,21 @@ ref_model:
     expert_parallel_degree: 1
   checkpoint:
     enable: true
-    initial_load_path: /mnt/wsfuse/huggingface_models/models--Qwen--Qwen3-1.7B/snapshots/0060bc56d46589041c1048efd1a397421b1142b5
+    initial_load_path: /mnt/wsfuse/teamforge/hf/qwen3_1.7b
+    folder: ""
     initial_load_in_hf: true
 
 # All resource allocations
 services:
   policy:
     procs: ${policy.engine_args.tensor_parallel_size}
-    num_replicas: 2
+    num_replicas: 1
     with_gpus: true
     mesh_name: policy
     hosts: 1
   ref_model:
     procs: 1
-    num_replicas: 2
+    num_replicas: 1
     with_gpus: true
     mesh_name: ref_model
     hosts: 1

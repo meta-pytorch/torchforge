@@ -68,7 +68,7 @@ extensions = [
 html_favicon = "_static/logo-icon.svg"
 
 html_baseurl = (
-    f"https://meta-pytorch.org/forge/{version_path}"  # needed for sphinx-sitemap
+    f"https://meta-pytorch.org/torchforge/{version_path}"  # needed for sphinx-sitemap
 )
 sitemap_locales = [None]
 sitemap_excludes = [
@@ -122,7 +122,7 @@ html_theme_options = {
         },
         {
             "name": "GitHub",
-            "url": "https://github.com/meta-pytorch/forge",
+            "url": "https://github.com/meta-pytorch/torchforge",
             "icon": "fa-brands fa-github",
         },
         {
@@ -138,7 +138,7 @@ html_theme_options = {
     ],
     "use_edit_page_button": True,
     "navbar_center": "navbar-nav",
-    "canonical_url": "https://meta-pytorch.org/forge/",
+    "canonical_url": "https://meta-pytorch.org/torchforge/",
     "header_links_before_dropdown": 7,
     "show_toc_level": 2,
     "navigation_depth": 3,
@@ -151,7 +151,7 @@ html_context = {
     "display_github": True,
     "github_url": "https://github.com",
     "github_user": "meta-pytorch",
-    "github_repo": "forge",
+    "github_repo": "torchforge",
     "feedback_url": "https://github.com/meta-pytorch/forge",
     "colab_branch": "gh-pages",
     "github_version": "main",
@@ -178,6 +178,30 @@ myst_enable_extensions = [
 
 # Configure MyST parser to treat mermaid code blocks as mermaid directives
 myst_fence_as_directive = ["mermaid"]
+
+# Disable D3 zoom (we'll use lightbox instead)
+mermaid_d3_zoom = False
+
+# Global Mermaid theme configuration - applies to all diagrams
+mermaid_init_js = """
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+        primaryColor: '#4CAF50',
+        primaryTextColor: '#000',
+        primaryBorderColor: '#fff',
+        lineColor: '#555',
+        secondaryColor: '#FF9800',
+        tertiaryColor: '#ffffde'
+    },
+    flowchart: {
+        curve: 'basis'
+    },
+    themeCSS: '.edgePath .path { stroke-width: 4px; stroke: #555; }'
+});
+"""
 
 autodoc_default_options = {
     "members": True,
@@ -266,7 +290,7 @@ def copy_markdown_tutorials(app):
         # Copy the file
         shutil.copy2(md_file, target_path)
         print(
-            f"[Forge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}"
+            f"[TorchForge Docs] Copied {md_file.name} to {target_path.relative_to(app.srcdir)}"
         )
 
 

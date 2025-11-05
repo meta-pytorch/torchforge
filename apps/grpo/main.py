@@ -24,7 +24,6 @@ from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
-from forge.cli.config import parse
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
@@ -34,6 +33,7 @@ from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.config import parse
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -59,8 +59,7 @@ class Episode:
 
     @property
     def request_tensor(self) -> torch.Tensor:
-        request_tokens: torch.Tensor = self.completion.prompt_ids
-        tensor = torch.tensor(request_tokens, dtype=torch.long)
+        tensor: torch.Tensor = self.completion.prompt_ids.to(torch.long)
         if tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
             tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
@@ -68,8 +67,7 @@ class Episode:
 
     @property
     def response_tensor(self) -> torch.Tensor:
-        response_tokens: torch.Tensor = self.completion.token_ids
-        tensor = torch.tensor(response_tokens, dtype=torch.long)
+        tensor: torch.Tensor = self.completion.token_ids.to(torch.long)
         if tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
@@ -120,6 +118,7 @@ def collate(
     return inputs, targets
 
 
+# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
@@ -128,12 +127,7 @@ def simple_grpo_loss(
     padding_mask: torch.Tensor,
     beta: float = 0.1,
 ) -> torch.Tensor:
-    """
-    Example GRPO Loss Function for RLTrainer
-    """
     logprobs: torch.Tensor = compute_logprobs(logits, response)
-
-    # Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
     per_token_loss = -(per_token_policy_loss - beta * kl)
@@ -146,7 +140,6 @@ def simple_grpo_loss(
 
 @dataclass
 class RewardActor(ForgeActor):
-    """Reward actor that uses a list of scoring functions."""
 
     reward_functions: list[Callable]
 
@@ -178,14 +171,12 @@ class RewardActor(ForgeActor):
                 Reduce.STD,
             )
 
-            # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
                 Reduce.MEAN,
             )
 
-            # count fn calls
             record_metric(
                 f"reward/evaluate_response/count_{reward_fn_name}_calls",
                 1,
@@ -198,8 +189,6 @@ class RewardActor(ForgeActor):
 
 @dataclass
 class ComputeAdvantages(ForgeActor):
-    """Compute advantages for GRPO using reward signals."""
-
     @endpoint
     async def compute(self, group: Group) -> list[float]:
         # TODO: add batch processing
@@ -223,6 +212,7 @@ class DatasetActor(ForgeActor):
     @endpoint
     def setup(self):
         self._tokenizer = get_tokenizer(self.model)
+        self._epoch = 0
 
         def gsm8k_transform(sample):
             system_prompt = """
@@ -243,29 +233,36 @@ class DatasetActor(ForgeActor):
             formatted_target = target.split("#### ")[1]
             return {"request": formatted_request, "target": formatted_target}
 
-        ds = load_dataset(
+        self._base_dataset = load_dataset(
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
-        ds = ds.map(gsm8k_transform)
-        ds = ds.shuffle()
-        self._iterator = iter(ds)
+        self._base_dataset = self._base_dataset.map(gsm8k_transform)
+        self._base_dataset = self._base_dataset.shuffle()
+        self._iterator = iter(self._base_dataset)
 
     @endpoint
     async def sample(self) -> dict[str, str] | None:
         try:
             sample = next(self._iterator)
 
-            # Record dataset metrics
             record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
             record_metric(
                 "dataset/sample/avg_sample_len",
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
         except StopIteration:
-            return None
+            # Restart iterator for next epoch with reshuffling
+            self._epoch += 1
+            print(
+                f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
+            )
+            self._base_dataset.set_epoch(self._epoch)
+            self._iterator = iter(self._base_dataset)
+            return next(self._iterator)
 
     @endpoint
     async def pad_token(self):
@@ -304,8 +301,8 @@ async def main(cfg: DictConfig):
     else:
         provisioner = await init_provisioner()
 
-    metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
-    mlogger = await get_or_create_metric_logger()
+    metric_logging_cfg = cfg.get("metric_logging", {})
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Setup services ---- #
@@ -406,13 +403,11 @@ async def main(cfg: DictConfig):
                 episode.ref_logprobs = ref_logprobs[i]
             del ref_logprobs, input_ids
 
-            # Calculate advantages and add to replay buffer
             advantages = await compute_advantages.compute.call_one(episodes)
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
 
-            # Log metrics
             rollout_count += 1
             record_metric(
                 "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
@@ -479,7 +474,7 @@ async def main(cfg: DictConfig):
     except KeyboardInterrupt:
         print("Training interrupted by user")
     finally:
-        print("Shutting down...")
+        print("Shutting down... (this may take a few seconds)")
         shutdown_event.set()
 
         try:

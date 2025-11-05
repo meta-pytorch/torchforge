@@ -115,7 +115,11 @@ class ReferenceModel(ForgeActor):
     @endpoint
     async def setup(self):
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
-        self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+        engine_config = ForgeJobConfig(**engine_config)
+        engine_config.checkpoint.folder = (
+            ""  # hardcode to empty to force load from initial_load_path
+        )
+        self.engine = ForgeEngine(engine_config)
         self.engine.checkpointer.load()
         self.model = self.engine.model_parts[0]  # No pipeline parallelism yet
         self.model.eval()
@@ -128,7 +132,7 @@ class ReferenceModel(ForgeActor):
         Args:
             input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
             max_req_tokens (int): maximum request length.
-            return_logprobs (bool): whether to return og probabilities instead of raw logits.
+            return_logprobs (bool): whether to return log probabilities instead of raw logits.
 
             return_logprobs flag significantly impacts the amount of data transferred to the caller:
             - When False: Returns logits with shape [group_size, req + res_length, vocab_size].

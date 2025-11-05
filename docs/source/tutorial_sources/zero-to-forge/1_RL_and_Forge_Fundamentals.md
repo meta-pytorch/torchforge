@@ -1,8 +1,8 @@
-# Part 1: RL Fundamentals - Using Forge Terminology
+# Part 1: RL Fundamentals - Using TorchForge Terminology
 
-## Core RL Components in Forge
+## Core RL Components in TorchForge
 
-Let's start with a simple math tutoring example to understand RL concepts with the exact names Forge uses:
+Let's start with a simple math tutoring example to understand RL concepts with the exact names TorchForge uses:
 
 ### The Toy Example: Teaching Math
 
@@ -11,8 +11,10 @@ graph TD
     subgraph Example["Math Tutoring RL Example"]
         Dataset["Dataset: math problems"]
         Policy["Policy: student AI"]
-        Reward["Reward Model: scores answers"]
-        Reference["Reference Model: baseline"]
+        Reward["Reward Model:
+        scores answers"]
+        Reference["Reference Model:
+        baseline"]
         ReplayBuffer["Replay Buffer: stores experiences"]
         Trainer["Trainer: improves student"]
     end
@@ -25,12 +27,14 @@ graph TD
     ReplayBuffer --> Trainer
     Trainer --> Policy
 
-    style Policy fill:#4CAF50
-    style Reward fill:#FF9800
-    style Trainer fill:#E91E63
+    style Policy fill:#4CAF50,stroke:#fff,stroke-width:2px
+    style Reward fill:#FF9800,stroke:#fff,stroke-width:2px
+    style Trainer fill:#E91E63,stroke:#fff,stroke-width:2px
+
+    linkStyle default stroke:#888,stroke-width:2px
 ```
 
-### RL Components Defined (Forge Names)
+### RL Components Defined (TorchForge Names)
 
 1. **Dataset**: Provides questions/prompts (like "What is 2+2?")
 2. **Policy**: The AI being trained (generates answers like "The answer is 4")
@@ -66,17 +70,17 @@ def conceptual_rl_step():
     if batch is not None:
         trainer.train_step(batch)  # Student gets better!
 
-# 🔄 See complete working example below with actual Forge service calls
+# 🔄 See complete working example below with actual TorchForge service calls
 ```
 
-## From Concepts to Forge Services
+## From Concepts to TorchForge Services
 
-Here's the key insight: **Each RL component becomes a Forge service**. The toy example above maps directly to Forge:
+Here's the key insight: **Each RL component becomes a TorchForge service**. The toy example above maps directly to TorchForge:
 
 ```mermaid
 graph LR
     subgraph Concepts["RL Concepts"]
-        direction TB
+
         C1["Dataset"]
         C2["Policy"]
         C3["Reward Model"]
@@ -85,10 +89,10 @@ graph LR
         C6["Trainer"]
     end
 
-    subgraph Services["Forge Services (Real Classes)"]
-        direction TB
+    subgraph Services["TorchForge Services (Real Classes)"]
+
         S1["DatasetActor"]
-        S2["Policy"]
+        S2["Generator"]
         S3["RewardActor"]
         S4["ReferenceModel"]
         S5["ReplayBuffer"]
@@ -108,9 +112,9 @@ graph LR
     style S3 fill:#FF9800
 ```
 
-### RL Step with Forge Services
+### RL Step with TorchForge Services
 
-Let's look at the example from above again, but this time we would use the names from Forge:
+Let's look at the example from above again, but this time we would use the names from TorchForge:
 
 ```python
 # Conceptual Example
@@ -151,7 +155,7 @@ async def conceptual_forge_rl_step(services, step):
 
 **Key difference**: Same RL logic, but each component is now a distributed, fault-tolerant, auto-scaling service.
 
-Did you realise-we are not worrying about any Infra code here! Forge Automagically handles the details behind the scenes and you can focus on writing your RL Algorthms!
+Did you realise-we are not worrying about any Infra code here! TorchForge Automagically handles the details behind the scenes and you can focus on writing your RL Algorithms!
 
 
 ## Why This Matters: Traditional ML Infrastructure Fails
@@ -173,11 +177,20 @@ Our simple RL loop above has complex requirements:
 
 ```mermaid
 graph LR
-    A["Policy: Student AI<br/>'What is 2+2?' → 'The answer is 4'"]
-    B["Reward: Teacher<br/>Scores answer: 0.95"]
-    C["Reference: Original Student<br/>Provides baseline comparison"]
-    D["Replay Buffer: Notebook<br/>Stores: question + answer + score"]
-    E["Trainer: Tutor<br/>Improves student using experiences"]
+    A["Policy: Student AI
+    'What is 2+2?' →
+    'The answer is 4'"]
+    B["Reward: Teacher
+    Scores answer: 0.95"]
+    C["Reference: Original Student
+    Provides baseline comparison"]
+    D["Replay Buffer: Notebook
+    Stores: question
+    + answer
+    + score"]
+    E["Trainer: Tutor
+    Improves student
+    using experiences"]
 
     A --> B
     A --> C
@@ -196,7 +209,7 @@ graph LR
 Each step has different:
 - **Latency requirements**: Policy inference needs low latency (each episode waits), training can batch multiple episodes together
 - **Scaling patterns**: Need N policy replicas to keep trainer busy, plus different sharding strategies (tensor parallel for training vs replicated inference)
-- **Failure modes**: Any component failure cascades to halt the entire pipeline (Forge prevents this with automatic failover)
+- **Failure modes**: Any component failure cascades to halt the entire pipeline (TorchForge prevents this with automatic failover)
 - **Resource utilization**: GPUs for inference/training, CPUs for data processing
 
 ### Problem 3: The Coordination Challenge
@@ -218,11 +231,11 @@ def naive_rl_step():
         entire_system_stops()
 ```
 
-## Enter Forge: RL-Native Architecture
+## Enter TorchForge: RL-Native Architecture
 
-Forge solves these problems by treating each RL component as an **independent, distributed unit** - some as fault-tolerant services (like Policy inference where failures are easy to handle), others as actors (like Trainers where recovery semantics differ)
+TorchForge solves these problems by treating each RL component as an **independent, distributed unit** - some as fault-tolerant services (like Policy inference where failures are easy to handle), others as actors (like Trainers where recovery semantics differ)
 
-Let's see how core RL concepts map to Forge components (you'll notice a mix of `.route()` for services and `.call_one()` for actors - we cover when to use each in Part 2):
+Let's see how core RL concepts map to TorchForge components (you'll notice a mix of `.route()` for services and `.call_one()` for actors - we cover when to use each in Part 2):
 
 **Quick API Reference:** (covered in detail in Part 2: Service Communication Patterns)
 - `.route()` - Send request to any healthy replica in a service (load balanced)
@@ -231,7 +244,7 @@ Let's see how core RL concepts map to Forge components (you'll notice a mix of `
 
 ```python
 async def real_rl_training_step(services, step):
-    """Single RL step using verified Forge APIs"""
+    """Single RL step using verified TorchForge APIs"""
 
     # 1. Environment interaction - Using actual DatasetActor API
     sample = await services['dataloader'].sample.call_one()
@@ -280,7 +293,7 @@ responses = await policy.generate.route(prompt=question)
 answer = responses[0].text  # responses is list[Completion]
 ```
 
-Forge handles behind the scenes:
+TorchForge handles behind the scenes:
 - Routing to least loaded replica
 - GPU memory management
 - Batch optimization
@@ -290,7 +303,7 @@ Forge handles behind the scenes:
 ### Independent Scaling
 ```python
 
-from forge.actors.policy import Policy
+from forge.actors.generator import Generator as Policy
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.trainer import RLTrainer
@@ -361,9 +374,9 @@ group_size = 1
     )
 ```
 
-**Forge Components: Services vs Actors**
+**TorchForge Components: Services vs Actors**
 
-Forge has two types of distributed components:
+TorchForge has two types of distributed components:
 - **Services**: Multiple replicas with automatic load balancing (like Policy, RewardActor)
 - **Actors**: Single instances that handle their own internal distribution (like RLTrainer, ReplayBuffer)
 
@@ -378,7 +391,7 @@ We cover this distinction in detail in Part 2, but for now this explains the sca
 # If a policy replica fails:
 responses = await policy.generate.route(prompt=question)
 answer = responses[0].text
-# -> Forge automatically routes to healthy replica
+# -> TorchForge automatically routes to healthy replica
 # -> Failed replica respawns in background
 # -> No impact on training loop
 

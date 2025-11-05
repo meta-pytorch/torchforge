@@ -16,6 +16,7 @@ from forge.observability.metrics import (
     BackendRole,
     ConsoleBackend,
     get_logger_backend_class,
+    LoggingMode,
     MaxAccumulator,
     MeanAccumulator,
     Metric,
@@ -80,18 +81,17 @@ class TestMetricCreation:
         assert isinstance(BackendRole.LOCAL, BackendRole)
         assert isinstance(BackendRole.GLOBAL, BackendRole)
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
     @pytest.mark.asyncio
-    async def test_backend_role_usage(self, mock_actor_name):
+    async def test_backend_role_usage(self):
         """Test that BackendRole constants are actually used instead of string literals."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
-
         # Test ConsoleBackend
-        console_backend = ConsoleBackend({})
+        console_backend = ConsoleBackend(logging_mode=LoggingMode.GLOBAL_REDUCE)
         await console_backend.init(role=BackendRole.LOCAL)
 
         # Test WandbBackend role validation without WandB initialization
-        wandb_backend = WandbBackend({"project": "test"})
+        wandb_backend = WandbBackend(
+            logging_mode=LoggingMode.GLOBAL_REDUCE, project="test"
+        )
 
         # Mock all the WandB init methods to focus only on role validation
         with patch.object(wandb_backend, "_init_global"), patch.object(
@@ -295,41 +295,36 @@ class TestCriticalFixes:
         mock_collector_class.assert_called_once()
         mock_collector.push.assert_called_once()
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
-    def test_wandb_backend_creation(self, mock_actor_name):
+    def test_wandb_backend_creation(self):
         """Test WandbBackend creation and basic setup without WandB dependency."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
 
-        config = {
-            "project": "test_project",
-            "group": "test_group",
-            "reduce_across_ranks": True,
-        }
-        backend = WandbBackend(config)
+        backend = WandbBackend(
+            logging_mode=LoggingMode.GLOBAL_REDUCE,
+            project="test_project",
+            group="test_group",
+        )
 
-        assert backend.project == "test_project"
-        assert backend.group == "test_group"
-        assert backend.reduce_across_ranks is True
-        assert backend.share_run_id is False  # default
+        # Test backend kwargs storage
+        assert backend.backend_kwargs["project"] == "test_project"
+        assert backend.backend_kwargs["group"] == "test_group"
+        assert backend.logging_mode == LoggingMode.GLOBAL_REDUCE
+        assert backend.per_rank_share_run is False  # default
 
         # Test metadata method
         metadata = backend.get_metadata_for_secondary_ranks()
         assert metadata == {}  # Should be empty when no run
 
-    @patch("forge.observability.metrics.get_actor_name_with_rank")
     @pytest.mark.asyncio
-    async def test_console_backend(self, mock_actor_name):
+    async def test_console_backend(self):
         """Test ConsoleBackend basic operations."""
-        mock_actor_name.return_value = "TestActor_abcd_r0"
-
-        backend = ConsoleBackend({})
+        backend = ConsoleBackend(logging_mode=LoggingMode.GLOBAL_REDUCE)
 
         await backend.init(role=BackendRole.LOCAL)
 
-        # Test log - should not raise
+        # Test log_batch - should not raise
         # Create a test metric
         test_metric = Metric("test", 1.0, Reduce.MEAN)
-        await backend.log([test_metric], global_step=1)
+        await backend.log_batch([test_metric], global_step=1)
 
         await backend.finish()  # Should not raise
 
@@ -425,28 +420,33 @@ class TestMetricActorDisabling:
         if hasattr(procs, "_local_fetcher"):
             delattr(procs, "_local_fetcher")
 
-        # Test functionality
-        global_logger = await get_or_create_metric_logger(proc_mesh=procs)
+        # Test functionality - pass explicit process_name since test bypasses provisioner
+        global_logger = await get_or_create_metric_logger(
+            proc_mesh=procs, process_name="TestProcess"
+        )
 
         # Get results to check
         proc_has_fetcher = hasattr(procs, "_local_fetcher")
-        global_has_fetcher = await global_logger.has_fetcher.call_one(procs)
+        proc_id = procs._uid if hasattr(procs, "_uid") else None
+        global_has_fetcher = (
+            await global_logger.has_fetcher.call_one(proc_id) if proc_id else False
+        )
 
         # Assert based on expected behavior
         if should_register_fetchers:
             assert (
                 proc_has_fetcher
-            ), f"Expected process to have _local_fetcher when {env_var_value=}"
+            ), f"Expected process to have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
             assert (
                 global_has_fetcher
-            ), f"Expected global logger to have fetcher registered when {env_var_value=}"
+            ), f"Expected global logger to have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
         else:
             assert (
                 not proc_has_fetcher
-            ), f"Expected process to NOT have _local_fetcher when {env_var_value=}"
+            ), f"Expected process to NOT have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
             assert (
                 not global_has_fetcher
-            ), f"Expected global logger to NOT have fetcher registered when {env_var_value=}"
+            ), f"Expected global logger to NOT have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
