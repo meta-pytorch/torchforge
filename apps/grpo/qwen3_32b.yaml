@@ -12,9 +12,9 @@ off_by_n: 1 # Off by one by default
 
 provisioner:
   launcher: slurm
-  cpu: 128            # CPUs per node
-  memory_mb: 1655502  # Memory in MB per node
-  gpus_per_node: 4    # Number of GPUs per node
+  cpu:             # CPUs per node - if emtpy, will be inferred from Slurm
+  memory_mb:   # Memory in MB per node - if emtpy, will be inferred from Slurm
+  gpus_per_node:     # Number of GPUs per node - if emtpy, will be inferred from Slurm
 
 # Main loop configuration
 rollout_threads: 32 # make this 4x the number of policy replicas seems to work well
