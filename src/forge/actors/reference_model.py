@@ -13,6 +13,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
+import torch.nn.functional as F
+
+from forge.controller import ForgeActor
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+
+# from forge.util.ops import compute_logprobs
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 
@@ -26,11 +33,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.controller import ForgeActor
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.util.ops import compute_logprobs
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -180,15 +182,77 @@ class ReferenceModel(ForgeActor):
                     with torch.inference_mode():
                         logits = self.model(input_ids)
         self.step += 1
-        if isinstance(logits, DTensor):
-            logits = logits.full_tensor()
+        # if isinstance(logits, DTensor):
+        #     logits = logits.full_tensor()
         t.step("forward")
 
         if not return_logprobs:
             t.stop()
+            if isinstance(logits, DTensor):
+                return logits.full_tensor()
             return logits
         else:
-            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+            logprobs = compute_logprobs_chunked(logits, input_ids[:, max_req_tokens:])
             t.step("compute_logprobs")
             t.stop()
             return logprobs
+
+
+def compute_logprobs_chunked(
+    logits: torch.Tensor | DTensor,
+    input_ids: torch.Tensor,
+    temperature: float = 1.0,
+    align: bool = True,
+    chunk_size: int = 512,
+) -> torch.Tensor:
+    """
+    Memory-efficient version that processes logits in chunks along the sequence dimension.
+    Useful for very long sequences where even the DTensor operations might cause memory issues.
+
+    Args:
+        chunk_size: Number of tokens to process at once. Lower values use less memory.
+    """
+    is_dtensor = isinstance(logits, DTensor)
+
+    # Align logits with input_ids if requested
+    if align:
+        target_len = input_ids.size(1)
+        logits = logits[:, -target_len - 1 : -1, :]
+        if not is_dtensor:
+            logits = logits.to(input_ids.device)
+
+    batch_size, seq_len, vocab_size = logits.shape
+
+    # Initialize output tensor
+    logprobs = torch.zeros(
+        batch_size, seq_len, dtype=torch.float32, device=logits.device
+    )
+
+    # Process in chunks
+    for start_idx in range(0, seq_len, chunk_size):
+        end_idx = min(start_idx + chunk_size, seq_len)
+
+        # Get chunk of logits and input_ids
+        logits_chunk = logits[:, start_idx:end_idx, :]
+        input_chunk = input_ids[:, start_idx:end_idx]
+
+        # Scale and convert to fp32
+        scaled_chunk = (logits_chunk / temperature).float()
+
+        # Compute log probabilities for this chunk
+        chunk_size_actual = end_idx - start_idx
+        flat_logits = scaled_chunk.reshape(-1, vocab_size)
+        flat_targets = input_chunk.reshape(-1).long()
+
+        chunk_logprobs = -F.cross_entropy(
+            flat_logits,
+            flat_targets,
+            reduction="none",
+        )
+
+        # Store in output tensor
+        logprobs[:, start_idx:end_idx] = chunk_logprobs.reshape(
+            batch_size, chunk_size_actual
+        )
+
+    return logprobs

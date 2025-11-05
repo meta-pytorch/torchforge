@@ -16,6 +16,18 @@ import torch
 import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
+from forge.actors._torchstore_utils import (
+    DcpHandle,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    rdma_available,
+)
+
+from forge.controller import ForgeActor
+from forge.data.utils import batch_to_device
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+
 from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -35,18 +47,6 @@ from torchtitan.config.job_config import (
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
 from torchtitan.experiments.forge.job_config import ForgeJobConfig
-
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    rdma_available,
-)
-
-from forge.controller import ForgeActor
-from forge.data.utils import batch_to_device
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -176,8 +176,7 @@ class RLTrainer(ForgeActor):
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
-        record_metric("rl_trainer/count_training_steps", 1, Reduce.SUM)
-        record_metric("rl_trainer/avg_grpo_loss", loss, Reduce.MEAN)
+        record_metric("rl_trainer/avg_loss", loss, Reduce.MEAN)
 
         # These are placeholder values until the loss function exposes these metrics
         # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
