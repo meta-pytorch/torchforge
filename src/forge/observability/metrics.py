@@ -141,12 +141,25 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
         list[Metric]: List of reduced metrics
 
     Example:
-        states = [
-            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
-            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
+        >>> states = [
+        ...     {
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": "mean"},
+        ...         "reward/sample": {
+        ...             "reduction_type": "sample",
+        ...             "samples": [{"episode_id": 1, "reward": 0.5}],
+        ...         },
+        ...     },
+        ...     {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
+        ... ]
+        >>> reduce_metrics_states(states)
+        [
+            Metric(key='loss', value=2.0, reduction=Reduce.MEAN),
+            Metric(
+                key='reward/sample',
+                value=[{'episode_id': 1, 'reward': 0.5}],
+                reduction=Reduce.SAMPLE,
+            )
         ]
-        reduce_metrics_states(states)
-        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
@@ -649,7 +662,6 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: stream without reduce
         for backend in self.per_rank_no_reduce_backends:
-
             if metric.reduction == Reduce.SAMPLE:
                 asyncio.create_task(backend.log_samples([metric], self.global_step))
             else:
@@ -712,11 +724,9 @@ class MetricCollector:
             scalar_metrics = [
                 m for m in metrics_for_backends if m.reduction != Reduce.SAMPLE
             ]
-            sample_metrics = {
-                m.key: m.value
-                for m in metrics_for_backends
-                if m.reduction == Reduce.SAMPLE
-            }
+            sample_metrics = [
+                m for m in metrics_for_backends if m.reduction == Reduce.SAMPLE
+            ]
 
             for backend in self.per_rank_reduce_backends:
                 if scalar_metrics:
@@ -1025,6 +1035,10 @@ class WandbBackend(LoggerBackend):
             table_name, table_rows = sample.key, sample.value
             if not table_rows:
                 continue
+
+            # Convert to list if single sample. This happens when logging stream
+            if isinstance(table_rows, dict):
+                table_rows = [table_rows]
 
             # If table doesn't exist yet, create it in INCREMENTAL mode
             if table_name not in self._tables:
