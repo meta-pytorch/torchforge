@@ -53,7 +53,7 @@ logger.setLevel(logging.DEBUG)
 
 
 @dataclass
-class RLTrainer(ForgeActor):
+class TitanTrainer(ForgeActor):
     """A reinforcement learning trainer actor for policy optimization training.
 
     Built on top of TorchTitan's training engine, this actor provides a complete training

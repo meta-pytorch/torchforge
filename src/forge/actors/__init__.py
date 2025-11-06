@@ -6,7 +6,7 @@
 
 __all__ = [
     "Generator",
-    "RLTrainer",
+    "TitanTrainer",
     "ReplayBuffer",
     "ReferenceModel",
     "SandboxedPythonCoder",
@@ -18,10 +18,10 @@ def __getattr__(name):
         from .generator import Generator
 
         return Generator
-    elif name == "RLTrainer":
-        from .trainer import RLTrainer
+    elif name == "TitanTrainer":
+        from .trainer import TitanTrainer
 
-        return RLTrainer
+        return TitanTrainer
     elif name == "ReplayBuffer":
         from .replay_buffer import ReplayBuffer
 
