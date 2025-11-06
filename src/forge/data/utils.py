@@ -219,31 +219,29 @@ def batch_to_device(batch: dict, device: torch.device) -> None:
 
 
 class StopAfterOneEpoch:
-    """Iterator that wraps a dataloader and stops after one epoch completes.
+    """Iterator that wraps a dataloader and stops iterating after a rank shows that an epoch has been completed.
 
-    Handles epoch detection and synchronization across DP ranks using async
-    all_reduce. Assumes dataset inherits from InfiniteTuneIterableDataset
-    which provides 'metrics' with 'num_epochs' metric.
+    In distributed eval, we may have len(dataset) % num_ranks != 0. This means that some ranks may be on epoch 0
+    while others are already in epoch 1. To avoid hangs, all ranks *must* stop at the same time.
+    This means that we need to do some sort of `all_reduce` to know if at least one rank has seen epoch==1,
+    introducing communication overhead and blocking the forward pass.
 
-    When any rank detects an epoch change, all ranks stop (synchronized).
+    This function minimzes this impact by fetching one batch in advance and perfoming async all_reduce, overlapping communications.
+
+    Assumes batch contains samples with Metric("num_epochs", ...) field to detect epoch change, as it is done in
+    `forge.src.data.datasets.HfIterableDataset`.
 
     Args:
         dataloader_iter: Iterator over dataloader batches
-        device: Device for computation
-        dataset_name: Name for logging
         dp_process_group: Data parallel process group (None for single process)
     """
 
     def __init__(
         self,
         dataloader_iter: Iterator,
-        device: torch.device,
-        dataset_name: str,
         dp_process_group: Any = None,
     ):
         self.dataloader_iter = dataloader_iter
-        self.device = device
-        self.dataset_name = dataset_name
         self.dp_process_group = dp_process_group
 
         # Prefetch first batch for pipeline-style execution
@@ -275,9 +273,7 @@ class StopAfterOneEpoch:
             self._epoch_tensor = None
 
         if self._should_stop:
-            logger.debug(
-                f"[{self.dataset_name}] Eval epoch completed. Stopping data iterator."
-            )
+            logger.debug("Eval epoch completed. Stopping data iterator.")
             raise StopIteration
 
         # Get current batch
@@ -291,7 +287,7 @@ class StopAfterOneEpoch:
 
         # Start async epoch sync
         if torch.distributed.is_initialized():
-            self._epoch_tensor = torch.tensor([int(epoch_changed)], device=self.device)
+            self._epoch_tensor = torch.tensor([int(epoch_changed)])
             self._pending_work = torch.distributed.all_reduce(
                 self._epoch_tensor,
                 op=torch.distributed.ReduceOp.MAX,

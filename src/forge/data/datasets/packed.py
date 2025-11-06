@@ -446,10 +446,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
         return None
 
     def __iter__(self) -> Iterator[SampleDict]:
-        """Create a new iterator for the dataset.
-
-        Always resets the packer state to ensure consistent iteration from the start.
-        """
         if not isinstance(self.dataset, Iterable):
             raise TypeError("Dataset is not an iterable")
 

@@ -146,16 +146,18 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         if self._dp_mesh is not None:
             world_size = dist.get_world_size(group=self._dp_mesh)
             rank = dist.get_rank(group=self._dp_mesh)
-            logger.info(
+            logger.debug(
                 f"Using DP mesh for sharding: rank={rank}, world_size={world_size}"
             )
         elif dist.is_initialized():
             # Fallback to global rank (may not respect TP/PP)
             world_size = dist.get_world_size()
             rank = dist.get_rank()
+
+            # TODO: is there a way to detect this and raise error instead?
             logger.warning(
                 f"Using global rank for sharding: rank={rank}, world_size={world_size}. "
-                f"If using TP/PP, pass dp_mesh for correct sharding."
+                f"If using other types of parallelsim (CP/TP/PP), pass dp_mesh for correct sharding."
             )
 
         # Load and shard dataset
@@ -166,7 +168,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         if is_streaming:
             logger.warning(
                 f"Streaming datasets were not yet tested for distributed training. "
-                f"split_dataset_by_node is applied, but no resharding was done manually. "
                 f"Dataset '{self.info.name}' has "
                 f"{getattr(ds, 'num_shards', 'unknown')} shards, and your training has {world_size} ranks."
                 f"See: https://huggingface.co/docs/datasets/en/package_reference/main_classes?#datasets.IterableDataset.shard"
@@ -201,7 +202,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                 if num_shards > dataset_size:
                     raise ValueError(
                         f"Number of shards ({num_shards}) is greater than the dataset size ({dataset_size})."
-                        f"Please decrease one of {num_shards_per_rank=} or {num_dataloader_workers=} or {world_size=}."
+                        f"Please decrease one of {num_shards_per_rank=} or dataloader.num_workers={num_dataloader_workers}"
                     )
 
             ds = ds.to_iterable_dataset(num_shards=num_shards)

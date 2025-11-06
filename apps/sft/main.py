@@ -338,9 +338,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             model_part.eval()
 
         # Get DP process group for epoch synchronization
-        dp_process_group = None
+        dp_mesh = None
         if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
-            dp_process_group = self.parallel_dims.world_mesh.get_group("dp")
+            dp_mesh = self.parallel_dims.world_mesh.get_group("dp")
 
         # Evaluate each dataset sequentially
         for dataset_name, val_dataloader in self.val_dataloaders.items():
@@ -350,12 +350,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             total_loss = torch.tensor(0.0, device=self.device)
             num_steps = 0
 
-            # NOTE: Assumes batch contains batch["metrics"]["num_epochs"]: int
+            # NOTE: Assumes batch contains samples with Metric("num_epochs", ...) field
             batch_iter = StopAfterOneEpoch(
-                iter(val_dataloader),  # Fresh iterator from epoch 0
-                self.device,
-                dataset_name,
-                dp_process_group,
+                dataloader_iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
+                dp_process_group=dp_mesh,
             )
 
             with torch.no_grad():
