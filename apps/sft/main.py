@@ -25,7 +25,11 @@ import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
-from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
+from forge.data.datasets.sft_dataset import (
+    AlpacaToMessages,
+    OpenThoughtsToMessages,
+    sft_iterable_dataset,
+)
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
@@ -165,13 +169,32 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
+        # Get dataset configuration from job_config
+        dataset_config = self.job_config["dataset"]
+        dataset_path = dataset_config["path"]
+        dataset_split = dataset_config["split"]
+        message_transform_type = dataset_config.get("message_transform", "alpaca")
+        masking_strategy = dataset_config.get("masking_strategy", "train_on_assistant")
+
+        # Select the appropriate message transform
+        if message_transform_type == "openthoughts":
+            message_transform = OpenThoughtsToMessages(
+                masking_strategy=masking_strategy
+            )
+        elif message_transform_type == "alpaca":
+            message_transform = AlpacaToMessages(masking_strategy=masking_strategy)
+        else:
+            raise ValueError(
+                f"Unknown message_transform type: {message_transform_type}"
+            )
+
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
-            message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
+            message_transform=message_transform,
+            path=dataset_path,
+            split=dataset_split,
         )
-        packer = TextPacker(padding_idx=0)
+        packer = TextPacker(padding_idx=151643)
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,

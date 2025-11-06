@@ -1,4 +1,6 @@
 import asyncio
+import itertools
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -63,6 +65,9 @@ def collate(
         teacher_logprobs = [t.teacher_logprobs for t in batch]
         teacher_logprobs = torch.stack(teacher_logprobs)
 
+        # student_logprobs = [t.completion.logprobs for t in batch]
+        # student_logprobs = torch.stack(student_logprobs)
+
         pad_id = batch[0].pad_id
         padding_mask = response != pad_id
 
@@ -70,6 +75,7 @@ def collate(
         target = {
             "response": response,
             "teacher_logprobs": teacher_logprobs,
+            # "student_logprobs": student_logprobs,
             "padding_mask": padding_mask,
         }
         inputs.append(input)
@@ -81,6 +87,7 @@ def importance_sampling_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
     teacher_logprobs: torch.Tensor,
+    # student_logprobs: torch.Tensor,
     padding_mask: torch.Tensor,
     **kwargs,
 ) -> torch.Tensor:
@@ -135,32 +142,28 @@ async def main(cfg: DictConfig):
     tokenizer = get_tokenizer(cfg.student_model)
     pad_id = tokenizer.pad_token_id
     dataset = load_dataset(cfg.dataset.path, split=cfg.dataset.get("split", "train"))
-    dataset = dataset.filter(lambda x: x["domain"] == cfg.dataset["domain"])
+    # dataset = dataset.filter(lambda x: x["domain"] == cfg.dataset["domain"])
     dataset_iter = iter(dataset)
 
     print("All services initialized successfully!")
 
     step = 0
     for epoch in range(max_steps):
+        # start time
+        start = time.perf_counter()
         if step >= max_steps:
             break
 
-        # Collect rollout
         trajectories = []
         while len(trajectories) < train_batch_size:
             try:
                 sample = next(dataset_iter)
-                # Extract the human prompt from OpenThoughts format
-                conversations = sample.get("conversations", [])
-                if conversations and len(conversations) > 0:
-                    prompt = conversations[0].get("value", "")
-                else:
-                    prompt = sample.get("prompt", sample.get("text", ""))
+                conversation = sample["conversations"]
+                prompt = conversation[0]["value"]
 
-                print(f"Starting request with prompt: {prompt}")
-                completions = await student_generator.generate.route(prompt)
+                completions = await student_generator.generate.fanout(prompt)
 
-                for completion in completions:
+                for completion in itertools.chain(*completions):
                     # Create trajectory with raw completion
                     trajectory = Trajectory(
                         pad_id=pad_id,
@@ -200,6 +203,9 @@ async def main(cfg: DictConfig):
         # Push weights to student generator
         await student_trainer.push_weights.call(step)
         await student_generator.update_weights.fanout(step)
+
+        end = time.perf_counter()
+        print(f"Step {step} took {end - start} seconds")
 
         await mlogger.flush.call_one(step)
 

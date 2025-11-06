@@ -2,17 +2,16 @@
 # >>> python -m apps.on-policy-distillation.main --config apps/on-policy-distillation/qwen_0_6b_to_8b.yaml
 
 # Global configuration
-train_batch_size: 4  # Number of trajectories per training step
-max_req_tokens: 512
-max_res_tokens: 65536
-student_model: "Qwen/Qwen3-1.7B"
+train_batch_size: 64  # Number of trajectories per training step
+max_req_tokens: 2048
+max_res_tokens: 4096
+student_model: "Qwen/Qwen3-0.6B"
 teacher_model: "Qwen/Qwen3-8B"
 
 # Dataset configuration
 dataset:
   path: "open-thoughts/OpenThoughts3-1.2M"
   split: "train"
-  domain: "math"
 
 # Student Generator configuration (inference model)
 student_generator:
@@ -22,7 +21,7 @@ student_generator:
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_params:
-    n: 2  # Single response per prompt
+    n: 16
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 0.95
@@ -31,7 +30,7 @@ student_generator:
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
+    flavor: 0.6B
     hf_assets_path: hf://${student_model}
   optimizer:
     name: AdamW
@@ -41,16 +40,16 @@ trainer:
     warmup_steps: 10
   training:
     local_batch_size: ${train_batch_size}  # Per-device batch size
-    seq_len: 66048
+    seq_len: 8192
     max_norm: 1.0
     steps: 10000
     dtype: bfloat16
-    gc_freq: 1
+    gc_freq: 5
   compile:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 2
+    data_parallel_shard_degree: 1
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
@@ -58,15 +57,15 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    # folder: ./checkpoint_student
+    folder: ./checkpoint_student
     initial_load_path: hf://${student_model}
     initial_load_in_hf: true
     last_save_in_hf: true
-    interval: 500
+    interval: 250
     async_mode: "disabled"
   activation_checkpoint:
-    mode: selective
-    selective_ac_option: op
+    mode: none
+    # selective_ac_option: op
 
 # Teacher model configuration
 teacher:
@@ -77,13 +76,13 @@ teacher:
   training:
     seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
-    gc_freq: 1
+    gc_freq: 10
   compile:
     enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 2
-    tensor_parallel_degree: 1  # Use 2 GPUs for teacher
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
@@ -95,17 +94,17 @@ teacher:
 # Resource allocations (3 GPUs total)
 services:
   student_generator:
-    procs: 1  # Student inference: 1 GPU
-    num_replicas: 1
+    procs: 1
+    num_replicas: 4
     mesh_name: student_generator
     with_gpus: true
   teacher:
-    procs: 2 # Teacher: 2 GPUs with TP
-    num_replicas: 1
+    procs: 1
+    num_replicas: 2
     mesh_name: teacher
     with_gpus: true
   trainer:
-    procs: 2  # Student training: shares GPU with student_generator
+    procs: 1
     num_replicas: 1
     mesh_name: trainer
     with_gpus: true
