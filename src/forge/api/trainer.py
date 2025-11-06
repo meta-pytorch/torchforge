@@ -105,27 +105,6 @@ class Trainer(Protocol):
         """
         ...
 
-    async def get_info(self) -> dict[str, Any]:
-        """Get static model metadata.
-
-        Returns:
-            dict with keys like:
-                - model_name: str
-                - step: int
-                - config: dict
-        """
-        ...
-
-    async def get_status(self) -> dict[str, Any]:
-        """Get runtime status.
-
-        Returns:
-            dict with keys like:
-                - step: int
-                - accumulated_microbatches: int
-        """
-        ...
-
     def get_tokenizer(self):
         """Get the tokenizer.
 
