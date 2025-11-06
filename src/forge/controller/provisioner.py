@@ -110,12 +110,7 @@ async def set_environment(proc_mesh: ProcMesh, env_vars: dict[str, str]):
 
 
 class GpuManager:
-    """Tracks and assigns GPU devices on a host.
-
-    This currently mimics the `gpu_manager` in system_controllers - we will
-    consolidate as part of the "proper HostMesh integration" work.
-
-    """
+    """Tracks and assigns GPU devices on a host."""
 
     def __init__(self, available_devices: set[int] | None = None):
         if available_devices is None:
