@@ -177,6 +177,10 @@ async def main(cfg: DictConfig):
     update_time = time.time() - update_start
     print(f"Updated generator weights ({update_time:.2f}s)\n")
 
+    # TODO - ideally we have the capability to check forward passes between
+    # the trainer/generator to verify correctness. This would require adding
+    # forward capabilities to both trainer/generator actors.
+
     # Summary
     print("=" * 80)
     print("Results")
