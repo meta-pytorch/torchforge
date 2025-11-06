@@ -22,14 +22,15 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
-from apps.sft.eval_utils import get_dp_process_group, run_evaluation
 from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
+from forge.util.logging import log_rank_zero
 
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -83,17 +84,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
 
-        # Evaluation settings - no defaults, must be explicit in config
-        validation_config = job_config.get("validation")
-        if validation_config is not None:
-            self.validation_enabled = validation_config.get("enabled")
-            self.eval_interval = validation_config.get("eval_interval")
-            self.eval_steps = validation_config.get("eval_steps")
-        else:
-            self.validation_enabled = False
-            self.eval_interval = None
-            self.eval_steps = None
-
         self._init_dist()
         super().__init__(job_config)
 
@@ -135,54 +125,67 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
-        # Always expect dataset_val.datasets configuration
-        dataset_val_config = self.job_config.get("dataset_val")
+        """Setup datasets from config.
 
-        datasets = dataset_val_config["datasets"]
+        Loads training and evaluation datasets based on config structure.
+        """
+        # Load training datasets
+        logger.info("Setting training datasets")
+        train_datasets_config = self.job_config.training.datasets
+        self.train_dataloader = self.setup_data(train_datasets_config)
 
-        # Setup all datasets
+        # Load eval config (might be None)
+        eval_config = self.job_config.get("eval", {})
         self.val_dataloaders = {}
-        self.train_dataloader = None
+        self.validation_enabled = False
+        self.eval_every_n_steps = eval_config.get("eval_every_n_steps", None)
+        max_eval_steps = eval_config.get("max_eval_steps", None)
+        self.max_eval_steps = (
+            max_eval_steps if max_eval_steps and max_eval_steps > 0 else None
+        )
+        self.validation_enabled = (
+            self.eval_every_n_steps is not None and self.eval_every_n_steps > 0
+        )
+        if self.validation_enabled:
+            logger.info("Setting eval datasets")
+            self.eval_datasets_config = eval_config.datasets
 
-        for i, dataset_spec in enumerate(datasets):
-            dataset_name = dataset_spec.get("name")
-            dataset_path = dataset_spec.get("path")
-            dataset_split = dataset_spec.get("split")
+            for i, dataset_config in enumerate(self.eval_datasets_config):
+                ds_name = dataset_config.get("dataset_name", i)
 
-            if not dataset_name or not dataset_path or not dataset_split:
-                raise ValueError(
-                    f"Each dataset must have 'name', 'path', and 'split'. "
-                    f"Got dataset[{i}]: {dataset_spec}"
-                )
-
-            dataloader = self.setup_data(
-                dataset_path=dataset_path,
-                dataset_split=dataset_split,
-            )
-
-            # First dataset with split starting with 'train' is used for training
-            if i == 0 and dataset_split.startswith("train"):
-                self.train_dataloader = dataloader
-                logger.info(
-                    f"Setup training dataset: {dataset_name} (split={dataset_split})"
-                )
-
-            # All datasets can be used for validation
-            self.val_dataloaders[dataset_name] = dataloader
-            logger.info(f"Setup dataset: {dataset_name} (split={dataset_split})")
-
-        # If validation disabled, clear validation dataloaders (but keep training)
-        if not self.validation_enabled:
-            self.val_dataloaders = None
-            logger.info("Validation disabled - only training dataloader will be used")
+                dataloader = self.setup_data([dataset_config])
+                self.val_dataloaders[ds_name] = dataloader
 
         # Load checkpoint if resuming
         self.checkpointer.load(step=self.current_step)
 
-    def setup_data(
-        self, dataset_path: str = "yahma/alpaca-cleaned", dataset_split: str = "train"
-    ):
-        """Setup data with configurable dataset path and split."""
+    def setup_data(self, dataset_configs: list[dict]) -> StatefulDataLoader:
+        """Setup data from dataset configs.
+
+        Currently only supports single dataset (first in list).
+        Multi-dataset training with InterleavedDataset is future work.
+
+        Args:
+            dataset_configs: List of dataset config dicts with keys like 'path', 'split', etc.
+
+        Returns:
+            StatefulDataLoader for the dataset
+
+        Raises:
+            ValueError: If multiple datasets provided (not yet supported)
+        """
+        # Currently only support single dataset
+        if len(dataset_configs) > 1:
+            raise ValueError(
+                f"Multiple training datasets not supported yet. "
+                f"Got {len(dataset_configs)} datasets. "
+                f"For dataset mixing, use InterleavedDataset (coming soon)."
+            )
+
+        dataset_config = dataset_configs[0]
+
+        # TODO: Evaluate if tokenizers should be created once and shared for every dataset
+        # Load tokenizer
         print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
@@ -196,28 +199,37 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
+        # Store tokenizer for later use (e.g., decoding in debug logs)
+        self.tokenizer = tokenizer
+
+        # Get DP mesh for data sharding
+        dp_mesh = None
+        if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
+            dp_mesh = self.parallel_dims.world_mesh.get_group("dp")
+
+        # Pass config directly to dataset constructor
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path=dataset_path,
-            split=dataset_split,
+            dp_mesh=dp_mesh,
+            **dataset_config,  # Unpack config (path, split, etc.)
         )
+
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
-            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
+            target_tokens_per_pack=self.job_config.training.seq_len,
         )
-        dataloader = StatefulDataLoader(
+
+        return StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
-            drop_last=True,  # Ensure consistent batch sizes across DP ranks
+            drop_last=True,
         )
-
-        return dataloader
 
     def forward(
         self,
@@ -308,31 +320,106 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.optimizers.step()
         self.lr_schedulers.step()
 
-    async def evaluate(self) -> dict[str, dict[str, float]]:
-        """Run evaluation with async all_reduce for cross-rank epoch synchronization.
+    async def evaluate(self) -> None:
+        """Run evaluation on multiple datasets, one at a time.
 
-        Evaluates on all configured validation datasets and returns per-dataset metrics.
-
-        Returns:
-            Dict mapping dataset name to metrics dict, e.g.:
-            {
-                "val_in_domain": {"val_loss": 2.5, "val_batches": 100},
-                "val_out_domain": {"val_loss": 3.1, "val_batches": 100}
-            }
+        1. Set models to eval mode
+        2. For each eval dataset:
+            - Create fresh iterator (starts from epoch 0)
+            - Use StopAfterOneEpoch to iterate until epoch boundary. This utility
+                is necessary for infinite iterable dataset, since epoch boundaries are not known.
+            - Respect max_eval_steps cap if configured
+            - Record loss and step metrics (on dp rank only)
+        3. Restore models to train mode
         """
+        logger.debug("==STARTING EVALUATION==")
 
-        # Create a wrapper that calls forward with compute_gradients=False
-        def forward_eval(input_dict, labels):
-            return self.forward(input_dict, labels, compute_gradients=False)
+        # Set models to eval mode
+        for model_part in self.model_parts:
+            model_part.eval()
 
-        return await run_evaluation(
-            val_dataloaders=self.val_dataloaders,
-            model_parts=self.model_parts,
-            forward_fn=forward_eval,
-            device=self.device,
-            eval_steps=self.eval_steps,
-            dp_process_group=get_dp_process_group(self.parallel_dims),
-        )
+        # Get DP process group for epoch synchronization
+        dp_process_group = None
+        if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
+            dp_process_group = self.parallel_dims.world_mesh.get_group("dp")
+
+        # Evaluate each dataset sequentially
+        for dataset_name, val_dataloader in self.val_dataloaders.items():
+            logger.debug(f"=====Evaluating dataset: {dataset_name}=====")
+
+            # Evaluation loop for this dataset
+            total_loss = torch.tensor(0.0, device=self.device)
+            num_steps = 0
+
+            # NOTE: Assumes batch contains batch["metrics"]["num_epochs"]: int
+            batch_iter = StopAfterOneEpoch(
+                iter(val_dataloader),  # Fresh iterator from epoch 0
+                self.device,
+                dataset_name,
+                dp_process_group,
+            )
+
+            with torch.no_grad():
+                for batch in batch_iter:
+                    # Check max_eval_steps limit
+                    if (
+                        self.max_eval_steps is not None
+                        and num_steps >= self.max_eval_steps
+                    ):
+                        log_rank_zero(
+                            logger,
+                            f"[{dataset_name}] Reached max_eval_steps cap of {self.max_eval_steps}",
+                        )
+                        break
+
+                    # Move tensors to device
+                    for key, value in batch.items():
+                        if isinstance(value, torch.Tensor):
+                            batch[key] = value.to(self.device)
+
+                    # Process batch
+                    labels = batch.pop("labels")
+                    loss = self.forward(batch, labels, compute_gradients=False)
+                    total_loss += loss
+                    num_steps += 1
+
+                    # Log progress (rank 0 only)
+                    if num_steps % 100 == 0:
+                        loss_val = loss.item()
+                        log_rank_zero(
+                            logger,
+                            f"  [{dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}",
+                        )
+
+            # Compute average loss
+            avg_loss = (total_loss / max(num_steps, 1)).item()
+            log_rank_zero(logger, f"  [{dataset_name}] avg_loss: {avg_loss:.4f}")
+
+            # Record metrics only on DP rank 0 to avoid double counting
+            # record_metric aggregates across all processes via monarch
+            should_record = True
+            if dp_process_group is not None:
+                dp_rank = torch.distributed.get_rank(group=dp_process_group)
+                should_record = dp_rank == 0
+
+            if should_record:
+                record_metric(
+                    f"ForgeSFTRecipe/evaluate/{dataset_name}_loss",
+                    avg_loss,
+                    Reduce.MEAN,
+                )
+                record_metric(
+                    f"ForgeSFTRecipe/evaluate/{dataset_name}_steps",
+                    num_steps,
+                    Reduce.MEAN,
+                )
+
+        # Restore train mode
+        for model_part in self.model_parts:
+            model_part.train()
+
+        # Summary
+        logger.debug("==EVALUATION COMPLETE==")
 
     @endpoint
     async def train(self) -> None:
@@ -359,9 +446,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             self.current_step += 1
 
             # Run evaluation periodically if enabled
-            if self.validation_enabled and self.current_step % self.eval_interval == 0:
-                eval_metrics = await self.evaluate()
-                logger.info(f"Step {self.current_step} | Eval metrics: {eval_metrics}")
+            if (
+                self.validation_enabled
+                and self.current_step % self.eval_every_n_steps == 0
+            ):
+                await self.evaluate()
 
             self.checkpointer.save(
                 curr_step=self.current_step,
@@ -369,6 +458,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             )
 
         # self.pbar.close()
+
+        # Run final evaluation at end of training
+        if self.validation_enabled:
+            logger.info("Running final evaluation at end of training...")
+            await self.evaluate()
 
     @endpoint
     async def cleanup(self) -> None:

@@ -70,6 +70,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         dataset_name: str | None = None,
         filter_fn: Callable | None = None,
         filter_kwargs: dict[str, Any] | None = None,
+        dp_mesh: Any = None,
         **load_dataset_kwargs,
     ):
         # Store configuration
@@ -79,6 +80,8 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._model_transform = model_transform
         self._output_transform = output_transform
         self._weight = weight if weight is not None else 1.0
+        self._dp_mesh = dp_mesh
+        self._is_resumed = False
 
         # Create default transform if not provided
         self._metric_transform = metric_transform or DefaultDatasetMetricTransform()
@@ -138,11 +141,22 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         shuffle configuration, and filtering. Called once during __init__.
         """
 
-        # Distributed setup
+        # Extract rank/world_size from DP mesh
         world_size, rank = 1, 0
-        if dist.is_initialized():
+        if self._dp_mesh is not None:
+            world_size = dist.get_world_size(group=self._dp_mesh)
+            rank = dist.get_rank(group=self._dp_mesh)
+            logger.info(
+                f"Using DP mesh for sharding: rank={rank}, world_size={world_size}"
+            )
+        elif dist.is_initialized():
+            # Fallback to global rank (may not respect TP/PP)
             world_size = dist.get_world_size()
             rank = dist.get_rank()
+            logger.warning(
+                f"Using global rank for sharding: rank={rank}, world_size={world_size}. "
+                f"If using TP/PP, pass dp_mesh for correct sharding."
+            )
 
         # Load and shard dataset
         ds = load_dataset(**load_dataset_kwargs)
@@ -218,6 +232,9 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         - Adds 'num_epochs' metric to track dataset progress
         - Yields samples indefinitely for continuous training
         """
+        # Reset iter
+        if not self._is_resumed:
+            self._num_epochs = 0
 
         while True:  # Infinite iteration
             self._ds.set_epoch(self._num_epochs)
@@ -282,3 +299,4 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         # HF is responsible for resuming the dataset state
         # where it last left off
         self._ds.load_state_dict(hf_state)
+        self._is_resumed = True

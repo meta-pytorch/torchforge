@@ -4,12 +4,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from enum import Enum
-from typing import Any, Literal, Union
+from typing import Any, Iterator, Literal, Union
 
 import torch
 
 from torch.nn.attention.flex_attention import BlockMask
+
+logger = logging.getLogger(__name__)
 
 CROSS_ENTROPY_IGNORE_IDX = -100
 
@@ -213,3 +216,127 @@ def batch_to_device(batch: dict, device: torch.device) -> None:
                 f"Tensor, or BlockMask with flexattention enabled. "
                 f'Got key "{k}" with value of type {type(v)}'
             )
+
+
+class StopAfterOneEpoch:
+    """Iterator that wraps a dataloader and stops after one epoch completes.
+
+    Handles epoch detection and synchronization across DP ranks using async
+    all_reduce. Assumes dataset inherits from InfiniteTuneIterableDataset
+    which provides 'metrics' with 'num_epochs' metric.
+
+    When any rank detects an epoch change, all ranks stop (synchronized).
+
+    Args:
+        dataloader_iter: Iterator over dataloader batches
+        device: Device for computation
+        dataset_name: Name for logging
+        dp_process_group: Data parallel process group (None for single process)
+    """
+
+    def __init__(
+        self,
+        dataloader_iter: Iterator,
+        device: torch.device,
+        dataset_name: str,
+        dp_process_group: Any = None,
+    ):
+        self.dataloader_iter = dataloader_iter
+        self.device = device
+        self.dataset_name = dataset_name
+        self.dp_process_group = dp_process_group
+
+        # Prefetch first batch for pipeline-style execution
+        self._next_batch = next(dataloader_iter)
+
+        # Track pending async epoch sync
+        self._epoch_tensor: torch.Tensor | None = None
+        self._pending_work: Any = None
+        self._should_stop = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> dict:
+        """Get next batch from current epoch.
+
+        Returns:
+            Batch dict guaranteed to be from current epoch
+
+        Raises:
+            StopIteration: When epoch completes across all ranks
+        """
+        # Check if previous epoch sync completed
+        if self._pending_work is not None:
+            self._pending_work.wait()
+            if self._epoch_tensor.item() > 0:
+                self._should_stop = True
+            self._pending_work = None
+            self._epoch_tensor = None
+
+        if self._should_stop:
+            logger.debug(
+                f"[{self.dataset_name}] Eval epoch completed. Stopping data iterator."
+            )
+            raise StopIteration
+
+        # Get current batch
+        current_batch = self._next_batch
+        current_epoch = extract_epoch_from_batch(current_batch)
+
+        # Prefetch next batch and check for epoch change
+        self._next_batch = next(self.dataloader_iter)
+        next_epoch = extract_epoch_from_batch(self._next_batch)
+        epoch_changed = next_epoch > current_epoch
+
+        # Start async epoch sync
+        if torch.distributed.is_initialized():
+            self._epoch_tensor = torch.tensor([int(epoch_changed)], device=self.device)
+            self._pending_work = torch.distributed.all_reduce(
+                self._epoch_tensor,
+                op=torch.distributed.ReduceOp.MAX,
+                group=self.dp_process_group,
+                async_op=True,
+            )
+        elif epoch_changed:
+            # if not distributed, just update the flag directly
+            self._should_stop = True
+
+        return current_batch
+
+
+def extract_epoch_from_batch(batch: dict | list) -> int:
+    """Extract epoch number from batch metrics.
+
+    Assumes datasets inherit from InfiniteTuneIterableDataset which always
+    adds num_epochs metric. Raises clear error if assumption is violated.
+
+    Args:
+        batch: Batch dictionary with 'metrics' field OR list of sample dicts
+
+    Returns:
+        Epoch number from metrics
+
+    Raises:
+        ValueError: If metrics missing or no num_epochs found
+    """
+    # Handle list of samples (uncollated batches)
+    if isinstance(batch, list):
+        if not batch:
+            raise ValueError("Empty batch provided")
+        batch = batch[0]  # Extract first sample
+
+    if "metrics" not in batch:
+        raise ValueError(
+            "Batch missing 'metrics' field. Ensure dataset inherits from "
+            "InfiniteTuneIterableDataset which adds this automatically."
+        )
+
+    for metric in batch["metrics"]:
+        if "num_epochs" in metric.key:
+            return int(metric.value)
+
+    raise ValueError(
+        f"No 'num_epochs' metric found in batch. Got metrics: "
+        f"{[m.key for m in batch['metrics']]}"
+    )

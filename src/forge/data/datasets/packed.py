@@ -343,9 +343,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
         # exhausted: whether the dataset is exhausted
         self._exhausted: bool = False
 
-        # resuming: whether the packer is resuming from a checkpoint
-        self._resuming: bool = False
-
     def _fill_buffer(self, iterator: Iterator[SampleType]) -> None:
         """
         Fills the buffer with samples from the dataset.
@@ -449,18 +446,15 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
         return None
 
     def __iter__(self) -> Iterator[SampleDict]:
+        """Create a new iterator for the dataset.
+
+        Always resets the packer state to ensure consistent iteration from the start.
+        """
         if not isinstance(self.dataset, Iterable):
             raise TypeError("Dataset is not an iterable")
 
-        if not self._resuming:
-            self._reset_packer_state()
-            self._iterator = iter(self.dataset)
-
-        # If resuming, the iterator must be recreated from the loaded state
-        if self._iterator is None:
-            self._iterator = iter(self.dataset)
-
-        self._resuming = False  # Consume the resume flag
+        self._reset_packer_state()
+        self._iterator = iter(self.dataset)
 
         # Main packing loop
         while True:
@@ -502,7 +496,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             raise ValueError("Dataset is not stateful.")
 
         self._reset_packer_state()
-        self._resuming = True
 
 
 class TextPacker(Packer[SampleDict]):

@@ -162,6 +162,7 @@ def sft_iterable_dataset(
     dataset_name: str | None = None,
     filter_fn: Callable | None = None,
     filter_kwargs: dict[str, Any] | None = None,
+    dp_mesh: Any = None,
     **load_dataset_kwargs: dict[str, Any],
 ) -> HfIterableDataset:
     """
@@ -177,6 +178,7 @@ def sft_iterable_dataset(
         dataset_name (str | None): Name for metrics namespacing
         filter_fn (Callable | None): Filter function
         filter_kwargs (dict[str, Any] | None): Filter function kwargs
+        dp_mesh (Any): Data parallel mesh for sharding (None for single process)
         **load_dataset_kwargs (dict[str, Any]): Args passed to load_dataset
 
     Returns:
@@ -206,5 +208,6 @@ def sft_iterable_dataset(
         dataset_name=dataset_name,
         filter_fn=filter_fn,
         filter_kwargs=filter_kwargs,
+        dp_mesh=dp_mesh,
         **load_dataset_kwargs,
     )
