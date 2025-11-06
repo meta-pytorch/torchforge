@@ -20,7 +20,7 @@ Key features:
 > work. It's recommended that you signal your intention to contribute in the
 > issue tracker, either by filing a new issue or by claiming an existing one.
 
-## 📖 Documentation (Coming Soon)
+## 📖 Documentation
 
 View torchforge's hosted documentation: https://meta-pytorch.org/torchforge.
 
@@ -32,7 +32,20 @@ You can also find our notebook tutorials (coming soon)
 
 ### Basic
 
-torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan). (Note that the basic install script
+torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan).
+
+You can install Forge with:
+```
+$ conda create -n forge python=3.10
+$ conda activate forge
+$ uv pip install .
+```
+
+(conda-less uv install is a wip)
+
+For your reference, we also include a basic install script that installs other system dependencies
+along with torchforge:
+(note that this basic install script
 uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
 
 ```bash
@@ -44,6 +57,13 @@ conda activate forge
 Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
 
 After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
+
+
+```
+uv run apps/grpo/main.py --config apps/grpo/qwen3_1_7b.yaml
+```
+
+or if not using uv:
 
 ```
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml

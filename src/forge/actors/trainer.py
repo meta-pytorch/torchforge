@@ -166,11 +166,7 @@ class RLTrainer(ForgeActor):
 
         t.step("forward_backward")
 
-        current_lr = (
-            self.engine.lr_schedulers.get_last_lr()[0]
-            if hasattr(self.engine.lr_schedulers, "get_last_lr")
-            else 0.001
-        )
+        current_lr = self.engine.lr_schedulers.schedulers[0].get_last_lr()[0]
         record_metric("rl_trainer/learning_rate", current_lr, Reduce.MIN)
 
         self.engine.optimizers.step()
@@ -180,8 +176,7 @@ class RLTrainer(ForgeActor):
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
-        record_metric("rl_trainer/count_training_steps", 1, Reduce.SUM)
-        record_metric("rl_trainer/avg_grpo_loss", loss, Reduce.MEAN)
+        record_metric("rl_trainer/avg_loss", loss, Reduce.MEAN)
 
         # These are placeholder values until the loss function exposes these metrics
         # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)

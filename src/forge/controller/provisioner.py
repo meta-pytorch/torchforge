@@ -6,7 +6,6 @@
 
 """Remote and local resource manager for allocation and provisioning."""
 import asyncio
-import functools
 import logging
 
 import os
@@ -19,7 +18,6 @@ from monarch._src.actor.shape import Extent
 from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
-
 from monarch.utils import setup_env_for_distributed
 
 from forge.controller.launcher import BaseLauncher, get_launcher
@@ -46,6 +44,39 @@ class _RemoteInfoFetcher(Actor):
         return socket.gethostname(), _get_port()
 
 
+class EnvSetter(Actor):
+    """Actor to set environment variables on each proc in a mesh.
+
+    Ideally, this is handled in spawn_procs's bootstrap call which
+    essentially does the same thing as we're doing here.
+
+    However, Monarch's SetupActor currently fails to stop on shutdown
+    which leads to zombie messages sent to the SetupActor. This is a
+    known issue, and we will move back to bootstrap once it's fixed.
+
+    We are able to avoid this here by properly awaiting the spawning
+    of the actor.
+
+    """
+
+    @endpoint
+    def set_env(self, env_vars: dict[str, str]):
+        """Set environment variables on this proc.
+
+        Args:
+            env_vars: Dictionary of environment variables to set
+        """
+        import os
+        import socket
+
+        # Set VLLM_HOST_IP (required for vLLM on multiple nodes)
+        os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
+
+        # Set user-provided environment variables
+        for k, v in env_vars.items():
+            os.environ[k] = v
+
+
 async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     """Returns the host name and port of the host mesh."""
     throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
@@ -62,6 +93,20 @@ async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
     # Stopping this proc is the right thing to do, but Monarch does not yet handle manual stops well.
     # await throwaway_procs.stop()
     return host, port
+
+
+async def set_environment(proc_mesh: ProcMesh, env_vars: dict[str, str]):
+    """Set environment variables on a proc mesh using EnvSetter actor.
+
+    This replaces the old bootstrap approach to avoid Monarch's SetupActor
+    mesh failures on shutdown.
+
+    Args:
+        proc_mesh: The proc mesh to set environment variables on
+        env_vars: Dictionary of environment variables to set
+    """
+    env_setter = proc_mesh.spawn("_env_setter", EnvSetter)
+    await env_setter.set_env.call(env_vars)
 
 
 class GpuManager:
@@ -244,26 +289,6 @@ class Provisioner:
                 gpu_manager = self._host_gpu_map[self._this_host_id]
                 host_mesh._host_id = self._this_host_id
 
-            def bootstrap(env: dict[str, str]):
-                """Runs on process startup.
-
-                We use this to set environment variables like CUDA, etc.
-                We prefer to pass in environment variables to bootstrap,
-                but there are occasionally host-specific environments that can
-                only be set once the process is alive on remote hosts.
-
-                """
-                # bootstrap is run on all processes. We use this
-                # to set environment variables like CUDA etc.
-                import os
-
-                # vLLM requires this environment variable when spawning model servers
-                # across multiple nodes.
-                os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
-
-                for k, v in env.items():
-                    os.environ[k] = v
-
             if with_gpus:
                 if not addr or not port:
                     addr, port = await get_remote_info(host_mesh)
@@ -281,17 +306,22 @@ class Provisioner:
                 for env_var in all_env_vars():
                     env_vars[env_var.name] = str(env_var.get_value())
 
+            # Spawn procs without bootstrap to avoid SetupActor mesh failures
             procs = host_mesh.spawn_procs(
                 per_host={"procs": num_procs},
-                bootstrap=functools.partial(bootstrap, env=env_vars),
+                name=mesh_name,
             )
 
+            # Set up environment variables (replaces old bootstrap)
+            if env_vars:
+                await set_environment(procs, env_vars)
+
+            # Set up PyTorch distributed environment if using GPUs
             if with_gpus:
-                # Set up environment variables for PyTorch distributed...
                 await setup_env_for_distributed(
                     procs,
                     master_addr=addr,
-                    master_port=port,
+                    master_port=int(port),
                 )
 
             if is_remote:
