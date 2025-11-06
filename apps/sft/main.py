@@ -125,19 +125,14 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
-        """Setup datasets from config.
-
-        Loads training and evaluation datasets based on config structure.
-        """
         # Load training datasets
         logger.info("Setting training datasets")
         train_datasets_config = self.job_config.training.datasets
         self.train_dataloader = self.setup_data(train_datasets_config)
 
-        # Load eval config (might be None)
+        # Load eval datasets
         eval_config = self.job_config.get("eval", {})
         self.val_dataloaders = {}
-        self.validation_enabled = False
         self.eval_every_n_steps = eval_config.get("eval_every_n_steps", None)
         max_eval_steps = eval_config.get("max_eval_steps", None)
         self.max_eval_steps = (
@@ -160,33 +155,28 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.checkpointer.load(step=self.current_step)
 
     def setup_data(self, dataset_configs: list[dict]) -> StatefulDataLoader:
-        """Setup data from dataset configs.
-
-        Currently only supports single dataset (first in list).
-        Multi-dataset training with InterleavedDataset is future work.
+        """Instantiates datasets and returns a StatefulDataLoader.
 
         Args:
-            dataset_configs: List of dataset config dicts with keys like 'path', 'split', etc.
+            dataset_configs (list[dict]): List of dataset config dicts used as `sft_iterable_dataset(**dataset_configs[i])`.
 
         Returns:
-            StatefulDataLoader for the dataset
+            StatefulDataLoader
 
         Raises:
             ValueError: If multiple datasets provided (not yet supported)
         """
-        # Currently only support single dataset
+        # TODO felipemello: Currently only support single dataset
         if len(dataset_configs) > 1:
             raise ValueError(
                 f"Multiple training datasets not supported yet. "
                 f"Got {len(dataset_configs)} datasets. "
-                f"For dataset mixing, use InterleavedDataset (coming soon)."
             )
 
         dataset_config = dataset_configs[0]
 
         # TODO: Evaluate if tokenizers should be created once and shared for every dataset
         # Load tokenizer
-        print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -237,26 +227,14 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
-            drop_last=True,
         )
 
     def forward(
         self,
         input_dict: dict[str, torch.Tensor],
         labels: torch.Tensor,
-        compute_gradients: bool = True,
     ) -> torch.Tensor:
-        """Forward pass with optional gradient computation.
-
-        Args:
-            input_dict: Input dictionary containing tokens
-            labels: Target labels
-            compute_gradients: If True, compute gradients (training mode).
-                             If False, skip backward pass (evaluation mode).
-
-        Returns:
-            Loss tensor
-        """
+        """Forward pass only (no backward)"""
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
 
@@ -276,7 +254,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         )
 
         if parallel_dims.pp_enabled:
-            # Pipeline Parallel forward (with optional backward)
+            # Pipeline Parallel forward / backward inside step() call
+            # Note: backward only happens if not in torch.no_grad() context
             with self.train_context(optional_context_parallel_ctx):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
@@ -298,7 +277,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 else torch.tensor([-1.0], device=self.device)
             )
         else:
-            # Non-PP forward (with optional backward)
+            # Non-PP forward
             with self.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.maybe_enable_amp:
@@ -306,8 +285,19 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     loss = self.loss_fn(pred, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                if compute_gradients:
-                    loss.backward()
+
+        return loss
+
+    def forward_backward(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
+        loss = self.forward(input_dict, labels)
+
+        # For non-PP, explicitly call backward (PP does it inside step())
+        if not self.parallel_dims.pp_enabled:
+            loss.backward()
 
         return loss
 
@@ -319,7 +309,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         #     self.data_parallel_size,
         # ) as grad_acc:
         labels = batch.pop("labels")
-        loss = self.forward(batch, labels, compute_gradients=True)
+        loss = self.forward_backward(batch, labels)
         loss = loss.item()
 
         record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
@@ -388,7 +378,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
                     # Process batch
                     labels = batch.pop("labels")
-                    loss = self.forward(batch, labels, compute_gradients=False)
+                    loss = self.forward(batch, labels)
                     total_loss += loss
                     num_steps += 1
 
