@@ -83,9 +83,9 @@ class TestStopAfterOneEpochSingleProcess:
         dataloader = StatefulDataLoader(dataset, batch_size=2, collate_fn=lambda x: x)
 
         # Wrap with StopAfterOneEpoch
-        device = torch.device("cuda")
         batch_iter = StopAfterOneEpoch(
-            iter(dataloader), device, "test_dataset", dp_process_group=None
+            dataloader_iter=iter(dataloader),
+            dp_mesh=None,
         )
 
         # Collect all batches until StopIteration
@@ -134,13 +134,11 @@ class TestStopAfterOneEpochDistributed(FSDPTest):
             )
 
             # Get DP process group (use global group for this test)
-            dp_process_group = dist.group.WORLD
+            dp_mesh = dist.group.WORLD
 
             batch_iter = StopAfterOneEpoch(
-                iter(dataloader),
-                torch.device("cuda"),
-                f"test_rank{rank}",
-                dp_process_group,
+                dataloader_iter=iter(dataloader),
+                dp_mesh=dp_mesh,
             )
 
             # Collect batches

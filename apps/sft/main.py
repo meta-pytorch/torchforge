@@ -353,7 +353,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # NOTE: Assumes batch contains samples with Metric("num_epochs", ...) field
             batch_iter = StopAfterOneEpoch(
                 dataloader_iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
-                dp_process_group=dp_mesh,
+                dp_mesh=dp_mesh,
             )
 
             with torch.no_grad():
@@ -395,8 +395,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # Record metrics only on DP rank 0 to avoid double counting
             # record_metric aggregates across all processes via monarch
             should_record = True
-            if dp_process_group is not None:
-                dp_rank = torch.distributed.get_rank(group=dp_process_group)
+            if dp_mesh is not None:
+                dp_rank = torch.distributed.get_rank(group=dp_mesh)
                 should_record = dp_rank == 0
 
             if should_record:

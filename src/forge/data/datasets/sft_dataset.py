@@ -7,6 +7,7 @@
 from typing import Any, Callable
 
 import torch
+import torch.distributed as dist
 
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.metric_transform import DefaultDatasetMetricTransform
@@ -162,7 +163,7 @@ def sft_iterable_dataset(
     dataset_name: str | None = None,
     filter_fn: Callable | None = None,
     filter_kwargs: dict[str, Any] | None = None,
-    dp_mesh: Any = None,
+    dp_mesh: dist.ProcessGroup | None = None,
     **load_dataset_kwargs: dict[str, Any],
 ) -> HfIterableDataset:
     """
@@ -178,7 +179,7 @@ def sft_iterable_dataset(
         dataset_name (str | None): Name for metrics namespacing
         filter_fn (Callable | None): Filter function
         filter_kwargs (dict[str, Any] | None): Filter function kwargs
-        dp_mesh (Any): Data parallel mesh for sharding (None for single process)
+        dp_mesh (dist.ProcessGroup | None): Data parallel process group for sharding (None for single process)
         **load_dataset_kwargs (dict[str, Any]): Args passed to load_dataset
 
     Returns:

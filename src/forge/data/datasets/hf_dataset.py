@@ -70,7 +70,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         dataset_name: str | None = None,
         filter_fn: Callable | None = None,
         filter_kwargs: dict[str, Any] | None = None,
-        dp_mesh: Any = None,
+        dp_mesh: dist.ProcessGroup | None = None,
         **load_dataset_kwargs,
     ):
         # Store configuration

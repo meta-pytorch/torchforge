@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any, Iterator, Literal, Union
 
 import torch
+import torch.distributed as dist
 
 from torch.nn.attention.flex_attention import BlockMask
 
@@ -233,16 +234,16 @@ class StopAfterOneEpoch:
 
     Args:
         dataloader_iter: Iterator over dataloader batches
-        dp_process_group: Data parallel process group (None for single process)
+        dp_mesh: Data parallel process group (None for single process)
     """
 
     def __init__(
         self,
         dataloader_iter: Iterator,
-        dp_process_group: Any = None,
+        dp_mesh: dist.ProcessGroup | None = None,
     ):
         self.dataloader_iter = dataloader_iter
-        self.dp_process_group = dp_process_group
+        self.dp_mesh = dp_mesh
 
         # Prefetch first batch for pipeline-style execution
         self._next_batch = next(dataloader_iter)
@@ -291,7 +292,7 @@ class StopAfterOneEpoch:
             self._pending_work = torch.distributed.all_reduce(
                 self._epoch_tensor,
                 op=torch.distributed.ReduceOp.MAX,
-                group=self.dp_process_group,
+                group=self.dp_mesh,
                 async_op=True,
             )
         elif epoch_changed:
