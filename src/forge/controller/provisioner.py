@@ -42,14 +42,19 @@ class _RemoteInfoFetcher(Actor):
     """An actor responsible for getting remote host information."""
 
     @endpoint
-    def get_info(self) -> tuple[str, str, int]:
-        """Returns hostname, port, and GPU count."""
+    def get_info(self) -> tuple[str, str]:
+        """Returns hostname and port."""
+        return socket.gethostname(), _get_port()
+
+    @endpoint
+    def get_gpu_count(self) -> int:
+        """Returns the number of GPUs available on this host."""
         try:
             gpu_count = torch.cuda.device_count()
         except Exception:
             # If torch is not available or CUDA is not available, assume no GPUs
             gpu_count = 0
-        return socket.gethostname(), _get_port(), gpu_count
+        return gpu_count
 
 
 class EnvSetter(Actor):
@@ -85,8 +90,8 @@ class EnvSetter(Actor):
             os.environ[k] = v
 
 
-async def get_host_info(host_mesh: HostMesh) -> tuple[str, str, int]:
-    """Returns the host name, port, and GPU count of the host mesh."""
+async def get_remote_info(host_mesh: HostMesh) -> tuple[str, str]:
+    """Returns the host name and port of the host mesh."""
     throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
     fetcher = throwaway_procs.spawn("_fetcher", _RemoteInfoFetcher)
 
@@ -95,12 +100,24 @@ async def get_host_info(host_mesh: HostMesh) -> tuple[str, str, int]:
     singleton_slice = {k: slice(0, 1) for k in fetcher.extent.keys()}
     fetcher = fetcher.slice(**singleton_slice)
     # Fetcher should be a singleton at this point - call_one() will fail otherwise
-
-    host, port, gpu_count = await fetcher.get_info.call_one()
+    host, port = await fetcher.get_info.call_one()
 
     # Stopping this proc is the right thing to do, but Monarch does not yet handle manual stops well.
     # await throwaway_procs.stop()
-    return host, port, gpu_count
+    return host, port
+
+
+async def get_host_gpus(host_mesh: HostMesh) -> int:
+    """Returns the number of GPUs available on the host mesh."""
+    throwaway_procs = host_mesh.spawn_procs(per_host={"procs": 1})
+    fetcher = throwaway_procs.spawn("_gpu_counter", _RemoteInfoFetcher)
+
+    # Reduce to a singleton
+    singleton_slice = {k: slice(0, 1) for k in fetcher.extent.keys()}
+    fetcher = fetcher.slice(**singleton_slice)
+
+    gpu_count = await fetcher.get_gpu_count.call_one()
+    return gpu_count
 
 
 async def set_environment(proc_mesh: ProcMesh, env_vars: dict[str, str]):
@@ -313,18 +330,11 @@ class Provisioner:
                         num_hosts=num_hosts,
                     )
                     host_id = uuid.uuid1()
-                    # Get host info including GPU count from the remote host
-                    host_addr, host_port, remote_gpu_count = await get_host_info(
-                        host_mesh
-                    )
+                    # Get the GPU count from the remote host
+                    remote_gpu_count = await get_host_gpus(host_mesh)
                     gpu_manager = GpuManager(max_device_count=remote_gpu_count)
                     self._host_gpu_map[host_id] = gpu_manager
                     host_mesh._host_id = host_id
-                    # Use the fetched addr/port if not explicitly provided
-                    if addr is None:
-                        addr = host_addr
-                    if port is None:
-                        port = host_port
                 else:
                     host_id = host_mesh._host_id
                     gpu_manager = self._host_gpu_map[host_id]
@@ -336,7 +346,7 @@ class Provisioner:
 
             if with_gpus:
                 if not addr or not port:
-                    addr, port, _ = await get_host_info(host_mesh)
+                    addr, port = await get_remote_info(host_mesh)
                 gpu_ids = gpu_manager.get_gpus(num_procs)
 
                 env_vars["MASTER_ADDR"] = addr
