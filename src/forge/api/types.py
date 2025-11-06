@@ -7,9 +7,13 @@
 """Type definitions for the Forge API."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, TypeAlias
 
 import torch
+
+
+# Loss function signature: takes logits and batch, returns scalar loss
+LossFn: TypeAlias = Callable[[torch.Tensor, "TextTrainBatch"], torch.Tensor]
 
 
 @dataclass

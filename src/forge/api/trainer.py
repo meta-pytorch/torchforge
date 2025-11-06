@@ -18,6 +18,7 @@ import torch
 from forge.api.types import (
     ForwardBackwardResult,
     ForwardResult,
+    LossFn,
     OptimStepResult,
     TextTrainBatch,
     TrainerInfo,
@@ -29,7 +30,9 @@ from forge.api.types import (
 class Trainer(Protocol):
     """Protocol defining the standard interface for all Forge trainers."""
 
-    async def forward_backward(self, batch: TextTrainBatch) -> ForwardBackwardResult:
+    async def forward_backward(
+        self, batch: TextTrainBatch, loss_fn: LossFn | None = None
+    ) -> ForwardBackwardResult:
         """Execute forward pass and backward pass for one batch of data.
 
         Basic usage - single batch per optimizer step:
@@ -45,16 +48,26 @@ class Trainer(Protocol):
             >>> await trainer.forward_backward(batch2)  # Accumulates another batch
             >>> await trainer.optim_step()  # Apply all accumulated gradients
 
+        Custom loss function for specific batches:
+            >>> def custom_loss(logits: torch.Tensor, batch: TextTrainBatch) -> torch.Tensor:
+            >>>     # Custom loss computation (e.g., PPO clip, DPO, etc.)
+            >>>     return loss
+            >>>
+            >>> result = await trainer.forward_backward(batch, loss_fn=custom_loss)
+
         Args:
             batch: TextTrainBatch containing input_ids, target_ids, and optional
                 target_mask/target_weights. See forge.api.types.TextTrainBatch for details.
+            loss_fn: Optional custom loss function. If None, uses the loss function
+                configured at trainer creation. Signature: (logits, batch) -> loss.
+                Useful for mixed training objectives or experimentation.
 
         Returns:
             ForwardBackwardResult containing loss and metrics
 
         Note:
-            The loss function is configured at trainer creation time via the
-            `loss` parameter, not passed to this method.
+            The default loss function is configured at trainer creation time via the
+            `loss` parameter. The `loss_fn` parameter here allows per-batch override.
         """
         ...
 

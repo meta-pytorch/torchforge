@@ -13,6 +13,7 @@ from forge.api.trainer import Trainer
 from forge.api.types import (
     ForwardBackwardResult,
     ForwardResult,
+    LossFn,
     OptimStepResult,
     TextTrainBatch,
     TrainerInfo,
@@ -27,4 +28,5 @@ __all__ = [
     "ForwardResult",
     "TrainerInfo",
     "TrainerStatus",
+    "LossFn",
 ]
