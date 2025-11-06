@@ -16,12 +16,12 @@ from typing import Any, Protocol, runtime_checkable
 import torch
 
 from forge.api.types import (
+    ForwardBackwardResult,
     ForwardResult,
     OptimStepResult,
     TextTrainBatch,
     TrainerInfo,
     TrainerStatus,
-    TrainResult,
 )
 
 
@@ -29,7 +29,7 @@ from forge.api.types import (
 class Trainer(Protocol):
     """Protocol defining the standard interface for all Forge trainers."""
 
-    async def forward_backward(self, batch: TextTrainBatch) -> TrainResult:
+    async def forward_backward(self, batch: TextTrainBatch) -> ForwardBackwardResult:
         """Execute forward pass and backward pass for one batch of data.
 
         Basic usage - single batch per optimizer step:
@@ -50,7 +50,7 @@ class Trainer(Protocol):
                 target_mask/target_weights. See forge.api.types.TextTrainBatch for details.
 
         Returns:
-            TrainResult containing loss and metrics
+            ForwardBackwardResult containing loss and metrics
 
         Note:
             The loss function is configured at trainer creation time via the

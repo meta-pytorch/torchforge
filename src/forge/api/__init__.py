@@ -11,18 +11,18 @@ This module defines the public interfaces that all Forge implementations conform
 
 from forge.api.trainer import Trainer
 from forge.api.types import (
+    ForwardBackwardResult,
     ForwardResult,
     OptimStepResult,
     TextTrainBatch,
     TrainerInfo,
     TrainerStatus,
-    TrainResult,
 )
 
 __all__ = [
     "Trainer",
     "TextTrainBatch",
-    "TrainResult",
+    "ForwardBackwardResult",
     "OptimStepResult",
     "ForwardResult",
     "TrainerInfo",

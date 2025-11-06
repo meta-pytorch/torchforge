@@ -47,7 +47,7 @@ class TextTrainBatch:
 
 
 @dataclass
-class TrainResult:
+class ForwardBackwardResult:
     """Result from a forward_backward pass.
 
     Attributes:
