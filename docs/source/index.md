@@ -201,8 +201,6 @@ Before starting significant work, signal your intention in the issue tracker to 
 ```{toctree}
 :maxdepth: 2
 :caption: Documentation
-:maxdepth: 2
-:caption: Documentation
 
 getting_started
 concepts
@@ -210,14 +208,6 @@ tutorials
 api
 ```
 
-## Indices
-
-* {ref}`genindex` - Index of all documented objects
-* {ref}`modindex` - Python module index
-
----
-
-**License**: BSD 3-Clause | **GitHub**: [meta-pytorch/forge](https://github.com/meta-pytorch/forge)
 ## Indices
 
 * {ref}`genindex` - Index of all documented objects
