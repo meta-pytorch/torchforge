@@ -437,12 +437,12 @@ class GlobalLoggingActor(ForgeActor):
                 await backend.log_batch(reduced_metrics, global_step)
 
     @endpoint
-    def has_fetcher(self, proc_id: str) -> bool:
+    async def has_fetcher(self, proc_id: str) -> bool:
         """Check if a fetcher is registered with the given proc_id."""
         return proc_id in self.fetchers
 
     @endpoint
-    def get_fetcher_count(self) -> int:
+    async def get_fetcher_count(self) -> int:
         return len(self.fetchers)
 
     @endpoint

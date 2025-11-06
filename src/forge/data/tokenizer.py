@@ -215,8 +215,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
     Args:
         tokenizer_json_path (str): Path to tokenizer.json file
         tokenizer_config_json_path (str | None): Path to tokenizer_config.json file. Default: None
-        generation_config_path (str | None): Path to generation_config.json file.
-            Default: None
+        generation_config_path (str | None): Path to generation_config.json file. Default: None
+        chat_template_path (str | None): Path to chat_template.jinja file. Default: None
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
     """
@@ -227,6 +227,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         *,
         tokenizer_config_json_path: str | None = None,
         generation_config_path: str | None = None,
+        chat_template_path: str | None = None,
         truncation_type: str = "right",
     ):
         self.base_tokenizer = HuggingFaceBaseTokenizer(
@@ -245,7 +246,13 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
 
         # It is used sometimes in HF chat_templates
         _env.globals["raise_exception"] = self._raise_helper
-        self.template = _env.from_string(config["chat_template"])
+
+        if chat_template_path:
+            with open(chat_template_path, "r") as f:
+                self.template = _env.from_string(f.read())
+        else:
+            self.template = _env.from_string(config["chat_template"])
+
         self.truncation_type = truncation_type
 
         self.special_tokens_mapping = {}
