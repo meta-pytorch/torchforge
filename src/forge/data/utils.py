@@ -305,36 +305,30 @@ class StopAfterOneEpoch:
         return current_batch
 
 
-def extract_epoch_from_batch(batch: dict | list) -> int:
-    """Extract epoch number from batch metrics.
+def extract_epoch_from_batch(batch: dict) -> int:
+    """Extract epoch number from batch metrics. Useful to detect epoch changes during validation,
+    where we want to run exactly one epoch.
 
-    Assumes datasets inherit from InfiniteTuneIterableDataset which always
-    adds num_epochs metric. Raises clear error if assumption is violated.
+    Assumes the dataset adds "num_epochs" Metric to teh sample, where one epoch is incremented on dataset exhaustion.
+    For an example, check forge.src.data.datasets.HfIterableDataset.
 
     Args:
-        batch: Batch dictionary with 'metrics' field OR list of sample dicts
+        batch (dict): Batch dictionary with 'metrics' field
 
     Returns:
-        Epoch number from metrics
+        int: Max epoch number from metrics
 
     Raises:
-        ValueError: If metrics missing or no num_epochs found
+        ValueError: If metrics key is missing or not metric `num_epochs` found
     """
-    # Handle list of samples (uncollated batches)
-    if isinstance(batch, list):
-        if not batch:
-            raise ValueError("Empty batch provided")
-        batch = batch[0]  # Extract first sample
-
     if "metrics" not in batch:
         raise ValueError(
-            "Batch missing 'metrics' field. Ensure dataset inherits from "
-            "InfiniteTuneIterableDataset which adds this automatically."
+            "Batch missing 'metrics' field. Cannot extract epoch from batch."
         )
 
-    for metric in batch["metrics"]:
-        if "num_epochs" in metric.key:
-            return int(metric.value)
+    epochs = [metric.value for metric in batch["metrics"] if metric.key == "num_epochs"]
+    if epochs:
+        return max(epochs)
 
     raise ValueError(
         f"No 'num_epochs' metric found in batch. Got metrics: "
