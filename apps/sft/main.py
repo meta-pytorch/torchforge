@@ -353,6 +353,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # NOTE: Assumes batch contains samples with Metric("num_epochs", ...) field
             batch_iter = StopAfterOneEpoch(
                 dataloader_iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
+                device=self.device,
                 dp_mesh=dp_mesh,
             )
 

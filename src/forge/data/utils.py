@@ -234,15 +234,18 @@ class StopAfterOneEpoch:
 
     Args:
         dataloader_iter: Iterator over dataloader batches
+        device: Device for synchronization tensors (use cuda for NCCL backend)
         dp_mesh: Data parallel process group (None for single process)
     """
 
     def __init__(
         self,
         dataloader_iter: Iterator,
+        device: torch.device,
         dp_mesh: dist.ProcessGroup | None = None,
     ):
         self.dataloader_iter = dataloader_iter
+        self.device = device
         self.dp_mesh = dp_mesh
 
         # Prefetch first batch for pipeline-style execution
@@ -288,7 +291,7 @@ class StopAfterOneEpoch:
 
         # Start async epoch sync
         if torch.distributed.is_initialized():
-            self._epoch_tensor = torch.tensor([int(epoch_changed)])
+            self._epoch_tensor = torch.tensor([int(epoch_changed)], device=self.device)
             self._pending_work = torch.distributed.all_reduce(
                 self._epoch_tensor,
                 op=torch.distributed.ReduceOp.MAX,
@@ -306,7 +309,7 @@ def extract_epoch_from_batch(batch: dict) -> int:
     """Extract epoch number from batch metrics. Useful to detect epoch changes during validation,
     where we want to run exactly one epoch.
 
-    Assumes the dataset adds "num_epochs" Metric to teh sample, where one epoch is incremented on dataset exhaustion.
+    Assumes the dataset adds "num_epochs" Metric to the sample, where one epoch is incremented on dataset exhaustion.
     For an example, check forge.src.data.datasets.HfIterableDataset.
 
     Args:
@@ -316,14 +319,15 @@ def extract_epoch_from_batch(batch: dict) -> int:
         int: Max epoch number from metrics
 
     Raises:
-        ValueError: If metrics key is missing or not metric `num_epochs` found
+        ValueError: If metrics key is missing or no metric with 'num_epochs' found
     """
     if "metrics" not in batch:
         raise ValueError(
             "Batch missing 'metrics' field. Cannot extract epoch from batch."
         )
 
-    epochs = [metric.value for metric in batch["metrics"] if metric.key == "num_epochs"]
+    # Match metrics where 'num_epochs' appears in the key (handles prefixed keys like 'dataset/name/num_epochs')
+    epochs = [metric.value for metric in batch["metrics"] if "num_epochs" in metric.key]
     if epochs:
         return max(epochs)
 

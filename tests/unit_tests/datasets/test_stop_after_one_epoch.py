@@ -27,6 +27,25 @@ def create_test_json_file(path: Path, num_samples: int) -> None:
             f.write(f'{{"id": {i}, "tokens": [{i}, {i+1}]}}\n')
 
 
+def simple_collate(batch):
+    """Simple collate function that mimics collate_packed behavior.
+
+    Stacks tensors, extends metrics list, keeps other fields as lists.
+    """
+    collated = {}
+    for key in batch[0].keys():
+        if isinstance(batch[0][key], torch.Tensor):
+            collated[key] = torch.stack([sample[key] for sample in batch], dim=0)
+        elif key == "metrics":
+            # Extend all metrics into a single list
+            collated[key] = []
+            for sample in batch:
+                collated[key].extend(sample[key])
+        else:
+            collated[key] = [sample[key] for sample in batch]
+    return collated
+
+
 class TestExtractEpochFromBatch:
     """Test extract_epoch_from_batch helper function."""
 
@@ -80,11 +99,14 @@ class TestStopAfterOneEpochSingleProcess:
             num_shards_per_rank=1,
         )
 
-        dataloader = StatefulDataLoader(dataset, batch_size=2, collate_fn=lambda x: x)
+        dataloader = StatefulDataLoader(
+            dataset, batch_size=2, collate_fn=simple_collate
+        )
 
         # Wrap with StopAfterOneEpoch
         batch_iter = StopAfterOneEpoch(
             dataloader_iter=iter(dataloader),
+            device=torch.device("cpu"),
             dp_mesh=None,
         )
 
@@ -130,7 +152,7 @@ class TestStopAfterOneEpochDistributed(FSDPTest):
             )
 
             dataloader = StatefulDataLoader(
-                dataset, batch_size=2, collate_fn=lambda x: x
+                dataset, batch_size=2, collate_fn=simple_collate
             )
 
             # Get DP process group (use global group for this test)
@@ -138,6 +160,7 @@ class TestStopAfterOneEpochDistributed(FSDPTest):
 
             batch_iter = StopAfterOneEpoch(
                 dataloader_iter=iter(dataloader),
+                device=torch.device("cuda"),
                 dp_mesh=dp_mesh,
             )
 
