@@ -2,12 +2,12 @@
 <!DOCTYPE html>
 
 
-<html lang="en" data-content_root="../../../" >
+<html lang="en" data-content_root="../../../../" >
 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>forge.actors.trainer &#8212; torchforge 0.1 documentation</title>
+    <title>forge.actors.trainer.titan &#8212; torchforge 0.1 documentation</title>
   
   
   
@@ -17,34 +17,34 @@
   </script>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
 
   
-  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
 
-    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=047068a3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=d2d258e8" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=b61afe48" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=b61afe48" />
   
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
 
-    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
-    <script src="../../../_static/doctools.js?v=888ff710"></script>
-    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script src="../../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
     <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
     <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
     <script type="module">
@@ -71,12 +71,12 @@ mermaid.initialize({
 import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
 window.addEventListener("load", () => mermaid.run());
 </script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/forge/actors/trainer';</script>
-    <script src="../../../_static/custom.js?v=0065d487"></script>
-    <link rel="canonical" href="https://meta-pytorch.org/torchforge/main/_modules/forge/actors/trainer.html" />
-    <link rel="icon" href="../../../_static/logo-icon.svg"/>
-    <link rel="index" title="Index" href="../../../genindex.html" />
-    <link rel="search" title="Search" href="../../../search.html" />
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/forge/actors/trainer/titan';</script>
+    <script src="../../../../_static/custom.js?v=0065d487"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/torchforge/main/_modules/forge/actors/trainer/titan.html" />
+    <link rel="icon" href="../../../../_static/logo-icon.svg"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -124,13 +124,13 @@ window.addEventListener("load", () => mermaid.run());
   }
 </style>
 
-<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
-<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
-<meta property="og:image" content="../../../_static/img/pytorch_seo.png" />
-<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta property="og:image" content="../../../../_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
 <meta http-equiv="Content-Security-Policy"
   content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
 <meta name="pytorch_project" content="">
@@ -264,7 +264,7 @@ window.addEventListener("load", () => mermaid.run());
     <div class="search-button__overlay"></div>
     <div class="search-button__search-container">
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -301,7 +301,7 @@ window.addEventListener("load", () => mermaid.run());
     
   
 
-<a class="navbar-brand logo" href="../../../index.html">
+<a class="navbar-brand logo" href="../../../../index.html">
   
   
   
@@ -323,21 +323,21 @@ window.addEventListener("load", () => mermaid.run());
   <ul class="bd-navbar-elements navbar-nav">
     
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../getting_started.html">
+  <a class="nav-link nav-internal" href="../../../../getting_started.html">
     Getting Started
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../tutorials.html">
+  <a class="nav-link nav-internal" href="../../../../tutorials.html">
     Tutorials
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../api.html">
+  <a class="nav-link nav-internal" href="../../../../api.html">
     API Reference
   </a>
 </li>
@@ -354,7 +354,7 @@ window.addEventListener("load", () => mermaid.run());
         <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -470,21 +470,21 @@ document.write(`
   <ul class="bd-navbar-elements navbar-nav">
     
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../getting_started.html">
+  <a class="nav-link nav-internal" href="../../../../getting_started.html">
     Getting Started
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../tutorials.html">
+  <a class="nav-link nav-internal" href="../../../../tutorials.html">
     Tutorials
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../../../api.html">
+  <a class="nav-link nav-internal" href="../../../../api.html">
     API Reference
   </a>
 </li>
@@ -502,7 +502,7 @@ document.write(`
           <div class="navbar-item">
   
 <form class="bd-search d-flex align-items-center"
-      action="../../../search.html"
+      action="../../../../search.html"
       method="get">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input type="search"
@@ -615,14 +615,14 @@ document.write(`
   <ul class="bd-breadcrumbs">
     
     <li class="breadcrumb-item breadcrumb-home">
-      <a href="../../../index.html" class="nav-link" aria-label="Home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
     
-    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">forge.actors.trainer</li>
+    <li class="breadcrumb-item active" aria-current="page">forge.actors...</li>
   </ul>
 </nav>
 </div>
@@ -664,13 +664,13 @@ document.write(`
     <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <link itemprop="item" href="../../index.html">
+        <link itemprop="item" href="../../../index.html">
         <meta itemprop="name" content="Module code">
         <meta itemprop="position" content="1">
       </div>
       
       <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <meta itemprop="name" content="forge.actors.trainer">
+        <meta itemprop="name" content="forge.actors.trainer.titan">
         <meta itemprop="position" content="2">
       </div>
     </div>
@@ -678,24 +678,24 @@ document.write(`
     
     
     <div class="pytorch-call-to-action-links">
-      <div id="tutorial-type">_modules/forge/actors/trainer</div>
+      <div id="tutorial-type">_modules/forge/actors/trainer/titan</div>
       <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
         <div id="google-colab-link">
-          <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+          <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
           <div class="call-to-action-desktop-view">Run in Google Colab</div>
           <div class="call-to-action-mobile-view">Colab</div>
         </div>
       </a>
       <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
         <div id="download-notebook-link">
-          <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+          <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
           <div class="call-to-action-desktop-view">Download Notebook</div>
           <div class="call-to-action-mobile-view">Notebook</div>
         </div>
       </a>
       <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
         <div id="github-view-link">
-          <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+          <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
           <div class="call-to-action-desktop-view">View on GitHub</div>
           <div class="call-to-action-mobile-view">GitHub</div>
         </div>
@@ -709,7 +709,7 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for forge.actors.trainer</h1><div class="highlight"><pre>
+  <h1>Source code for forge.actors.trainer.titan</h1><div class="highlight"><pre>
 <span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
 <span class="c1"># All rights reserved.</span>
 <span class="c1">#</span>
@@ -764,11 +764,11 @@ document.write(`
 <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="RLTrainer">
-<a class="viewcode-back" href="../../../api_trainer.html#forge.actors.trainer.RLTrainer">[docs]</a>
+<div class="viewcode-block" id="TitanTrainer">
+<a class="viewcode-back" href="../../../../api_trainer.html#forge.actors.trainer.TitanTrainer">[docs]</a>
 <span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">RLTrainer</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A reinforcement learning trainer actor for policy optimization training.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TitanTrainer</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A generic trainer actor implementation built on top of TorchTitan.</span>
 
 <span class="sd">    Built on top of TorchTitan&#39;s training engine, this actor provides a complete training</span>
 <span class="sd">    loop for reinforcement learning. It performs forward and backward passes with gradient</span>
@@ -844,8 +844,8 @@ document.write(`
         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">checkpointer</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">step</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">optimizers</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
 
-<div class="viewcode-block" id="RLTrainer.forward_backward">
-<a class="viewcode-back" href="../../../api_trainer.html#forge.actors.trainer.RLTrainer.forward_backward">[docs]</a>
+<div class="viewcode-block" id="TitanTrainer.forward_backward">
+<a class="viewcode-back" href="../../../../api_trainer.html#forge.actors.trainer.TitanTrainer.forward_backward">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forward_backward</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">],</span> <span class="n">targets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
@@ -1039,8 +1039,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
 
   
 
@@ -1087,7 +1087,7 @@ document.write(`
 <div class="cookie-banner-wrapper">
   <div class="container">
     <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
-    <img class="close-button" src="../../../_static/img/pytorch-x.svg">
+    <img class="close-button" src="../../../../_static/img/pytorch-x.svg">
   </div>
 </div>
   
@@ -1124,20 +1124,20 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "forge.actors.trainer",
-       "headline": "forge.actors.trainer",
+       "name": "forge.actors.trainer.titan",
+       "headline": "forge.actors.trainer.titan",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
-       "url": "/_modules/forge/actors/trainer.html",
-       "articleBody": "Source code for forge.actors.trainer # Copyright (c) Meta Platforms, Inc. and affiliates. # All rights reserved. # # This source code is licensed under the BSD-style license found in the # LICENSE file in the root directory of this source tree. import logging import os import time from collections.abc import Mapping from dataclasses import dataclass, field, fields from typing import Callable import torch import torch.distributed.checkpoint as dcp import torchstore as ts from monarch.actor import endpoint from torch import Tensor from torch.distributed.checkpoint._nested_dict import flatten_state_dict from torchtitan.config.job_config import ( ActivationCheckpoint, Checkpoint, Comm, Compile, Job, LRScheduler, MemoryEstimation, Model, Optimizer, Parallelism, Quantize, Training, ) from torchtitan.experiments.forge.engine import ForgeEngine from torchtitan.experiments.forge.job_config import ForgeJobConfig from forge.actors._torchstore_utils import ( DcpHandle, get_dcp_whole_state_dict_key, get_param_key, rdma_available, ) from forge.controller import ForgeActor from forge.data.utils import batch_to_device from forge.observability.metrics import record_metric, Reduce from forge.observability.perf_tracker import Tracer logger = logging.getLogger(__name__) logger.setLevel(logging.DEBUG) [docs] @dataclass class RLTrainer(ForgeActor): \"\"\"A reinforcement learning trainer actor for policy optimization training. Built on top of TorchTitan\u0027s training engine, this actor provides a complete training loop for reinforcement learning. It performs forward and backward passes with gradient computation, optimization steps, and checkpoint management. Unlike the ReferenceModel actor which only runs forward passes, RLTrainer actively updates the policy model parameters through gradient descent. The trainer supports the same distributed training strategies that TorchTitan does, including but not limited to, tensor parallelism, data parallelism, and FSDP (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel for policy optimization algorithms like GRPO (Group Relative Policy Optimization), where it optimizes the policy against a loss that includes KL divergence penalties from the reference model. The trainer handles: - Forward and backward propagation with automatic mixed precision (AMP) - Optimizer steps with learning rate scheduling \"\"\" job: Job = field(default_factory=Job) model: Model = field(default_factory=Model) optimizer: Optimizer = field(default_factory=Optimizer) lr_scheduler: LRScheduler = field(default_factory=LRScheduler) training: Training = field(default_factory=Training) parallelism: Parallelism = field(default_factory=Parallelism) checkpoint: Checkpoint = field(default_factory=Checkpoint) activation_checkpoint: ActivationCheckpoint = field( default_factory=ActivationCheckpoint ) compile: Compile = field(default_factory=Compile) quantize: Quantize = field(default_factory=Quantize) comm: Comm = field(default_factory=Comm) memory_estimation: MemoryEstimation = field(default_factory=MemoryEstimation) # Non JobConfig-related fields loss: Callable = lambda logits, **targets: logits state_dict_key: str = \"model_state_dict\" use_dcp: bool = not rdma_available() dcp_path: str = \"forge_dcp_tmp\" def __post_init__(self): super().__init__() if self.use_dcp: torch.serialization.set_crc32_options(False) for f in fields(self): attr = getattr(self, f.name) if isinstance(attr, Mapping): setattr(self, f.name, f.type(**attr)) elif not isinstance(attr, f.type): raise TypeError( f\"{f.name} should be a {f.type} type or a dict like object\" ) self.step = 1 # fragile contract. self.num_training_steps = self.training.steps self.gradient_accumulation_steps = 1 os.environ[\"PYTORCH_CUDA_ALLOC_CONF\"] = \"expandable_segments:True\" logger.info(\"Compiling loss\") self.loss = torch.compile(self.loss) @endpoint async def setup(self): # TODO: update ForgeEngine to not use ForgeJobConfig engine_config = {f.name: getattr(self, f.name) for f in fields(self)} for key in { \"loss\", \"state_dict_key\", \"use_dcp\", \"dcp_path\", }: engine_config.pop(key) # Not part of job config self.engine = ForgeEngine(ForgeJobConfig(**engine_config)) self.engine.checkpointer.load(step=self.step) self.engine.optimizers.zero_grad() [docs] def forward_backward( self, inputs: dict[str, Tensor], targets: dict[str, Tensor] ) -\u003e Tensor: model_parts = self.engine.model_parts parallel_dims = self.engine.parallel_dims optional_context_parallel_ctx = None if parallel_dims.pp_enabled: raise NotImplementedError(\"PP not implemented yet\") else: with self.engine.train_context(optional_context_parallel_ctx): assert len(model_parts) == 1 with self.engine.maybe_enable_amp: logits = model_parts[0](**inputs) loss = self.loss(logits, **targets) del logits # Free to before bwd to avoid peaking memory loss.backward() return loss @endpoint async def train_step( self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]] ) -\u003e float: t = Tracer(\"rl_trainer_perf/step\", timer=\"gpu\", track_memory=True) t.start() self.engine.gc_handler.run(self.step) local_inputs = inputs[self.engine.dp_rank] local_targets = targets[self.engine.dp_rank] batch_to_device(local_inputs, self.engine.device) batch_to_device(local_targets, self.engine.device) loss = self.forward_backward(local_inputs, local_targets) torch.distributed.all_reduce(loss) t.step(\"forward_backward\") current_lr = self.engine.lr_schedulers.schedulers[0].get_last_lr()[0] record_metric(\"rl_trainer/learning_rate\", current_lr, Reduce.MIN) self.engine.optimizers.step() self.engine.optimizers.zero_grad() self.engine.lr_schedulers.step() t.step(\"optimizer_step\") # TODO: delete item() to avoid cpu-gpu sync loss = loss.detach().item() record_metric(\"rl_trainer/avg_loss\", loss, Reduce.MEAN) # These are placeholder values until the loss function exposes these metrics # record_metric(\"rl_trainer/step/avg_kl_divergence\", 0.0, Reduce.MEAN) # record_metric(\"rl_trainer/step/std_kl_divergence\", 0.0, Reduce.STD) # record_metric(\"rl_trainer/step/avg_policy_entropy\", 0.0, Reduce.MEAN) self.step += 1 self.engine.checkpointer.save( curr_step=self.step, last_step=self.step == self.num_training_steps, ) t.step(\"save_checkpoint\") t.stop() return loss @endpoint async def push_weights(self, policy_version: int) -\u003e None: \"\"\"Push weights to torchstore in HF format.\"\"\" t = Tracer(\"rl_trainer_perf/push_weights\", timer=\"gpu\", track_memory=True) t.start() logger.info(f\"Pushing weights for policy version {policy_version}\") start_time = time.perf_counter() if \"model\" not in self.engine.checkpointer.states: raise RuntimeError(\"Model state not found in checkpointer state\") sd = self.engine.checkpointer.states[\"model\"].state_dict() flattened_state_dict, _ = flatten_state_dict(sd) t.step(\"flatten_state_dict\") if self.engine.checkpointer.sd_adapter is None: raise RuntimeError( \"Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided.\" ) hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict) t.step(\"to_hf\") if self.use_dcp: key = get_dcp_whole_state_dict_key(policy_version) dcp_id = f\"{self.dcp_path}/{key}\" storage_writer = torch.distributed.checkpoint.FileSystemWriter( dcp_id, single_file_per_rank=False, thread_count=8 ) metadata = dcp.save(storage_writer=storage_writer, state_dict=hf_state_dict) dcp_handle = DcpHandle( checkpoint_id=dcp_id, metadata=metadata, param_names=hf_state_dict.keys(), ) await ts.put(key, dcp_handle) t.step(\"dcp_save\") else: for name, param in hf_state_dict.items(): key = get_param_key(policy_version, name) await ts.put(key, param) t.step(\"ts_save\") t.stop() end_time = time.perf_counter() logger.info(\"Completed weights push in %.2f seconds\", end_time - start_time) @endpoint async def cleanup(self) -\u003e None: if self.engine.checkpointer: self.engine.checkpointer.close()",
+       "url": "/_modules/forge/actors/trainer/titan.html",
+       "articleBody": "Source code for forge.actors.trainer.titan # Copyright (c) Meta Platforms, Inc. and affiliates. # All rights reserved. # # This source code is licensed under the BSD-style license found in the # LICENSE file in the root directory of this source tree. import logging import os import time from collections.abc import Mapping from dataclasses import dataclass, field, fields from typing import Callable import torch import torch.distributed.checkpoint as dcp import torchstore as ts from monarch.actor import endpoint from torch import Tensor from torch.distributed.checkpoint._nested_dict import flatten_state_dict from torchtitan.config.job_config import ( ActivationCheckpoint, Checkpoint, Comm, Compile, Job, LRScheduler, MemoryEstimation, Model, Optimizer, Parallelism, Quantize, Training, ) from torchtitan.experiments.forge.engine import ForgeEngine from torchtitan.experiments.forge.job_config import ForgeJobConfig from forge.actors._torchstore_utils import ( DcpHandle, get_dcp_whole_state_dict_key, get_param_key, rdma_available, ) from forge.controller import ForgeActor from forge.data.utils import batch_to_device from forge.observability.metrics import record_metric, Reduce from forge.observability.perf_tracker import Tracer logger = logging.getLogger(__name__) logger.setLevel(logging.DEBUG) [docs] @dataclass class TitanTrainer(ForgeActor): \"\"\"A generic trainer actor implementation built on top of TorchTitan. Built on top of TorchTitan\u0027s training engine, this actor provides a complete training loop for reinforcement learning. It performs forward and backward passes with gradient computation, optimization steps, and checkpoint management. Unlike the ReferenceModel actor which only runs forward passes, RLTrainer actively updates the policy model parameters through gradient descent. The trainer supports the same distributed training strategies that TorchTitan does, including but not limited to, tensor parallelism, data parallelism, and FSDP (Fully Sharded Data Parallel). It is typically used in conjunction with ReferenceModel for policy optimization algorithms like GRPO (Group Relative Policy Optimization), where it optimizes the policy against a loss that includes KL divergence penalties from the reference model. The trainer handles: - Forward and backward propagation with automatic mixed precision (AMP) - Optimizer steps with learning rate scheduling \"\"\" job: Job = field(default_factory=Job) model: Model = field(default_factory=Model) optimizer: Optimizer = field(default_factory=Optimizer) lr_scheduler: LRScheduler = field(default_factory=LRScheduler) training: Training = field(default_factory=Training) parallelism: Parallelism = field(default_factory=Parallelism) checkpoint: Checkpoint = field(default_factory=Checkpoint) activation_checkpoint: ActivationCheckpoint = field( default_factory=ActivationCheckpoint ) compile: Compile = field(default_factory=Compile) quantize: Quantize = field(default_factory=Quantize) comm: Comm = field(default_factory=Comm) memory_estimation: MemoryEstimation = field(default_factory=MemoryEstimation) # Non JobConfig-related fields loss: Callable = lambda logits, **targets: logits state_dict_key: str = \"model_state_dict\" use_dcp: bool = not rdma_available() dcp_path: str = \"forge_dcp_tmp\" def __post_init__(self): super().__init__() if self.use_dcp: torch.serialization.set_crc32_options(False) for f in fields(self): attr = getattr(self, f.name) if isinstance(attr, Mapping): setattr(self, f.name, f.type(**attr)) elif not isinstance(attr, f.type): raise TypeError( f\"{f.name} should be a {f.type} type or a dict like object\" ) self.step = 1 # fragile contract. self.num_training_steps = self.training.steps self.gradient_accumulation_steps = 1 os.environ[\"PYTORCH_CUDA_ALLOC_CONF\"] = \"expandable_segments:True\" logger.info(\"Compiling loss\") self.loss = torch.compile(self.loss) @endpoint async def setup(self): # TODO: update ForgeEngine to not use ForgeJobConfig engine_config = {f.name: getattr(self, f.name) for f in fields(self)} for key in { \"loss\", \"state_dict_key\", \"use_dcp\", \"dcp_path\", }: engine_config.pop(key) # Not part of job config self.engine = ForgeEngine(ForgeJobConfig(**engine_config)) self.engine.checkpointer.load(step=self.step) self.engine.optimizers.zero_grad() [docs] def forward_backward( self, inputs: dict[str, Tensor], targets: dict[str, Tensor] ) -\u003e Tensor: model_parts = self.engine.model_parts parallel_dims = self.engine.parallel_dims optional_context_parallel_ctx = None if parallel_dims.pp_enabled: raise NotImplementedError(\"PP not implemented yet\") else: with self.engine.train_context(optional_context_parallel_ctx): assert len(model_parts) == 1 with self.engine.maybe_enable_amp: logits = model_parts[0](**inputs) loss = self.loss(logits, **targets) del logits # Free to before bwd to avoid peaking memory loss.backward() return loss @endpoint async def train_step( self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]] ) -\u003e float: t = Tracer(\"rl_trainer_perf/step\", timer=\"gpu\", track_memory=True) t.start() self.engine.gc_handler.run(self.step) local_inputs = inputs[self.engine.dp_rank] local_targets = targets[self.engine.dp_rank] batch_to_device(local_inputs, self.engine.device) batch_to_device(local_targets, self.engine.device) loss = self.forward_backward(local_inputs, local_targets) torch.distributed.all_reduce(loss) t.step(\"forward_backward\") current_lr = self.engine.lr_schedulers.schedulers[0].get_last_lr()[0] record_metric(\"rl_trainer/learning_rate\", current_lr, Reduce.MIN) self.engine.optimizers.step() self.engine.optimizers.zero_grad() self.engine.lr_schedulers.step() t.step(\"optimizer_step\") # TODO: delete item() to avoid cpu-gpu sync loss = loss.detach().item() record_metric(\"rl_trainer/avg_loss\", loss, Reduce.MEAN) # These are placeholder values until the loss function exposes these metrics # record_metric(\"rl_trainer/step/avg_kl_divergence\", 0.0, Reduce.MEAN) # record_metric(\"rl_trainer/step/std_kl_divergence\", 0.0, Reduce.STD) # record_metric(\"rl_trainer/step/avg_policy_entropy\", 0.0, Reduce.MEAN) self.step += 1 self.engine.checkpointer.save( curr_step=self.step, last_step=self.step == self.num_training_steps, ) t.step(\"save_checkpoint\") t.stop() return loss @endpoint async def push_weights(self, policy_version: int) -\u003e None: \"\"\"Push weights to torchstore in HF format.\"\"\" t = Tracer(\"rl_trainer_perf/push_weights\", timer=\"gpu\", track_memory=True) t.start() logger.info(f\"Pushing weights for policy version {policy_version}\") start_time = time.perf_counter() if \"model\" not in self.engine.checkpointer.states: raise RuntimeError(\"Model state not found in checkpointer state\") sd = self.engine.checkpointer.states[\"model\"].state_dict() flattened_state_dict, _ = flatten_state_dict(sd) t.step(\"flatten_state_dict\") if self.engine.checkpointer.sd_adapter is None: raise RuntimeError( \"Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided.\" ) hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict) t.step(\"to_hf\") if self.use_dcp: key = get_dcp_whole_state_dict_key(policy_version) dcp_id = f\"{self.dcp_path}/{key}\" storage_writer = torch.distributed.checkpoint.FileSystemWriter( dcp_id, single_file_per_rank=False, thread_count=8 ) metadata = dcp.save(storage_writer=storage_writer, state_dict=hf_state_dict) dcp_handle = DcpHandle( checkpoint_id=dcp_id, metadata=metadata, param_names=hf_state_dict.keys(), ) await ts.put(key, dcp_handle) t.step(\"dcp_save\") else: for name, param in hf_state_dict.items(): key = get_param_key(policy_version, name) await ts.put(key, param) t.step(\"ts_save\") t.stop() end_time = time.perf_counter() logger.info(\"Completed weights push in %.2f seconds\", end_time - start_time) @endpoint async def cleanup(self) -\u003e None: if self.engine.checkpointer: self.engine.checkpointer.close()",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
          "url": "https://pytorch.org"
        },
-       "image": "../../../_static/img/pytorch_seo.png",
+       "image": "../../../../_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/_modules/forge/actors/trainer.html"
+         "@id": "/_modules/forge/actors/trainer/titan.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"
