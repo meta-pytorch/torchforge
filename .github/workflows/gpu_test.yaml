@@ -40,7 +40,8 @@ jobs:
       - name: Install torchforge
         run: pip install uv && uv pip install . && uv pip install .[dev]
       - name: Run unit tests with coverage
-        # TODO add all tests
         run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+      - name: Run unit tests with coverage
+        run: pytest tests/integration_tests --cov=. --cov-report=xml --durations=20 -vv
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3
