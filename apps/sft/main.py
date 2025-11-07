@@ -155,8 +155,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 dataloader = self.setup_data([dataset_config])
                 self.val_dataloaders[ds_name] = dataloader
 
-        # Load checkpoint if resuming
+        # TODO: confirm that this is working properly
+        # Should also use load, not dcp_load
         self.checkpointer.load(step=self.current_step)
+
+        # self.profiler = self.setup_profiler(self.train_config.profiler_config)
+        # self.logger = self.setup_logger(self.train_config.logger_config)
 
     def setup_data(self, dataset_configs: list[dict]) -> StatefulDataLoader:
         """Instantiates datasets and returns a StatefulDataLoader.
@@ -219,16 +223,22 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
-            target_tokens_per_pack=self.job_config.training.seq_len,
+            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
         )
 
-        return StatefulDataLoader(
+        dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
             collate_fn=partial(
                 collate_packed, mask_fn=packer.create_block_mask, device=self.device
             ),
         )
+
+        # Ultimately we probably want something like this
+        # packer = build_packing_strategy(packing_config)
+        # dataset = build_dataset(dataset_config)
+        # dataloader = build_dataloader(dataloader_config, dataset, packer)
+        returndataloader
 
     def forward_backward(
         self,
@@ -346,7 +356,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             total_loss = torch.tensor(0.0, device=self.device)
             num_steps = 0
 
-            # NOTE: Assumes batch contains samples with Metric("num_epochs", ...) field
+            # NOTE: Assumes batch contains field "metrics"
             batch_iter = StopAfterOneEpoch(
                 iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
                 device=self.device,
@@ -406,7 +416,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         for model_part in self.model_parts:
             model_part.train()
 
-        # Summary
         logger.info("==Evaluation complete==")
 
     @endpoint
@@ -451,7 +460,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # self.pbar.close()
 
-        # Run final evaluation at end of training
         if self.validation_enabled:
             logger.info("Running final evaluation at end of training...")
             await self.evaluate()
