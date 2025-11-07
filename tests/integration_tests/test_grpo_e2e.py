@@ -59,6 +59,7 @@ class TestGRPOEndToEnd:
     """End-to-end integration tests for GRPO training loop."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(600)  # 10 minute timeout to prevent hanging
     @requires_cuda
     async def test_grpo_smoke_test(self):
         """
@@ -74,6 +75,10 @@ class TestGRPOEndToEnd:
         - Policy receives weight updates
         - Training completes successfully
         """
+        logger.info("=" * 80)
+        logger.info("Starting GRPO smoke test")
+        logger.info("=" * 80)
+
         try:
             # Load test config
             config_path = "tests/integration_tests/fixtures/grpo_smoke_test.yaml"
@@ -91,9 +96,20 @@ class TestGRPOEndToEnd:
             # Import main here to avoid issues with module-level imports
             from apps.grpo.main import main
 
+            logger.info("Starting main training loop...")
             # Run the main training loop
             # This should run for exactly 3 steps and then exit cleanly
             await main(cfg)
+
+            logger.info("Main training loop completed successfully")
+            logger.info("GRPO smoke test completed successfully!")
+
+        except Exception as e:
+            logger.error(f"GRPO smoke test failed with error: {e}")
+            raise
         finally:
             # Cleanup
+            logger.info("Cleaning up test checkpoint directory...")
             _cleanup_checkpoint_dir()
+            logger.info("Cleanup complete")
+            logger.info("=" * 80)
