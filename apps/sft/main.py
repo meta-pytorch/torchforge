@@ -77,7 +77,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         self.current_step = 0
         self.num_training_steps = job_config.training.steps
-        self.metric_logger = None  # TODO: fix this
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
