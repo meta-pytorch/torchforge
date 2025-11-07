@@ -30,7 +30,6 @@ from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
-from forge.util.logging import log_rank_zero
 
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -125,6 +124,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
+
+        # metric logger
+        self.mlogger = await self.setup_metric_logger()
+
         # Load training datasets
         logger.info("Setting training datasets")
         train_datasets_config = self.job_config.training.datasets
@@ -148,6 +151,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             for i, dataset_config in enumerate(self.eval_datasets_config):
                 ds_name = dataset_config.get("dataset_name", i)
 
+                # TODO: Support separate eval batch size from config (eval.local_batch_size)
                 dataloader = self.setup_data([dataset_config])
                 self.val_dataloaders[ds_name] = dataloader
 
@@ -305,7 +309,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         loss = loss.item()
 
         record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
-        logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
+        if self.current_step % 10 == 0:
+            logger.info(
+                f"step {self.current_step} / {self.num_training_steps} | Loss: {loss}"
+            )
+
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
         self.optimizers.step()
@@ -323,7 +331,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             - Record loss and step metrics (on dp rank only)
         3. Restore models to train mode
         """
-        logger.debug("==STARTING EVALUATION==")
 
         # Set models to eval mode
         for model_part in self.model_parts:
@@ -336,7 +343,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # Evaluate each dataset sequentially
         for dataset_name, val_dataloader in self.val_dataloaders.items():
-            logger.debug(f"=====Evaluating dataset: {dataset_name}=====")
+            logger.info(f"=====Evaluating dataset: {dataset_name}=====")
 
             # Evaluation loop for this dataset
             total_loss = torch.tensor(0.0, device=self.device)
@@ -356,9 +363,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                         self.max_eval_steps is not None
                         and num_steps >= self.max_eval_steps
                     ):
-                        log_rank_zero(
-                            logger,
-                            f"[{dataset_name}] Reached max_eval_steps cap of {self.max_eval_steps}",
+                        logger.info(
+                            f"[{dataset_name}] Reached max_eval_steps cap of {self.max_eval_steps}"
                         )
                         break
 
@@ -374,17 +380,17 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     num_steps += 1
 
                     # Log progress (rank 0 only)
-                    if num_steps % 100 == 0:
+                    if num_steps % 50 == 0:
                         loss_val = loss.item()
-                        log_rank_zero(
-                            logger,
-                            f"  [{dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}",
+                        logger.info(
+                            f"[dataset {dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}"
                         )
 
             # Compute average loss
             avg_loss = (total_loss / max(num_steps, 1)).item()
-            log_rank_zero(logger, f"  [{dataset_name}] avg_loss: {avg_loss:.4f}")
-
+            logger.info(
+                f"[dataset {dataset_name}] Final Step {num_steps} | Avg Loss: {avg_loss:.4f}"
+            )
             # Record metrics only on DP rank 0 to avoid double counting
             # record_metric aggregates across all processes via monarch
             should_record = True
@@ -394,13 +400,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
             if should_record:
                 record_metric(
-                    f"ForgeSFTRecipe/evaluate/{dataset_name}_loss",
+                    f"evaluate/dataset_{dataset_name}_loss",
                     avg_loss,
-                    Reduce.MEAN,
-                )
-                record_metric(
-                    f"ForgeSFTRecipe/evaluate/{dataset_name}_steps",
-                    num_steps,
                     Reduce.MEAN,
                 )
 
@@ -409,7 +410,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             model_part.train()
 
         # Summary
-        logger.debug("==EVALUATION COMPLETE==")
+        logger.info("==Evaluation complete==")
 
     @endpoint
     async def train(self) -> None:
@@ -446,6 +447,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 curr_step=self.current_step,
                 last_step=self.current_step == self.num_training_steps,
             )
+
+            # Flush metrics
+            if self._rank == 0:
+                await self.mlogger.flush.call_one(global_step=self.current_step)
 
         # self.pbar.close()
 

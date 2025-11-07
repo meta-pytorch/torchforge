@@ -37,9 +37,8 @@ training:
       split: "train[:95%]"
 
 eval:
-  eval_every_n_steps: 5   # (null = disabled)
-  max_eval_steps: 0    # Max batches per eval dataset (null = run until epoch completes)
-  batch_size: ${training.local_batch_size}  # Batch size for evaluation
+  eval_every_n_steps: 5  # (null = disabled)
+  max_eval_steps: null    # Max batches per eval dataset (null = run until epoch completes)
   datasets:
       - path: "yahma/alpaca-cleaned"
         split: "train[95%:]"
@@ -47,9 +46,9 @@ eval:
 parallelism:
   data_parallel_replicate_degree: 1
   data_parallel_shard_degree: -1
-  tensor_parallel_degree: 2
+  tensor_parallel_degree: 1
   pipeline_parallel_degree: 1
-  context_parallel_degree: 2
+  context_parallel_degree: 1
   expert_parallel_degree: 1
   disable_loss_parallel: false
 
