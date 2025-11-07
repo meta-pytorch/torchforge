@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import monarch
+import monarch.actor
 
 import pytest
 import torch
