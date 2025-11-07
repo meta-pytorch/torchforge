@@ -14,11 +14,18 @@ import logging
 import shutil
 from pathlib import Path
 
+import monarch
+
 import pytest
 import torch
 
 from forge.util.config import resolve_hf_hub_paths
 from omegaconf import DictConfig, OmegaConf
+
+# Temporary workaround - without this, proc_mesh.stop
+# will raise an exit code 1 failing all other tests.
+monarch.actor.unhandled_fault_hook = lambda failure: None
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
