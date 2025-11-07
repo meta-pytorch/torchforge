@@ -220,6 +220,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
+        # Ultimately we probably want something like this
+        # packer = build_packing_strategy(packing_config)
+
         return dataloader
 
     def forward_backward(
@@ -259,6 +262,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     )
 
             # accumulate losses across pipeline microbatches
+            # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
             loss = (
                 torch.mean(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
