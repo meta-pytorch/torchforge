@@ -81,7 +81,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._output_transform = output_transform
         self._weight = weight if weight is not None else 1.0
         self._dp_mesh = dp_mesh
-        self._is_resumed = False
 
         # Create default transform if not provided
         self._metric_transform = metric_transform or DefaultDatasetMetricTransform()
@@ -105,6 +104,10 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
             self._metric_transform.set_source(dataset_name)
 
         # Internal state for resumption
+        # _start_epoch: The epoch to start from. Updated on resume from ckpt.
+        # useful when doing iter(ds), which restarts dataset from original state.
+        self._start_epoch = 0
+        # _num_epochs: updated on every dataset exhaustion
         self._num_epochs = 0
 
         # Load and setup HF dataset
@@ -233,9 +236,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         - Adds 'num_epochs' metric to track dataset progress
         - Yields samples indefinitely for continuous training
         """
-        # Reset iter
-        if not self._is_resumed:
-            self._num_epochs = 0
+        self._num_epochs = self._start_epoch
 
         while True:  # Infinite iteration
             self._ds.set_epoch(self._num_epochs)
@@ -294,10 +295,9 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         return state
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self._num_epochs = state_dict["num_epochs"]
+        self._start_epoch = state_dict["num_epochs"]
         hf_state = state_dict["hf_dataset_state"]
 
         # HF is responsible for resuming the dataset state
         # where it last left off
         self._ds.load_state_dict(hf_state)
-        self._is_resumed = True

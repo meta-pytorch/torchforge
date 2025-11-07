@@ -270,6 +270,72 @@ class TestHfIterableDataset:
             epoch_value == 1 for epoch_value in epoch_values
         ), f"Epoch values should be 1, got {epoch_values}"
 
+    def test_multiple_iter_calls_after_resume(
+        self, dataset_factory, small_dataset_file
+    ):
+        """Test that calling iter() multiple times after resuming restarts from checkpoint epoch.
+
+        1. Resume from checkpoint at epoch 2
+        2. Consume one epoch (now at epoch 3)
+        3. Call iter(ds) again to create a new iterator
+        4. The new iterator should restart from epoch 2 (checkpoint epoch), not 0 or 3
+
+        This ensures datasets can be re-iterated from their checkpoint state.
+        """
+        dataset = dataset_factory(small_dataset_file, shuffle=False)
+
+        # consume 2 epochs
+        it1 = iter(dataset)
+        samples = list(islice(it1, SMALL_DATASET_SIZE * 2))
+
+        # Save checkpoint after 2 epochs
+        state = dataset.state_dict()
+
+        # Continue training for 1 more epoch on the same iterator
+        more_samples = list(islice(it1, SMALL_DATASET_SIZE))
+
+        # Create a new dataset instance and load the checkpoint
+        dataset2 = dataset_factory(small_dataset_file, shuffle=False)
+        dataset2.load_state_dict(state)
+
+        # First iter() call should start from epoch 2 (the checkpoint epoch)
+        it2 = iter(dataset2)
+        first_iter_samples = list(islice(it2, SMALL_DATASET_SIZE))
+        first_iter_epochs = [
+            metric.value
+            for sample in first_iter_samples
+            for metric in sample["metrics"]
+            if "num_epochs" in metric.key
+        ]
+        assert all(
+            epoch == 2 for epoch in first_iter_epochs
+        ), f"First iter() should start at checkpoint epoch 2, got {set(first_iter_epochs)}"
+
+        # Consume one more epoch from the same iterator (now at epoch 3)
+        second_epoch_samples = list(islice(it2, SMALL_DATASET_SIZE))
+        second_epoch_epochs = [
+            metric.value
+            for sample in second_epoch_samples
+            for metric in sample["metrics"]
+            if "num_epochs" in metric.key
+        ]
+        assert all(
+            epoch == 3 for epoch in second_epoch_epochs
+        ), f"Second epoch should be 3, got {set(second_epoch_epochs)}"
+
+        # Call iter() again - it should restart from epoch 2, not continue from 4
+        it3 = iter(dataset2)
+        new_iter_samples = list(islice(it3, SMALL_DATASET_SIZE))
+        new_iter_epochs = [
+            metric.value
+            for sample in new_iter_samples
+            for metric in sample["metrics"]
+            if "num_epochs" in metric.key
+        ]
+        assert all(
+            epoch == 2 for epoch in new_iter_epochs
+        ), f"New iter() should restart from checkpoint epoch 2, got {set(new_iter_epochs)}"
+
 
 class TestDistributedHfIterableDataset(FSDPTest):
     """Test HfIterableDataset with 2-GPU distributed setup."""
