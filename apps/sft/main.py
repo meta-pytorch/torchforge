@@ -229,12 +229,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
-    def forward(
+    def forward_backward(
         self,
         input_dict: dict[str, torch.Tensor],
         labels: torch.Tensor,
+        skip_backward: bool = False,
     ) -> torch.Tensor:
-        """Forward pass only (no backward)"""
+        """Forward pass with optional backward."""
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
 
@@ -255,7 +256,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         if parallel_dims.pp_enabled:
             # Pipeline Parallel forward / backward inside step() call
-            # Note: backward only happens if not in torch.no_grad() context
+            # Note: PP backward only happens if not in torch.no_grad() context
             with self.train_context(optional_context_parallel_ctx):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
@@ -277,7 +278,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 else torch.tensor([-1.0], device=self.device)
             )
         else:
-            # Non-PP forward
+            # Non-PP forward / backward - must happen inside same context
             with self.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.maybe_enable_amp:
@@ -286,18 +287,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 # need to free to before bwd to avoid peaking memory
                 del pred
 
-        return loss
-
-    def forward_backward(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        labels: torch.Tensor,
-    ) -> torch.Tensor:
-        loss = self.forward(input_dict, labels)
-
-        # For non-PP, explicitly call backward (PP does it inside step())
-        if not self.parallel_dims.pp_enabled:
-            loss.backward()
+                # Only run backward if requested. Useful for eval.
+                if not skip_backward:
+                    loss.backward()
 
         return loss
 
@@ -377,7 +369,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
                     # Process batch
                     labels = batch.pop("labels")
-                    loss = self.forward(batch, labels)
+                    loss = self.forward_backward(batch, labels, skip_backward=True)
                     total_loss += loss
                     num_steps += 1
 
