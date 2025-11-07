@@ -238,7 +238,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # packer = build_packing_strategy(packing_config)
         # dataset = build_dataset(dataset_config)
         # dataloader = build_dataloader(dataloader_config, dataset, packer)
-        returndataloader
+        return dataloader
 
     def forward_backward(
         self,
