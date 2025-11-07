@@ -40,8 +40,15 @@ jobs:
       - name: Install torchforge
         run: pip install uv && uv pip install . && uv pip install .[dev]
       - name: Run unit tests with coverage
-        run: pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
-      - name: Run unit tests with coverage
-        run: pytest tests/integration_tests --cov=. --cov-report=xml --durations=20 -vv
+        run: PYTHONPATH=. pytest tests/unit_tests --cov=. --cov-report=xml --durations=20 -vv
+      - name: Run integration tests with coverage (each file separately for Monarch isolation)
+        run: |
+          # Run each test file in a separate process to avoid Monarch state leakage
+          # set -e ensures the CI fails if any test file fails (not just the last one)
+          set -e
+          for test_file in tests/integration_tests/test_*.py; do
+            echo "Running $test_file"
+            PYTHONPATH=. pytest "$test_file" --cov=. --cov-append --cov-report=xml --durations=20 -vv
+          done
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v3

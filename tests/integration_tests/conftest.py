@@ -4,6 +4,19 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""Integration tests configuration.
+
+IMPORTANT: Due to Monarch's cleanup issues, integration tests should be run
+separately for proper isolation. Run individual test files like:
+
+    pytest tests/integration_tests/test_grpo_e2e.py -vv
+    pytest tests/integration_tests/test_policy_update.py -vv
+
+Or run all tests (each file in separate process):
+
+    for f in tests/integration_tests/test_*.py; do pytest "$f" -vv; done
+"""
+
 import argparse
 
 import pytest

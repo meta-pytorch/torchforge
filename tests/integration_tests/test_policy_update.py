@@ -152,9 +152,9 @@ async def _setup_and_teardown(request):
     # ---- setup ---- #
     config_path = request.config.getoption("--config", default=None)
     if not config_path:
-        pytest.skip(
-            "No config file provided. Use --config <path> to specify a YAML config file"
-        )
+        # Use default config if none provided
+        config_path = "tests/integration_tests/fixtures/qwen3_1_7b_no_tp.yaml"
+        logger.info(f"No config provided, using default: {config_path}")
 
     use_dcp_override = request.config.getoption("--use_dcp")
     cfg = _load_config(config_path=config_path)
@@ -254,10 +254,10 @@ class TestWeightSync:
         # Setting everything to zero
         await rl_trainer.zero_out_model_states.call()
         await rl_trainer.push_weights.call(policy_version=v1)
-        await policy.save_model_params.fanout()
+        await policy._test_save_model_params.fanout()
 
         # Sanity check that before update all the tests pass
-        all_errs = await policy.validate_model_params.fanout(
+        all_errs = await policy._test_validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
@@ -265,7 +265,7 @@ class TestWeightSync:
                 assert not e, f"Validation failed with exception: {e}"
 
         await policy.update_weights.fanout(version=v1)
-        all_errs = await policy.validate_model_params.fanout(
+        all_errs = await policy._test_validate_model_params.fanout(
             _test_validate_params_all_zeros
         )
         for errs in all_errs:
@@ -274,7 +274,7 @@ class TestWeightSync:
 
         # Reloading v0, getting back original weights
         await policy.update_weights.fanout(version=v0)
-        all_errs = await policy.validate_model_params.fanout(
+        all_errs = await policy._test_validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
