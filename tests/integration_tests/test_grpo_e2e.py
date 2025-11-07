@@ -8,9 +8,6 @@
 Run this with:
 PYTHONPATH=. pytest -s tests/integration_tests/test_grpo_e2e.py::test_grpo_smoke_test
 
-For running all integration tests with proper isolation (due to Monarch cleanup issues):
-for f in tests/integration_tests/test_*.py; do pytest "$f" -vv; done
-
 """
 
 import logging

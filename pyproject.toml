@@ -41,7 +41,6 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-timeout",
-    "pytest-xdist",
     "tensorboard",
     "expecttest",
     "tomli>=1.1.0",
