@@ -105,7 +105,7 @@ class TestStopAfterOneEpochSingleProcess:
 
         # Wrap with StopAfterOneEpoch
         batch_iter = StopAfterOneEpoch(
-            dataloader_iter=iter(dataloader),
+            iter=iter(dataloader),
             device=torch.device("cpu"),
             dp_mesh=None,
         )
@@ -159,7 +159,7 @@ class TestStopAfterOneEpochDistributed(FSDPTest):
             dp_mesh = dist.group.WORLD
 
             batch_iter = StopAfterOneEpoch(
-                dataloader_iter=iter(dataloader),
+                iter=iter(dataloader),
                 device=torch.device("cuda"),
                 dp_mesh=dp_mesh,
             )

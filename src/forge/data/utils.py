@@ -220,36 +220,34 @@ def batch_to_device(batch: dict, device: torch.device) -> None:
 
 
 class StopAfterOneEpoch:
-    """Iterator that wraps a dataloader and stops iterating after a rank shows that an epoch has been completed.
+    """Wraps an iterator, e.g. dataloader, and stops iterating after a rank shows that an epoch has been completed.
 
     In distributed eval, we may have len(dataset) % num_ranks != 0. This means that some ranks may be on epoch 0
-    while others are already in epoch 1. To avoid hangs, all ranks *must* stop at the same time.
-    This means that we need to do some sort of `all_reduce` to know if at least one rank has seen epoch==1,
-    introducing communication overhead and blocking the forward pass.
+    while others are already in epoch 1. To avoid hangs, all ranks *must* stop at the same time, requiring communication.
 
-    This function minimzes this impact by fetching one batch in advance and perfoming async all_reduce, overlapping communications.
+    This function minimzes this impact by fetching one batch in advance and perfoming overlapping async all_reduce.
 
-    Assumes batch contains samples with Metric("num_epochs", ...) field to detect epoch change, as it is done in
+    Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
     `forge.src.data.datasets.HfIterableDataset`.
 
     Args:
-        dataloader_iter: Iterator over dataloader batches
-        device: Device for synchronization tensors (use cuda for NCCL backend)
-        dp_mesh: Data parallel process group (None for single process)
+        iter (Iterator): Iterator over dataloader batches
+        device (torch.device): Device for synchronizing tensors
+        dp_mesh (dist.ProcessGroup | None): Data parallel process group (None for single process)
     """
 
     def __init__(
         self,
-        dataloader_iter: Iterator,
+        iter: Iterator,
         device: torch.device,
         dp_mesh: dist.ProcessGroup | None = None,
     ):
-        self.dataloader_iter = dataloader_iter
+        self.iter = iter
         self.device = device
         self.dp_mesh = dp_mesh
 
         # Prefetch first batch for pipeline-style execution
-        self._next_batch = next(dataloader_iter)
+        self._next_batch = next(iter)
 
         # Track pending async epoch sync
         self._epoch_tensor: torch.Tensor | None = None
@@ -285,7 +283,7 @@ class StopAfterOneEpoch:
         current_epoch = extract_epoch_from_batch(current_batch)
 
         # Prefetch next batch and check for epoch change
-        self._next_batch = next(self.dataloader_iter)
+        self._next_batch = next(self.iter)
         next_epoch = extract_epoch_from_batch(self._next_batch)
         epoch_changed = next_epoch > current_epoch
 
@@ -306,11 +304,10 @@ class StopAfterOneEpoch:
 
 
 def extract_epoch_from_batch(batch: dict) -> int:
-    """Extract epoch number from batch metrics. Useful to detect epoch changes during validation,
-    where we want to run exactly one epoch.
+    """Extract epoch number from batch metrics. Useful to detect epoch changes during validation.
 
-    Assumes the dataset adds "num_epochs" Metric to the sample, where one epoch is incremented on dataset exhaustion.
-    For an example, check forge.src.data.datasets.HfIterableDataset.
+    Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
+    `forge.src.data.datasets.HfIterableDataset`.
 
     Args:
         batch (dict): Batch dictionary with 'metrics' field

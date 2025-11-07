@@ -202,9 +202,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
-        # Store tokenizer for later use (e.g., decoding in debug logs)
-        self.tokenizer = tokenizer
-
         # Get DP mesh for data sharding
         dp_mesh = None
         if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
@@ -215,7 +212,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
             dp_mesh=dp_mesh,
-            **dataset_config,  # Unpack config (path, split, etc.)
+            **dataset_config,
         )
 
         packer = TextPacker(padding_idx=0)
@@ -351,7 +348,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
             # NOTE: Assumes batch contains samples with Metric("num_epochs", ...) field
             batch_iter = StopAfterOneEpoch(
-                dataloader_iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
+                iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
                 device=self.device,
                 dp_mesh=dp_mesh,
             )
