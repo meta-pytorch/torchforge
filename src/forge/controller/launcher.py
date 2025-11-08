@@ -17,6 +17,8 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
+
+from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 
@@ -27,8 +29,6 @@ from monarch.tools import commands
 from monarch.tools.commands import info
 from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
-
-from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
@@ -251,7 +251,7 @@ class MastLauncher(BaseLauncher):
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
                 "hpcClusterUuid": "MastProdCluster",
-                "rmAttribution": "pytorch4all_clients_approved",
+                "rmAttribution": "msl_infra_hw_enab_agentrl",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
