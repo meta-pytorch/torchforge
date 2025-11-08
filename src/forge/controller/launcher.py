@@ -8,6 +8,7 @@
 
 import copy
 import getpass
+import logging
 import os
 import subprocess
 import tempfile
@@ -47,6 +48,8 @@ except ImportError as e:
 JOB_NAME_KEY = "job_name"
 LAUNCHER_KEY = "launcher"
 
+logger = logging.getLogger(__name__)
+
 
 def mount_mnt_directory(mount_dst: str) -> None:
     """Mounts the MAST remote directory to the specified destination.
@@ -85,9 +88,9 @@ def mount_mnt_directory(mount_dst: str) -> None:
             check=True,
             env=clean_env,
         )
-        print("Done mounting")
+        logger.info("Done mounting")
     except subprocess.CalledProcessError as e:
-        print(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
+        logger.error(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
     finally:
         # Restore original LD_LIBRARY_PATH
         if original_ld_library_path:
@@ -173,7 +176,7 @@ class Slurmlauncher(BaseLauncher):
                 gpu_count = inferred_gpu
 
             if cpu_count and memory_mb and gpu_count:
-                print(
+                logger.info(
                     f"Inferred SLURM node resources from environment: "
                     f"{cpu_count} CPUs, {memory_mb} MB memory, {gpu_count} GPUs"
                 )
@@ -185,7 +188,7 @@ class Slurmlauncher(BaseLauncher):
                 f"Got: cpu={cpu_count}, memory_mb={memory_mb}, gpus_per_node={gpu_count}"
             )
 
-        print(
+        logger.info(
             f"Using SLURM node resources: {cpu_count} CPUs, {memory_mb} MB memory, {gpu_count} GPUs"
         )
 
@@ -294,7 +297,7 @@ class MastLauncher(BaseLauncher):
         handle = self.create_server_handle()
         server_spec = info(handle)
         if server_spec and server_spec.state == AppState.RUNNING:
-            print(f"Job {self.job_name} is already running. Skipping launch.")
+            logger.info(f"Job {self.job_name} is already running. Skipping launch.")
             return server_spec
 
         config = Config(
