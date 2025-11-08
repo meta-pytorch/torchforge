@@ -16,7 +16,7 @@ import torch
 import torchstore as ts
 from forge.actors.generator import Generator
 
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.provisioner import init_provisioner
 
 from forge.controller.service.service import uuid
@@ -50,7 +50,7 @@ PYTHONPATH=. pytest -s tests/integration_tests/test_policy_update.py::TestWeight
 TEST_DCP_DIR = "test_dcp_tmp"
 
 
-class MockRLTrainer(RLTrainer):
+class MockTitanTrainer(TitanTrainer):
     @endpoint
     async def zero_out_model_states(self):
         """This simply sets all model weights to zero."""
@@ -59,7 +59,7 @@ class MockRLTrainer(RLTrainer):
             for k in sd.keys():
                 if not torch.is_floating_point(sd[k]):
                     logger.info(
-                        f"[MockRLTrainer] zero_out_model_states(): skipping non-float param {k}"
+                        f"[MockTitanTrainer] zero_out_model_states(): skipping non-float param {k}"
                     )
                     continue
                 sd[k] *= 0.0
@@ -199,14 +199,14 @@ async def _setup_and_teardown(request):
         )
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
-    policy, rl_trainer = await asyncio.gather(
+    policy, titan_trainer = await asyncio.gather(
         *[
             Generator.options(**services_policy_cfg).as_service(**cfg.policy),
-            MockRLTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
+            MockTitanTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
         ]
     )
 
-    yield policy, rl_trainer
+    yield policy, titan_trainer
 
     # ---- teardown ---- #
     logger.info("Shutting down services and cleaning up DCP directory..")
@@ -214,7 +214,7 @@ async def _setup_and_teardown(request):
     await asyncio.gather(
         policy.shutdown(),
         ts.shutdown(),
-        RLTrainer.shutdown(rl_trainer),
+        TitanTrainer.shutdown(titan_trainer),
     )
 
     # Cleanup DCP directory
@@ -235,7 +235,7 @@ class TestWeightSync:
     @requires_cuda
     async def test_sanity_check(self, _setup_and_teardown):
         """
-        Sanity check for weight sync sharding between RLTrainer and Policy for a given model config.
+        Sanity check for weight sync sharding between TitanTrainer and Policy for a given model config.
 
         The check performs the following steps:
         - Initialize trainer and push weights v0 (original huggingface ckpt)
@@ -245,15 +245,15 @@ class TestWeightSync:
 
         """
 
-        policy, rl_trainer = _setup_and_teardown
+        policy, titan_trainer = _setup_and_teardown
 
         v0 = uuid.uuid4().int
         v1 = v0 + 1
 
-        await rl_trainer.push_weights.call(policy_version=v0)
+        await titan_trainer.push_weights.call(policy_version=v0)
         # Setting everything to zero
-        await rl_trainer.zero_out_model_states.call()
-        await rl_trainer.push_weights.call(policy_version=v1)
+        await titan_trainer.zero_out_model_states.call()
+        await titan_trainer.push_weights.call(policy_version=v1)
         await policy.save_model_params.fanout()
 
         # Sanity check that before update all the tests pass
