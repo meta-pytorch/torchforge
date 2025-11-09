@@ -259,10 +259,11 @@ class MastLauncher(BaseLauncher):
             ),
         )
 
-        # Submit job without waiting for it to be RUNNING
         job_handle = create(config, name=self.job_name)
-        print(f"MAST job {self.job_name} submitted successfully.")
-        print(f"Job link: {job_handle}")
+        print(
+            f"MAST job launched successfully:\n"
+            f"\033[34mhttps://www.internalfb.com/mlhub/pipelines/runs/mast/{self.job_name}\033[0m\n"
+        )
         return job_handle
 
     def add_additional_packages(self, packages: "Packages") -> "Packages":
