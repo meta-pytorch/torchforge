@@ -287,12 +287,14 @@ class Generator(ForgeActor):
         return state_dict
 
     @endpoint
-    async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
+    async def generate(self, prompt: str, *, priority: int = 0, n: int | None = None) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
             prompt (str): The prompt to generate a response for.
             priority (int, optional): The priority of the request. Defaults to 0.
+            n (int, optional): Number of completions to generate. If not provided, uses the default
+                from self.sampling_params.n.
 
         Returns:
             list[Completion]: n completions from vLLM based on your prompt.
@@ -301,12 +303,18 @@ class Generator(ForgeActor):
         t.start()
         record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
+        # Use provided n or fall back to default, creating modified params if needed
+        if n is not None and n != self.sampling_params.n:
+            params = SamplingParams.from_optional(**{**self.sampling_params.to_dict(), 'n': n})
+        else:
+            params = self.sampling_params
+
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)
 
         tokenization_kwargs = {}
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
-        truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
+        truncate_prompt_tokens = params.truncate_prompt_tokens
         _validate_truncation_size(
             self.vllm_config.model_config.max_model_len,
             truncate_prompt_tokens,
@@ -315,7 +323,7 @@ class Generator(ForgeActor):
         prompt_str, request = self.processor.process_inputs(
             request_id=request_id,
             prompt={"prompt": prompt},
-            params=self.sampling_params,
+            params=params,
             arrival_time=None,
             tokenization_kwargs=tokenization_kwargs,
             trace_headers=None,
@@ -331,21 +339,21 @@ class Generator(ForgeActor):
             await self.request_lock.wait_for(lambda: self.accepting_requests)
 
             # Explicitly keeping the redundant logic to make it easier to pick up vLLM changes
-            if (num_samples := self.sampling_params.n) == 1:
+            if (num_samples := params.n) == 1:
                 self.output_processor.add_request(request, prompt_str, None, 0)
                 request, _ = self._preprocess_add_request(request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (None, request_fut)
                 self.scheduler.add_request(request)
             else:
-                parent_req = ParentRequest(request_id, self.sampling_params)
+                parent_req = ParentRequest(request_id, params)
                 for idx in range(num_samples):
                     # Note: `get_child_info` mutates ParentRequest to track the
                     # generated child request
-                    child_request_id, params = parent_req.get_child_info(idx)
+                    child_request_id, params_child = parent_req.get_child_info(idx)
                     child_request = request if idx == num_samples - 1 else copy(request)
                     child_request.request_id = child_request_id
-                    child_request.sampling_params = params
+                    child_request.sampling_params = params_child
                     self.output_processor.add_request(
                         child_request, prompt_str, parent_req, idx
                     )
