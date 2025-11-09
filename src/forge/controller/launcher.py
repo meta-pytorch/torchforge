@@ -242,7 +242,6 @@ class MastLauncher(BaseLauncher):
         server_spec = info(handle)
         if server_spec and server_spec.state == AppState.RUNNING:
             print(f"Job {self.job_name} is already running. Skipping launch.")
-            print(f"Job link: {handle}")
             return server_spec
 
         config = Config(
