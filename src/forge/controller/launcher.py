@@ -17,6 +17,8 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
+
+from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 
@@ -24,11 +26,8 @@ from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
-from monarch.tools.commands import info
-from monarch.tools.components import hyperactor
+from monarch.tools.commands import create, info
 from monarch.tools.config import Config, Workspace
-
-from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
@@ -243,6 +242,7 @@ class MastLauncher(BaseLauncher):
         server_spec = info(handle)
         if server_spec and server_spec.state == AppState.RUNNING:
             print(f"Job {self.job_name} is already running. Skipping launch.")
+            print(f"Job link: {handle}")
             return server_spec
 
         config = Config(
@@ -259,8 +259,11 @@ class MastLauncher(BaseLauncher):
             ),
         )
 
-        await commands.get_or_create(self.job_name, config)
-        return server_spec
+        # Submit job without waiting for it to be RUNNING
+        job_handle = create(config, name=self.job_name)
+        print(f"MAST job {self.job_name} submitted successfully.")
+        print(f"Job link: {job_handle}")
+        return job_handle
 
     def add_additional_packages(self, packages: "Packages") -> "Packages":
         packages.add_package("oil.oilfs:stable")

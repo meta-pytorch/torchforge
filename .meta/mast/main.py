@@ -63,8 +63,10 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
             extra_args=extra_args or [],
         )
         await launcher.launch_mast_job()
-        print(f"MAST job {launcher.job_name} launched successfully with client role.")
-        print("The client is running inside MAST and will execute the training.")
+        print(f"\n{'='*80}")
+        print(f"MAST job '{launcher.job_name}' submitted successfully!")
+        print(f"The client is running inside MAST and will execute the training.")
+        print(f"{'='*80}\n")
     else:
         # In remote mode, we're already running inside MAST, so mount directory, init provisioner and run training
         mount_mnt_directory("/mnt/wsfuse")
