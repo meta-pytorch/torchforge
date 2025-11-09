@@ -251,7 +251,7 @@ class MastLauncher(BaseLauncher):
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
                 "hpcClusterUuid": "MastProdCluster",
-                "rmAttribution": "msl_infra_hw_enab_agentrl",
+                "rmAttribution": "pytorch4all_clients_approved",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
