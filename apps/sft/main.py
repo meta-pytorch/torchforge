@@ -389,7 +389,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
             with maybe_no_grad:
                 for batch in batch_iter:
-                    # Check max_eval_steps limit
+                    # if max_eval_steps>len(dataset), it will be stopped earlier by StopAfterOneEpoch.
                     if (
                         self.max_eval_steps is not None
                         and num_steps >= self.max_eval_steps
