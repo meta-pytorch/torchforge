@@ -287,7 +287,9 @@ class Generator(ForgeActor):
         return state_dict
 
     @endpoint
-    async def generate(self, prompt: str, *, priority: int = 0, n: int | None = None) -> list[Completion]:
+    async def generate(
+        self, prompt: str, *, priority: int = 0, n: int | None = None
+    ) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:

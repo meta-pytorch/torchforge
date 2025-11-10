@@ -17,8 +17,6 @@ from typing import Any
 import monarch
 
 import torchx.specs as specs
-
-from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 
@@ -28,6 +26,8 @@ from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import create, info
 from monarch.tools.config import Config, Workspace
+
+from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
