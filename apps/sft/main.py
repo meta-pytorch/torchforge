@@ -92,6 +92,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
             self.rank_should_record_loss = False
 
+        # Logging frequency
+        self.log_every_n_steps = self.job_config.get("log_every_n_steps", 10)
+
     def _init_dist(self):
         """Initializes torch distributed.
 
@@ -133,9 +136,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # metric logger
         self.mlogger = await self.setup_metric_logger()
-
-        # Logging frequency
-        self.log_every_n_steps = self.job_config.get("log_every_n_steps", 10)
 
         # Load training datasets
         logger.info("Setting training datasets")
