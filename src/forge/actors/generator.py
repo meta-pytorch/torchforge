@@ -305,7 +305,6 @@ class Generator(ForgeActor):
         t.start()
         record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
-        # Use provided n or fall back to default, creating modified params if needed
         if n is not None and n != self.sampling_params.n:
             params = self.sampling_params.__replace__(n=n)
         else:
