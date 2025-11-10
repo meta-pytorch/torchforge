@@ -302,7 +302,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 loss = loss.detach()
 
         else:
-            # Non-PP forward / backward - must happen inside same context
+            # Non-PP forward / backward
             with self.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.maybe_enable_amp:
