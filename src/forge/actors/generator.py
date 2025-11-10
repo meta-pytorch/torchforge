@@ -305,7 +305,7 @@ class Generator(ForgeActor):
 
         # Use provided n or fall back to default, creating modified params if needed
         if n is not None and n != self.sampling_params.n:
-            params = SamplingParams.from_optional(**{**self.sampling_params.to_dict(), 'n': n})
+            params = self.sampling_params.__replace__(n=n)
         else:
             params = self.sampling_params
 
