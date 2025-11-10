@@ -11,7 +11,7 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 """
 
 import asyncio
-
+import contextlib
 import logging
 import math
 import os
@@ -86,6 +86,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self._init_dist()
         super().__init__(job_config)
 
+        # For Pipeline Parallelism (PP): Only the last PP stage computes the actual loss
+        # For non-PP setups: All ranks compute loss
+        self.rank_should_record_loss = True
+        if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
+            self.rank_should_record_loss = False
+
     def _init_dist(self):
         """Initializes torch distributed.
 
@@ -127,6 +133,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # metric logger
         self.mlogger = await self.setup_metric_logger()
+
+        # Logging frequency
+        self.log_every_n_steps = self.job_config.get("log_every_n_steps", 10)
 
         # Load training datasets
         logger.info("Setting training datasets")
@@ -267,7 +276,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         if parallel_dims.pp_enabled:
             # Pipeline Parallel forward / backward inside step() call
-            # Note: PP backward only happens if not in torch.no_grad() context
             with self.train_context(optional_context_parallel_ctx):
                 targets, losses = (
                     (labels, []) if self.pp_has_last_stage else (None, None)
@@ -284,10 +292,15 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
             loss = (
-                torch.mean(torch.stack(losses)).to(self.device)
+                torch.sum(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
-                else torch.tensor([-1.0], device=self.device)
+                else torch.tensor(-1.0, device=self.device)
             )
+
+            # TODO: PP requires gradients enabled and cant deactive with no_grad
+            if skip_backward:
+                loss = loss.detach()
+
         else:
             # Non-PP forward / backward - must happen inside same context
             with self.train_context(optional_context_parallel_ctx):
@@ -313,13 +326,14 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
-        loss = loss.item()
 
-        record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
-        if self.current_step % 10 == 0:
-            logger.info(
-                f"step {self.current_step} / {self.num_training_steps} | Loss: {loss}"
-            )
+        if self.rank_should_record_loss:
+            loss_val = loss.item()
+            record_metric("ForgeSFTRecipe/train_step/loss", loss_val, Reduce.MEAN)
+            if self.current_step % self.log_every_n_steps == 0:
+                logger.info(
+                    f"step {self.current_step} / {self.num_training_steps} | Loss: {loss_val}"
+                )
 
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
@@ -348,7 +362,17 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
             dp_mesh = self.parallel_dims.world_mesh.get_group("dp")
 
+        # For non-PP: disable gradients to save memory
+        # TODO: For PP, if disabling gradients, throws error
+        maybe_no_grad = (
+            contextlib.nullcontext()
+            if self.parallel_dims.pp_enabled
+            else torch.no_grad()
+        )
+
         # Evaluate each dataset sequentially
+        all_dataset_losses = []
+        all_dataset_steps = []
         for dataset_name, val_dataloader in self.val_dataloaders.items():
             logger.info(f"=====Evaluating dataset: {dataset_name}=====")
 
@@ -363,7 +387,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 dp_mesh=dp_mesh,
             )
 
-            with torch.no_grad():
+            with maybe_no_grad:
                 for batch in batch_iter:
                     # Check max_eval_steps limit
                     if (
@@ -386,31 +410,51 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     total_loss += loss
                     num_steps += 1
 
-                    # Log progress (rank 0 only)
-                    if num_steps % 50 == 0:
+                    # Log progress
+                    if (
+                        self.rank_should_record_loss
+                        and num_steps % self.log_every_n_steps == 0
+                    ):
                         loss_val = loss.item()
                         logger.info(
                             f"[dataset {dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}"
                         )
 
-            # Compute average loss
+            # log loss
             avg_loss = (total_loss / max(num_steps, 1)).item()
+            all_dataset_losses.append(avg_loss)
+            all_dataset_steps.append(num_steps)
             logger.info(
                 f"[dataset {dataset_name}] Final Step {num_steps} | Avg Loss: {avg_loss:.4f}"
             )
-            # Record metrics only on DP rank 0 to avoid double counting
-            # record_metric aggregates across all processes via monarch
-            should_record = True
-            if dp_mesh is not None:
-                dp_rank = torch.distributed.get_rank(group=dp_mesh)
-                should_record = dp_rank == 0
-
-            if should_record:
+            if self.rank_should_record_loss:
                 record_metric(
-                    f"evaluate/dataset_{dataset_name}_loss",
+                    f"evaluate/dataset_{dataset_name}_avg_loss",
                     avg_loss,
                     Reduce.MEAN,
                 )
+
+        # Record macro and micro average losses across datasets (only if multiple datasets)
+        if self.rank_should_record_loss and len(all_dataset_losses) > 1:
+            # Macro: same weight for all datasets
+            macro_avg_loss = sum(all_dataset_losses) / len(all_dataset_losses)
+            record_metric("evaluate/macro_avg_loss", macro_avg_loss, Reduce.MEAN)
+
+            # Micro: weighted mean by dataset size
+            total_steps = sum(all_dataset_steps)
+            micro_avg_loss = (
+                sum(
+                    loss * steps
+                    for loss, steps in zip(all_dataset_losses, all_dataset_steps)
+                )
+                / total_steps
+            )
+            record_metric("evaluate/micro_avg_loss", micro_avg_loss, Reduce.MEAN)
+
+            logger.info(
+                f"Macro avg loss (unweighted): {macro_avg_loss:.4f}, "
+                f"Micro avg loss (weighted): {micro_avg_loss:.4f}"
+            )
 
         # Restore train mode
         for model_part in self.model_parts:
