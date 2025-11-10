@@ -37,7 +37,7 @@ training:
       split: "train[:95%]"
 
 eval:
-  eval_every_n_steps: 5  # null = disabled
+  eval_every_n_steps: 50  # null = disabled
   max_eval_steps: null    # null = run until epoch completes
   datasets:
       - path: "yahma/alpaca-cleaned"
