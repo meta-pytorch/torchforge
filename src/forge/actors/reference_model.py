@@ -22,6 +22,7 @@ from torchtitan.config.job_config import (
     Compile,
     Model,
     Parallelism,
+    Quantize,
     Training,
 )
 from torchtitan.experiments.forge.engine import ForgeEngine
@@ -61,6 +62,7 @@ class ReferenceModel(ForgeActor):
         (TP, PP, CP, DP)
         checkpoint (Checkpoint): Checkpoint loading configuration
         compile (Compile): Torch compilation settings
+        quantize (Quantize): Quantization settings (float8, etc.)
         comm (Comm): Communication backend configuration
         training (Training): Training-related settings (dtype, garbage
         collection, etc.)
@@ -71,6 +73,7 @@ class ReferenceModel(ForgeActor):
     parallelism: Parallelism = field(default_factory=Parallelism)
     checkpoint: Checkpoint = field(default_factory=Checkpoint)
     compile: Compile = field(default_factory=Compile)
+    quantize: Quantize = field(default_factory=Quantize)
     comm: Comm = field(default_factory=Comm)
     training: Training = field(
         default_factory=Training
