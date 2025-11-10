@@ -36,7 +36,6 @@ CONFIG_FILE="$1"
 
 # Generate a unique job name based on the config file name
 BASENAME=$(basename "$CONFIG_FILE" .yaml)
-BASENAME=${BASENAME#.meta/mast/}
 RANDOM_SUFFIX=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 6 | head -n 1)
 JOB_NAME="${BASENAME}-${RANDOM_SUFFIX}"
 log_info "Generated job name: $JOB_NAME"
