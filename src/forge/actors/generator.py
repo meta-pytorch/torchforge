@@ -426,18 +426,28 @@ class Generator(ForgeActor):
                     self.request_lock.notify_all()
 
     @endpoint
-    async def update_weights(self, version: int) -> None:
+    async def update_weights(
+        self, version: int, *, wait_for_pending: bool = True, reset_cache: bool = True
+    ) -> None:
         """Update weights on base model from a generator version to be found in a torchstore volume.
 
         Args:
             generator_version (int): Generator version from which to update. This will correspond to a key in a
                 torchstore volume.
+            wait_for_pending (bool): If True (default), blocks new requests and waits for pending requests to
+                complete before updating weights. If False, updates weights immediately without waiting,
+                allowing in-flight updates (requests may see new weights mid-generation).
+            reset_cache (bool): If True (default), resets the KV prefix cache after updating weights.
+                Set to False to preserve cache when doing in-flight updates.
 
         Example:
             >>> trainer.train_step(...)
             >>> version += 1
             >>> await trainer.push_weights()
+            >>> # Original blocking behavior (default)
             >>> generator.update_weights(version)
+            >>> # In-flight updates (opt-in)
+            >>> generator.update_weights(version, wait_for_pending=False, reset_cache=False)
         """
         # TODO: enable shared memory prefetch for DCP-based weight sync
         if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
@@ -448,27 +458,28 @@ class Generator(ForgeActor):
         # Serialize updates (only one update at a time)
         async with self.update_lock:
             # Grab the lock to stop accepting requests and wait on pending requests
-            async with self.request_lock:
-                self.accepting_requests = False
-                curr_requests = [fut for _, fut in self.requests.values()]
-                if curr_requests:
-                    # Record pending requests metrics
-                    record_metric(
-                        "generator_perf/update_weights/avg_pending_requests",
-                        len(curr_requests),
-                        Reduce.MEAN,
-                    )
-                    record_metric(
-                        "generator_perf/update_weights/max_pending_requests",
-                        len(curr_requests),
-                        Reduce.MAX,
-                    )
-                    logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+            if wait_for_pending:
+                async with self.request_lock:
+                    self.accepting_requests = False
+                    curr_requests = [fut for _, fut in self.requests.values()]
+                    if curr_requests:
+                        # Record pending requests metrics
+                        record_metric(
+                            "generator_perf/update_weights/avg_pending_requests",
+                            len(curr_requests),
+                            Reduce.MEAN,
+                        )
+                        record_metric(
+                            "generator_perf/update_weights/max_pending_requests",
+                            len(curr_requests),
+                            Reduce.MAX,
+                        )
+                        logger.debug(f"Waiting for {len(curr_requests)} pending requests")
 
-                # Wait until all pending requests have been processed
-                # TODO: If generating long sequences, this might be long and will block
-                # generator weight updates
-                await self.request_lock.wait_for(lambda: len(self.requests) == 0)
+                    # Wait until all pending requests have been processed
+                    # TODO: If generating long sequences, this might be long and will block
+                    # generator weight updates
+                    await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
             # Record weight update metrics
             record_metric(
@@ -492,12 +503,14 @@ class Generator(ForgeActor):
             self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
-            self.scheduler.reset_prefix_cache()
+            if reset_cache:
+                self.scheduler.reset_prefix_cache()
 
         # Resume accepting requests and wake up any waiting generate() calls
-        async with self.request_lock:
-            self.accepting_requests = True
-            self.request_lock.notify_all()
+        if wait_for_pending:
+            async with self.request_lock:
+                self.accepting_requests = True
+                self.request_lock.notify_all()
 
         logger.info(f"Weight update completed (now v{self.generator_version})")
 
