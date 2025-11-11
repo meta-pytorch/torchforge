@@ -127,7 +127,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
-        # Setup training data
         self.train_dataloader = self.setup_data()
 
         self.mlogger = await self.setup_metric_logger()
