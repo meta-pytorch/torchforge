@@ -14,6 +14,10 @@ import uuid
 
 import torch
 
+from forge.controller.launcher import BaseLauncher, get_launcher
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.types import ProcessConfig, ProvisionerConfig
+
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
@@ -21,10 +25,6 @@ from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
-
-from forge.controller.launcher import BaseLauncher, get_launcher
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
-from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -364,7 +364,6 @@ class Provisioner:
             # Spawn procs without bootstrap to avoid SetupActor mesh failures
             procs = host_mesh.spawn_procs(
                 per_host={"procs": num_procs},
-                name=mesh_name,
             )
 
             # Set up environment variables (replaces old bootstrap)
