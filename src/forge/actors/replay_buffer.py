@@ -170,22 +170,6 @@ class ReplayBuffer(ForgeActor):
         )
         self.buffer = deque(self._collect(indices))
 
-        # Record evict metrics
-        policy_age = [
-            curr_policy_version - ep.data.policy_version for ep in self.buffer
-        ]
-        if policy_age:
-            record_metric(
-                "buffer/evict/avg_policy_age",
-                sum(policy_age) / len(policy_age),
-                Reduce.MEAN,
-            )
-            record_metric(
-                "buffer/evict/max_policy_age",
-                max(policy_age),
-                Reduce.MAX,
-            )
-
         evicted_count = buffer_len_before_evict - len(self.buffer)
         record_metric("buffer/evict/sum_episodes_evicted", evicted_count, Reduce.SUM)
 
