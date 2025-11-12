@@ -33,9 +33,9 @@ def age_evict(
     """Buffer eviction policy, remove old or over-sampled entries"""
     indices = []
     for i, entry in enumerate(buffer):
-        if max_age and policy_version - entry.data.policy_version > max_age:
+        if max_age is not None and policy_version - entry.data.policy_version > max_age:
             continue
-        if max_samples and entry.sample_count >= max_samples:
+        if max_samples is not None and entry.sample_count >= max_samples:
             continue
         indices.append(i)
     return indices
