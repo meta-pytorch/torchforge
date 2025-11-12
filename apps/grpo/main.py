@@ -210,7 +210,7 @@ class DatasetActor(ForgeActor):
     model: str = "Qwen/Qwen3-1.7B"
 
     @endpoint
-    def setup(self):
+    async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
         self._epoch = 0
 
@@ -266,7 +266,12 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     async def pad_token(self):
-        return self._tokenizer.pad_token_id
+        # Use pad_token_id if available, otherwise use eos_token_id
+        # Llama models don't have a pad token by default
+        if self._tokenizer.pad_token_id is not None:
+            return self._tokenizer.pad_token_id
+        else:
+            return self._tokenizer.eos_token_id
 
 
 async def drop_weights(version: int):
