@@ -81,37 +81,37 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
-        self._init_dist()
+        # self._init_dist()
         super().__init__(job_config)
 
-    def _init_dist(self):
-        """Initializes torch distributed.
+    # def _init_dist(self):
+    #     """Initializes torch distributed.
 
-        torchrun normally hands this, but we need to do it ourselves
-        in monarch for now.
+    #     torchrun normally hands this, but we need to do it ourselves
+    #     in monarch for now.
 
-        We should consider putting this into ForgeActor, but having this
-        be explicit for now.
+    #     We should consider putting this into ForgeActor, but having this
+    #     be explicit for now.
 
-        """
-        env = {
-            "RANK": str(self._rank),
-            "LOCAL_RANK": str(self._rank),
-            "LOCAL_WORLD_SIZE": str(self._size),
-            "GROUP_RANK": str(self._size),
-            "GROUP_WORLD_SIZE": str(self._size),
-            "ROLE_RANK": str(self._rank),
-            "ROLE_WORLD_SIZE": str(self._size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self._size),
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
-        logger.info("env: {}".format(env))
+    #     """
+    #     env = {
+    #         "RANK": str(self._rank),
+    #         "LOCAL_RANK": str(self._rank),
+    #         "LOCAL_WORLD_SIZE": str(self._size),
+    #         "GROUP_RANK": str(self._size),
+    #         "GROUP_WORLD_SIZE": str(self._size),
+    #         "ROLE_RANK": str(self._rank),
+    #         "ROLE_WORLD_SIZE": str(self._size),
+    #         "ROLE_NAME": "rank",
+    #         "WORLD_SIZE": str(self._size),
+    #         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+    #     }
+    #     os.environ.update(env)
+    #     logger.info("env: {}".format(env))
 
     async def setup_metric_logger(self):
         """Initialization happens in the main process. Here we just retrieve it"""
-        mlogger = await get_or_create_metric_logger()
+        mlogger: GlobalLoggingActor = await get_or_create_metric_logger()
         return mlogger
 
     def record_batch_metrics(self, data_metrics: list):
