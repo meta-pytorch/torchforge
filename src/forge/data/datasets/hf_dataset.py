@@ -70,6 +70,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         dataset_name: str | None = None,
         filter_fn: Callable | None = None,
         filter_kwargs: dict[str, Any] | None = None,
+        dp_mesh: dist.ProcessGroup | None = None,
         **load_dataset_kwargs,
     ):
         # Store configuration
@@ -79,6 +80,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         self._model_transform = model_transform
         self._output_transform = output_transform
         self._weight = weight if weight is not None else 1.0
+        self._dp_mesh = dp_mesh
 
         # Create default transform if not provided
         self._metric_transform = metric_transform or DefaultDatasetMetricTransform()
@@ -102,6 +104,10 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
             self._metric_transform.set_source(dataset_name)
 
         # Internal state for resumption
+        # _start_epoch: The epoch to start from. Updated on resume from ckpt.
+        # useful when doing iter(ds), which restarts dataset from original state.
+        self._start_epoch = 0
+        # _num_epochs: updated on every dataset exhaustion
         self._num_epochs = 0
 
         # Load and setup HF dataset
@@ -138,11 +144,24 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         shuffle configuration, and filtering. Called once during __init__.
         """
 
-        # Distributed setup
+        # Extract rank/world_size from DP mesh
         world_size, rank = 1, 0
-        if dist.is_initialized():
+        if self._dp_mesh is not None:
+            world_size = dist.get_world_size(group=self._dp_mesh)
+            rank = dist.get_rank(group=self._dp_mesh)
+            logger.debug(
+                f"Using DP mesh for sharding: rank={rank}, world_size={world_size}"
+            )
+        elif dist.is_initialized():
+            # Fallback to global rank (may not respect TP/PP)
             world_size = dist.get_world_size()
             rank = dist.get_rank()
+
+            # TODO: is there a way to detect this and raise error instead?
+            logger.warning(
+                f"Using global rank for sharding: rank={rank}, world_size={world_size}. "
+                f"If using other types of parallelsim (CP/TP/PP), pass dp_mesh for correct sharding."
+            )
 
         # Load and shard dataset
         ds = load_dataset(**load_dataset_kwargs)
@@ -152,7 +171,6 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         if is_streaming:
             logger.warning(
                 f"Streaming datasets were not yet tested for distributed training. "
-                f"split_dataset_by_node is applied, but no resharding was done manually. "
                 f"Dataset '{self.info.name}' has "
                 f"{getattr(ds, 'num_shards', 'unknown')} shards, and your training has {world_size} ranks."
                 f"See: https://huggingface.co/docs/datasets/en/package_reference/main_classes?#datasets.IterableDataset.shard"
@@ -187,7 +205,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
                 if num_shards > dataset_size:
                     raise ValueError(
                         f"Number of shards ({num_shards}) is greater than the dataset size ({dataset_size})."
-                        f"Please decrease one of {num_shards_per_rank=} or {num_dataloader_workers=} or {world_size=}."
+                        f"Please decrease one of {num_shards_per_rank=} or dataloader.num_workers={num_dataloader_workers}"
                     )
 
             ds = ds.to_iterable_dataset(num_shards=num_shards)
@@ -218,6 +236,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         - Adds 'num_epochs' metric to track dataset progress
         - Yields samples indefinitely for continuous training
         """
+        self._num_epochs = self._start_epoch
 
         while True:  # Infinite iteration
             self._ds.set_epoch(self._num_epochs)
@@ -276,7 +295,7 @@ class HfIterableDataset(InfiniteTuneIterableDataset):
         return state
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self._num_epochs = state_dict["num_epochs"]
+        self._start_epoch = state_dict["num_epochs"]
         hf_state = state_dict["hf_dataset_state"]
 
         # HF is responsible for resuming the dataset state

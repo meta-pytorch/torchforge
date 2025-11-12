@@ -31,7 +31,16 @@ training:
   max_norm: 1.0
   steps: 1000
   compile: false
-  dataset: "c4"
+  datasets:
+    - path: "yahma/alpaca-cleaned"
+      split: "train[:95%]"
+
+eval:
+  eval_every_n_steps: 50  # null = disabled
+  max_eval_steps: null    # null = run until epoch completes
+  datasets:
+      - path: "yahma/alpaca-cleaned"
+        split: "train[95%:]"
 
 parallelism:
   data_parallel_replicate_degree: 1
