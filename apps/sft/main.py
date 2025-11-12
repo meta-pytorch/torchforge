@@ -85,7 +85,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     async def setup_metric_logger(self):
         """Initialization happens in the main process. Here we just retrieve it"""
-        mlogger: GlobalLoggingActor = await get_or_create_metric_logger()
+        mlogger = await get_or_create_metric_logger()
         return mlogger
 
     def record_batch_metrics(self, data_metrics: list):
