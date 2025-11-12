@@ -6,18 +6,17 @@
 
 """Trainer protocol for Forge.
 
-This module defines the unified training interface that all trainer implementations
-must conform to.
+This module defines the unified training interface that all trainer
+implementations must conform to.
 
 """
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
 
 from forge.api.types import (
     ForwardBackwardResult,
-    ForwardResult,
     LossFn,
     OptimStepResult,
     TextTrainBatch,
@@ -28,7 +27,13 @@ from forge.api.types import (
 
 @runtime_checkable
 class Trainer(Protocol):
-    """Protocol defining the standard interface for all Forge trainers."""
+    """Protocol defining the standard interface for all Forge trainers.
+
+    Trainer implementations are expected to accept a default loss function at
+    initialization time. This loss function is used when loss_fn is not
+    provided to forward_backward(). The default loss should follow the
+    LossFn signature.
+    """
 
     async def forward_backward(
         self, batch: TextTrainBatch, loss_fn: LossFn | None = None
@@ -49,8 +54,10 @@ class Trainer(Protocol):
             >>> await trainer.optim_step()  # Apply all accumulated gradients
 
         Custom loss function for specific batches:
-            >>> def custom_loss(logits: torch.Tensor, batch: TextTrainBatch) -> torch.Tensor:
-            >>>     # Custom loss computation (e.g., PPO clip, DPO, etc.)
+            >>> def custom_loss(outputs: dict[str, Any], batch: TextTrainBatch) -> torch.Tensor:
+            >>>     # Custom loss computation (e.g., PPO clip, DPO, cut cross entropy, etc.)
+            >>>     logits = outputs["logits"]
+            >>>     # ... compute loss from logits, or use other outputs like hidden_states
             >>>     return loss
             >>>
             >>> result = await trainer.forward_backward(batch, loss_fn=custom_loss)
@@ -59,7 +66,8 @@ class Trainer(Protocol):
             batch: TextTrainBatch containing input_ids, target_ids, and optional
                 target_mask/target_weights. See forge.api.types.TextTrainBatch for details.
             loss_fn: Optional custom loss function. If None, uses the loss function
-                configured at trainer creation. Signature: (logits, batch) -> loss.
+                configured at trainer creation. Signature: (outputs, batch) -> loss
+                where outputs is a dict with at least "logits" key.
                 Useful for mixed training objectives or experimentation.
 
         Returns:
@@ -68,10 +76,12 @@ class Trainer(Protocol):
         Note:
             The default loss function is configured at trainer creation time via the
             `loss` parameter. The `loss_fn` parameter here allows per-batch override.
+            All loss functions should accept (outputs: dict[str, Any], batch: TextTrainBatch)
+            where outputs contains at minimum a "logits" key.
         """
         ...
 
-    async def optim_step(self, params: dict[str, Any] | None = None) -> OptimStepResult:
+    async def optim_step(self) -> OptimStepResult:
         """Apply optimizer step using accumulated gradients, then clear gradients.
 
         This method:
@@ -83,11 +93,6 @@ class Trainer(Protocol):
 
         Gradients must have been accumulated via forward_backward() calls before
         calling this method.
-
-        Args:
-            params: Optional optimizer parameters. Currently reserved for future use.
-                Most implementations ignore this and use the optimizer config from
-                trainer initialization.
 
         Returns:
             OptimStepResult containing step number, learning rate, and accumulated batch count
@@ -132,7 +137,7 @@ class Trainer(Protocol):
         """
         ...
 
-    async def forward(self, inputs: dict[str, torch.Tensor]) -> ForwardResult:
+    async def forward(self, inputs: dict[str, torch.Tensor]) -> torch.Tensor:
         """Run forward pass only, without backward pass (for evaluation/inference).
 
         This method executes the model's forward pass without computing gradients.
@@ -147,37 +152,41 @@ class Trainer(Protocol):
                 Other keys depend on the model architecture.
 
         Returns:
-            ForwardResult containing model logits
+            Model output logits. Shape: [batch_size, seq_len, vocab_size]
 
         Note:
             This runs in torch.no_grad() context - no gradients are computed.
 
         Example:
             >>> eval_batch = {"input_ids": torch.tensor([[1, 2, 3, 4]])}
-            >>> output = await trainer.forward(eval_batch)
-            >>> logits = output.logits  # [1, 4, vocab_size]
+            >>> logits = await trainer.forward(eval_batch)  # [1, 4, vocab_size]
             >>> predictions = logits.argmax(dim=-1)  # [1, 4]
         """
         ...
 
-    async def save_state(
-        self, name: str | None = None, path: str | None = None
-    ) -> dict[str, Any]:
-        """Save a checkpoint of the current trainer state.
+    async def save(
+        self,
+        name: str | None = None,
+        path: str | None = None,
+        weights_only: bool = False,
+    ) -> str:
+        """Save trainer state or weights to persistent storage.
 
-        Saves the complete training state including model weights, optimizer state,
-        learning rate scheduler state, and current step counter. This checkpoint
-        can be loaded later to resume training from this exact point.
+        By default, saves complete training state (model weights, optimizer state,
+        learning rate scheduler state, and step counter). Set weights_only=True to
+        save only model weights for inference/deployment.
 
         Args:
             name: Optional checkpoint name/identifier. If None, uses the current
-                step number (e.g., "step-1000").
+                step number (e.g., "step-1000" or "weights-step-1000").
             path: Optional base directory or URI where checkpoint should be saved.
                 If None, uses the default checkpoint directory configured at trainer
                 creation. Supports different backends via URI schemes:
                 - `/local/path` - local filesystem
                 - `ts://key` - TorchStore
                 - `s3://bucket/key` - S3
+            weights_only: If True, saves only model weights (lighter, for inference).
+                If False (default), saves full training state including optimizer.
 
         Location resolution:
             - Both provided: path/name (e.g., "/checkpoints" + "best" = "/checkpoints/best")
@@ -186,28 +195,27 @@ class Trainer(Protocol):
             - Neither: default_dir/step-{current_step}
 
         Returns:
-            dict containing:
-                - path: str - Full path where checkpoint was saved
-                - step: int - Training step at which checkpoint was saved
+            Full path/URI where checkpoint was saved
 
         Example:
-            >>> # Save to default location with step number
-            >>> result = await trainer.save_state()  # => /default/step-1000
+            >>> # Save full training state (default)
+            >>> path = await trainer.save(name="checkpoint-1000")
+            >>> print(f"Saved to {path}")  # => "Saved to /default/checkpoint-1000"
             >>>
-            >>> # Save with custom name to default location
-            >>> result = await trainer.save_state("best-model")  # => /default/best-model
+            >>> # Save weights only for inference
+            >>> path = await trainer.save(name="policy-v1", weights_only=True)
             >>>
-            >>> # Save to custom base directory
-            >>> result = await trainer.save_state("final", "/custom/checkpoints")
-            >>> # => /custom/checkpoints/final
+            >>> # Save to TorchStore
+            >>> path = await trainer.save(name="best", path="ts://checkpoints")
+            >>> # => "ts://checkpoints/best"
         """
         ...
 
-    async def load_state(self, path: str | None = None) -> dict[str, Any]:
+    async def load(self, path: str | None = None) -> str:
         """Load a previously saved checkpoint.
 
-        Restores the complete training state from a checkpoint, including model
-        weights, optimizer state, learning rate scheduler state, and step counter.
+        Restores training state from a checkpoint. Automatically handles both
+        full checkpoints and weights-only checkpoints.
 
         Args:
             path: Optional path or URI to the checkpoint to load. If None, loads
@@ -217,63 +225,18 @@ class Trainer(Protocol):
                 - `s3://bucket/key` - S3
 
         Returns:
-            dict containing:
-                - step: int - Training step from the loaded checkpoint
-                - learning_rate: float - Learning rate from the loaded checkpoint
+            Path/URI that was loaded
 
         Example:
             >>> # Load latest checkpoint from default location
-            >>> result = await trainer.load_state()
-            >>> print(f"Resumed from step {result['step']}")
+            >>> path = await trainer.load()
+            >>> print(f"Loaded from {path}")
             >>>
             >>> # Load specific checkpoint by path
-            >>> result = await trainer.load_state("/checkpoints/step-5000")
+            >>> path = await trainer.load("/checkpoints/step-5000")
             >>>
             >>> # Load from TorchStore
-            >>> result = await trainer.load_state("ts://checkpoint-key")
-        """
-        ...
-
-    async def save_weights(
-        self, name: str | None = None, path: str | None = None
-    ) -> dict[str, Any]:
-        """Save model weights only (without optimizer/scheduler state).
-
-        Saves only the model weights in a format suitable for inference/sampling.
-        This is lighter weight than save_state() since it excludes training state
-        like optimizer and scheduler.
-
-        Args:
-            name: Optional checkpoint name/identifier. If None, uses the current
-                step number (e.g., "weights-step-1000").
-            path: Optional base directory or URI where weights should be saved.
-                If None, uses the default location configured at trainer creation.
-                Supports different backends via URI schemes:
-                - `/local/path` - local filesystem
-                - `ts://key` - TorchStore
-                - `s3://bucket/key` - S3
-
-        Location resolution:
-            - Both provided: path/name
-            - Only path: use path directly
-            - Only name: default_dir/name
-            - Neither: default_dir/step-{current_step}
-
-        Returns:
-            dict containing:
-                - path: str - Full URI where weights were saved
-                - version: str | int - The name/version that was saved
-
-        Example:
-            >>> # Save to default location with step number
-            >>> result = await trainer.save_weights()
-            >>>
-            >>> # Save to TorchStore for inference server
-            >>> result = await trainer.save_weights("policy-v1", "ts://policy-weights")
-            >>> # → ts://policy-weights/policy-v1
-            >>>
-            >>> # Save to S3
-            >>> result = await trainer.save_weights(path="s3://bucket/models/final")
+            >>> path = await trainer.load("ts://checkpoint-key")
         """
         ...
 
@@ -284,13 +247,14 @@ class Trainer(Protocol):
         that doesn't change during training.
 
         Returns:
-            TrainerInfo containing model name, step, config, and parallelism settings
+            TrainerInfo containing model name, step, model_config, and parallelism settings
 
         Example:
             >>> info = await trainer.get_info()
             >>> print(f"Training {info.model_name} at step {info.step}")
-            >>> print(f"Vocab size: {info.config['vocab_size']}")
-            >>> print(f"Data parallel degree: {info.parallelism['dp_degree']}")
+            >>> print(f"Vocab size: {info.model_config['vocab_size']}")
+            >>> print(f"DP={info.parallelism.dp_degree}, TP={info.parallelism.tp_degree}")
+            >>> print(f"Device: {info.parallelism.device}")
         """
         ...
 
@@ -312,7 +276,7 @@ class Trainer(Protocol):
         """
         ...
 
-    def get_tokenizer(self):
+    async def get_tokenizer(self):
         """Get the tokenizer associated with this model.
 
         Returns the tokenizer used for encoding/decoding text with this model.
@@ -321,12 +285,8 @@ class Trainer(Protocol):
         Returns:
             PreTrainedTokenizer: The HuggingFace tokenizer for this model
 
-        Note:
-            This is a synchronous method (not async) since tokenizer access is
-            typically fast and doesn't require remote calls.
-
         Example:
-            >>> tokenizer = trainer.get_tokenizer()
+            >>> tokenizer = await trainer.get_tokenizer()
             >>> tokens = tokenizer.encode("Hello world")
             >>> text = tokenizer.decode([1, 2, 3, 4])
         """

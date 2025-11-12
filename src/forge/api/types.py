@@ -12,8 +12,9 @@ from typing import Any, Callable, TypeAlias
 import torch
 
 
-# Loss function signature: takes logits and batch, returns scalar loss
-LossFn: TypeAlias = Callable[[torch.Tensor, "TextTrainBatch"], torch.Tensor]
+# Loss function signature: takes model outputs (as dict) and batch, returns scalar loss
+# The dict will typically contain logits, but may include other keys depending on use case.
+LossFn: TypeAlias = Callable[[dict[str, Any], "TextTrainBatch"], torch.Tensor]
 
 
 @dataclass
@@ -57,7 +58,8 @@ class ForwardBackwardResult:
     Attributes:
         loss: Loss value computed for the batch
         metrics: Additional metrics computed during training (e.g., perplexity,
-            accuracy). May be empty if no additional metrics are tracked.
+            accuracy, KL divergence). May be empty if no additional metrics are tracked.
+            Values can be scalars, tensors, or other structured data depending on the loss.
 
     Example:
         >>> result = await trainer.forward_backward(batch)
@@ -67,7 +69,7 @@ class ForwardBackwardResult:
     """
 
     loss: float
-    metrics: dict[str, float]
+    metrics: dict[str, Any]
 
 
 @dataclass
@@ -93,18 +95,32 @@ class OptimStepResult:
 
 
 @dataclass
-class ForwardResult:
-    """Result from a forward pass (evaluation/inference).
+class ParallelismInfo:
+    """Parallelism configuration for distributed training.
 
     Attributes:
-        logits: Model output logits (pre-softmax). Shape: [batch_size, seq_len, vocab_size]
+        dp_degree: Data parallel degree (number of data parallel replicas)
+        tp_degree: Tensor parallel degree (model sharding across devices)
+        pp_degree: Pipeline parallel degree (model sharding across pipeline stages)
+        world_size: Total number of processes in the distributed training job
+        dp_rank: Current data parallel rank (0 to dp_degree-1)
+        tp_rank: Current tensor parallel rank (0 to tp_degree-1)
+        device: Device identifier (e.g., "cuda:0", "cuda:1")
 
     Example:
-        >>> result = await trainer.forward(eval_batch)
-        >>> predictions = result.logits.argmax(dim=-1)  # [batch_size, seq_len]
+        >>> info = await trainer.get_info()
+        >>> p = info.parallelism
+        >>> print(f"DP={p.dp_degree}, TP={p.tp_degree}, PP={p.pp_degree}")
+        >>> print(f"Running on {p.device} (DP rank {p.dp_rank})")
     """
 
-    logits: torch.Tensor
+    dp_degree: int
+    tp_degree: int
+    pp_degree: int
+    world_size: int
+    dp_rank: int
+    tp_rank: int
+    device: str
 
 
 @dataclass
@@ -114,42 +130,29 @@ class TrainerInfo:
     This contains information about the trainer configuration and model architecture
     that doesn't change during training.
 
-    Note:
-        The exact format of `config` and `parallelism` dicts depends on the underlying
-        trainer implementation (TorchTitan, HuggingFace, etc.). The fields below
-        document common keys, but implementations may include additional fields.
-
     Attributes:
         model_name: Name or path of the model being trained
         step: Current training step
-        config: Model configuration. Common keys include:
+        model_config: Model architecture configuration. Common keys include:
             - vocab_size: int - Size of the vocabulary
             - hidden_size: int - Hidden dimension size
             - num_layers: int - Number of transformer layers
             - num_attention_heads: int - Number of attention heads
             - max_seq_len: int - Maximum sequence length
-        parallelism: Parallelism configuration. Common keys include:
-            - dp_degree: int - Data parallel degree
-            - tp_degree: int - Tensor parallel degree
-            - pp_degree: int - Pipeline parallel degree
-            - dp_rank: int - Current data parallel rank
-            - tp_rank: int - Current tensor parallel rank
-            - device: str - Device identifier (e.g., "cuda:0")
-            - gradient_accumulation_steps: int - Number of microbatches per step
+        parallelism: Parallelism configuration for distributed training
 
     Example:
         >>> info = await trainer.get_info()
         >>> print(f"Training {info.model_name} at step {info.step}")
-        >>> print(f"Vocab size: {info.config['vocab_size']}")
-        >>> print(f"DP={info.parallelism['dp_degree']}, "
-        >>>       f"TP={info.parallelism['tp_degree']}")
-        >>> print(f"Device: {info.parallelism['device']}")
+        >>> print(f"Vocab size: {info.model_config['vocab_size']}")
+        >>> print(f"DP={info.parallelism.dp_degree}, TP={info.parallelism.tp_degree}")
+        >>> print(f"Device: {info.parallelism.device}")
     """
 
     model_name: str
     step: int
-    config: dict[str, Any]
-    parallelism: dict[str, Any]
+    model_config: dict[str, Any]
+    parallelism: ParallelismInfo
 
 
 @dataclass
