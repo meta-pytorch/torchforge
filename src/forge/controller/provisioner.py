@@ -134,23 +134,6 @@ async def set_environment(proc_mesh: ProcMesh, env_vars: dict[str, str]):
     await env_setter.set_env.call(env_vars)
 
 
-def get_nccl_env_vars() -> dict[str, str]:
-    """Get NCCL environment variables by detecting network interfaces."""
-    if "NCCL_SOCKET_IFNAME" in os.environ and "NCCL_IB_DISABLE" in os.environ:
-        return {}
-
-    try:
-        interfaces = os.listdir("/sys/class/net/")
-        ib_interfaces = [i for i in interfaces if i.startswith("ib")]
-
-        return {
-            "NCCL_SOCKET_IFNAME": ",".join(ib_interfaces) if ib_interfaces else "^lo",
-            "NCCL_IB_DISABLE": "0" if ib_interfaces else "1",
-        }
-    except Exception:
-        return {"NCCL_SOCKET_IFNAME": "^lo", "NCCL_IB_DISABLE": "1"}
-
-
 class GpuManager:
     """Tracks and assigns GPU devices on a host.
 
@@ -364,15 +347,10 @@ class Provisioner:
             if with_gpus:
                 if not addr or not port:
                     addr, port = await get_remote_info(host_mesh)
-                gpu_ids: list[str] = gpu_manager.get_gpus(num_procs)
+                gpu_ids = gpu_manager.get_gpus(num_procs)
 
-                # Set PyTorch distributed environment variables
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
-
-                # Get NCCL-specific environment variables
-                nccl_vars = await get_nccl_env_vars()
-                env_vars.update(nccl_vars)
 
                 # Set the PTD world size
                 world_size = num_procs * (num_hosts or 1)
