@@ -288,15 +288,19 @@ class Generator(ForgeActor):
 
     @endpoint
     async def generate(
-        self, prompt: str, *, priority: int = 0, n: int | None = None
+        self,
+        prompt: str,
+        *,
+        priority: int = 0,
+        sampling_params: SamplingParams | None = None,
     ) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
             prompt (str): The prompt to generate a response for.
             priority (int, optional): The priority of the request. Defaults to 0.
-            n (int, optional): Number of completions to generate. If not provided, uses the default
-                from self.sampling_params.n.
+            sampling_params (SamplingParams, optional): Sampling parameters to use for this request.
+                If not provided, uses self.sampling_params.
 
         Returns:
             list[Completion]: n completions from vLLM based on your prompt.
@@ -305,10 +309,10 @@ class Generator(ForgeActor):
         t.start()
         record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
-        if n is not None and n != self.sampling_params.n:
-            params = self.sampling_params.__replace__(n=n)
-        else:
-            params = self.sampling_params
+        params = sampling_params or self.sampling_params
+        # Ensure output_kind is set to FINAL_ONLY (as required by post_init)
+        if params.output_kind != RequestOutputKind.FINAL_ONLY:
+            params = params.__replace__(output_kind=RequestOutputKind.FINAL_ONLY)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)

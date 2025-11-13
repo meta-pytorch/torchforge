@@ -132,27 +132,6 @@ class TestGeneratorConfig(unittest.TestCase):
             self.assertEqual(generator.sampling_params.n, 2)
             self.assertEqual(generator.sampling_params.max_tokens, 32)
 
-    @pytest.mark.skipif(
-        _import_error(),
-        reason="Import error, likely due to missing dependencies on CI.",
-    )
-    def test_generate_n_parameter_logic(self):
-        from forge.actors.generator import Generator
-
-        generator = Generator(sampling_params={"n": 2, "max_tokens": 16})
-        base_params = generator.sampling_params
-
-        def get_params_for(n_override: int | None):
-            if n_override in (None, base_params.n):
-                return base_params
-            return base_params.__replace__(n=n_override)
-
-        self.assertIs(get_params_for(None), base_params)
-        self.assertIs(get_params_for(2), base_params)
-        updated = get_params_for(4)
-        self.assertEqual(updated.n, 4)
-        self.assertIsNot(updated, base_params)
-
 
 if __name__ == "__main__":
     unittest.main()
