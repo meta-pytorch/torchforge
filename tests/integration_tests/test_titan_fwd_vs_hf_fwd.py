@@ -213,7 +213,7 @@ def compare_logits(
                 hf_val = hf_logits_cpu[pos].item()
                 diff_val = abs_diff[pos].item()
                 print(
-                    f"  {i + 1}. Position {pos}: titan={titan_val:.6f}, hf={hf_val:.6f}, diff={diff_val:.6f}"
+                    f"  {i+1}. Position {pos}: titan={titan_val:.6f}, hf={hf_val:.6f}, diff={diff_val:.6f}"
                 )
 
     return metrics
@@ -242,12 +242,12 @@ def compare_probabilities(
             zip(titan_top_k.values, titan_top_k.indices)
         ):
             token = tokenizer.decode([token_id.item()])
-            print(f"  {i + 1}. '{token}' (id={token_id.item()}): {prob.item():.6f}")
+            print(f"  {i+1}. '{token}' (id={token_id.item()}): {prob.item():.6f}")
 
         print("\nHugging Face Top-K:")
         for i, (prob, token_id) in enumerate(zip(hf_top_k.values, hf_top_k.indices)):
             token = tokenizer.decode([token_id.item()])
-            print(f"  {i + 1}. '{token}' (id={token_id.item()}): {prob.item():.6f}")
+            print(f"  {i+1}. '{token}' (id={token_id.item()}): {prob.item():.6f}")
 
     # Calculate overlap in top-k predictions
     titan_top_tokens = set(titan_top_k.indices.tolist())
