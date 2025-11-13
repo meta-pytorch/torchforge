@@ -15,19 +15,17 @@ import uuid
 from typing import Any
 
 import monarch
-
 import torchx.specs as specs
-
-from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
-
 from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import create, info
 from monarch.tools.config import Config, Workspace
+
+from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
@@ -267,7 +265,7 @@ class MastLauncher(BaseLauncher):
 
     def add_additional_packages(self, packages: "Packages") -> "Packages":
         packages.add_package("oil.oilfs:stable")
-        packages.add_package("manifold.manifoldfs")
+        packages.add_package("manifold.manifoldfs:prod")
         return packages
 
     def build_appdef(self) -> specs.AppDef:
