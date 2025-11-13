@@ -14,10 +14,6 @@ import uuid
 
 import torch
 
-from forge.controller.launcher import BaseLauncher, get_launcher
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
-from forge.types import ProcessConfig, ProvisionerConfig
-
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
@@ -25,6 +21,10 @@ from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
+
+from forge.controller.launcher import BaseLauncher, get_launcher
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -134,7 +134,7 @@ async def set_environment(proc_mesh: ProcMesh, env_vars: dict[str, str]):
     await env_setter.set_env.call(env_vars)
 
 
-async def get_nccl_env_vars() -> dict[str, str]:
+def get_nccl_env_vars() -> dict[str, str]:
     """Get NCCL environment variables by detecting network interfaces."""
     if "NCCL_SOCKET_IFNAME" in os.environ and "NCCL_IB_DISABLE" in os.environ:
         return {}
