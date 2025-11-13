@@ -39,6 +39,8 @@ from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
+from forge.reward.hf_rm import HFRewardModel
+from forge.reward.ensemble import EnsembleReward
 
 @dataclass
 class Episode:
@@ -137,11 +139,24 @@ def simple_grpo_loss(
     ).mean()
     return loss
 
-
 @dataclass
 class RewardActor(ForgeActor):
-
-    reward_functions: list[Callable]
+    # use_model = True
+    use_model: bool = False
+    reward_functions: list[Callable] = None
+    rm_specs: list[dict] = None
+    ensemble_reduce: str = "mean"
+    
+    def __post_init__(self):
+        if self.use_model:
+            rms = [HFRewardModel(**spec) for spec in self.rm_specs]
+            self.reward_fn = EnsembleReward(rms, reduce=self.ensemble_reduce)
+            self.reward_functions = [self.reward_fn] if self.use_model else []
+        else:
+            self.reward_functions = [
+                MathReward(),
+                ThinkingReward(),
+            ]
 
     @endpoint
     async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
@@ -309,6 +324,11 @@ async def main(cfg: DictConfig):
     metric_logging_cfg = cfg.get("metric_logging", {})
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
+    
+    reward_cfg = cfg.get("reward", {})
+    use_model = bool(reward_cfg.get("use_model", False))
+    rm_specs = reward_cfg.get("rm_specs", [])
+    ensemble_reduce = reward_cfg.get("ensemble_reduce", "mean")
 
     # ---- Setup services ---- #
 
@@ -332,7 +352,9 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+            use_model=use_model,
+            rm_specs=rm_specs,
+            ensemble_reduce=ensemble_reduce,
         ),
     )
 
