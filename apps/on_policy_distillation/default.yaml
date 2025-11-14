@@ -1,19 +1,28 @@
-# On-Policy Distillation: Qwen 0.6B (student) learning from Qwen 8B (teacher)
-# >>> python -m apps.on-policy-distillation.main --config apps/on-policy-distillation/qwen_0_6b_to_8b.yaml
+# On-Policy Distillation: Qwen 1.7B (student) learning from Qwen 8B (teacher)
+# >>> python -m apps.on_policy_distillation.main --config apps/on_policy_distillation/qwen_1_7b_to_8b.yaml
 
 # Global configuration
-train_batch_size: 64  # Number of trajectories per training step
+train_batch_size: 16  # Number of trajectories per training step
 max_req_tokens: 2048
 max_res_tokens: 4096
-student_model: "Qwen/Qwen3-0.6B"
+student_model: "./Qwen3-1.7B-Base-SFT" # Path to base model SFT'd on a math dataset
 teacher_model: "Qwen/Qwen3-8B"
+
+# Observability configuration
+metric_logging:
+  wandb:
+    project: opd-training
+    group: opd_exp_${oc.env:USER}
+    logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
+  console:
+    logging_mode: global_reduce
 
 # Dataset configuration
 dataset:
-  path: "open-thoughts/OpenThoughts3-1.2M"
+  path: "zwhe99/DeepMath-103K"
   split: "train"
 
-# Student Generator configuration (inference model)
+# Student generation configuration
 student_generator:
   engine_args:
     model: ${student_model}
@@ -21,28 +30,28 @@ student_generator:
     pipeline_parallel_size: 1
     enforce_eager: false
   sampling_params:
-    n: 16
+    n: 4
     max_tokens: ${max_res_tokens}
-    temperature: 1.0
+    temperature: 0.6
     top_p: 0.95
 
-# Student Trainer configuration
+# Student training configuration
 trainer:
   model:
     name: qwen3
-    flavor: 0.6B
+    flavor: 1.7B
     hf_assets_path: hf://${student_model}
   optimizer:
     name: AdamW
-    lr: 5e-5  # Higher LR for distillation
+    lr: 5e-5
     eps: 1e-8
   lr_scheduler:
-    warmup_steps: 10
+    warmup_steps: 0
   training:
     local_batch_size: ${train_batch_size}  # Per-device batch size
     seq_len: 8192
     max_norm: 1.0
-    steps: 10000
+    steps: 200
     dtype: bfloat16
     gc_freq: 5
   compile:
@@ -57,15 +66,16 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    folder: ./checkpoint_student
-    initial_load_path: hf://${student_model}
+    folder: ./checkpoint-opd
+    initial_load_path: ${student_model}
+    initial_load_model_only: true
     initial_load_in_hf: true
     last_save_in_hf: true
-    interval: 250
+    interval: 50
     async_mode: "disabled"
   activation_checkpoint:
-    mode: none
-    # selective_ac_option: op
+    mode: selective
+    selective_ac_option: op
 
 # Teacher model configuration
 teacher:
@@ -91,7 +101,7 @@ teacher:
     initial_load_path: hf://${teacher_model}
     initial_load_in_hf: true
 
-# Resource allocations (3 GPUs total)
+# Resource allocations
 services:
   student_generator:
     procs: 1

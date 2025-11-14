@@ -14,7 +14,7 @@ This approach is **10-30x more compute efficient** than traditional RL while ach
 ## Experimental Setup
 
 ### Models
-- **Student**: Qwen3-0.6B-Base (or Qwen3-8B for larger experiments)
+- **Student**: Qwen3-1.7B-Base (or Qwen3-8B for larger experiments)
 - **Teacher**: Qwen3-8B (or Qwen3-32B)
 - **Evaluation**: AIME'24 benchmark
 
@@ -24,11 +24,11 @@ This approach is **10-30x more compute efficient** than traditional RL while ach
 First, establish a strong baseline through off-policy distillation:
 
 ```bash
-python -m apps.sft.main --config apps/sft/qwen3_0_6.yaml
+python -m apps.sft.main --config apps/sft/qwen3_1_7b.yaml
 ```
 
 - **Dataset**: OpenThoughts3-1.2M (400k prompts)
-- **Expected Performance**: ~60% on AIME'24
+- **Expected Performance**: ~40% on AIME'24
 - **Purpose**: Teaches the model basic math reasoning patterns
 
 #### Phase 2: On-Policy Distillation
@@ -40,8 +40,8 @@ python -m apps.on-policy-distillation.main --config apps/on-policy-distillation/
 
 - **Starting Point**: SFT checkpoint from Phase 1
 - **Dataset**: Math prompts (from OpenThoughts3 or DeepMath, but only prompts - not solutions)
-- **Training**: ~150 steps (77k prompts with 4 samples each)
-- **Expected Performance**: ~70% on AIME'24
+- **Training**: ~150-200 steps (77k prompts with 4 samples each)
+- **Expected Performance**: ~50% on AIME'24
 
 ### Key Implementation Details
 
@@ -55,22 +55,6 @@ python -m apps.on-policy-distillation.main --config apps/on-policy-distillation/
 3. **No Discount Factor**: Optimize only immediate next token (discount=0)
 
 4. **Efficient Batching**: Can use smaller batch sizes than RL due to dense rewards
-
-## Evaluation
-
-Evaluate on AIME'24 benchmark after each phase:
-
-```bash
-python -m apps.eval.aime --checkpoint <path_to_checkpoint>
-```
-
-## Expected Results
-
-| Method | AIME'24 Score | Training Cost |
-|--------|---------------|---------------|
-| SFT (400k prompts) | ~60% | Baseline |
-| SFT (2M prompts, extrapolated) | ~70% | 5x baseline |
-| OPD (150 steps) | ~70% | 0.1-0.3x baseline |
 
 ## Key Advantages
 
@@ -91,17 +75,3 @@ python -m apps.eval.aime --checkpoint <path_to_checkpoint>
 - [On-Policy Distillation Blog Post](https://thinkingmachines.ai/blog/on-policy-distillation/)
 - [Tinker Cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
 - [OpenThoughts3 Dataset](https://huggingface.co/datasets/open-thoughts/OpenThoughts3-1.2M)
-
----
-
-**Important Code Modification Needed**: Your current OPD implementation should:
-1. Load from an SFT checkpoint (not raw base model)
-2. Extract only prompts from the dataset (not use the solutions)
-3. Add proper checkpoint loading in the trainer config:
-
-```yaml
-trainer:
-  checkpoint:
-    initial_load_path: ./checkpoint_student/sft_final  # Load SFT checkpoint
-    # ... rest of config
-```

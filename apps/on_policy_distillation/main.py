@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import asyncio
 import itertools
 import time
@@ -25,7 +31,6 @@ class Trajectory:
     pad_id: int
     request_len: int
     response_len: int
-    # Processed data
     completion: Completion | None = None
     teacher_logprobs: torch.Tensor | None = None
 
@@ -65,9 +70,6 @@ def collate(
         teacher_logprobs = [t.teacher_logprobs for t in batch]
         teacher_logprobs = torch.stack(teacher_logprobs)
 
-        # student_logprobs = [t.completion.logprobs for t in batch]
-        # student_logprobs = torch.stack(student_logprobs)
-
         pad_id = batch[0].pad_id
         padding_mask = response != pad_id
 
@@ -75,7 +77,6 @@ def collate(
         target = {
             "response": response,
             "teacher_logprobs": teacher_logprobs,
-            # "student_logprobs": student_logprobs,
             "padding_mask": padding_mask,
         }
         inputs.append(input)
@@ -83,26 +84,22 @@ def collate(
     return inputs, targets
 
 
-def importance_sampling_loss(
+def reverse_kl_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
     teacher_logprobs: torch.Tensor,
-    # student_logprobs: torch.Tensor,
     padding_mask: torch.Tensor,
     **kwargs,
 ) -> torch.Tensor:
     student_logprobs = compute_logprobs(logits, response)
-    reverse_kl = -(student_logprobs - teacher_logprobs)
-    prob_ratio = torch.exp(teacher_logprobs - student_logprobs)
-    per_token_loss = prob_ratio * reverse_kl
 
-    # Apply mask and compute mean over valid tokens
-    masked_loss = per_token_loss * padding_mask
-    num_valid_tokens = padding_mask.sum(dim=1, keepdim=True).clamp(min=1.0)
-    loss_per_sequence = masked_loss.sum(dim=1, keepdim=True) / num_valid_tokens
-    loss = loss_per_sequence.mean()
+    reverse_kl = student_logprobs.detach() - teacher_logprobs
+    advantages = -reverse_kl
 
-    return loss
+    per_token = -(advantages * student_logprobs) * padding_mask
+    loss = per_token.sum() / padding_mask.sum().clamp(min=1)
+
+    return loss.mean()
 
 
 async def main(cfg: DictConfig):
@@ -113,15 +110,10 @@ async def main(cfg: DictConfig):
 
     provisioner = await init_provisioner()
     mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(
-        {
-            "wandb": {"project": "opd-v0", "logging_mode": "global_reduce"},
-            "console": {"logging_mode": "global_reduce"},
-        }
-    )
+    await mlogger.init_backends.call_one(cfg.metric_logging)
     student_trainer, student_generator, teacher = await asyncio.gather(
         RLTrainer.options(**cfg.services.trainer).as_actor(
-            **cfg.trainer, loss=importance_sampling_loss
+            **cfg.trainer, loss=reverse_kl_loss
         ),
         Generator.options(**cfg.services.student_generator).as_service(
             **cfg.student_generator
@@ -129,7 +121,7 @@ async def main(cfg: DictConfig):
         ReferenceModel.options(**cfg.services.teacher).as_service(**cfg.teacher),
     )
 
-    # Setup torchstore for weight management
+    # Initialize torchstore for weight management
     trainer_num_procs = cfg.services.trainer["procs"]
     trainer_host_mesh_name = cfg.services.trainer["mesh_name"]
     trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
@@ -138,75 +130,67 @@ async def main(cfg: DictConfig):
         strategy=ts.LocalRankStrategy(),
     )
 
-    # Load dataset
-    tokenizer = get_tokenizer(cfg.student_model)
-    pad_id = tokenizer.pad_token_id
-    dataset = load_dataset(cfg.dataset.path, split=cfg.dataset.get("split", "train"))
-    # dataset = dataset.filter(lambda x: x["domain"] == cfg.dataset["domain"])
-    dataset_iter = iter(dataset)
-
     print("All services initialized successfully!")
+
+    # Configure my dataset
+    tokenizer = get_tokenizer(cfg.student_model)
+    map_fn = lambda x: tokenizer.apply_chat_template(
+        [
+            {
+                "role": "user",
+                "content": x["question"]
+                + "\n\nPlease reason step by step, and put your final answer within \boxed{}.",
+            }
+        ],
+        add_generation_prompt=True,
+        tokenize=False,
+    )
+    dataset = load_dataset(cfg.dataset.path, split=cfg.dataset.split).map(map_fn)
+    dataset_iter = iter(dataset)
 
     step = 0
     for epoch in range(max_steps):
-        # start time
         start = time.perf_counter()
         if step >= max_steps:
             break
 
         trajectories = []
         while len(trajectories) < train_batch_size:
-            try:
-                sample = next(dataset_iter)
-                conversation = sample["conversations"]
-                prompt = conversation[0]["value"]
+            prompt = next(dataset_iter)
+            completions = await student_generator.generate.fanout(prompt)
+            for completion in itertools.chain(*completions):
+                trajectory = Trajectory(
+                    pad_id=tokenizer.pad_token_id,
+                    request_len=max_req_tokens,
+                    response_len=max_res_tokens,
+                    completion=completion,
+                )
+                input_ids = torch.cat(
+                    [
+                        trajectory.request_tensor.unsqueeze(0),
+                        trajectory.response_tensor.unsqueeze(0),
+                    ],
+                    dim=1,
+                )
+                teacher_logprobs = await teacher.forward.route(
+                    input_ids, max_req_tokens, return_logprobs=True
+                )
+                trajectory.teacher_logprobs = teacher_logprobs
+                trajectories.append(trajectory)
 
-                completions = await student_generator.generate.fanout(prompt)
-
-                for completion in itertools.chain(*completions):
-                    # Create trajectory with raw completion
-                    trajectory = Trajectory(
-                        pad_id=pad_id,
-                        request_len=max_req_tokens,
-                        response_len=max_res_tokens,
-                        completion=completion,
-                    )
-
-                    # Build padded input for teacher using trajectory properties
-                    input_ids = torch.cat(
-                        [
-                            trajectory.request_tensor.unsqueeze(0),
-                            trajectory.response_tensor.unsqueeze(0),
-                        ],
-                        dim=1,
-                    )
-
-                    teacher_logprobs = await teacher.forward.route(
-                        input_ids, max_req_tokens, return_logprobs=True
-                    )
-
-                    trajectory.teacher_logprobs = teacher_logprobs
-                    trajectories.append(trajectory)
-            except StopIteration:
-                print("Dataset exhausted, resetting iterator")
-                dataset_iter = iter(dataset)
-
-        # Train on collected trajectories
         trajectories = [
             trajectories[i::train_batch_size] for i in range(train_batch_size)
         ]
         inputs, targets = collate(trajectories)
         await student_trainer.train_step.call(inputs, targets)
 
-        step += 1
-
-        # Push weights to student generator
         await student_trainer.push_weights.call(step)
         await student_generator.update_weights.fanout(step)
 
+        step += 1
+
         end = time.perf_counter()
         print(f"Step {step} took {end - start} seconds")
-
         await mlogger.flush.call_one(step)
 
     print(f"Training completed after {step} steps")

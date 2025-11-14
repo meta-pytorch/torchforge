@@ -21,7 +21,6 @@ from typing import Any
 
 import torch
 
-import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
 from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
