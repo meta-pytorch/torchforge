@@ -13,7 +13,7 @@ dependencies = [
     # PyTorch
     "torch==2.9.0",
     "torchdata>=0.8.0",
-    "torchtitan==0.2.0",
+    "torchtitan==0.1.0.dev20251029",
     "torchmonarch==0.1.2",
     "torchstore==0.1.2",
     # vLLM
@@ -83,6 +83,11 @@ members = [
 name = "pytorch-cu128"
 url  = "https://download.pytorch.org/whl/cu128"
 
+# pytorch nightly
+[[tool.uv.index]]
+name = "pytorch-nightly-cu128"
+url = "https://download.pytorch.org/whl/nightly/cu128"
+
 # vllm
 [[tool.uv.index]]
 name = "vllm-forge"
@@ -90,6 +95,7 @@ url = "https://download.pytorch.org/whl/preview/forge"
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
+torchtitan = { index = "pytorch-nightly-cu128" }
 vllm = { index = "vllm-forge" }
 
 [tool.uv]
