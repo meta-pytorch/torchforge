@@ -68,7 +68,7 @@ python -m apps.on-policy-distillation.main --config apps/on-policy-distillation/
 1. **Ensure proper initialization**: Load the SFT checkpoint before starting OPD
 2. **Use prompts only**: During OPD, sample completions from student, don't use dataset solutions
 3. **Teacher quality matters**: Better teachers provide better supervision
-4. **Monitor reverse KL**: Should decrease to near-zero as training progresses
+4. **Monitor reverse KL**: Should go to near-zero as training progresses
 
 ## References
 

@@ -7,20 +7,13 @@
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset, InterleavedDataset
 from .hf_dataset import HfIterableDataset
 from .packed import PackedDataset
-from .sft_dataset import (
-    AlpacaToMessages,
-    OpenThoughtsToMessages,
-    sft_iterable_dataset,
-    SFTOutputTransform,
-)
+from .sft_dataset import sft_iterable_dataset, SFTOutputTransform
 
 __all__ = [
-    "AlpacaToMessages",
     "DatasetInfo",
     "HfIterableDataset",
     "InterleavedDataset",
     "InfiniteTuneIterableDataset",
-    "OpenThoughtsToMessages",
     "PackedDataset",
     "SFTOutputTransform",
     "sft_iterable_dataset",
