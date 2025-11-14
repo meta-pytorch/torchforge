@@ -239,12 +239,11 @@ class Generator(ForgeActor):
         # TODO: this assumes the generator is on the same host as the worker
         # and only works for single host generators. Figure out how to support
         # generators with workers spanned across multiple hosts.
-        pass
-        # fetcher_procs = this_host().spawn_procs(
-        #     per_host={"procs": self.n_fetcher_procs}
-        # )
-        # self._fetcher_procs = fetcher_procs
-        # self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
+        fetcher_procs = this_host().spawn_procs(
+            per_host={"procs": self.n_fetcher_procs}
+        )
+        self._fetcher_procs = fetcher_procs
+        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
 
     def _start_processing(self):
         if self._run_task is None or self._run_task.done():
