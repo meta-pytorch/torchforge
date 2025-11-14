@@ -20,6 +20,7 @@ except ImportError:
 
 
 # FIXME: remove this once wandb fixed this issue
+# https://github.com/wandb/wandb/issues/10890
 # Patch importlib.metadata.distributions before wandb imports it
 # to filter out packages with None metadata
 import importlib.metadata
