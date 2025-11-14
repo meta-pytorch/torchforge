@@ -31,9 +31,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-GitHub = "https://github.com/pytorch-labs/forge"
-Documentation = "https://github.com/pytorch-labs/forge/tree/main/docs"
-Issues = "https://github.com/pytorch-labs/forge/issues"
+GitHub = "https://github.com/meta-pytorch/torchforge"
+Documentation = "https://meta-pytorch.org/torchforge"
+Issues = "https://github.com/meta-pytorch/torchforge/issues"
 
 [project.optional-dependencies]
 dev = [

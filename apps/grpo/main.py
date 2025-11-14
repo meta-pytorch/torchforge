@@ -23,7 +23,7 @@ from forge.actors._torchstore_utils import (
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
@@ -210,7 +210,7 @@ class DatasetActor(ForgeActor):
     model: str = "Qwen/Qwen3-1.7B"
 
     @endpoint
-    def setup(self):
+    async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
         self._epoch = 0
 
@@ -266,7 +266,12 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     async def pad_token(self):
-        return self._tokenizer.pad_token_id
+        # Use pad_token_id if available, otherwise use eos_token_id
+        # Llama models don't have a pad token by default
+        if self._tokenizer.pad_token_id is not None:
+            return self._tokenizer.pad_token_id
+        else:
+            return self._tokenizer.eos_token_id
 
 
 async def drop_weights(version: int):
@@ -318,7 +323,7 @@ async def main(cfg: DictConfig):
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.actors.trainer).as_actor(
+        TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(

@@ -15,17 +15,14 @@ import uuid
 from typing import Any
 
 import monarch
-
 import torchx.specs as specs
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
-
 from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
-from monarch.tools.commands import info
-from monarch.tools.components import hyperactor
+from monarch.tools.commands import create, info
 from monarch.tools.config import Config, Workspace
 
 from forge.types import Launcher, LauncherConfig
@@ -259,12 +256,16 @@ class MastLauncher(BaseLauncher):
             ),
         )
 
-        await commands.get_or_create(self.job_name, config)
-        return server_spec
+        job_handle = create(config, name=self.job_name)
+        print(
+            f"MAST job launched successfully:\n"
+            f"\033[92mhttps://www.internalfb.com/mlhub/pipelines/runs/mast/{self.job_name}\033[0m"
+        )
+        return job_handle
 
     def add_additional_packages(self, packages: "Packages") -> "Packages":
         packages.add_package("oil.oilfs:stable")
-        packages.add_package("manifold.manifoldfs")
+        packages.add_package("manifold.manifoldfs:prod")
         return packages
 
     def build_appdef(self) -> specs.AppDef:
