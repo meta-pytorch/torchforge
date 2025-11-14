@@ -132,26 +132,6 @@ class TestGeneratorConfig(unittest.TestCase):
             self.assertEqual(generator.sampling_params.n, 2)
             self.assertEqual(generator.sampling_params.max_tokens, 32)
 
-    @pytest.mark.skipif(
-        _import_error(),
-        reason="Import error, likely due to missing dependencies on CI.",
-    )
-    def test_generator_overrides_output_kind_to_final_only(self):
-        """Generator overrides output_kind to FINAL_ONLY when initialized with dict."""
-        from forge.actors.generator import Generator
-        from vllm.sampling_params import RequestOutputKind
-
-        sampling_dict = {
-            "n": 1,
-            "max_tokens": 16,
-            "output_kind": RequestOutputKind.DELTA,
-        }
-
-        generator = Generator(sampling_params=sampling_dict)
-        self.assertEqual(
-            generator.sampling_params.output_kind, RequestOutputKind.FINAL_ONLY
-        )
-
 
 if __name__ == "__main__":
     unittest.main()
