@@ -1,0 +1,120 @@
+# On-Policy Distillation: Qwen 1.7B (student) learning from Qwen 8B (teacher)
+# >>> python -m apps.on_policy_distillation.main --config apps/on_policy_distillation/qwen_1_7b_to_8b.yaml
+
+# Global configuration
+train_batch_size: 16  # Number of trajectories per training step
+max_req_tokens: 2048
+max_res_tokens: 4096
+student_model: "./Qwen3-1.7B-Base-SFT" # Path to base model SFT'd on a math dataset
+teacher_model: "Qwen/Qwen3-8B"
+
+# Observability configuration
+metric_logging:
+  wandb:
+    project: opd-training
+    group: opd_exp_${oc.env:USER}
+    logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
+  console:
+    logging_mode: global_reduce
+
+# Dataset configuration
+dataset:
+  path: "zwhe99/DeepMath-103K"
+  split: "train"
+
+# Student generation configuration
+student_generator:
+  engine_args:
+    model: ${student_model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: false
+  sampling_params:
+    n: 4
+    max_tokens: ${max_res_tokens}
+    temperature: 0.6
+    top_p: 0.95
+
+# Student training configuration
+trainer:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${student_model}
+  optimizer:
+    name: AdamW
+    lr: 5e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 0
+  training:
+    local_batch_size: ${train_batch_size}  # Per-device batch size
+    seq_len: 8192
+    max_norm: 1.0
+    steps: 200
+    dtype: bfloat16
+    gc_freq: 5
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    folder: ./checkpoint-opd
+    initial_load_path: ${student_model}
+    initial_load_model_only: true
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 50
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Teacher model configuration
+teacher:
+  model:
+    name: qwen3
+    flavor: 8B
+    hf_assets_path: hf://${teacher_model}
+  training:
+    seq_len: ${trainer.training.seq_len}
+    dtype: bfloat16
+    gc_freq: 10
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${teacher_model}
+    initial_load_in_hf: true
+
+# Resource allocations
+services:
+  student_generator:
+    procs: 1
+    num_replicas: 4
+    mesh_name: student_generator
+    with_gpus: true
+  teacher:
+    procs: 1
+    num_replicas: 2
+    mesh_name: teacher
+    with_gpus: true
+  trainer:
+    procs: 1
+    num_replicas: 1
+    mesh_name: trainer
+    with_gpus: true
