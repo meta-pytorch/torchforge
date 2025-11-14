@@ -309,10 +309,11 @@ class Generator(ForgeActor):
         t.start()
         record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
+        if sampling_params is not None:
+             # as in `post_init`
+             sampling_params.output_kind = RequestOutputKind.FINAL_ONLY 
+        
         params = sampling_params or self.sampling_params
-        # Ensure output_kind is set to FINAL_ONLY (as required by post_init)
-        if params.output_kind != RequestOutputKind.FINAL_ONLY:
-            params = params.__replace__(output_kind=RequestOutputKind.FINAL_ONLY)
 
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)
