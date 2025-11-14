@@ -16,7 +16,7 @@ import torchstore as ts
 from datasets import load_dataset
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
@@ -112,7 +112,7 @@ async def main(cfg: DictConfig):
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(cfg.metric_logging)
     student_trainer, student_generator, teacher = await asyncio.gather(
-        RLTrainer.options(**cfg.services.trainer).as_actor(
+        TitanTrainer.options(**cfg.services.trainer).as_actor(
             **cfg.trainer, loss=reverse_kl_loss
         ),
         Generator.options(**cfg.services.student_generator).as_service(
