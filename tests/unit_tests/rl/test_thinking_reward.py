@@ -203,6 +203,19 @@ class TestThinkingReward(unittest.TestCase):
         result = self.reward("prompt", f"<think>{long_content}</think>")
         self.assertEqual(result, 1.0)
 
+    def test_custom_tag(self):
+        """Test that ThinkingReward uses the custom tag passed in."""
+        # Create reward with custom Japanese tag
+        custom_tag_reward = ThinkingReward(tag="思考")
+
+        # Response with custom tag should get full reward
+        result = custom_tag_reward("prompt", "<思考>This is my reasoning</思考>")
+        self.assertEqual(result, 1.0)
+
+        # Response with default "think" tag should get no reward
+        result = custom_tag_reward("prompt", "<think>This is my reasoning</think>")
+        self.assertEqual(result, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
