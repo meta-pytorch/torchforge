@@ -17,3 +17,21 @@ try:
         os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 except ImportError:
     pass
+
+
+# FIXME: remove this once wandb fixed this issue
+# Patch importlib.metadata.distributions before wandb imports it
+# to filter out packages with None metadata
+import importlib.metadata
+
+_original_distributions = importlib.metadata.distributions
+
+
+def _patched_distributions():
+    """Filter out distributions with None metadata"""
+    for dist in _original_distributions():
+        if dist.metadata is not None:
+            yield dist
+
+
+importlib.metadata.distributions = _patched_distributions
