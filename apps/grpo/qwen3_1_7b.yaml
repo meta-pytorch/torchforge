@@ -114,6 +114,20 @@ ref_model:
     initial_load_path: hf://${model}
     initial_load_in_hf: true
 
+reward:
+  use_model: true                # true -> use HF RM ensemble; false -> use builtin rewards
+  ensemble_reduce: mean       # mean | median | max | vote
+  builtin: ["math", "thinking"]   # used if use_rm: false
+  rm_specs:
+    - model_id: Skywork/Skywork-Reward-V2-Qwen3-0.6B
+      # device: cuda:1
+      # torch_dtype: torch.bfloat16
+      max_length: 4096
+    - model_id: Qwen/Qwen2.5-1.5B   # use a REAL RM checkpoint here
+      # device: cuda:1
+      # torch_dtype: torch.bfloat16
+      max_length: 4096
+
 # All resource allocations
 services:
   policy:
@@ -130,7 +144,7 @@ services:
     procs: 1
     num_replicas: 1
     mesh_name: reward_actor
-    with_gpus: false
+    with_gpus: true
 
 actors:
   dataset:
