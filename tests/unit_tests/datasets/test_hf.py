@@ -229,12 +229,12 @@ class TestHfIterableDataset:
         ), f"Shuffled epochs should be shuffled differently, got {first_epoch_ids} and {second_epoch_ids}"
 
         # But should contain the same set of IDs
-        assert (
-            set(first_epoch_ids) == set(range(SMALL_DATASET_SIZE))
-        ), f"First epoch samples should be (0-{SMALL_DATASET_SIZE-1}), got {first_epoch_ids}"
-        assert (
-            set(second_epoch_ids) == set(range(SMALL_DATASET_SIZE))
-        ), f"Second epoch samples should be (0-{SMALL_DATASET_SIZE-1}), got {second_epoch_ids}"
+        assert set(first_epoch_ids) == set(
+            range(SMALL_DATASET_SIZE)
+        ), f"First epoch samples should be (0-{SMALL_DATASET_SIZE - 1}), got {first_epoch_ids}"
+        assert set(second_epoch_ids) == set(
+            range(SMALL_DATASET_SIZE)
+        ), f"Second epoch samples should be (0-{SMALL_DATASET_SIZE - 1}), got {second_epoch_ids}"
 
     def test_epoch_tracking(self, dataset_factory, small_dataset_file):
         """Test that epoch number is correctly tracked across dataset restarts."""

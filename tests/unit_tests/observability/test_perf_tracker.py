@@ -389,8 +389,9 @@ class TestEnvironmentConfiguration:
         if env_value == "true" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        with patch("torch.cuda.is_available", return_value=True), patch(
-            "forge.observability.perf_tracker.record_metric"
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("forge.observability.perf_tracker.record_metric"),
         ):
             monkeypatch.setenv(METRIC_TIMER_USES_GPU.name, env_value)
 

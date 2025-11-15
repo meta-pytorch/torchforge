@@ -47,9 +47,10 @@ def mock_rank():
 @pytest.fixture
 def mock_actor_context():
     """Mock Monarch actor context for testing actor name generation."""
-    with patch("forge.observability.metrics.context") as mock_context, patch(
-        "forge.observability.metrics.current_rank"
-    ) as mock_rank:
+    with (
+        patch("forge.observability.metrics.context") as mock_context,
+        patch("forge.observability.metrics.current_rank") as mock_rank,
+    ):
         # Setup mock context
         ctx = MagicMock()
         actor_instance = MagicMock()
