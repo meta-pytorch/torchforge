@@ -39,7 +39,7 @@ repos:
     hooks:
     -   id: ufmt
         additional_dependencies:
-          - ruff-api == 0.1.0
+          - black == 24.4.2
           - usort == 1.0.8.post1
 
 - repo: https://github.com/jsh9/pydoclint
