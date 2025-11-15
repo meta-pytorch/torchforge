@@ -129,7 +129,7 @@ class Slurmlauncher(BaseLauncher):
         configure(default_transport=ChannelTransport.Tcp)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
-        appdef = hyperactor.host_mesh(
+        appdef = meta_hyperactor.host_mesh(
             image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
         )
         for role in appdef.roles:
