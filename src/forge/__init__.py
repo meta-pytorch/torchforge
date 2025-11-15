@@ -25,14 +25,15 @@ except ImportError:
 # to filter out packages with None metadata
 import importlib.metadata
 
-_original_distributions = importlib.metadata.distributions
+# Guard to ensure this runs only once
+if not hasattr(importlib.metadata, "_distributions_patched"):
+    _original_distributions = importlib.metadata.distributions
 
+    def _patched_distributions():
+        """Filter out distributions with None metadata"""
+        for dist in _original_distributions():
+            if dist.metadata is not None:
+                yield dist
 
-def _patched_distributions():
-    """Filter out distributions with None metadata"""
-    for dist in _original_distributions():
-        if dist.metadata is not None:
-            yield dist
-
-
-importlib.metadata.distributions = _patched_distributions
+    importlib.metadata.distributions = _patched_distributions
+    importlib.metadata._distributions_patched = True
