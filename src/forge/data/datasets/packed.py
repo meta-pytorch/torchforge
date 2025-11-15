@@ -10,13 +10,13 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, TypeVar
 
 import torch
+
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
+from forge.observability.metrics import Metric, Reduce
 from torch.nn.attention.flex_attention import (
     create_block_mask as create_block_mask_flex,
 )
 from torchdata.stateful_dataloader import Stateful
-
-from forge.data import CROSS_ENTROPY_IGNORE_IDX
-from forge.observability.metrics import Metric, Reduce
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -464,7 +464,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
 
         # Main packing loop
         while True:
-
             # Stop if the source is exhausted and there's no data left to pack
             if self._exhausted and not self._buffer and self._current_pack_size == 0:
                 break

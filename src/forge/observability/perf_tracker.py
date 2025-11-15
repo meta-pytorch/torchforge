@@ -220,14 +220,11 @@ class Tracer:
 
 
 class _TimerProtocol(Protocol):
-    def start(self) -> None:
-        ...
+    def start(self) -> None: ...
 
-    def step(self, name: str) -> None:
-        ...
+    def step(self, name: str) -> None: ...
 
-    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]:
-        ...
+    def get_all_durations(self) -> tuple[list[tuple[str, float]], float]: ...
 
 
 class _TimerCPU(_TimerProtocol):
@@ -279,9 +276,9 @@ class _TimerCUDA(_TimerProtocol):
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available for timing")
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self._futures: list[
-            tuple[str, Future[float], int]
-        ] = []  # (name, future, submission_index)
+        self._futures: list[tuple[str, Future[float], int]] = (
+            []
+        )  # (name, future, submission_index)
         self._durations: list[tuple[str, float]] = []
         self._chain_start: torch.cuda.Event | None = None
 

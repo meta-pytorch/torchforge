@@ -94,12 +94,12 @@ class TestMetricCreation:
         )
 
         # Mock all the WandB init methods to focus only on role validation
-        with patch.object(wandb_backend, "_init_global"), patch.object(
-            wandb_backend, "_init_shared_global"
-        ), patch.object(wandb_backend, "_init_shared_local"), patch.object(
-            wandb_backend, "_init_per_rank"
+        with (
+            patch.object(wandb_backend, "_init_global"),
+            patch.object(wandb_backend, "_init_shared_global"),
+            patch.object(wandb_backend, "_init_shared_local"),
+            patch.object(wandb_backend, "_init_per_rank"),
         ):
-
             # Should not raise error for valid roles (type system prevents invalid values)
             await wandb_backend.init(role=BackendRole.GLOBAL)
             await wandb_backend.init(role=BackendRole.LOCAL)

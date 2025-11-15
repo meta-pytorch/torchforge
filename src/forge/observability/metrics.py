@@ -13,11 +13,11 @@ from enum import Enum
 from typing import Any
 
 import pytz
-from monarch.actor import current_rank
 
 from forge.observability.utils import get_proc_name_with_rank
 
 from forge.util.logging import get_logger, log_once
+from monarch.actor import current_rank
 
 logger = get_logger("INFO")
 
@@ -654,7 +654,6 @@ class LoggerBackend(ABC):
     def __init__(
         self, *, logging_mode: LoggingMode, per_rank_share_run: bool = False, **kwargs
     ) -> None:
-
         self.logging_mode = logging_mode
         self.per_rank_share_run = per_rank_share_run
         self.backend_kwargs = kwargs

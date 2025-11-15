@@ -8,12 +8,12 @@
 import logging
 from typing import Type
 
-from monarch.actor import proc_mesh
-
 from forge.controller import ForgeActor
 from forge.controller.service import ServiceActor, ServiceConfig
 
 from forge.controller.service.interface import ServiceInterfaceV2
+
+from monarch.actor import proc_mesh
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

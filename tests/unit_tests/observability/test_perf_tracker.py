@@ -55,7 +55,8 @@ def assert_metrics_dict_matches(calls, expected_metrics):
         assert metric_name in actual_metrics, f"Missing metric: {metric_name}"
         actual_val = actual_metrics[metric_name]
         assert actual_val == pytest.approx(
-            expected_val, rel=0.2  # 20% relative tolerance for timing tests
+            expected_val,
+            rel=0.2,  # 20% relative tolerance for timing tests
         ), f"Expected {metric_name}={expected_val}, got {actual_val}"
 
 
@@ -388,8 +389,9 @@ class TestEnvironmentConfiguration:
         if env_value == "true" and not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        with patch("torch.cuda.is_available", return_value=True), patch(
-            "forge.observability.perf_tracker.record_metric"
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("forge.observability.perf_tracker.record_metric"),
         ):
             monkeypatch.setenv(METRIC_TIMER_USES_GPU.name, env_value)
 

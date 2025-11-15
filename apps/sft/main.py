@@ -287,7 +287,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
 
 async def run(cfg: DictConfig) -> None:
-
     logging.info("Spawning recipe...")
     process_cfg = cfg.pop("processes")
 

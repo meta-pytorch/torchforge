@@ -59,7 +59,6 @@ class GeneratorActor(ForgeActor):
         rank = current_rank().rank
 
         with trace("policy_perf", track_memory=False, timer="gpu") as tracer:
-
             value = rank * 1000 + step * 100 + substep * 10
             tracer.step("time_to_value")
             # Record generation metrics following the plan
