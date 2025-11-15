@@ -6,19 +6,6 @@
 
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
-# Patch importlib.metadata.distributions before wandb imports it
-# to filter out packages with None metadata
-import importlib.metadata
-_original_distributions = importlib.metadata.distributions
-
-def _patched_distributions():
-    """Filter out distributions with None metadata"""
-    for dist in _original_distributions():
-        if dist.metadata is not None:
-            yield dist
-
-importlib.metadata.distributions = _patched_distributions
-
 import asyncio
 import time
 import uuid
@@ -138,9 +125,12 @@ def simple_grpo_loss(
     ref_logprobs: torch.Tensor,
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
+    beta: float = 0.1,
 ) -> torch.Tensor:
     logprobs: torch.Tensor = compute_logprobs(logits, response)
-    per_token_loss = torch.exp(logprobs - logprobs.detach()) * advantages.detach()
+    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+    per_token_loss = -(per_token_policy_loss - beta * kl)
     loss = (
         ((per_token_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))

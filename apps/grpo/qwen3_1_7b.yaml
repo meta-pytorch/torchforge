@@ -7,10 +7,10 @@ local_batch_size: 16 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 1024
 model: "Qwen/Qwen3-1.7B"
-off_by_n: 0 # Off by one by default
+off_by_n: 1 # Off by one by default
 
 # Main loop configuration
-rollout_threads: 1  # Recommended to set equal to policy.num_replicas
+rollout_threads: 1   # Recommended to set equal to policy.num_replicas
 
 
 # Observability configuration
