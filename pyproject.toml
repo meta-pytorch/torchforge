@@ -101,3 +101,22 @@ environments = [
     "sys_platform == 'linux'",
 ]
 # override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
+
+[tool.ufmt]
+formatter = "ruff-api"
+sorter = "usort"
+
+[tool.black]
+target-version = ["py310"]
+
+[tool.usort]
+first_party_detection = false
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint.isort]
+case-sensitive = false
+combine-as-imports = true
+detect-same-package = false
+order-by-type = false
