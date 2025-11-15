@@ -140,7 +140,6 @@ def simple_grpo_loss(
 
 @dataclass
 class RewardActor(ForgeActor):
-
     reward_functions: list[Callable]
 
     @endpoint
@@ -210,7 +209,7 @@ class DatasetActor(ForgeActor):
     model: str = "Qwen/Qwen3-1.7B"
 
     @endpoint
-    def setup(self):
+    async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
         self._epoch = 0
 
