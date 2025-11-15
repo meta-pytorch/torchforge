@@ -9,14 +9,6 @@ import logging
 import uuid
 from typing import Any, Union
 
-from monarch.actor import (
-    context,
-    endpoint,
-    get_or_spawn_controller,
-    ProcMesh,
-    this_proc,
-)
-
 from forge.controller.actor import ForgeActor
 
 from forge.env import FORGE_DISABLE_METRICS
@@ -27,6 +19,14 @@ from forge.observability.metrics import (
     LoggingMode,
     MetricCollector,
     reduce_metrics_states,
+)
+
+from monarch.actor import (
+    context,
+    endpoint,
+    get_or_spawn_controller,
+    ProcMesh,
+    this_proc,
 )
 
 

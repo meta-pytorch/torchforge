@@ -28,11 +28,11 @@ import torch.distributed as dist
 
 from forge.data.datasets import HfIterableDataset
 from forge.data.metric_transform import DefaultDatasetMetricTransform
+
+from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
 
 from torchdata.stateful_dataloader import StatefulDataLoader
-
-from tests.test_utils import gpu_test
 
 from .test_iterable_utils import collate_with_metrics, generate_ckpt
 
@@ -229,11 +229,11 @@ class TestHfIterableDataset:
         ), f"Shuffled epochs should be shuffled differently, got {first_epoch_ids} and {second_epoch_ids}"
 
         # But should contain the same set of IDs
-        assert set(first_epoch_ids) == set(
-            range(SMALL_DATASET_SIZE)
+        assert (
+            set(first_epoch_ids) == set(range(SMALL_DATASET_SIZE))
         ), f"First epoch samples should be (0-{SMALL_DATASET_SIZE-1}), got {first_epoch_ids}"
-        assert set(second_epoch_ids) == set(
-            range(SMALL_DATASET_SIZE)
+        assert (
+            set(second_epoch_ids) == set(range(SMALL_DATASET_SIZE))
         ), f"Second epoch samples should be (0-{SMALL_DATASET_SIZE-1}), got {second_epoch_ids}"
 
     def test_epoch_tracking(self, dataset_factory, small_dataset_file):

@@ -50,7 +50,6 @@ def mock_actor_context():
     with patch("forge.observability.metrics.context") as mock_context, patch(
         "forge.observability.metrics.current_rank"
     ) as mock_rank:
-
         # Setup mock context
         ctx = MagicMock()
         actor_instance = MagicMock()

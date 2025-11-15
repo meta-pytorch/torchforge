@@ -99,7 +99,6 @@ class TestMetricCreation:
         ), patch.object(wandb_backend, "_init_shared_local"), patch.object(
             wandb_backend, "_init_per_rank"
         ):
-
             # Should not raise error for valid roles (type system prevents invalid values)
             await wandb_backend.init(role=BackendRole.GLOBAL)
             await wandb_backend.init(role=BackendRole.LOCAL)
@@ -434,19 +433,11 @@ class TestMetricActorDisabling:
 
         # Assert based on expected behavior
         if should_register_fetchers:
-            assert (
-                proc_has_fetcher
-            ), f"Expected process to have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
-            assert (
-                global_has_fetcher
-            ), f"Expected global logger to have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
+            assert proc_has_fetcher, f"Expected process to have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
+            assert global_has_fetcher, f"Expected global logger to have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
         else:
-            assert (
-                not proc_has_fetcher
-            ), f"Expected process to NOT have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
-            assert (
-                not global_has_fetcher
-            ), f"Expected global logger to NOT have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
+            assert not proc_has_fetcher, f"Expected process to NOT have _local_fetcher when FORGE_DISABLE_METRICS={env_var_value}"
+            assert not global_has_fetcher, f"Expected global logger to NOT have fetcher registered when FORGE_DISABLE_METRICS={env_var_value}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

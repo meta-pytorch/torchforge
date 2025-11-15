@@ -123,7 +123,6 @@ class SFTOutputTransform:
     """
 
     def __call__(self, sample: dict[str, Any]) -> dict[str, Any]:
-
         # Sanity checks
         if not isinstance(sample["tokens"], torch.Tensor):
             sample["tokens"] = torch.tensor(sample["tokens"])
