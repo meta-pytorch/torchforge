@@ -140,7 +140,6 @@ def simple_grpo_loss(
 
 @dataclass
 class RewardActor(ForgeActor):
-
     reward_functions: list[Callable]
 
     @endpoint
