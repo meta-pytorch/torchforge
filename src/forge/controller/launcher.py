@@ -133,6 +133,7 @@ class Slurmlauncher(BaseLauncher):
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
         # This can be removed in the future once this has been removed.
+        # Changed TCP this to TcpWithHostname for the slurm launcher
         configure(default_transport=ChannelTransport.TcpWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
