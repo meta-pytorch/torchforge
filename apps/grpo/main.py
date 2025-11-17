@@ -305,10 +305,6 @@ async def main(cfg: DictConfig):
     else:
         provisioner = await init_provisioner()
 
-    metric_logging_cfg = cfg.get("metric_logging", {})
-    mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(metric_logging_cfg)
-
     # ---- Setup services ---- #
 
     (
@@ -353,6 +349,11 @@ async def main(cfg: DictConfig):
         strategy=ts.LocalRankStrategy(),
     )
     print("Torchstore successfully initialized with local rank strategy")
+
+    # Initialize metric logger after all proc meshes have been spawned
+    metric_logging_cfg = cfg.get("metric_logging", {})
+    mlogger = await get_or_create_metric_logger(process_name="Controller")
+    await mlogger.init_backends.call_one(metric_logging_cfg)
 
     # ---- Core RL loops ---- #
     async def continuous_rollouts():
