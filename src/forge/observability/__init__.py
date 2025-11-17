@@ -21,7 +21,6 @@ from .metrics import (
     MetricAccumulator,
     MetricCollector,
     MinAccumulator,
-    record_episode_sample,
     record_metric,
     Reduce,
     reduce_metrics_states,
@@ -37,7 +36,6 @@ __all__ = [
     # Main API functions
     "record_metric",
     "reduce_metrics_states",
-    "record_episode_sample",
     "get_logger_backend_class",
     "get_or_create_metric_logger",
     # Performance tracking

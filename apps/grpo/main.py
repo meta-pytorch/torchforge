@@ -29,7 +29,7 @@ from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
-from forge.observability.metrics import record_episode_sample, record_metric, Reduce
+from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 
 from forge.types import LauncherConfig, ProvisionerConfig
@@ -449,8 +449,13 @@ async def main(cfg: DictConfig):
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
-                record_episode_sample(
-                    "main_samples/continuous_rollouts/sample_table", episode
+
+                sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
+                sample["score"] = sample["reward"]
+                record_metric(
+                    "main_samples/continuous_rollouts/sample_table",
+                    sample,
+                    Reduce.SAMPLE,
                 )
 
             rollout_count += 1

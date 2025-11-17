@@ -201,17 +201,6 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
     return reduced_metrics
 
 
-def record_episode_sample(table_name: str, episode):
-    """
-    Record a structured sample-level log for a single episode.
-    Args:
-        table_name (str): logging prefix (e.g. "rollout/sample").
-        episode (Episode): episode object with filled attributes.
-    """
-    sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
-    record_metric(table_name, sample, Reduce.SAMPLE)
-
-
 ################
 # Accumulators #
 ################
@@ -430,7 +419,7 @@ class SampleAccumulator(MetricAccumulator):
     """
 
     def __init__(
-        self, reduction: Reduce, top_k: int = 1, bottom_k: int = 1, key: str = "reward"
+        self, reduction: Reduce, top_k: int = 1, bottom_k: int = 1, key: str = "score"
     ):
         super().__init__(reduction)
         self.samples: List[Dict[str, Any]] = []
@@ -869,12 +858,10 @@ class ConsoleBackend(LoggerBackend):
     async def log_samples(self, samples: List[Metric], step: int) -> None:
         """Pretty-print sample-level logs to console."""
 
-        logger.info(f"==========  SAMPLE LOGS STEP {step} ==========")
         for sample in samples:
             table_name, table_rows = sample.key, sample.value
             logger.info(f"[{table_name}] ({len(table_rows)} samples)")
             logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
-        logger.info("==============================================\n")
 
 
 class WandbBackend(LoggerBackend):
@@ -1056,6 +1043,13 @@ class WandbBackend(LoggerBackend):
 
             # Add rows (fill missing columns with None)
             for s in table_rows:
+                # Check for extra columns not in the table schema
+                extra_columns = set(s.keys()) - set(table.columns)
+                if extra_columns:
+                    logger.warning(
+                        f"WandbBackend: Row has extra columns not in table '{table_name}': {sorted(extra_columns)}. "
+                        f"These will be ignored."
+                    )
                 values = [s.get(c) for c in table.columns]
                 table.add_data(*values)
 
