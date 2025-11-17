@@ -36,12 +36,6 @@ class ReinforceLoss(nn.Module):
         advantages,
         sampling_logprobs,
     ):
-        target_mask_sum = padding_mask.sum()
-        target_mask_sum = torch.maximum(
-            target_mask_sum, torch.ones_like(target_mask_sum)
-        )
-
-        # Importance sampling ratio
         logp_diff = logprobs - sampling_logprobs.detach()
         prob_ratio = torch.exp(logp_diff).detach()
         prob_ratio = torch.clamp(
@@ -49,7 +43,10 @@ class ReinforceLoss(nn.Module):
         )
         advantages = advantages * prob_ratio
 
-        numerator = (-logprobs * advantages * padding_mask).sum()
+        per_token_loss = -logprobs * advantages
+        sequence_length = padding_mask.sum(dim=1).clamp(min=1.0)
+        per_sequence_loss = (per_token_loss * padding_mask).sum(dim=1) / sequence_length
 
-        denominator = target_mask_sum
-        return numerator / denominator
+        loss = per_sequence_loss.mean()
+
+        return loss
