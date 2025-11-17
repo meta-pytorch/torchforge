@@ -30,16 +30,14 @@ class ReinforceLoss(nn.Module):
         self, trainer_logits, target_ids, target_mask, target_weights, target_log_probs
     ):
         trainer_log_probs = compute_logprobs(trainer_logits, target_ids, align=False)
-        target_mask = target_mask.detach()
         target_weights = target_weights
         target_mask_sum = target_mask.sum()
         target_mask_sum = torch.maximum(
             target_mask_sum, torch.ones_like(target_mask_sum)
         )
-        sampler_log_probs = target_log_probs
 
         # Importance sampling ratio
-        logp_diff = trainer_log_probs - sampler_log_probs.detach()
+        logp_diff = trainer_log_probs - target_log_probs.detach()
         importance_weights = torch.exp(logp_diff).detach()
         importance_weights = torch.clamp(importance_weights, min=0.1, max=10.0)
         weighted_advantages = target_weights * importance_weights
