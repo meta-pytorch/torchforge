@@ -26,25 +26,24 @@ class ReinforceLoss(nn.Module):
 
     def forward(
         self,
-        trainer_log_probs,
+        logprobs,
         target_ids,
-        target_mask,
-        target_weights,
-        target_log_probs,
+        padding_mask,
+        advantages,
+        sampling_logprobs,
     ):
-        target_weights = target_weights
-        target_mask_sum = target_mask.sum()
+        target_mask_sum = padding_mask.sum()
         target_mask_sum = torch.maximum(
             target_mask_sum, torch.ones_like(target_mask_sum)
         )
 
         # Importance sampling ratio
-        logp_diff = trainer_log_probs - target_log_probs.detach()
-        importance_weights = torch.exp(logp_diff).detach()
-        importance_weights = torch.clamp(importance_weights, min=0.1, max=10.0)
-        weighted_advantages = target_weights * importance_weights
+        logp_diff = logprobs - sampling_logprobs.detach()
+        prob_ratio = torch.exp(logp_diff).detach()
+        prob_ratio = torch.clamp(prob_ratio, min=0.1, max=10.0)
+        advantages = advantages * prob_ratio
 
-        numerator = (-trainer_log_probs * weighted_advantages * target_mask).sum()
+        numerator = (-logprobs * advantages * padding_mask).sum()
 
         denominator = target_mask_sum
         return numerator / denominator
