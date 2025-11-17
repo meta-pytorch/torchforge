@@ -21,8 +21,12 @@ class ReinforceLoss(nn.Module):
     numerical noise. GRPO is more resilient in this case.
     """
 
-    def __init__(self):
+    def __init__(
+        self, prob_ratio_min: float | None = None, prob_ratio_max: float | None = None
+    ):
         super().__init__()
+        self.prob_ratio_min = prob_ratio_min
+        self.prob_ratio_max = prob_ratio_max
 
     def forward(
         self,
@@ -40,7 +44,9 @@ class ReinforceLoss(nn.Module):
         # Importance sampling ratio
         logp_diff = logprobs - sampling_logprobs.detach()
         prob_ratio = torch.exp(logp_diff).detach()
-        prob_ratio = torch.clamp(prob_ratio, min=0.1, max=10.0)
+        prob_ratio = torch.clamp(
+            prob_ratio, min=self.prob_ratio_min, max=self.prob_ratio_max
+        )
         advantages = advantages * prob_ratio
 
         numerator = (-logprobs * advantages * padding_mask).sum()
