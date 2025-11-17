@@ -285,8 +285,8 @@ class Service:
             return
 
         # Distribute requests among healthy replicas
-        for i, request in enumerate(migrated_requests):
-            target_replica = healthy_replicas[i % len(healthy_replicas)]
+        for request in migrated_requests:
+            target_replica = self._default_router.get_replica(healthy_replicas)
             await target_replica.enqueue_request(request)
 
             # Update session mapping if needed
