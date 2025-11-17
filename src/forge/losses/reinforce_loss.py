@@ -5,8 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-
-from forge.util.ops import compute_logprobs
 from torch import nn
 
 
@@ -27,9 +25,13 @@ class ReinforceLoss(nn.Module):
         super().__init__()
 
     def forward(
-        self, trainer_logits, target_ids, target_mask, target_weights, target_log_probs
+        self,
+        trainer_log_probs,
+        target_ids,
+        target_mask,
+        target_weights,
+        target_log_probs,
     ):
-        trainer_log_probs = compute_logprobs(trainer_logits, target_ids, align=False)
         target_weights = target_weights
         target_mask_sum = target_mask.sum()
         target_mask_sum = torch.maximum(
