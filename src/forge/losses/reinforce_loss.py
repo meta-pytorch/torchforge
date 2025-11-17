@@ -36,8 +36,7 @@ class ReinforceLoss(nn.Module):
         advantages,
         sampling_logprobs,
     ):
-        logp_diff = logprobs - sampling_logprobs.detach()
-        prob_ratio = torch.exp(logp_diff).detach()
+        prob_ratio = torch.exp(logprobs - sampling_logprobs)
         prob_ratio = torch.clamp(
             prob_ratio, min=self.prob_ratio_min, max=self.prob_ratio_max
         )
