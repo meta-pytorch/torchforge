@@ -28,14 +28,7 @@ class ReinforceLoss(nn.Module):
         self.prob_ratio_min = prob_ratio_min
         self.prob_ratio_max = prob_ratio_max
 
-    def forward(
-        self,
-        logprobs,
-        target_ids,
-        padding_mask,
-        advantages,
-        sampling_logprobs,
-    ):
+    def forward(self, logprobs, sampling_logprobs, advantages, padding_mask):
         prob_ratio = torch.exp(logprobs - sampling_logprobs)
         prob_ratio = torch.clamp(
             prob_ratio, min=self.prob_ratio_min, max=self.prob_ratio_max
