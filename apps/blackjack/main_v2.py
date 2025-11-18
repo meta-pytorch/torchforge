@@ -11,9 +11,9 @@ import multiprocessing
 import os
 import signal
 import subprocess
+import threading
 import time
 import uuid
-import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
@@ -262,17 +262,23 @@ class TokenAccumulator:
 
         print(f"[TokenAccumulator] About to tokenize assistant response")
         print(f"[TokenAccumulator] Response text length: {len(response_text)} chars")
-        print(f"[TokenAccumulator] Response token_ids length: {len(response_token_ids)} tokens")
+        print(
+            f"[TokenAccumulator] Response token_ids length: {len(response_token_ids)} tokens"
+        )
         print(f"[TokenAccumulator] First 150 chars: {response_text[:150]}")
 
         # Safety check: If response is suspiciously long, warn and potentially truncate
         if len(response_text) > 10000:  # 10k chars is way too much for blackjack
-            print(f"[TokenAccumulator] ⚠️  WARNING: Response text is {len(response_text)} chars - this may cause slow tokenization!")
+            print(
+                f"[TokenAccumulator] ⚠️  WARNING: Response text is {len(response_text)} chars - this may cause slow tokenization!"
+            )
             print(f"[TokenAccumulator] Last 150 chars: {response_text[-150:]}")
 
         message = {"role": "assistant", "content": response_text}
         assistant_tokens = self._tokenize_delta(message, "assistant")
-        print(f"[TokenAccumulator] Tokenization complete, got {len(assistant_tokens)} tokens")
+        print(
+            f"[TokenAccumulator] Tokenization complete, got {len(assistant_tokens)} tokens"
+        )
 
         # Check budget - reject if would exceed max_seq_len
         if len(assistant_tokens) > self.get_remaining_budget():
@@ -687,8 +693,12 @@ async def do_single_rollout(
             response_text = response.text
             print(f"  [DEBUG] Got response.text, length: {len(response_text)}")
             print(f"  [DEBUG] About to access response.token_ids as list")
-            response_token_ids_list = list(response.token_ids)  # Explicitly convert to list
-            print(f"  [DEBUG] Got response.token_ids, length: {len(response_token_ids_list)}")
+            response_token_ids_list = list(
+                response.token_ids
+            )  # Explicitly convert to list
+            print(
+                f"  [DEBUG] Got response.token_ids, length: {len(response_token_ids_list)}"
+            )
 
             print(f"  [DEBUG] About to call add_assistant_response")
             success = accumulator.add_assistant_response(

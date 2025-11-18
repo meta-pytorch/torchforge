@@ -49,7 +49,7 @@ INFO 11-17 21:08:00 [__init__.py:235] Automatically detected platform cuda.
 [34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Total parameter count: dense 2,031,739,904, sparse 0, active 2,031,739,904
 [34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Applied selective activation checkpointing to the model
 NCCL version 2.27.5+cuda12.9
-[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to 
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to
 [34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Mixed precision training is handled by AMP
 [34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m loading from HF safetensors from --checkpoint.initial_load_path: /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
 [34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Loading the checkpoint from /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e.
@@ -204,7 +204,7 @@ Okay, let's see. The user has a BlackJack hand with a value of ?, and the dealer
 [TokenAccumulator] Response text length: 4868 chars
 [TokenAccumulator] Response token_ids length: 1146 tokens
 [TokenAccumulator] First 150 chars: <think>
-Okay, let's see. The user is playing BlackJack, and the current hand is ?, and the dealer is ?. I need to decide whether to hit or stand. But 
+Okay, let's see. The user is playing BlackJack, and the current hand is ?, and the dealer is ?. I need to decide whether to hit or stand. But
 [TokenAccumulator] Tokenization complete, got 1150 tokens
 
 [do_single_rollout] Turn 1
@@ -343,7 +343,7 @@ ValueError: Expected input batch_size (7900) to match target batch_size (7904).
 [TokenAccumulator] Response text length: 2594 chars
 [TokenAccumulator] Response token_ids length: 615 tokens
 [TokenAccumulator] First 150 chars: <think>
-Okay, let's see. The user has been asking for HIT or STAND responses repeatedly. The initial hand and dealer are both unknown. Since the user 
+Okay, let's see. The user has been asking for HIT or STAND responses repeatedly. The initial hand and dealer are both unknown. Since the user
 [TokenAccumulator] Tokenization complete, got 619 tokens
 
 [do_single_rollout] Turn 3

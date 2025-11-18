@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Test script to verify OpenSpiel metadata extraction is working.
 
@@ -7,10 +13,12 @@ Usage:
 """
 
 import sys
+
 sys.path.insert(0, "/home/felipemello/OpenEnv/src")
 
-from envs.openspiel_env.server.openspiel_environment import OpenSpielEnvironment
 from envs.openspiel_env.models import OpenSpielAction
+from envs.openspiel_env.server.openspiel_environment import OpenSpielEnvironment
+
 
 def test_direct_env():
     """Test using OpenSpielEnvironment directly (no HTTP server)."""
@@ -19,9 +27,7 @@ def test_direct_env():
     print("=" * 60)
 
     env = OpenSpielEnvironment(
-        game_name="blackjack",
-        agent_player=0,
-        opponent_policy="random"
+        game_name="blackjack", agent_player=0, opponent_policy="random"
     )
 
     # Reset
@@ -78,6 +84,7 @@ def test_http_env():
     except Exception as e:
         print(f"\n[HTTP ERROR] {type(e).__name__}: {e}")
         import traceback
+
         traceback.print_exc()
 
 

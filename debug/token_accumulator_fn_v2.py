@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from enum import Enum
 
 
@@ -94,8 +100,7 @@ class TokenAccumulator:
         """
         # Check truncation
         is_truncated = (
-            len(response_token_ids) > 0
-            and response_token_ids[-1] != self.eos_token_id
+            len(response_token_ids) > 0 and response_token_ids[-1] != self.eos_token_id
         )
 
         if is_truncated:
@@ -136,9 +141,7 @@ class TokenAccumulator:
                 [0.0] * content_start  # Role markers before
                 + response_logprobs  # Actual logprobs from vLLM
                 + [0.0]
-                * (
-                    len(new_tokens) - content_start - len(response_token_ids)
-                )  # After
+                * (len(new_tokens) - content_start - len(response_token_ids))  # After
             )
         else:
             # Fallback: all zeros

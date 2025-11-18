@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 Minimal test to verify v9 fix for Qwen think tags.
 
@@ -10,6 +16,7 @@ Tests 4 scenarios:
 """
 
 import sys
+
 sys.path.insert(0, "/home/felipemello/forge")
 
 from transformers import AutoTokenizer
@@ -37,20 +44,26 @@ class TokenAccumulator:
         base = [{"role": "system", "content": ""}, {"role": "user", "content": ""}]
         with_assistant = base + [{"role": "assistant", "content": "<think>X</think>"}]
 
-        base_tokens = self.tokenizer.apply_chat_template(base, add_generation_prompt=False, tokenize=True)
-        full_tokens = self.tokenizer.apply_chat_template(with_assistant, add_generation_prompt=False, tokenize=True)
+        base_tokens = self.tokenizer.apply_chat_template(
+            base, add_generation_prompt=False, tokenize=True
+        )
+        full_tokens = self.tokenizer.apply_chat_template(
+            with_assistant, add_generation_prompt=False, tokenize=True
+        )
 
         # Extract assistant portion
-        assistant_full = full_tokens[len(base_tokens):]
+        assistant_full = full_tokens[len(base_tokens) :]
 
         # Content tokens
-        content_tokens = self.tokenizer.encode("<think>X</think>", add_special_tokens=False)
+        content_tokens = self.tokenizer.encode(
+            "<think>X</think>", add_special_tokens=False
+        )
 
         # Find content position in assistant_full
         for i in range(len(assistant_full) - len(content_tokens) + 1):
-            if assistant_full[i:i+len(content_tokens)] == content_tokens:
+            if assistant_full[i : i + len(content_tokens)] == content_tokens:
                 header = assistant_full[:i]
-                footer = assistant_full[i+len(content_tokens):]
+                footer = assistant_full[i + len(content_tokens) :]
                 return header, footer
 
         # Fallback: assume last token is footer (eos)
@@ -66,7 +79,7 @@ class TokenAccumulator:
         )
 
         # Extract delta
-        delta = new_tokens[len(self.all_tokens):]
+        delta = new_tokens[len(self.all_tokens) :]
         self.all_tokens.extend(delta)
 
     def add_assistant_response(self, content_tokens: list[int], text: str):
@@ -78,7 +91,9 @@ class TokenAccumulator:
             text: Decoded text (for message log)
         """
         # Check if truncated (last token != eos)
-        is_truncated = len(content_tokens) > 0 and content_tokens[-1] != self.eos_token_id
+        is_truncated = (
+            len(content_tokens) > 0 and content_tokens[-1] != self.eos_token_id
+        )
 
         # Combine: header + content + footer
         # BUT if truncated, don't add footer (incomplete response)
@@ -158,8 +173,7 @@ def main():
 
     # Simulate complete response
     content_tokens, content_text = simulate_vllm_response(
-        tokenizer,
-        f"<think>Let me think...</think>\n\nHIT{tokenizer.eos_token}"
+        tokenizer, f"<think>Let me think...</think>\n\nHIT{tokenizer.eos_token}"
     )
     print(f"  Content tokens: {len(content_tokens)}")
     print(f"  Last token == eos: {content_tokens[-1] == tokenizer.eos_token_id}")
@@ -178,7 +192,7 @@ def main():
     content_tokens, content_text = simulate_vllm_response(
         tokenizer,
         "<think>Let me think about this carefully...",
-        truncate_at=10  # Truncate after 10 tokens
+        truncate_at=10,  # Truncate after 10 tokens
     )
     print(f"  Content tokens: {len(content_tokens)}")
     print(f"  Content text: {repr(content_text)}")
@@ -203,8 +217,7 @@ def main():
     acc3.add_user_message("Hand: 15, Dealer: 10")
 
     content_tokens, content_text = simulate_vllm_response(
-        tokenizer,
-        f"<think>Thinking...</think>\n\nHIT{tokenizer.eos_token}"
+        tokenizer, f"<think>Thinking...</think>\n\nHIT{tokenizer.eos_token}"
     )
     acc3.add_assistant_response(content_tokens, content_text)
 
@@ -221,9 +234,7 @@ def main():
 
     # First response truncated
     content_tokens, content_text = simulate_vllm_response(
-        tokenizer,
-        "<think>Let me",
-        truncate_at=5
+        tokenizer, "<think>Let me", truncate_at=5
     )
     is_truncated = acc4.add_assistant_response(content_tokens, content_text)
     print(f"  Turn 1 truncated: {is_truncated}")
@@ -240,9 +251,9 @@ def main():
     if has_duplicates:
         print(f"  ❌ FOUND DUPLICATES!")
         # Show where duplicates appear
-        lines = decoded.split('\n')
+        lines = decoded.split("\n")
         for i, line in enumerate(lines):
-            if '<think>' in line or '</think>' in line:
+            if "<think>" in line or "</think>" in line:
                 print(f"    Line {i}: {repr(line)}")
 
     print("\n" + "=" * 80)
