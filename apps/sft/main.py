@@ -88,9 +88,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
             self.rank_should_record_loss = False
 
-        # Logging frequency
-        self.log_every_n_steps = self.job_config.get("log_every_n_steps", 10)
-
         super().__init__(job_config)
 
     async def setup_metric_logger(self):
@@ -116,10 +113,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.train_dataloader = self.setup_data(train_datasets_config)
 
         # Load eval datasets
-        eval_config = self.job_config.get("eval", {})
+        eval_config = self.job_config["eval"]
         self.val_dataloaders = {}
-        self.eval_every_n_steps = eval_config.get("eval_every_n_steps", None)
-        max_eval_steps = eval_config.get("max_eval_steps", None)
+        self.eval_every_n_steps = eval_config["eval_every_n_steps"]
+        max_eval_steps = eval_config["max_eval_steps"]
         self.max_eval_steps = (
             max_eval_steps if max_eval_steps and max_eval_steps > 0 else None
         )
@@ -228,7 +225,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         labels: torch.Tensor,
         skip_backward: bool = False,
     ) -> torch.Tensor:
-        """Forward pass with optional backward."""
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
 
@@ -303,10 +299,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         if self.rank_should_record_loss:
             loss_val = loss.item()
             record_metric("ForgeSFTRecipe/train_step/loss", loss_val, Reduce.MEAN)
-            if self.current_step % self.log_every_n_steps == 0:
-                logger.info(
-                    f"step {self.current_step} / {self.num_training_steps} | Loss: {loss_val}"
-                )
+            logger.info(
+                f"step {self.current_step} / {self.num_training_steps} | Loss: {loss_val}"
+            )
 
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
@@ -353,7 +348,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             total_loss = torch.tensor(0.0, device=self.device)
             num_steps = 0
 
-            # NOTE: Assumes batch contains field "metrics"
+            # NOTE: Assumes batch contains field "metrics" containing "num_epochs"
             batch_iter = StopAfterOneEpoch(
                 iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
                 device=self.device,
@@ -384,10 +379,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     num_steps += 1
 
                     # Log progress
-                    if (
-                        self.rank_should_record_loss
-                        and num_steps % self.log_every_n_steps == 0
-                    ):
+                    if self.rank_should_record_loss:
                         loss_val = loss.item()
                         logger.info(
                             f"[dataset {dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}"
