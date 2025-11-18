@@ -23,7 +23,7 @@ from forge.actors._torchstore_utils import (
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import MathReward, ThinkingReward
@@ -31,7 +31,6 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from forge.util.ops import compute_logprobs
@@ -140,7 +139,6 @@ def simple_grpo_loss(
 
 @dataclass
 class RewardActor(ForgeActor):
-
     reward_functions: list[Callable]
 
     @endpoint
@@ -210,7 +208,7 @@ class DatasetActor(ForgeActor):
     model: str = "Qwen/Qwen3-1.7B"
 
     @endpoint
-    def setup(self):
+    async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
         self._epoch = 0
 
@@ -251,6 +249,11 @@ class DatasetActor(ForgeActor):
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric(
+                "dataset/sample/max_sample_len",
+                len(sample["request"]),
+                Reduce.MAX,
+            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
@@ -266,7 +269,12 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     async def pad_token(self):
-        return self._tokenizer.pad_token_id
+        # Use pad_token_id if available, otherwise use eos_token_id
+        # Llama models don't have a pad token by default
+        if self._tokenizer.pad_token_id is not None:
+            return self._tokenizer.pad_token_id
+        else:
+            return self._tokenizer.eos_token_id
 
 
 async def drop_weights(version: int):
@@ -318,7 +326,7 @@ async def main(cfg: DictConfig):
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.actors.trainer).as_actor(
+        TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
@@ -391,6 +399,24 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+                # drop episodes if
+                # 1> reward std-dev is very small (including all 0s and all 1s)
+                # 2> response is potentially truncated (response_len >= max_res_tokens)
+                rewards = [e.reward for e in episodes]
+                rewards_std = torch.std(torch.tensor(rewards))
+                max_response_len = max(
+                    e.completion.token_ids.shape[0] for e in episodes
+                )
+                drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+                record_metric(
+                    "main/continuous_rollouts/dropped_episodes",
+                    1 if drop else 0,
+                    Reduce.SUM,
+                )
+                if drop:
+                    del input_ids, episodes
+                    continue
 
             t.step("reward_evaluation")
 

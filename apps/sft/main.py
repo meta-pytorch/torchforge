@@ -83,11 +83,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
 
-        self._init_dist()
-        super().__init__(job_config)
-
-        # For Pipeline Parallelism (PP): Only the last PP stage computes the actual loss
-        # For non-PP setups: All ranks compute loss
+        # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
         self.rank_should_record_loss = True
         if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
             self.rank_should_record_loss = False
@@ -95,30 +91,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # Logging frequency
         self.log_every_n_steps = self.job_config.get("log_every_n_steps", 10)
 
-    def _init_dist(self):
-        """Initializes torch distributed.
-
-        torchrun normally hands this, but we need to do it ourselves
-        in monarch for now.
-
-        We should consider putting this into ForgeActor, but having this
-        be explicit for now.
-
-        """
-        env = {
-            "RANK": str(self._rank),
-            "LOCAL_RANK": str(self._rank),
-            "LOCAL_WORLD_SIZE": str(self._size),
-            "GROUP_RANK": str(self._size),
-            "GROUP_WORLD_SIZE": str(self._size),
-            "ROLE_RANK": str(self._rank),
-            "ROLE_WORLD_SIZE": str(self._size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self._size),
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
-        logger.info("env: {}".format(env))
+        super().__init__(job_config)
 
     async def setup_metric_logger(self):
         """Initialization happens in the main process. Here we just retrieve it"""
@@ -520,7 +493,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
 
 async def run(cfg: DictConfig) -> None:
-
     logging.info("Spawning recipe...")
     process_cfg = cfg.pop("processes")
 

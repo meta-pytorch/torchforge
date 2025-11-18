@@ -470,7 +470,7 @@ async def simple_rl_step():
     if batch is not None:
         print("Training on batch...")
         inputs, targets = batch  # GRPO returns (inputs, targets) tuple
-        loss = await trainer.train_step.call(inputs, targets)  # RLTrainer is an actor
+        loss = await trainer.train_step.call(inputs, targets)  # TitanTrainer is an actor
         print(f"Training loss: {loss}")
         return loss
     else:
@@ -507,7 +507,7 @@ reward_actor = await RewardActor.options(
 )
 
 # Training needs fewer but more powerful replicas
-trainer = await RLTrainer.options(
+trainer = await TitanTrainer.options(
     procs=1, with_gpus=True  # Fewer but GPU-heavy
 ).as_actor(  # Trainer typically uses .as_actor() not .as_service()
     model={"name": "qwen3", "flavor": "1.7B"},
@@ -580,7 +580,7 @@ import torch
 from forge.actors.generator import Generator as Policy
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages
 from forge.data.rewards import MathReward, ThinkingReward
 
@@ -603,7 +603,7 @@ print("Initializing all services...")
         engine_config={"model": "Qwen/Qwen3-1.7B", "tensor_parallel_size": 1},
         sampling_config={"n": 1, "max_tokens": 512}
     ),
-    RLTrainer.options(procs=1, with_gpus=True).as_actor(
+    TitanTrainer.options(procs=1, with_gpus=True).as_actor(
         model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": "hf://Qwen/Qwen3-1.7B"},
         optimizer={"name": "AdamW", "lr": 1e-5},
         training={"local_batch_size": 2, "seq_len": 2048}
@@ -667,7 +667,7 @@ print("Shutting down services...")
 await asyncio.gather(
     DatasetActor.shutdown(dataloader),
     policy.shutdown(),
-    RLTrainer.shutdown(trainer),
+    TitanTrainer.shutdown(trainer),
     ReplayBuffer.shutdown(replay_buffer),
     ComputeAdvantages.shutdown(compute_advantages),
     ReferenceModel.shutdown(ref_model),
