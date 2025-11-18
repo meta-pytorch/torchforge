@@ -1,0 +1,426 @@
+Warning: setting HYPERACTOR_CODEC_MAX_FRAME_LENGTH since this needs to be set to enable large RPC calls via Monarch
+INFO 11-17 21:07:37 [__init__.py:235] Automatically detected platform cuda.
+Starting OpenSpiel server for game 'blackjack' on port 9000...
+Using game string: blackjack
+[SERVER] Starting uvicorn for game 'blackjack' on port 9000
+INFO:     Started server process [2710960]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:36624 - "GET /health HTTP/1.1" 200 OK
+Waiting for OpenSpiel server to be ready...
+[DEBUG] Health check attempt 1 failed: ConnectionError: HTTPConnectionPool(host='localhost', port=9000): Max retries exceeded with url: /health (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f973a7c5580>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[DEBUG] Health check attempt 2: status=200
+✓ OpenSpiel server ready (took 2s)
+Launcher not provided, remote allocations will not work.
+wandb: Currently logged in as: felipemello (cabernet-team) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run yvzwcfys
+wandb: Tracking run with wandb version 0.23.0
+wandb: Run data is saved locally in /home/felipemello/forge/wandb/run-20251117_210743-yvzwcfys
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run denim-gorge-47
+wandb: ⭐️ View project at https://wandb.ai/cabernet-team/blackjack-grpo
+wandb: 🚀 View run at https://wandb.ai/cabernet-team/blackjack-grpo/runs/yvzwcfys
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Spawning actor EnvironmentActor
+Spawning service Generator
+Spawning actor TitanTrainer
+Spawning actor ReplayBuffer
+Spawning actor ComputeAdvantages
+Spawning service ReferenceModel
+EnvironmentActor initialized (model: Qwen/Qwen3-1.7B)
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:54 INFO[0m Compiling loss
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:57 INFO[0m Building 0-D device mesh with [], []
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:57 INFO[0m [GC] Initial GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m Total parameter count: dense 2,031,739,904, sparse 0, active 2,031,739,904
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m Applied selective activation checkpointing to the model
+NCCL version 2.27.5+cuda12.9
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to ./checkpoint
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m Mixed precision training is handled by AMP
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m loading from HF safetensors from --checkpoint.initial_load_path: /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:58 INFO[0m Loading the checkpoint from /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e.
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:59 INFO[0m [GC] GC collection for checkpoint loading. took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-17 21:07:59 INFO[0m Finished loading the checkpoint in 0.84 seconds.
+INFO 11-17 21:08:00 [__init__.py:235] Automatically detected platform cuda.
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:01 INFO[0m Building 0-D device mesh with [], []
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:01 INFO[0m [GC] Initial GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Total parameter count: dense 2,031,739,904, sparse 0, active 2,031,739,904
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Applied selective activation checkpointing to the model
+NCCL version 2.27.5+cuda12.9
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to 
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Mixed precision training is handled by AMP
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m loading from HF safetensors from --checkpoint.initial_load_path: /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:02 INFO[0m Loading the checkpoint from /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e.
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:03 INFO[0m [GC] GC collection for checkpoint loading. took 0.04 seconds
+[34m[ReferenceModel-0/1] 2025-11-17 21:08:03 INFO[0m Finished loading the checkpoint in 0.87 seconds.
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 11-17 21:08:08 [config.py:1604] Using max model len 40960
+INFO 11-17 21:08:08 [config.py:2434] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 11-17 21:08:10 [__init__.py:235] Automatically detected platform cuda.
+WARNING 11-17 21:08:12 [multiproc_worker_utils.py:307] Reducing Torch parallelism from 192 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+[W1117 21:08:14.496738043 ProcessGroupNCCL.cpp:924] Warning: TORCH_NCCL_AVOID_RECORD_STREAMS is the default now, this environment variable is thus deprecated. (function operator())
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 11-17 21:08:14 [parallel_state.py:1102] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 11-17 21:08:14 [topk_topp_sampler.py:59] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 11-17 21:08:14 [gpu_model_runner.py:1843] Starting to load model Qwen/Qwen3-1.7B...
+INFO 11-17 21:08:15 [gpu_model_runner.py:1875] Loading model from scratch...
+INFO 11-17 21:08:15 [cuda.py:290] Using Flash Attention backend on V1 engine.
+INFO 11-17 21:08:16 [weight_utils.py:296] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.60it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.59it/s]
+
+INFO 11-17 21:08:17 [default_loader.py:262] Loading weights took 0.58 seconds
+INFO 11-17 21:08:17 [gpu_model_runner.py:1892] Model loading took 3.2152 GiB and 1.913915 seconds
+[-]E1117 21:08:21.415051 2708139 hyperactor/src/channel/net.rs:872] error_msg:session unix:@BdPdF2acP6STQcaKWIELDP3e.6175059813916059614: failed to deliver message within timeout
+INFO 11-17 21:08:22 [backends.py:530] Using cache directory: /home/felipemello/.cache/vllm/torch_compile_cache/8e68fa2fc8/rank_0_0/backbone for vLLM's torch.compile
+INFO 11-17 21:08:22 [backends.py:541] Dynamo bytecode transform time: 4.28 s
+INFO 11-17 21:08:24 [backends.py:161] Directly load the compiled graph(s) for dynamic shape from the cache, took 1.659 s
+INFO 11-17 21:08:29 [monitor.py:34] torch.compile takes 4.28 s in total
+INFO 11-17 21:08:30 [gpu_worker.py:255] Available KV cache memory: 76.61 GiB
+INFO 11-17 21:08:30 [kv_cache_utils.py:833] GPU KV cache size: 717,264 tokens
+INFO 11-17 21:08:30 [kv_cache_utils.py:837] Maximum concurrency for 40,960 tokens per request: 17.51x
+Capturing CUDA graph shapes:   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graph shapes:   6%|▌         | 4/67 [00:00<00:01, 34.33it/s]Capturing CUDA graph shapes:  13%|█▎        | 9/67 [00:00<00:01, 37.86it/s]Capturing CUDA graph shapes:  19%|█▉        | 13/67 [00:00<00:01, 36.95it/s]Capturing CUDA graph shapes:  25%|██▌       | 17/67 [00:00<00:01, 37.71it/s]Capturing CUDA graph shapes:  33%|███▎      | 22/67 [00:00<00:01, 39.12it/s]Capturing CUDA graph shapes:  40%|████      | 27/67 [00:00<00:01, 35.96it/s]Capturing CUDA graph shapes:  46%|████▋     | 31/67 [00:00<00:00, 36.90it/s]Capturing CUDA graph shapes:  52%|█████▏    | 35/67 [00:00<00:00, 36.65it/s]Capturing CUDA graph shapes:  58%|█████▊    | 39/67 [00:01<00:00, 36.60it/s]Capturing CUDA graph shapes:  64%|██████▍   | 43/67 [00:01<00:00, 35.79it/s]Capturing CUDA graph shapes:  70%|███████   | 47/67 [00:01<00:00, 32.81it/s]Capturing CUDA graph shapes:  76%|███████▌  | 51/67 [00:01<00:00, 31.46it/s]Capturing CUDA graph shapes:  82%|████████▏ | 55/67 [00:01<00:00, 29.53it/s]Capturing CUDA graph shapes:  88%|████████▊ | 59/67 [00:01<00:00, 30.80it/s]Capturing CUDA graph shapes:  94%|█████████▍| 63/67 [00:01<00:00, 31.57it/s]Capturing CUDA graph shapes: 100%|██████████| 67/67 [00:02<00:00, 13.25it/s]Capturing CUDA graph shapes: 100%|██████████| 67/67 [00:02<00:00, 26.16it/s]
+INFO 11-17 21:08:34 [gpu_model_runner.py:2485] Graph capturing finished in 3 secs, took 1.89 GiB
+[-]E1117 21:08:38.263202 2708139 hyperactor/src/channel/net.rs:872] error_msg:session unix:@BdPdF2acP6STQcaKWIELDP3e.3823179278610282663: failed to deliver message within timeout
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 21:08:46 [__init__.py:235] Automatically detected platform cuda.
+INFO:     127.0.0.1:43260 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43266 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43276 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43284 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43290 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43266 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43276 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40720 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40728 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43276 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43266 - "POST /step HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40720 - "POST /step HTTP/1.1" 200 OK
+All services initialized successfully!
+Torchstore successfully initialized with local rank strategy
+Warming up policy with test generation...
+✓ Policy ready, test response: ' We need to make it to interact in the team, so li...'
+Testing OpenSpiel server connection...
+[DEBUG] Test env base_url=http://localhost:9000, timeout=15.0
+[DEBUG] Test env trust_env=False
+[DEBUG] Calling test_env.reset()...
+✓ OpenSpiel server test successful, legal_actions=[0, 1]
+Starting GRPO with 1 rollout threads
+
+[do_single_rollout] Turn 0
+  Remaining budget: 1999
+  Current tokens: 46
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1999
+
+[do_single_rollout] Turn 0
+  Remaining budget: 1999
+  Current tokens: 46
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1999
+
+[do_single_rollout] Turn 0
+  Remaining budget: 1999
+  Current tokens: 46
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1999
+
+[do_single_rollout] Turn 0
+  Remaining budget: 1999
+  Current tokens: 46
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1999
+  vLLM returned 656 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 2745
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 656
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 2745 chars
+[TokenAccumulator] Response token_ids length: 656 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user has a BlackJack hand and a dealer's visible card. But the hand and dealer are both unknown. The question is to outpu
+[TokenAccumulator] Tokenization complete, got 660 tokens
+
+[do_single_rollout] Turn 1
+  Remaining budget: 1328
+  Current tokens: 717
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1328
+  vLLM returned 886 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 3833
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 886
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 3833 chars
+[TokenAccumulator] Response token_ids length: 886 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user has a BlackJack hand with a value of ?, and the dealer has a value of ?. I need to determine whether to hit or stand
+[TokenAccumulator] Tokenization complete, got 890 tokens
+
+[do_single_rollout] Turn 1
+  Remaining budget: 1098
+  Current tokens: 947
+  Max seq len: 2048
+  Calling vLLM with max_tokens=1098
+  vLLM returned 1146 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 4868
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 1146
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 4868 chars
+[TokenAccumulator] Response token_ids length: 1146 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user is playing BlackJack, and the current hand is ?, and the dealer is ?. I need to decide whether to hit or stand. But 
+[TokenAccumulator] Tokenization complete, got 1150 tokens
+
+[do_single_rollout] Turn 1
+  Remaining budget: 838
+  Current tokens: 1207
+  Max seq len: 2048
+  Calling vLLM with max_tokens=838
+  vLLM returned 1179 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 5011
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 1179
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 5011 chars
+[TokenAccumulator] Response token_ids length: 1179 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user has a Blackjack hand and a dealer's visible card. But the hand and dealer are both unknown. The task is to determine
+[TokenAccumulator] Tokenization complete, got 1183 tokens
+
+[do_single_rollout] Creating episode game_2_b619ed1f
+  Final tokens: 1229
+  Final mask: 1229
+  Final logprobs: 1229
+  Is truncated: False
+  Truncation reason: None
+  Hit max turns: False
+  Max seq len: 2048
+  vLLM returned 384 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 1572
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 384
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 1572 chars
+[TokenAccumulator] Response token_ids length: 384 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user is playing Blackjack, and their hand and the dealer's upcard are both unknown. The previous action was 'HIT', so the
+[TokenAccumulator] Tokenization complete, got 388 tokens
+
+[do_single_rollout] Turn 2
+  Remaining budget: 699
+  Current tokens: 1346
+  Max seq len: 2048
+  Calling vLLM with max_tokens=699
+  vLLM returned 815 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 3396
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 815
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 3396 chars
+[TokenAccumulator] Response token_ids length: 815 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user has a Black Jack hand and a dealer's visible card. The previous action was 'HIT', so I need to decide whether to hit
+[TokenAccumulator] Tokenization complete, got 819 tokens
+
+[do_single_rollout] Creating episode game_0_6b7c6915
+  Final tokens: 1536
+  Final mask: 1536
+  Final logprobs: 1536
+  Is truncated: False
+  Truncation reason: None
+  Hit max turns: False
+  Max seq len: 2048
+  vLLM returned 367 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 1592
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 367
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 1592 chars
+[TokenAccumulator] Response token_ids length: 367 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user is playing BlackJack, and the current hand is unknown, and the dealer's hand is also unknown. The previous action wa
+[TokenAccumulator] Tokenization complete, got 371 tokens
+
+[do_single_rollout] Turn 2
+  Remaining budget: 456
+  Current tokens: 1589
+  Max seq len: 2048
+  Calling vLLM with max_tokens=456
+  vLLM returned 615 tokensINFO:     127.0.0.1:43276 - "POST /step HTTP/1.1" 200 OK
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+[34m[ReferenceModel-0/1] 2025-11-17 21:09:07 CRITICAL[0m Unhandled exception in actor endpoint
+Traceback (most recent call last):
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/monarch/_src/actor/actor_mesh.py", line 935, in handle
+    result = await the_method(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/src/forge/actors/reference_model.py", line 191, in forward
+    logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/src/forge/util/ops.py", line 91, in compute_logprobs
+    logprobs = -F.cross_entropy(
+                ^^^^^^^^^^^^^^^^
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/nn/functional.py", line 3458, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Expected input batch_size (7900) to match target batch_size (7904).
+
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 2594
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 615
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+[TokenAccumulator] About to tokenize assistant response
+[TokenAccumulator] Response text length: 2594 chars
+[TokenAccumulator] Response token_ids length: 615 tokens
+[TokenAccumulator] First 150 chars: <think>
+Okay, let's see. The user has been asking for HIT or STAND responses repeatedly. The initial hand and dealer are both unknown. Since the user 
+[TokenAccumulator] Tokenization complete, got 619 tokens
+
+[do_single_rollout] Turn 3
+  Remaining budget: 69
+  Current tokens: 1976
+  Max seq len: 2048
+  Calling vLLM with max_tokens=69
+  vLLM returned 69 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 296
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 69
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+  ❌ Generation failed, breaking
+
+[do_single_rollout] Creating episode game_1_3a7c28a0
+  Final tokens: 1976
+  Final mask: 1976
+  Final logprobs: 1976
+  Is truncated: True
+  Truncation reason: agent_too_long
+  Hit max turns: False
+  Max seq len: 2048
+  vLLM returned 456 tokens
+  [DEBUG] About to get generator_version
+  [DEBUG] Got generator_version: 0
+  [DEBUG] About to extract logprobs
+  [DEBUG] Got logprobs: False
+  [DEBUG] About to access response.text
+  [DEBUG] Got response.text, length: 2010
+  [DEBUG] About to access response.token_ids as list
+  [DEBUG] Got response.token_ids, length: 456
+  [DEBUG] About to call add_assistant_response
+[TokenAccumulator] ===== ENTERED add_assistant_response =====
+  ❌ Generation failed, breaking
+
+[do_single_rollout] Creating episode game_3_e56c36ae
+  Final tokens: 1589
+  Final mask: 1589
+  Final logprobs: 1589
+  Is truncated: True
+  Truncation reason: agent_too_long
+  Hit max turns: False
+  Max seq len: 2048
+
+[continuous_rollouts] Preparing ref_model input
+  Max episode length: 1976
+  Max seq len config: 2048
+  Episode 0: tokens=1536, truncated=False
+  Episode 1: tokens=1976, truncated=True
+  Episode 2: tokens=1229, truncated=False
+  Episode 3: tokens=1589, truncated=True
+  input_ids shape: torch.Size([4, 1976])
+  Calling ref_model with max_req_tokens=0
+Got failure on replica 0. Error:
+A remote actor call has failed.
+ Traceback of where the remote call failed (most recent call last):
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/monarch/_src/actor/actor_mesh.py", line 942, in handle
+    raise e
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/monarch/_src/actor/actor_mesh.py", line 935, in handle
+    result = await the_method(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/src/forge/actors/reference_model.py", line 191, in forward
+    logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/src/forge/util/ops.py", line 91, in compute_logprobs
+    logprobs = -F.cross_entropy(
+                ^^^^^^^^^^^^^^^^
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/nn/functional.py", line 3458, in cross_entropy
+    return torch._C._nn.cross_entropy_loss(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Expected input batch_size (7900) to match target batch_size (7904).
+
+Unhandled mesh failure, crashing! MeshFailure(rank=0, event=unix:@QqPD2GAuEO4qeCm06gIhOjIG,ref_model_0_0_1r1Tp9v3X8Bo,agent[0]: failed: actor mesh is stopped due to proc mesh shutdown on: ref_model_0_1mKfw1oCYr8b, rank 0 is in state Stopped at 2025-11-17 21:09:11.061809900 -08:00)
+[-]E1117 21:09:11.062528 2708139 monarch_hyperactor/src/v1/actor_mesh.rs:258] unhandled event reached unhandled_fault_hook: MeshFailure(rank=0, event=unix:@QqPD2GAuEO4qeCm06gIhOjIG,ref_model_0_0_1r1Tp9v3X8Bo,agent[0]: failed: actor mesh is stopped due to proc mesh shutdown on: ref_model_0_1mKfw1oCYr8b, rank 0 is in state Stopped at 2025-11-17 21:09:11.061809900 -08:00), which is exiting the process with code 1

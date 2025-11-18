@@ -1,0 +1,273 @@
+Warning: setting HYPERACTOR_CODEC_MAX_FRAME_LENGTH since this needs to be set to enable large RPC calls via Monarch
+INFO 11-17 20:21:45 [__init__.py:235] Automatically detected platform cuda.
+Model: Qwen/Qwen3-1.7B
+EOS token: <|im_end|> (id=151645)
+Spawning service Generator
+Launcher not provided, remote allocations will not work.
+INFO 11-17 20:21:55 [__init__.py:235] Automatically detected platform cuda.
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 11-17 20:22:02 [config.py:1604] Using max model len 2048
+INFO 11-17 20:22:03 [config.py:2434] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 11-17 20:22:05 [__init__.py:235] Automatically detected platform cuda.
+WARNING 11-17 20:22:06 [multiproc_worker_utils.py:307] Reducing Torch parallelism from 192 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+[W1117 20:22:10.473923048 ProcessGroupNCCL.cpp:924] Warning: TORCH_NCCL_AVOID_RECORD_STREAMS is the default now, this environment variable is thus deprecated. (function operator())
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 11-17 20:22:11 [parallel_state.py:1102] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 11-17 20:22:11 [topk_topp_sampler.py:59] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 11-17 20:22:11 [gpu_model_runner.py:1843] Starting to load model Qwen/Qwen3-1.7B...
+INFO 11-17 20:22:11 [gpu_model_runner.py:1875] Loading model from scratch...
+INFO 11-17 20:22:11 [cuda.py:290] Using Flash Attention backend on V1 engine.
+INFO 11-17 20:22:11 [weight_utils.py:296] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.27it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.27it/s]
+
+INFO 11-17 20:22:12 [default_loader.py:262] Loading weights took 0.64 seconds
+INFO 11-17 20:22:13 [gpu_model_runner.py:1892] Model loading took 3.2152 GiB and 0.951199 seconds
+INFO 11-17 20:22:17 [backends.py:530] Using cache directory: /home/felipemello/.cache/vllm/torch_compile_cache/d8aae92f35/rank_0_0/backbone for vLLM's torch.compile
+INFO 11-17 20:22:17 [backends.py:541] Dynamo bytecode transform time: 4.12 s
+INFO 11-17 20:22:19 [backends.py:161] Directly load the compiled graph(s) for dynamic shape from the cache, took 1.623 s
+INFO 11-17 20:22:24 [monitor.py:34] torch.compile takes 4.12 s in total
+INFO 11-17 20:22:25 [gpu_worker.py:255] Available KV cache memory: 76.61 GiB
+INFO 11-17 20:22:25 [kv_cache_utils.py:833] GPU KV cache size: 717,264 tokens
+INFO 11-17 20:22:25 [kv_cache_utils.py:837] Maximum concurrency for 2,048 tokens per request: 350.23x
+Capturing CUDA graph shapes:   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graph shapes:   4%|▍         | 3/67 [00:00<00:02, 27.66it/s]Capturing CUDA graph shapes:  12%|█▏        | 8/67 [00:00<00:01, 35.78it/s][-]E1117 20:22:26.079916 797506 hyperactor/src/channel/net.rs:872] error_msg:session unix:@3c11XJW9CpJwAL7EmqNQiVS2.12266164987128378238: failed to deliver message within timeout
+Capturing CUDA graph shapes:  18%|█▊        | 12/67 [00:00<00:01, 36.04it/s]Capturing CUDA graph shapes:  24%|██▍       | 16/67 [00:00<00:01, 37.10it/s]Capturing CUDA graph shapes:  31%|███▏      | 21/67 [00:00<00:01, 39.04it/s]Capturing CUDA graph shapes:  37%|███▋      | 25/67 [00:00<00:01, 39.28it/s]Capturing CUDA graph shapes:  45%|████▍     | 30/67 [00:00<00:00, 40.19it/s]Capturing CUDA graph shapes:  52%|█████▏    | 35/67 [00:00<00:00, 38.97it/s]Capturing CUDA graph shapes:  58%|█████▊    | 39/67 [00:01<00:00, 37.94it/s]Capturing CUDA graph shapes:  64%|██████▍   | 43/67 [00:01<00:00, 37.50it/s]Capturing CUDA graph shapes:  70%|███████   | 47/67 [00:01<00:00, 34.33it/s]Capturing CUDA graph shapes:  76%|███████▌  | 51/67 [00:01<00:00, 31.41it/s]Capturing CUDA graph shapes:  82%|████████▏ | 55/67 [00:01<00:00, 30.73it/s]Capturing CUDA graph shapes:  88%|████████▊ | 59/67 [00:01<00:00, 19.74it/s]Capturing CUDA graph shapes:  93%|█████████▎| 62/67 [00:02<00:00,  8.91it/s]Capturing CUDA graph shapes:  96%|█████████▌| 64/67 [00:03<00:00,  8.65it/s]Capturing CUDA graph shapes:  99%|█████████▊| 66/67 [00:03<00:00,  8.98it/s]Capturing CUDA graph shapes: 100%|██████████| 67/67 [00:03<00:00, 19.20it/s]
+INFO 11-17 20:22:29 [gpu_model_runner.py:2485] Graph capturing finished in 4 secs, took 1.89 GiB
+[-]E1117 20:22:33.111696 797506 hyperactor/src/channel/net.rs:872] error_msg:session unix:@3c11XJW9CpJwAL7EmqNQiVS2.1220693907073261032: failed to deliver message within timeout
+WARNING:forge.util.logging: Skipping metric collection for Generator_1b2sJWfkAsmK_r0. Metric logging backends (e.g. wandb) were not initialized. This happens when you try to use `record_metric` before calling `init_backends`. To disable this warning, please call in your main file:
+`mlogger = await get_or_create_metric_logger(process_name='Controller')`
+`await mlogger.init_backends.call_one(logging_config)`
+or set env variable `FORGE_DISABLE_METRICS=True`
+[34m[Generator-0/1] 2025-11-17 20:22:40 WARNING[0m Skipping metric collection for Generator_1b2sJWfkAsmK_r0. Metric logging backends (e.g. wandb) were not initialized. This happens when you try to use `record_metric` before calling `init_backends`. To disable this warning, please call in your main file:
+`mlogger = await get_or_create_metric_logger(process_name='Controller')`
+`await mlogger.init_backends.call_one(logging_config)`
+or set env variable `FORGE_DISABLE_METRICS=True`
+INFO 11-17 20:22:41 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 20:22:41 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 20:22:41 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-17 20:22:42 [__init__.py:235] Automatically detected platform cuda.
+✅ Generator ready
+
+
+=====
+TEST 1: prompt -> user -> assistant (COMPLETE)
+=====
+Response text: '<think>\nOkay, the user said, "Just reply to me with \'hi\'. Do not think about it." So I need to respond with \'hi\' without any additional thoughts.\n\nFirst, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they\'re testing if I follow instructions or want a quick response. I should keep it straightforward.\n\nI need to make sure there\'s no extra text. Just the word \'hi\'. No explanations or anything else. Let me check the previous messages to see if there\'s any context, but since the user didn\'t provide any, I\'ll go with the basic response.\n\nAlright, the reply is \'hi\'.\n</think>\n\nhi'
+Stop reason: stop
+Last token == EOS: True
+
+Episode accepted: True, Is truncated: False, Truncation reason: None
+
+-----
+DECODED CONVERSATION:
+-----
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+Just reply to me with 'hi'. Do not think about it.<|im_end|>
+<|im_start|>assistant
+<think>
+Okay, the user said, "Just reply to me with 'hi'. Do not think about it." So I need to respond with 'hi' without any additional thoughts.
+
+First, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they're testing if I follow instructions or want a quick response. I should keep it straightforward.
+
+I need to make sure there's no extra text. Just the word 'hi'. No explanations or anything else. Let me check the previous messages to see if there's any context, but since the user didn't provide any, I'll go with the basic response.
+
+Alright, the reply is 'hi'.
+</think>
+
+hi<|im_end|>
+
+-----
+Total tokens: 175
+✅ FINALIZE PASSED
+
+=====
+TEST 2: prompt -> user -> assistant-truncated (DROPPED)
+=====
+Response text: '<think>'
+Stop reason: length
+Last token == EOS: False
+
+Episode accepted: False, Is truncated: True, Truncation reason: TruncationReason.AGENT_TOO_LONG
+Remaining budget after truncation: 2015
+Current tokens: 30, max_seq_len: 2048
+DECODED CONVERSATION (what was accumulated BEFORE drop):
+----- <|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+Just reply to me with 'hi'. Do not think about it.<|im_end|>
+ -----
+✅ PASS: Total tokens in accumulator: 30 (only initial messages)
+
+=====
+TEST 3: prompt -> user -> assistant -> user (COMPLETE MULTI-TURN)
+=====
+
+Turn 1:
+  Response: '<think>\nOkay, the user said, "Just reply to me with \'hi\'. Do not think about it." So I need to respond with \'hi\' without any additional thoughts.\n\nFirst, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they\'re testing if I follow instructions or want a quick response. I should keep it straightforward.\n\nI need to make sure there\'s no extra text. Just the word \'hi\'. No explanations or anything else. Let me check the previous messages to see if there\'s any context, but since the user didn\'t provide any, I\'ll go with the basic response.\n\nAlright, the reply is \'hi\'.\n</think>\n\nhi'
+  Tokens: 141
+  Stop reason: stop
+  Last token == EOS: True
+
+-----
+DECODED CONVERSATION (after turn 1 attempt):
+-----
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+Just reply to me with 'hi'. Do not think about it.<|im_end|>
+<|im_start|>assistant
+<think>
+Okay, the user said, "Just reply to me with 'hi'. Do not think about it." So I need to respond with 'hi' without any additional thoughts.
+
+First, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they're testing if I follow instructions or want a quick response. I should keep it straightforward.
+
+I need to make sure there's no extra text. Just the word 'hi'. No explanations or anything else. Let me check the previous messages to see if there's any context, but since the user didn't provide any, I'll go with the basic response.
+
+Alright, the reply is 'hi'.
+</think>
+
+hi<|im_end|>
+
+-----
+
+Turn 2:
+
+FINAL DECODED CONVERSATION:
+-----
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+Just reply to me with 'hi'. Do not think about it.<|im_end|>
+<|im_start|>assistant
+<think>
+Okay, the user said, "Just reply to me with 'hi'. Do not think about it." So I need to respond with 'hi' without any additional thoughts.
+
+First, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they're testing if I follow instructions or want a quick response. I should keep it straightforward.
+
+I need to make sure there's no extra text. Just the word 'hi'. No explanations or anything else. Let me check the previous messages to see if there's any context, but since the user didn't provide any, I'll go with the basic response.
+
+Alright, the reply is 'hi'.
+</think>
+
+hi<|im_end|>
+<|im_start|>user
+Now say 'bye'.<|im_end|>
+
+-----
+   Total tokens in accumulator: 185
+✅ Thinking tags are balanced (1 pairs)
+
+❌ ERRORS FOUND:
+  - FINALIZE FAILED: Token count mismatch: 185 accumulated vs 46 ground truth (diff: -139). This happens when chat template modifies history.
+
+=====
+TEST 4: prompt -> user -> assistant -> user-truncated (DROPPED)
+=====
+
+Turn 1
+  Remaining budget before generation: 147
+  Response: '<think>\nOkay, the user said, "Just reply to me with \'hi\'. Do not think about it." So I need to respond with \'hi\' without any additional thoughts.\n\nFirst, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they\'re testing if I follow instructions or want a quick response. I should keep it straightforward.\n\nI need to make sure there\'s no extra text. Just the word \'hi\'. No explanations or anything else. Let me check the previous messages to see if there\'s any context, but since the user didn\'t provide any, I\'ll go with the basic response.\n\nAlright, the reply is \'hi\'.\n</think>\n\nhi'
+  Tokens: 141
+  Stop reason: stop
+  Last token == EOS: True
+TOTAL TOKENS IN ACCUMULATOR:  175
+get_remaining_budget:  2
+max_seq_len:  180
+
+User message accepted: False, Is truncated: True, Truncation reason: TruncationReason.USER_TOO_LONG
+Remaining budget after user truncation: 0
+Current tokens: 177, max_seq_len: 180
+
+DECODED CONVERSATION (what was accumulated before/during truncation):
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+Just reply to me with 'hi'. Do not think about it.<|im_end|>
+<|im_start|>assistant
+<think>
+Okay, the user said, "Just reply to me with 'hi'. Do not think about it." So I need to respond with 'hi' without any additional thoughts.
+
+First, I should confirm that I understand the instruction. The user wants a simple reply. Maybe they're testing if I follow instructions or want a quick response. I should keep it straightforward.
+
+I need to make sure there's no extra text. Just the word 'hi'. No explanations or anything else. Let me check the previous messages to see if there's any context, but since the user didn't provide any, I'll go with the basic response.
+
+Alright, the reply is 'hi'.
+</think>
+
+hi<|im_end|>
+<|im_start|>user
+-----
+   Total tokens in accumulator: 177
+✅ PASS: Episode correctly marked as truncated
+✅ PASS: Budget respected (177 <= 180)
+
+=====
+TEST 5: Initial messages > max_seq_len
+=====
+Initial tokens: 50, max_seq_len: 50
+is_truncated: True
+truncation_reason: TruncationReason.USER_TOO_LONG
+Remaining budget: 0
+
+DECODED CONVERSATION:
+-----
+<|im_start|>system
+You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful. You are helpful
+-----
+✅ PASS: Initial messages correctly truncated
+   Note: Remaining budget = 0 (may be >0 due to overhead calculation)
+
+=====
+TEST 6: Add user message with budget=0
+=====
+Initial: 100 tokens, budget: 0
+After add_user: 100 tokens
+success: False, is_truncated: True
+Remaining budget after attempt: 0
+
+DECODED CONVERSATION:
+-----
+<|im_start|>system
+You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.YouINFO 11-17 20:22:42 [__init__.py:235] Automatically detected platform cuda.
+
+-----
+✅ PASS: User message correctly rejected/truncated with zero budget
+
+=====
+TEST 7: Add assistant message with budget=0
+=====
+Initial: 100 tokens, budget: 0
+After add_assistant: 100 tokens
+success: False
+Remaining budget after attempt: 0
+
+DECODED CONVERSATION:
+-----
+<|im_start|>system
+You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You are helpful.You
+-----
+✅ PASS: Assistant message handled correctly with zero budget
+
+=====
+SUMMARY
+=====
+✅ PASS: Test 1 (complete)
+✅ PASS: Test 2 (truncated-drop)
+❌ FAIL: Test 3 (multi-turn)
+✅ PASS: Test 4 (multi-turn-truncated-drop)
+✅ PASS: Test 5 (initial-too-long)
+✅ PASS: Test 6 (zero-budget-user)
+✅ PASS: Test 7 (zero-budget-assistant)
+
+=====
+❌❌❌ SOME TESTS FAILED ❌❌❌
+
+Please check the output above for details
+=====
