@@ -82,12 +82,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.gradient_accumulation_steps = 1  # Example value, adjust as needed
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
-
-        # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
-        self.rank_should_record_loss = True
-        if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
-            self.rank_should_record_loss = False
-
         super().__init__(job_config)
 
     async def setup_metric_logger(self):
@@ -103,6 +97,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
+
+        # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
+        self.rank_should_record_loss = True
+        if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
+            self.rank_should_record_loss = False
 
         # metric logger
         self.mlogger = await self.setup_metric_logger()
@@ -250,13 +249,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     (labels, []) if self.pp_has_last_stage else (None, None)
                 )
                 if self.pp_has_first_stage:
-                    self.pp_schedule.step(
-                        inputs, target=targets, losses=losses, input_batch=inputs
-                    )
+                    self.pp_schedule.step(inputs, target=targets, losses=losses)
                 else:
-                    self.pp_schedule.step(
-                        target=targets, losses=losses, input_batch=inputs
-                    )
+                    self.pp_schedule.step(target=targets, losses=losses)
 
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
