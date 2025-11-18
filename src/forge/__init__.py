@@ -17,3 +17,6 @@ try:
         os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 except ImportError:
     pass
+
+# FIXME: T245433187 remove this line after testing
+# test internal approved changes can be landed without an approval in github
