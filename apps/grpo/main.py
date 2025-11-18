@@ -31,7 +31,6 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from forge.util.ops import compute_logprobs
@@ -250,6 +249,11 @@ class DatasetActor(ForgeActor):
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric(
+                "dataset/sample/max_sample_len",
+                len(sample["request"]),
+                Reduce.MAX,
+            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
@@ -395,6 +399,24 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+                # drop episodes if
+                # 1> reward std-dev is very small (including all 0s and all 1s)
+                # 2> response is potentially truncated (response_len >= max_res_tokens)
+                rewards = [e.reward for e in episodes]
+                rewards_std = torch.std(torch.tensor(rewards))
+                max_response_len = max(
+                    e.completion.token_ids.shape[0] for e in episodes
+                )
+                drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+                record_metric(
+                    "main/continuous_rollouts/dropped_episodes",
+                    1 if drop else 0,
+                    Reduce.SUM,
+                )
+                if drop:
+                    del input_ids, episodes
+                    continue
 
             t.step("reward_evaluation")
 
