@@ -14,17 +14,17 @@ from forge.data.datasets import HfIterableDataset
 
 from forge.data.utils import extract_epoch_from_batch, StopAfterOneEpoch
 from forge.observability.metrics import Metric, Reduce
-from torch.testing._internal.common_fsdp import FSDPTest
-from torchdata.stateful_dataloader import StatefulDataLoader
 
 from tests.test_utils import gpu_test
+from torch.testing._internal.common_fsdp import FSDPTest
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 def create_test_json_file(path: Path, num_samples: int) -> None:
     """Create test data file with simple samples."""
     with open(path, "w") as f:
         for i in range(num_samples):
-            f.write(f'{{"id": {i}, "tokens": [{i}, {i+1}]}}\n')
+            f.write(f'{{"id": {i}, "tokens": [{i}, {i + 1}]}}\n')
 
 
 def simple_collate(batch):
