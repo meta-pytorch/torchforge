@@ -45,8 +45,6 @@ Stores episodes for training. Can be implemented with various strategies:
 - **Reservoir**: Uniform sampling from history
 - **Hybrid**: Mix multiple strategies
 
-Integrates with TorchStore for efficient distributed storage.
-
 ## Design Principles
 
 ### Single-Controller Model
@@ -86,52 +84,6 @@ Write code as if nothing fails. When failures do occur:
 - Failed actors restart automatically
 
 You choose your fault tolerance granularity based on your needs.
-
-## Best Practices
-
-### Model Selection
-
-- Start with smaller models for prototyping
-- Use pre-configured model setups when available
-- Validate configurations before large-scale training
-
-### Data Preparation
-
-- Ensure balanced and diverse training data
-- Implement proper train/validation splits
-- Monitor data quality throughout training
-- Verify token distributions match expectations
-
-### Training Strategy
-
-- Begin with SFT before attempting GRPO
-- Use gradient accumulation for larger effective batch sizes
-- Monitor KL divergence to prevent policy collapse
-- Implement regular checkpointing for fault tolerance
-- Apply warmup schedules for stable training
-
-### Resource Optimization
-
-- Profile memory usage to identify bottlenecks
-- Tune batch sizes for your hardware configuration
-- Consider mixed precision training to reduce memory
-- Use appropriate parallelism strategies for your model size
-
-### Debugging
-
-- Start with single-GPU training to isolate issues
-- Enable verbose logging for distributed runs
-- Use profiling tools to identify bottlenecks
-- Validate data pipelines before full training
-- Monitor loss curves and generation quality
-
-## Validation
-
-TorchForge has been validated in real-world deployments:
-
-- **Stanford Collaboration**: Integration with the Weaver weak verifier project, training models that hill-climb on challenging reasoning benchmarks (MATH, GPQA)
-- **CoreWeave**: Large-scale training runs on 512 H100 GPU clusters with smooth, efficient performance
-- **Scale**: Tested across hundreds of GPUs with continuous rollouts and asynchronous training
 
 ## Learn More
 
