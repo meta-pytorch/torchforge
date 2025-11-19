@@ -119,7 +119,7 @@ class LanguageReward:
 
     def __init__(
         self,
-        target_language: str = "en",
+        target_language: str = "ja",
         match_reward: float = 1.0,
         no_match_reward: float = 0.0,
         tag: str = "思考",
