@@ -276,8 +276,6 @@ class MastLauncher(BaseLauncher):
                 for workspace in self.editable_workspace_paths
             ]
         )
-        wandb_dir = os.path.join("/mnt/wsfuse/teamforge/wandb/", uuid.uuid4().hex[:5])
-        os.makedirs(wandb_dir, exist_ok=True)
 
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
