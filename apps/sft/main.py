@@ -11,7 +11,7 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 """
 
 import asyncio
-
+import contextlib
 import logging
 import math
 import os
@@ -27,6 +27,7 @@ from forge.data.collate import collate_packed
 from forge.data.datasets.packed import PackedDataset, TextPacker
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
+from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
 
@@ -96,28 +97,72 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
-        self.train_dataloader = self.setup_data()
+
+        # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
+        self.rank_should_record_loss = True
+        if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
+            self.rank_should_record_loss = False
+
+        # metric logger
         self.mlogger = await self.setup_metric_logger()
 
-        # self.train_dataloader = self.setup_data(
-        #     self.train_config.train_dataset_config,
-        #     self.train_config.train_dataloader_config,
-        #     self.train_config.packing_config,
-        # )
-        # self.val_dataloader = self.setup_data(
-        #     self.train_config.val_dataset_config,
-        #     self.train_config.val_dataloader_config,
-        #     self.train_config.packing_config,
-        # )
+        # Load training datasets
+        logger.info("Setting training datasets")
+        train_datasets_config = self.job_config.training.datasets
+        self.train_dataloader = self.setup_data(train_datasets_config)
+
+        # Load eval datasets
+        eval_config = self.job_config["eval"]
+        self.val_dataloaders = {}
+        self.eval_every_n_steps = eval_config["eval_every_n_steps"]
+        max_eval_steps = eval_config["max_eval_steps"]
+        self.max_eval_steps = (
+            max_eval_steps if max_eval_steps and max_eval_steps > 0 else None
+        )
+        self.validation_enabled = (
+            self.eval_every_n_steps is not None and self.eval_every_n_steps > 0
+        )
+        if self.validation_enabled:
+            logger.info("Setting eval datasets")
+            self.eval_datasets_config = eval_config.datasets
+
+            for i, dataset_config in enumerate(self.eval_datasets_config):
+                ds_name = dataset_config.get("dataset_name", i)
+
+                # TODO: Support separate eval batch size from config (eval.local_batch_size)
+                dataloader = self.setup_data([dataset_config])
+                self.val_dataloaders[ds_name] = dataloader
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
         self.checkpointer.load(step=self.current_step)
+
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
 
-    def setup_data(self):
-        print(os.path.join(self.job_config.model.hf_assets_path, "tokenizer.json"))
+    def setup_data(self, dataset_configs: list[dict]) -> StatefulDataLoader:
+        """Instantiates datasets and returns a StatefulDataLoader.
+
+        Args:
+            dataset_configs (list[dict]): List of dataset config dicts used as `sft_iterable_dataset(**dataset_configs[i])`.
+
+        Returns:
+            StatefulDataLoader
+
+        Raises:
+            ValueError: If multiple datasets provided (not yet supported)
+        """
+        # TODO felipemello: Currently only support single dataset
+        if len(dataset_configs) > 1:
+            raise ValueError(
+                f"Multiple training datasets not supported yet. "
+                f"Got {len(dataset_configs)} datasets. "
+            )
+
+        dataset_config = dataset_configs[0]
+
+        # TODO: Evaluate if tokenizers should be created once and shared for every dataset
+        # Load tokenizer
         tokenizer = HuggingFaceModelTokenizer(
             tokenizer_json_path=os.path.join(
                 self.job_config.model.hf_assets_path, "tokenizer.json"
@@ -139,18 +184,26 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             ),
         )
 
+        # Get DP mesh for data sharding
+        dp_mesh = None
+        if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
+            dp_mesh = self.parallel_dims.world_mesh.get_group("dp")
+
+        # Pass config directly to dataset constructor
         dataset = sft_iterable_dataset(
             model_transform=tokenizer,
             message_transform=AlpacaToMessages(),
-            path="yahma/alpaca-cleaned",
-            split="train",
+            dp_mesh=dp_mesh,
+            **dataset_config,
         )
+
         packer = TextPacker(padding_idx=0)
         dataset = PackedDataset(
             dataset=dataset,
             packer=packer,
             target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
         )
+
         dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
@@ -166,7 +219,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         return dataloader
 
     def forward_backward(
-        self, input_dict: dict[str, torch.Tensor], labels: torch.Tensor
+        self,
+        input_dict: dict[str, torch.Tensor],
+        labels: torch.Tensor,
+        skip_backward: bool = False,
     ) -> torch.Tensor:
         model_parts = self.model_parts
         parallel_dims = self.parallel_dims
@@ -193,21 +249,22 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     (labels, []) if self.pp_has_last_stage else (None, None)
                 )
                 if self.pp_has_first_stage:
-                    self.pp_schedule.step(
-                        inputs, target=targets, losses=losses, input_batch=inputs
-                    )
+                    self.pp_schedule.step(inputs, target=targets, losses=losses)
                 else:
-                    self.pp_schedule.step(
-                        target=targets, losses=losses, input_batch=inputs
-                    )
+                    self.pp_schedule.step(target=targets, losses=losses)
 
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
             loss = (
-                torch.mean(torch.stack(losses)).to(self.device)
+                torch.sum(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
-                else torch.tensor([-1.0], device=self.device)
+                else torch.tensor(-1.0, device=self.device)
             )
+
+            # TODO: PP requires gradients enabled and cant deactive with no_grad
+            if skip_backward:
+                loss = loss.detach()
+
         else:
             # Non-PP forward / backward
             with self.train_context(optional_context_parallel_ctx):
@@ -217,7 +274,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     loss = self.loss_fn(pred, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                loss.backward()
+
+                # Only run backward if requested. Useful for eval.
+                if not skip_backward:
+                    loss.backward()
 
         return loss
 
@@ -230,14 +290,137 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
-        loss = loss.item()
 
-        record_metric("ForgeSFTRecipe/train_step/loss", loss, Reduce.MEAN)
-        logger.info(f"{self.current_step} / {self.num_training_steps}|Loss: {loss}")
+        if self.rank_should_record_loss:
+            loss_val = loss.item()
+            record_metric("ForgeSFTRecipe/train_step/loss", loss_val, Reduce.MEAN)
+            logger.info(
+                f"step {self.current_step} / {self.num_training_steps} | Loss: {loss_val}"
+            )
+
         # self.pbar.set_description(f"{self.current_step}|Loss: {loss}")
         # self.pbar.update(1)
         self.optimizers.step()
         self.lr_schedulers.step()
+
+    async def evaluate(self) -> None:
+        """Run evaluation on multiple datasets, one at a time.
+
+        1. Set models to eval mode
+        2. For each eval dataset:
+            - Create fresh iterator (starts from epoch 0)
+            - Use StopAfterOneEpoch to iterate until epoch boundary. This utility
+                is necessary for infinite iterable dataset, since epoch boundaries are not known.
+            - Respect max_eval_steps cap if configured
+            - Record loss and step metrics (on dp rank only)
+        3. Restore models to train mode
+        """
+
+        # Set models to eval mode
+        for model_part in self.model_parts:
+            model_part.eval()
+
+        # Get DP process group for epoch synchronization
+        dp_mesh = None
+        if self.parallel_dims is not None and self.parallel_dims.dp_enabled:
+            dp_mesh = self.parallel_dims.world_mesh.get_group("dp")
+
+        # For non-PP: disable gradients to save memory
+        # TODO: For PP, if disabling gradients, throws error
+        maybe_no_grad = (
+            contextlib.nullcontext()
+            if self.parallel_dims.pp_enabled
+            else torch.no_grad()
+        )
+
+        # Evaluate each dataset sequentially
+        all_dataset_losses = []
+        all_dataset_steps = []
+        for dataset_name, val_dataloader in self.val_dataloaders.items():
+            logger.info(f"=====Evaluating dataset: {dataset_name}=====")
+
+            # Evaluation loop for this dataset
+            total_loss = torch.tensor(0.0, device=self.device)
+            num_steps = 0
+
+            # NOTE: Assumes batch contains field "metrics" containing "num_epochs"
+            batch_iter = StopAfterOneEpoch(
+                iter=iter(val_dataloader),  # Fresh iterator from epoch 0,
+                device=self.device,
+                dp_mesh=dp_mesh,
+            )
+
+            with maybe_no_grad:
+                for batch in batch_iter:
+                    # if max_eval_steps>len(dataset), it will be stopped earlier by StopAfterOneEpoch.
+                    if (
+                        self.max_eval_steps is not None
+                        and num_steps >= self.max_eval_steps
+                    ):
+                        logger.info(
+                            f"[{dataset_name}] Reached max_eval_steps cap of {self.max_eval_steps}"
+                        )
+                        break
+
+                    # Move tensors to device
+                    for key, value in batch.items():
+                        if isinstance(value, torch.Tensor):
+                            batch[key] = value.to(self.device)
+
+                    # Process batch
+                    labels = batch.pop("labels")
+                    loss = self.forward_backward(batch, labels, skip_backward=True)
+                    total_loss += loss
+                    num_steps += 1
+
+                    # Log progress
+                    if self.rank_should_record_loss:
+                        loss_val = loss.item()
+                        logger.info(
+                            f"[dataset {dataset_name}] Step {num_steps} | Loss: {loss_val:.4f}"
+                        )
+
+            # log loss
+            avg_loss = (total_loss / max(num_steps, 1)).item()
+            all_dataset_losses.append(avg_loss)
+            all_dataset_steps.append(num_steps)
+            logger.info(
+                f"[dataset {dataset_name}] Final Step {num_steps} | Avg Loss: {avg_loss:.4f}"
+            )
+            if self.rank_should_record_loss:
+                record_metric(
+                    f"evaluate/dataset_{dataset_name}_avg_loss",
+                    avg_loss,
+                    Reduce.MEAN,
+                )
+
+        # Record macro and micro average losses across datasets (only if multiple datasets)
+        if self.rank_should_record_loss and len(all_dataset_losses) > 1:
+            # Macro: same weight for all datasets
+            macro_avg_loss = sum(all_dataset_losses) / len(all_dataset_losses)
+            record_metric("evaluate/macro_avg_loss", macro_avg_loss, Reduce.MEAN)
+
+            # Micro: weighted mean by dataset size
+            total_steps = sum(all_dataset_steps)
+            micro_avg_loss = (
+                sum(
+                    loss * steps
+                    for loss, steps in zip(all_dataset_losses, all_dataset_steps)
+                )
+                / total_steps
+            )
+            record_metric("evaluate/micro_avg_loss", micro_avg_loss, Reduce.MEAN)
+
+            logger.info(
+                f"Macro avg loss (unweighted): {macro_avg_loss:.4f}, "
+                f"Micro avg loss (weighted): {micro_avg_loss:.4f}"
+            )
+
+        # Restore train mode
+        for model_part in self.model_parts:
+            model_part.train()
+
+        logger.info("==Evaluation complete==")
 
     @endpoint
     async def train(self) -> None:
@@ -263,17 +446,27 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # self.profiler.step()
             self.current_step += 1
 
-            # Flush metrics
-            if self._rank == 0:
-                logger.debug(f"Flushing metrics at step {self.current_step}")
-                await self.mlogger.flush.call_one(global_step=self.current_step)
+            # Run evaluation periodically if enabled
+            if (
+                self.validation_enabled
+                and self.current_step % self.eval_every_n_steps == 0
+            ):
+                await self.evaluate()
 
             self.checkpointer.save(
                 curr_step=self.current_step,
                 last_step=self.current_step == self.num_training_steps,
             )
 
+            # Flush metrics
+            if self._rank == 0:
+                await self.mlogger.flush.call_one(global_step=self.current_step)
+
         # self.pbar.close()
+
+        if self.validation_enabled:
+            logger.info("Running final evaluation at end of training...")
+            await self.evaluate()
 
     @endpoint
     async def cleanup(self) -> None:
