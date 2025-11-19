@@ -211,7 +211,7 @@ class LanguageReward:
         )
 
         if should_debug:
-            sample = text_to_analyze[:150].replace("\n", " ")
+            sample = text_to_analyze[:1000].replace("\n", " ")
             match_symbol = "✓" if detected_lang == self.target_language else "✗"
             print(
                 f"\n[LanguageReward] Detection mode: {detection_mode}"
