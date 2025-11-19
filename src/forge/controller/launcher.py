@@ -25,6 +25,7 @@ from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocIniti
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import create, info
+from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
 
 _MAST_AVAILABLE = False
@@ -126,7 +127,7 @@ class Slurmlauncher(BaseLauncher):
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
         # This can be removed in the future once this has been removed.
-        configure(default_transport=ChannelTransport.Tcp)
+        configure(default_transport=ChannelTransport.TcpWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(

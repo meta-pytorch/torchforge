@@ -4,12 +4,16 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from enum import Enum
-from typing import Any, Literal, Union
+from typing import Any, Iterator, Literal, Union
 
 import torch
+import torch.distributed as dist
 
 from torch.nn.attention.flex_attention import BlockMask
+
+logger = logging.getLogger(__name__)
 
 CROSS_ENTROPY_IGNORE_IDX = -100
 
@@ -213,3 +217,118 @@ def batch_to_device(batch: dict, device: torch.device) -> None:
                 f"Tensor, or BlockMask with flexattention enabled. "
                 f'Got key "{k}" with value of type {type(v)}'
             )
+
+
+class StopAfterOneEpoch:
+    """Wraps an iterator, e.g. dataloader, and stops iterating after a rank shows that an epoch has been completed.
+
+    In distributed eval, we may have len(dataset) % num_ranks != 0. This means that some ranks may be on epoch 0
+    while others are already in epoch 1. To avoid hangs, all ranks *must* stop at the same time, requiring communication.
+
+    This function minimzes this impact by fetching one batch in advance and perfoming overlapping async all_reduce.
+
+    Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
+    `forge.src.data.datasets.HfIterableDataset`.
+
+    Args:
+        iter (Iterator): Iterator over dataloader batches
+        device (torch.device): Device for synchronizing tensors
+        dp_mesh (dist.ProcessGroup | None): Data parallel process group (None for single process)
+    """
+
+    def __init__(
+        self,
+        iter: Iterator,
+        device: torch.device,
+        dp_mesh: dist.ProcessGroup | None = None,
+    ):
+        self.iter = iter
+        self.device = device
+        self.dp_mesh = dp_mesh
+
+        # Prefetch first batch for pipeline-style execution
+        self._next_batch = next(iter)
+
+        # Track pending async epoch sync
+        self._epoch_tensor: torch.Tensor | None = None
+        self._pending_work: Any = None
+        self._should_stop = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> dict:
+        """Get next batch from current epoch.
+
+        Returns:
+            Batch dict guaranteed to be from current epoch
+
+        Raises:
+            StopIteration: When epoch completes across all ranks
+        """
+        # Check if previous epoch sync completed
+        if self._pending_work is not None:
+            self._pending_work.wait()
+            if self._epoch_tensor.item() > 0:
+                self._should_stop = True
+            self._pending_work = None
+            self._epoch_tensor = None
+
+        if self._should_stop:
+            logger.debug("Eval epoch completed. Stopping data iterator.")
+            raise StopIteration
+
+        # Get current batch
+        current_batch = self._next_batch
+        current_epoch = extract_epoch_from_batch(current_batch)
+
+        # Prefetch next batch and check for epoch change
+        self._next_batch = next(self.iter)
+        next_epoch = extract_epoch_from_batch(self._next_batch)
+        epoch_changed = next_epoch > current_epoch
+
+        # Start async epoch sync
+        if torch.distributed.is_initialized():
+            self._epoch_tensor = torch.tensor([int(epoch_changed)], device=self.device)
+            self._pending_work = torch.distributed.all_reduce(
+                self._epoch_tensor,
+                op=torch.distributed.ReduceOp.MAX,
+                group=self.dp_mesh,
+                async_op=True,
+            )
+        elif epoch_changed:
+            # if not distributed, just update the flag directly
+            self._should_stop = True
+
+        return current_batch
+
+
+def extract_epoch_from_batch(batch: dict) -> int:
+    """Extract epoch number from batch metrics. Useful to detect epoch changes during validation.
+
+    Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
+    `forge.src.data.datasets.HfIterableDataset`.
+
+    Args:
+        batch (dict): Batch dictionary with 'metrics' field
+
+    Returns:
+        int: Max epoch number from metrics
+
+    Raises:
+        ValueError: If metrics key is missing or no metric with 'num_epochs' found
+    """
+    if "metrics" not in batch:
+        raise ValueError(
+            "Batch missing 'metrics' field. Cannot extract epoch from batch."
+        )
+
+    # Match metrics where 'num_epochs' appears in the key (handles prefixed keys like 'dataset/name/num_epochs')
+    epochs = [metric.value for metric in batch["metrics"] if "num_epochs" in metric.key]
+    if epochs:
+        return max(epochs)
+
+    raise ValueError(
+        f"No 'num_epochs' metric found in batch. Got metrics: "
+        f"{[m.key for m in batch['metrics']]}"
+    )

@@ -97,7 +97,7 @@ First, download the model weights directly to the OilFS path. This should be don
 export HF_HOME=/mnt/wsfuse/teamforge/hf
 
 # Download the model (replace with your desired model)
-huggingface-cli download Qwen/Qwen3-8B --local-dir /mnt/wsfuse/teamforge/hf_artifacts/qwen3_8b
+hf download Qwen/Qwen3-8B --local-dir /mnt/wsfuse/teamforge/hf/qwen3_8b
 ```
 
 #### 2. Hydrate the HuggingFace Cache
