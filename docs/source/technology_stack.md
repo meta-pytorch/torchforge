@@ -2,9 +2,30 @@
 
 TorchForge is built on a carefully curated stack of battle-tested components, each solving specific challenges in distributed RL. Understanding this stack helps you troubleshoot issues, optimize performance, and customize your setup.
 
+::::{grid} 1
+
+:::{grid-item-card} 1. Your RL Algorithm
+Clean, pseudocode-like logic. No infrastructure concerns
+:::
+
+:::{grid-item-card} 2. TorchForge Actors
+A fast and memory-efficient inference engine optimized for large language models.
+:::
+
+:::{grid-item-card} 3. TorchForge Core: Services and TorchStore
+Orchestration layer and handling coordination, data, and fault tolerance.
+:::
+
+:::{grid-item-card} 4. Monarch
+PyTorch-native distributed programming framework
+:::
+
+::::
+
+
 ## Monarch: The Distributed Foundation
 
-**What it is:** Monarch is a PyTorch-native distributed programming framework that brings single-controller orchestration to entire clusters. It's implemented with a Python frontend and Rust backend for performance and robustness.
+**What it is:** Monarch is a PyTorch-native distributed programming framework that brings single-controller orchestration to entire clusters. It's implemented with a Python frontend and Rust backend for performance and robustness.please build the torchf
 
 **Why TorchForge needs it:**
 - **Single-Controller Model**: Write code that looks like a single Python program but scales to thousands of GPUs
