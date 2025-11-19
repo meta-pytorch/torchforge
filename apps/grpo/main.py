@@ -26,7 +26,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import RLTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
-from forge.data.rewards import MathReward, ThinkingReward
+from forge.data.rewards import LanguageReward, MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -125,7 +125,7 @@ def simple_grpo_loss(
     ref_logprobs: torch.Tensor,
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
-    beta: float = 0.1,
+    beta: float = 1e-4,
 ) -> torch.Tensor:
     logprobs: torch.Tensor = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
@@ -211,13 +211,19 @@ class DatasetActor(ForgeActor):
 
     @endpoint
     def setup(self):
+        self._epoch = 0
         self._tokenizer = get_tokenizer(self.model)
 
         def gsm8k_transform(sample):
-            system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
-            """
+            system_prompt = """You are a helpful AI assistant that solves math problems.
+
+Please show your reasoning inside <思考></思考> tags, then provide your final numerical answer inside <answer></answer> tags.
+
+Example:
+Question: What is 12 + 5?
+<思考>12と5を足します。12 + 5 = 17です。</思考>
+<answer>17</answer>
+"""
             request: str = sample["question"]
             as_chat = [
                 {"role": "system", "content": system_prompt},
@@ -232,12 +238,12 @@ class DatasetActor(ForgeActor):
             formatted_target = target.split("#### ")[1]
             return {"request": formatted_request, "target": formatted_target}
 
-        ds = load_dataset(
+        self._base_dataset = load_dataset(
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
-        ds = ds.map(gsm8k_transform)
-        ds = ds.shuffle()
-        self._iterator = iter(ds)
+        self._base_dataset = self._base_dataset.map(gsm8k_transform)
+        self._base_dataset = self._base_dataset.shuffle()
+        self._iterator = iter(self._base_dataset)
 
     @endpoint
     async def sample(self) -> dict[str, str] | None:
@@ -250,10 +256,14 @@ class DatasetActor(ForgeActor):
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
         except StopIteration:
-            return None
+            # Restart the iterator and increment epoch counter for multi-epoch training
+            self._iterator = iter(self._base_dataset)
+            self._epoch += 1
+            return next(self._iterator)
 
     @endpoint
     async def pad_token(self):
@@ -318,7 +328,17 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+            reward_functions=[
+                MathReward(),
+                ThinkingReward(tag="思考"),  # Use Japanese tag
+                LanguageReward(
+                    target_language="ja",
+                    tag="思考",
+                    match_reward=2.0,
+                    debug=True,
+                    debug_sample_rate=0.1,
+                ),  # Japanese language reward with debug
+            ]
         ),
     )
 
