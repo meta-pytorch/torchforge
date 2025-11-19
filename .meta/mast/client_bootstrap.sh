@@ -41,11 +41,5 @@ fi
 
 cd "$WORKSPACE_DIR/forge"
 
-export WANDB_MODE=offline
-export HF_HUB_OFFLINE=1
-export MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE=1
-export TORCHSTORE_RDMA_ENABLED=1
-export HF_HOME=/mnt/wsfuse/teamforge/hf
-
 # Execute the client training script with all passed arguments
 exec python -X faulthandler .meta/mast/main.py "$@"
