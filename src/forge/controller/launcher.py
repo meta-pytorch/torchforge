@@ -247,8 +247,8 @@ class MastLauncher(BaseLauncher):
             scheduler_args={
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
-                "hpcClusterUuid": "MastProdCluster",
-                "rmAttribution": "pytorch4all_clients_approved",
+                "hpcClusterUuid": "MastGenAICluster",
+                "rmAttribution": "msl_infra_hw_enab_agentrl",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
@@ -276,6 +276,8 @@ class MastLauncher(BaseLauncher):
                 for workspace in self.editable_workspace_paths
             ]
         )
+        wandb_dir = os.path.join("/mnt/wsfuse/teamforge/wandb/", uuid.uuid4().hex[:5])
+        os.makedirs(wandb_dir, exist_ok=True)
 
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
@@ -293,6 +295,7 @@ class MastLauncher(BaseLauncher):
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
                 "WANDB_MODE": "offline",
+                "WANDB_DIR": wandb_dir,
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
