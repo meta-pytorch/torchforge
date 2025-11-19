@@ -247,8 +247,8 @@ class MastLauncher(BaseLauncher):
             scheduler_args={
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
-                "hpcClusterUuid": "MastGenAICluster",
-                "rmAttribution": "msl_infra_hw_enab_agentrl",
+                "hpcClusterUuid": "MastProdCluster",
+                "rmAttribution": "pytorch4all_clients_approved",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
@@ -294,8 +294,6 @@ class MastLauncher(BaseLauncher):
                 "TORCHDYNAMO_VERBOSE": "1",
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
-                "WANDB_MODE": "offline",
-                "WANDB_DIR": wandb_dir,
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
