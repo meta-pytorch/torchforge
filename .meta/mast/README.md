@@ -119,11 +119,3 @@ This ensures that when MAST runs with `HF_HUB_OFFLINE=1`, the transformers libra
 Both cache and model files are stored under:
 - **Cache**: `/mnt/wsfuse/teamforge/hf` (set via `HF_HOME`)
 - **Model weights**: `/mnt/wsfuse/teamforge/hf/<model_name>`
-
-### Wandb Logs
-Wandb logs will be stored under `/mnt/wsfuse/teamforge/wandb`. The latest run will be stored under `/mnt/wsfuse/teamforge/wandb/latest-run`.
-
-To sync to wandb from a devserver with internet access, run:
-```bash
-wandb sync -p grpo-training /mnt/wsfuse/teamforge/wandb/latest-run
-```

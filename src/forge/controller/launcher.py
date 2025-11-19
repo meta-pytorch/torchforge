@@ -293,6 +293,7 @@ class MastLauncher(BaseLauncher):
                 "TORCHDYNAMO_VERBOSE": "1",
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
+                "WANDB_MODE": "offline",
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
