@@ -17,8 +17,8 @@ rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to
 # Observability configuration
 metric_logging:
   wandb:
-    project: "grpo-training"
-    group: "grpo_exp_${oc.env:USER}"
+    mode: offline
+    dir: /mnt/wsfuse/teamforge/
     logging_mode: global_reduce
   console:
     logging_mode: global_reduce

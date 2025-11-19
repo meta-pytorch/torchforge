@@ -121,3 +121,11 @@ Both cache and model files are stored under:
 - **Model weights**: `/mnt/wsfuse/teamforge/hf/<model_name>`
 
 Make sure your MAST config files point to the correct paths in `hf_artifacts`.
+
+### Wandb Logs
+Wandb logs will be stored under `/mnt/wsfuse/teamforge/wandb`. The latest run will be stored under `/mnt/wsfuse/teamforge/wandb/latest-run`.
+
+To sync to wandb from a devserver with internet access, run:
+```bash
+wandb sync -p grpo-training /mnt/wsfuse/teamforge/wandb/latest-run
+```
