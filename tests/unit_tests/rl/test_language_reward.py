@@ -27,7 +27,7 @@ class TestLanguageReward(unittest.TestCase):
     def test_init_default_values(self):
         """Test LanguageReward initialization with default values."""
         reward = self.LanguageReward()
-        self.assertEqual(reward.target_language, "en")
+        self.assertEqual(reward.target_language, "ja")
         self.assertEqual(reward.match_reward, 1.0)
         self.assertEqual(reward.no_match_reward, 0.0)
 
