@@ -15,9 +15,10 @@ from dataclasses import dataclass, field, fields
 import torch
 
 from forge.controller import ForgeActor
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.util.ops import compute_logprobs
+from forge.util.ops import compute_logprobs, create_shifted_targets
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 
@@ -126,21 +127,16 @@ class ReferenceModel(ForgeActor):
 
     @endpoint
     async def forward(
-        self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool
+        self,
+        input_ids: torch.Tensor,
+        return_logprobs: bool,
+        loss_mask: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         Args:
-            input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
-            max_req_tokens (int): maximum request length.
-            return_logprobs (bool): whether to return log probabilities instead of raw logits.
-
-            return_logprobs flag significantly impacts the amount of data transferred to the caller:
-            - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
-              This includes the full vocabulary distribution for each token position.
-
-            - When True: Returns log probabilities with shape [group_size, req_length].
-              This only includes probabilities for the request tokens, significantly reducing memory
-              usage and transfer overhead.
+            input_ids: Input token ids [batch, seq_len]
+            return_logprobs: Whether to return logprobs
+            loss_mask: Optional mask for which positions to compute logprobs [batch, seq_len]
         """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
@@ -188,7 +184,14 @@ class ReferenceModel(ForgeActor):
             t.stop()
             return logits
         else:
-            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+            # Create targets using utility function (loss_mask=None means all trainable)
+            targets = create_shifted_targets(input_ids, loss_mask)
+
+            # Compute logprobs using updated compute_logprobs
+            logprobs = compute_logprobs(
+                logits, targets, ignore_index=CROSS_ENTROPY_IGNORE_IDX
+            )
+
             t.step("compute_logprobs")
             t.stop()
             return logprobs

@@ -4,8 +4,8 @@
 # The OpenSpiel server will be started automatically by the training script.
 
 # Global configuration
-group_size: 4  # Number of parallel games per rollout
-local_batch_size: 8  # Per-device batch size
+group_size: 16  # Number of parallel games per rollout
+local_batch_size: 16  # Per-device batch size
 max_seq_len: 2048  # Maximum tokens for full conversation (including all turns)
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1  # Off-policy tolerance

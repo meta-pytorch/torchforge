@@ -1,0 +1,133 @@
+================================================================================
+TRL Training Mask Architecture: Visual Overview
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         RAW SEQUENCE EXAMPLE                                │
+│                                                                              │
+│  Prompt: "What is 2+2?"          Response: " 4" (generated)                │
+│  [2, 264, 318, 399, 16]          [449, 20]                                 │
+│                                                                              │
+│  After Tokenization & Padding:                                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │ [2, 264, 318, 399, 16, 449, 20, 0, 0, 0]                             ││
+│  │  └─ Prompt ─┘                  └ Response ┘ └─ Padding ─┘             ││
+│  │  length=5                       length=2     length=3                  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      MASK CREATION IN TRL                                   │
+│                                                                              │
+│  Step 1: Create masks from list of ids                                     │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │ completion_ids = [449, 20]                                            ││
+│  │ completion_mask = torch.ones_like(completion_ids) = [1, 1]           ││
+│  │                                                                        ││
+│  │ After padding (right-padding for responses):                          ││
+│  │ completion_ids  = [449, 20, 0, 0, 0]                                 ││
+│  │ completion_mask = [1,   1,  0, 0, 0]  ← masks padding                ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Step 2: Create attention mask for forward pass                            │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │ prompt_mask    = [1, 1, 1, 1, 1, 0, 0, 0]  (left-padded, but no pad) ││
+│  │ completion_mask = [1, 1, 0, 0, 0]                                    ││
+│  │ attention_mask = [1, 1, 1, 1, 1, 1, 1, 0, 0, 0]  (concatenated)     ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Step 3: Optional - mask truncated completions                            │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │ if mask_truncated_completions:                                        ││
+│  │   is_truncated = [False]  (response ended with EOS naturally)         ││
+│  │   completion_mask = completion_mask * (~is_truncated) = [1, 1, 0, 0] ││
+│  │                                                                        ││
+│  │ After this, ALL tokens in completion_mask are 1 (not truncated)      ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Step 4: Optional - entropy-based masking                                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │ if top_entropy_quantile < 1.0:                                        ││
+│  │   entropies = [2.3, 1.1, nan, nan, nan]  (per token, with padding nan)││
+│  │   entropy_threshold = 75th percentile = 1.8                           ││
+│  │   entropy_mask = (entropies >= 1.8) & completion_mask                 ││
+│  │   entropy_mask = [True, False, False, False, False]                   ││
+│  │                                                                        ││
+│  │ Only top-entropy tokens contribute to loss                            ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      LOSS COMPUTATION WITH MASKS                            │
+│                                                                              │
+│  GRPO Loss Formula:                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │  per_token_logps: [-2.1, -1.8, nan, nan, nan]                        ││
+│  │  per_token_loss:  [0.5,  0.3,  0,   0,   0]  (before masking)        ││
+│  │  completion_mask: [1,    1,    0,   0,   0]                          ││
+│  │                                                                        ││
+│  │  masked_loss = per_token_loss * completion_mask                       ││
+│  │             = [0.5,  0.3,  0,   0,   0]                              ││
+│  │                                                                        ││
+│  │  sum(masked_loss) / sum(completion_mask)                              ││
+│  │  = 0.8 / 2 = 0.4  ← Only response tokens contribute                  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Different Loss Types (all use completion_mask):                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │  loss_type='grpo':                                                     ││
+│  │    loss = mean([sum(loss_i * mask_i) / sum(mask_i) for each seq i])  ││
+│  │                                                                        ││
+│  │  loss_type='dapo':                                                     ││
+│  │    loss = sum(all_loss * all_mask) / total_active_tokens_globally     ││
+│  │                                                                        ││
+│  │  loss_type='dr_grpo':                                                  ││
+│  │    loss = sum(all_loss * all_mask) / (batch_size * max_len)          ││
+│  │          (eliminates length bias)                                      ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              TRAINABLE vs NON-TRAINABLE POSITIONS                           │
+│                                                                              │
+│  The distinction is simple:                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐│
+│  │  Prompt tokens:          NOT trainable (indices 0-4)                  ││
+│  │  Response tokens:        ALL trainable (indices 5-6)                  ││
+│  │  Padding tokens:         NOT trainable (indices 7-9)                  ││
+│  │                                                                        ││
+│  │  completion_mask marks response tokens: [1, 1, 0, 0, 0]             ││
+│  │  Every 1 in the completion_mask is trainable                         ││
+│  │  Every 0 is effectively frozen (loss * 0 = 0)                        ││
+│  │                                                                        ││
+│  │  → Response tokens === Trainable positions                            ││
+│  │  → Padding tokens === Non-trainable positions                         ││
+│  │  → Prompt tokens === Not in completion_mask (separate training)      ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│            DATA STRUCTURE: EPISODE/TRAJECTORY in GRPO                       │
+│                                                                              │
+│  output_dict = {                                                           │
+│    # Core tensors with masks                                              │
+│    'prompt_ids': (B, P),              # Batch, Prompt length              │
+│    'prompt_mask': (B, P),             # 1 for valid, 0 for padding       │
+│    'completion_ids': (B, C),          # Batch, Completion length          │
+│    'completion_mask': (B, C),         # 1 for valid, 0 for padding       │
+│    #                                                                       │
+│    # Advantage signal for policy gradient                                 │
+│    'advantages': (B,),                # Normalized advantage per seq      │
+│    'num_items_in_batch': int,         # Total valid tokens for norm      │
+│    #                                                                       │
+│    # Optional: Log probabilities for KL and importance sampling          │
+│    'old_per_token_logps': (B, P+C),   # For importance sampling          │
+│    'ref_per_token_logps': (B, P+C),   # For KL divergence               │
+│    'importance_sampling_ratio': (B, C),  # vLLM correction factor        │
+│  }                                                                         │
+│                                                                              │
+│  Note: Missing keys = not needed for this training config                 │
+│  All tensors moved to device at creation time                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================

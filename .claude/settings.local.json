@@ -10,7 +10,8 @@
       "Bash(lsof:*)",
       "Bash(xargs:*)",
       "Bash(test:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(nvidia-smi:*)"
     ],
     "deny": [],
     "ask": []

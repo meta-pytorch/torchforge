@@ -7,91 +7,73 @@
 import torch
 import torch.nn.functional as F
 
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
+
 
 def compute_logprobs(
     logits: torch.Tensor,
-    input_ids: torch.Tensor,
+    targets: torch.Tensor,
     temperature: float = 1.0,
-    align: bool = True,
+    ignore_index: int = CROSS_ENTROPY_IGNORE_IDX,
 ) -> torch.Tensor:
     """
-    Computes the log probabilities of the input tokens given the model logits and temperature.
-    Always converts inputs to fp32 for numerical stability.
-
-    This function handles two common usage patterns:
-
-    **Pattern 1: Pre-aligned logits (align=False)**
-    Use when logits are already aligned with input_ids, typically when you:
-    - Pass input_ids to the model: model(input_ids) -> logits
-    - The model outputs logits[i] that predict target_ids[i]
-    - logits.shape[1] == input_ids.shape[1]
-
-    Example:
-        >>> input_ids = torch.tensor([[1, 2, 3, 4]])  # Model input
-        >>> target_ids = torch.tensor([[2, 3, 4, 5]]) # Shifted by 1 (next-token prediction)
-        >>> logits = model(input_ids)  # Shape: [1, 4, vocab_size]
-        >>> # logits already aligned: logits[:, i] predicts target_ids[:, i]
-        >>> logprobs = compute_logprobs(logits, target_ids, align=False)
-
-    **Pattern 2: Full-sequence logits needing alignment (align=True, default)**
-    Use when you have logits for the full sequence but only want log probs for a subset
-    (e.g., just the response tokens, not the prompt). The function will:
-    - Slice logits to match the length of input_ids
-    - Take logits[:, -len(input_ids)-1:-1] to get positions that predict input_ids
-
-    Example:
-        >>> # Full sequence passed to model: [prompt + response]
-        >>> full_input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]])  # Prompt + response
-        >>> logits = model(full_input_ids)  # Shape: [1, 6, vocab_size]
-        >>> # Only want log probs for response tokens
-        >>> response_tokens = torch.tensor([[4, 5, 6]])  # Just the response
-        >>> logprobs = compute_logprobs(logits, response_tokens, align=True)
-        >>> # Function slices logits[:, -4:-1] to get logits that predict tokens [4, 5, 6]
-
-    The alignment logic ensures that when you have a full sequence but only want log
-    probabilities for the response portion, you don't need to re-run the model. This
-    is a key optimization in RL training where the prompt remains constant.
+    Computes the log probabilities of target tokens given the model logits.
 
     Args:
-        logits (`torch.Tensor`):
-            The model output logits of shape `(batch_size, sequence_length, vocab_size)`.
-        input_ids (`torch.Tensor`):
-            The target token ids of shape `(batch_size, target_sequence_length)`.
-            These are the tokens for which you want to compute log probabilities.
-        temperature (`float`, *optional*, defaults to 1.0):
-            The temperature value for scaling logits before computing log probabilities.
-            Higher values make the distribution more uniform, lower values more peaked.
-        align (`bool`, *optional*, defaults to True):
-            If True (default), align logits with input_ids by slicing to extract the
-            relevant positions from a longer sequence (Pattern 2).
-            If False, assume logits are already aligned with input_ids (Pattern 1).
+        logits: Model logits [batch, seq_len, vocab]
+        targets: Target token IDs [batch, seq_len]
+        temperature: Temperature for scaling
+        ignore_index: Positions with this value in targets are masked (get 0.0 logprob)
 
     Returns:
-        torch.Tensor: Log probabilities of shape `(batch_size, target_sequence_length)`.
-            Each element [b, i] is the log probability of input_ids[b, i] given the
-            corresponding logits.
-
-    Note:
-        This function uses cross_entropy instead of log_softmax + gather for better
-        numerical stability, especially important for fp16/bf16 training.
+        logprobs: [batch, seq_len] - Positions with ignore_index automatically get 0.0
     """
-    # Align logits with input_ids if requested
-    if align:
-        # Ignore the last token from logits because it predicts the next token (-1)
-        # And align logits with the input tokens length.
-        logits = logits[:, -input_ids.size(1) - 1 : -1, :].to(input_ids.device)
-
     scaled_logits = logits / temperature
-
-    # Cast up to fp32 for numerical stability
     scaled_logits_fp32 = scaled_logits.float()
 
-    # get per-token log probs
     batch_size, seq_len, vocab_size = scaled_logits_fp32.shape
     logprobs = -F.cross_entropy(
         scaled_logits_fp32.reshape(-1, vocab_size),
-        input_ids.reshape(-1).long(),
+        targets.reshape(-1).long(),
         reduction="none",
+        ignore_index=ignore_index,
     )
 
     return logprobs.reshape(batch_size, seq_len)
+
+
+def create_shifted_targets(
+    input_ids: torch.Tensor,
+    loss_mask: torch.Tensor | None = None,
+    ignore_index: int = CROSS_ENTROPY_IGNORE_IDX,
+) -> torch.Tensor:
+    """
+    Create next-token prediction targets using torch.roll.
+    Maintains same shape as input_ids.
+
+    Args:
+        input_ids: [batch, seq_len] or [seq_len] - Input token IDs
+        loss_mask: [batch, seq_len] or [seq_len] - Trainable positions (bool or float)
+                   If None, all positions are trainable
+        ignore_index: Value for masked positions (default: -100)
+
+    Returns:
+        targets: Same shape as input_ids
+                 targets[i] = input_ids[i+1] where trainable, else ignore_index
+    """
+    if input_ids.dim() == 1:
+        # 1D case
+        targets = torch.roll(input_ids, shifts=-1, dims=0)
+        targets[-1] = ignore_index  # Last position wraps, mask it
+    else:
+        # 2D case (batched)
+        targets = torch.roll(input_ids, shifts=-1, dims=-1)
+        targets[:, -1] = ignore_index  # Last position wraps, mask it
+
+    if loss_mask is not None:
+        loss_mask = loss_mask.to(input_ids.device)
+        targets = torch.where(
+            loss_mask.bool(), targets, torch.full_like(targets, ignore_index)
+        )
+
+    return targets

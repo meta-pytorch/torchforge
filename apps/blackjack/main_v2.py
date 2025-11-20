@@ -16,10 +16,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import lru_cache
-from typing import Any
+from functools import lru_cache, partial
+from typing import Any, Optional
 
 import requests
+
 import torch
 import torch.nn.functional as F
 import torchstore as ts
@@ -34,17 +35,17 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
-from forge.util.ops import compute_logprobs
+from forge.util.ops import compute_logprobs, create_shifted_targets
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from vllm import SamplingParams
 from vllm.transformers_utils.tokenizer import get_tokenizer
-
 
 # ============================================================================
 # Server Management Functions (from main.py)
@@ -59,7 +60,7 @@ def start_openspiel_server(game_name: str, port: int):
     from envs.openspiel_env.server.app import app
 
     print(f"[SERVER] Starting uvicorn for game '{game_name}' on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info", access_log=False)
 
 
 def kill_process_on_port(port: int):
@@ -94,17 +95,18 @@ class Episode:
 
     # Required fields (no defaults)
     episode_id: str
-    all_token_ids: torch.Tensor  # All tokens in conversation
-    logprobs: torch.Tensor  # Logprobs for all tokens
-    response_mask: torch.Tensor  # Mask: 1 = assistant token, 0 = other
+    all_token_ids: torch.Tensor  # [seq_len]
+    response_mask: torch.Tensor  # [seq_len]
+    loss_mask: torch.Tensor  # [seq_len]
     reward: float
 
     # Optional fields (with defaults)
     task_name: str = "blackjack"
-    generator_version: int = 0
+    policy_version: int = 0
     is_truncated: bool = False
     advantage: float | None = None
-    ref_logprobs: torch.Tensor | None = None
+    logprobs: torch.Tensor | None = None  # [seq_len]
+    ref_logprobs: torch.Tensor | None = None  # [seq_len]
     metadata: dict[str, Any] = field(default_factory=dict)
     message_log: list[dict[str, str]] | None = None
 
@@ -120,344 +122,626 @@ class EnvStepResult:
 
 
 # ============================================================================
-# TokenAccumulator (from v5)
+# TokenAccumulator
 # ============================================================================
-from enum import Enum
 
 
-class SanityCheckMode(Enum):
-    """Validation mode for finalize()."""
+class ValidationMode(Enum):
+    """Validation strictness."""
 
-    STRICT = "strict"
-    DISABLE = "disable"
+    STRICT = "strict"  # Raise on failures
+    WARN = "warn"  # Print warnings
+    OFF = "off"  # No validation
 
 
 class TruncationReason(Enum):
-    """Why an episode was truncated."""
+    """Truncation reason."""
 
-    MAX_TURNS = "max_turns"
-    AGENT_TOO_LONG = "agent_too_long"  # No EOS token or exceeded budget
     USER_TOO_LONG = "user_too_long"
+    ASSISTANT_TOO_LONG = "assistant_too_long"
     TOOL_TOO_LONG = "tool_too_long"
+    MAX_NUM_TURNS = "max_num_turns"
+
+
+@dataclass
+class EpisodeData:
+    """
+    Episode data as tensors, ready for training.
+
+    All tensors have shape (T,) where T is sequence length.
+    """
+
+    token_ids: torch.Tensor  # dtype=long
+    response_mask: torch.Tensor  # dtype=bool
+    logprobs: torch.Tensor  # dtype=float
+    is_truncated: bool
+    truncation_reason: Optional[str] = None
 
 
 class TokenAccumulator:
     """
-    Accumulates tokens during multi-turn RL rollouts with strict budget constraints.
-    **IMPORTANT** Truncation behavior:
-    - Agent response incomplete (no EOS): Tokens are dropped, nothing accumulated
-    - User message too long: Truncated to fit, episode marked for dropping
+    Accumulate tokens for multi-turn RL episodes using vLLM tokens directly.
 
-    Why do we need this class?
-    Problem: We need to track tokens as the conversation grows turn-by-turn.
+    ## Why Delta Tokenization?
 
-    Naive approach 1 - Just tokenize each message independently:
-        user_text = "Hello"
-        user_tokens = tokenizer.encode(user_text)  # [9906]
-        WRONG! -> Missing special tokens! Should be: [<|im_start|>, user, \n, 9906, <|im_end|>]
+    vLLM only returns assistant response tokens. We need the full conversation with
+    chat template tokens for training. We can't re-tokenize because it's expensive
+    and error-prone.
 
-    Naive approach 2 - Tokenize a full conversation
-        WRONG! ->  Qwen's template strips <think> tags from past messages, tokens don't match!
-        Also, hard to create mask for the tokens that are traianble
+    **What we get from vLLM:**
+    ```
+    response_tokens = [791, 19, 374, 220, 2]  # ["The", "answer", "is", "4", "<eos>"]
+    ```
 
-    Solution - Delta tokenization:
-        We tokenize [anchor + new_message] and slice off only the new tokens, where anchor is just a dummy message to allow the tokenizer to apply the correct message tokens, e.g. <|im_start|>:
+    **What we need for training:**
+    ```
+    [1, 2, 3]                    # ["You", "are", "helpful"]         (not trainable)
+    [10, 11, 12, 13]             # ["What", "is", "2+2", "?"]        (not trainable)
+    [150, 123]                   # ["<|im_start|>", "assistant"]     (not trainable)
+    [791, 19, 374, 220, 2]       # ["The", "answer", "is", "4", eos] (TRAINABLE!)
+    [151]                        # ["<|im_end|>"]                    (not trainable, Qwen only)
+    ```
 
-        Turn 1, adding user message:
-          tokenize([system, empty_user, new_user]) → [...system..., ...empty_user..., ...new_user...]
-          slice from anchor_len → get only new_user tokens
+    **Solution:** Use an anchor conversation [system, empty_user] that never changes.
+    Tokenize new messages against it and extract deltas. For assistant responses,
+    add generation prompt prefix and any model-specific suffix.
 
-        Turn 1, adding assistant:
-          tokenize([system, empty_user, new_assistant]) → [...system..., ...empty_user..., ...new_assistant...]
-          slice from anchor_len → get only new_assistant tokens
+    ## Truncation Behavior
 
-        The anchor ([system, empty_user]) stays constant, so the chat template applies
-        consistent formatting to the new message, and we extract just those tokens.
+    - **add_user**: If truncated, adds partial message (truncated to fit budget)
+    - **add_assistant**: If truncated, DROPS entire response (nothing added)
+    - Once truncated, all subsequent adds will fail (return False)
 
-    Usage:
-        acc = TokenAccumulator(tokenizer, messages=[...], max_seq_len=2048, eos_token_id=...)
+    ## Usage
 
-        acc.add_user_message("Hello")
+    ```python
+    acc = TokenAccumulator(tok, [{"role": "system", "content": "Help"}], 2048, eos_id=2)
 
-        input_text = acc.format_prompt()
+    # Add messages
+    acc.add_user("What is 2+2?")
+    prompt = acc.format_prompt()
+    response = vllm_generate(prompt)
+    acc.add_assistant(response.text, response.token_ids, response.logprobs)
 
-        response = model.generate(input_text, max_tokens=acc.get_remaining_budget())
+    # Show what will be trained on
+    acc.show_messages()
 
-        acc.add_assistant_response(response.text, response.token_ids)
+    # Get episode data as tensors
+    episode = acc.get_data()
+    # episode.token_ids: torch.Tensor (long)
+    # episode.response_mask: torch.Tensor (bool, True = trainable)
+    # episode.logprobs: torch.Tensor (float)
+    ```
 
-        if acc.is_truncated:
-            return None  # Drop episode
-
-        return Episode(
-            token_ids=acc.accumulated_tokens,
-            response_mask=acc.response_mask,
-            log_probs=acc.log_probs,
-            messages=messages,
-            ...)
+    Args:
+        tokenizer: HuggingFace tokenizer with apply_chat_template
+        messages: Initial messages (must include system message)
+        max_len: Maximum sequence length
+        eos_id: End-of-sequence token ID
+        thinking: Enable <think> tags for Qwen models
+        validation: Validation mode (STRICT, WARN, OFF)
     """
-
-    # Class-level lock for thread-safe tokenizer access across all instances
-    _tokenizer_lock = threading.Lock()
 
     def __init__(
         self,
         tokenizer,
         messages: list[dict],
-        max_seq_len: int,
-        eos_token_id: int,
-        sanity_check_mode: SanityCheckMode = SanityCheckMode.STRICT,
-    ):
+        max_len: int,
+        eos_id: int,
+        thinking: bool = True,
+        validation: ValidationMode = ValidationMode.STRICT,
+    ) -> None:
+        self._validate_init(tokenizer, messages, max_len, eos_id)
+
         self.tokenizer = tokenizer
-        self.max_seq_len = max_seq_len
-        self.eos_token_id = eos_token_id
-        self.sanity_check_mode = sanity_check_mode
+        self.max_len = max_len
+        self.eos_id = eos_id
+        self.thinking = thinking
+        self.validation = validation
 
-        # Core state
-        self.messages = []
-        self.accumulated_tokens = []
-        self.response_mask = []
-        self.logprobs = []
+        # State
+        self.messages: list[dict] = []
+        self._tokens: list[int] = []
+        self._mask: list[bool] = []
+        self._logprobs: list[float] = []
+        self.truncated: bool = False
+        self.truncation_reason: Optional[TruncationReason] = None
 
-        # Truncation tracking
-        self.is_truncated = False
-        self.truncation_reason = None
+        # Track message boundaries for efficient validation
+        # Each entry: (end_idx, role, should_end_with_eos)
+        self._message_ends: list[tuple[int, str, bool]] = []
 
+        # Thread safety
+        self._lock = threading.Lock()
+
+        # Setup
         self._setup_anchor(messages)
-        self._initialize_messages(messages)
+        self._init_messages(messages)
 
-    # ============ Public API ============
+    def __repr__(self) -> str:
+        status = f", truncated" if self.truncated else ""
+        return f"TokenAccumulator({len(self._tokens)}/{self.max_len}{status})"
 
-    def add_user_message(self, content: str) -> bool:
+    @property
+    def budget(self) -> int:
+        """Remaining token budget."""
+        return max(0, self.max_len - len(self._tokens) - self.gen_prompt_len)
+
+    def add_user(self, content: str) -> bool:
         """
-        Add user message, truncating to fit budget if necessary.
-        Returns False if truncated.
+        Add user message. If truncated, adds partial message (truncated to fit).
+
+        Returns:
+            True if not truncated, False if truncated
         """
-        user_tokens = self._tokenize_delta({"role": "user", "content": content}, "user")
-        budget = self.get_remaining_budget()
-        original_len = len(user_tokens)
-        user_tokens = self._truncate_to_fit(
-            user_tokens, budget, TruncationReason.USER_TOO_LONG
-        )
+        if not isinstance(content, str):
+            raise TypeError(f"content must be str, got {type(content)}")
 
-        if user_tokens:
-            self.messages.append({"role": "user", "content": content})
-            self._accumulate(user_tokens, is_response=False)
+        msg = {"role": "user", "content": content}
 
-        return len(user_tokens) == original_len
-
-    def add_assistant_response(
-        self,
-        response_text: str,
-        response_token_ids: list[int],
-        response_logprobs: list[float] | None = None,
-    ) -> bool:
-        print(f"[TokenAccumulator] ===== ENTERED add_assistant_response =====")
-        """
-        Add assistant response. Returns False if response was truncated (no EOS).
-        Episode should be dropped if this returns False.
-        """
-        # Check for truncation (missing EOS)
-        if response_token_ids and response_token_ids[-1] != self.eos_token_id:
-            return self._mark_truncated(TruncationReason.AGENT_TOO_LONG)
-
-        print(f"[TokenAccumulator] About to tokenize assistant response")
-        print(f"[TokenAccumulator] Response text length: {len(response_text)} chars")
-        print(
-            f"[TokenAccumulator] Response token_ids length: {len(response_token_ids)} tokens"
-        )
-        print(f"[TokenAccumulator] First 150 chars: {response_text[:150]}")
-
-        # Safety check: If response is suspiciously long, warn and potentially truncate
-        if len(response_text) > 10000:  # 10k chars is way too much for blackjack
-            print(
-                f"[TokenAccumulator] ⚠️  WARNING: Response text is {len(response_text)} chars - this may cause slow tokenization!"
+        # Tokenize [system, user] and extract delta
+        with self._lock:
+            full = self.tokenizer.apply_chat_template(
+                [self.anchor[0], msg],
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.thinking,
             )
-            print(f"[TokenAccumulator] Last 150 chars: {response_text[-150:]}")
+        # Extract user tokens by slicing off system prefix
+        tokens = full[self.sys_len :]
 
-        message = {"role": "assistant", "content": response_text}
-        assistant_tokens = self._tokenize_delta(message, "assistant")
-        print(
-            f"[TokenAccumulator] Tokenization complete, got {len(assistant_tokens)} tokens"
+        if not tokens:
+            return True
+
+        # Check budget
+        budget = self.budget
+        if budget <= 0:
+            self._mark_truncated(TruncationReason.USER_TOO_LONG)
+            return False
+
+        # Truncate if needed (still adds partial)
+        was_truncated = len(tokens) > budget
+        if was_truncated:
+            tokens = tokens[:budget]
+            self._mark_truncated(TruncationReason.USER_TOO_LONG)
+
+        self.messages.append(msg)
+        self._add_tokens(tokens, trainable=False, role="user", ends_with_eos=False)
+
+        return not was_truncated
+
+    def add_assistant(
+        self, text: str, token_ids: list[int], logprobs: Optional[list[float]] = None
+    ) -> bool:
+        """
+        Add assistant response from vLLM. If truncated, DROPS entire response (nothing added).
+
+        Args:
+            text: Response text (for message log)
+            token_ids: Token IDs from vLLM (must end with EOS)
+            logprobs: Log probabilities (optional)
+
+        Returns:
+            False if truncated/invalid (response dropped), True if added successfully
+        """
+        # Type validation
+        if not isinstance(text, str):
+            raise TypeError(f"text must be str, got {type(text)}")
+        if not isinstance(token_ids, list):
+            raise TypeError(f"token_ids must be list, got {type(token_ids)}")
+
+        # Must have tokens and end with EOS
+        if not token_ids:
+            return self._mark_truncated(TruncationReason.ASSISTANT_TOO_LONG)
+        if token_ids[-1] != self.eos_id:
+            return self._mark_truncated(TruncationReason.ASSISTANT_TOO_LONG)
+
+        # Check budget: generation_prompt + response + suffix
+        total_len = self.gen_prompt_len + len(token_ids) + len(self.suffix)
+        if total_len > self.budget:
+            return self._mark_truncated(TruncationReason.ASSISTANT_TOO_LONG)
+
+        # Validate logprobs if provided
+        if logprobs is not None:
+            if not isinstance(logprobs, list):
+                raise TypeError(f"logprobs must be list or None")
+            if len(logprobs) != len(token_ids):
+                raise ValueError(
+                    f"logprobs length mismatch: {len(logprobs)} != {len(token_ids)}"
+                )
+
+        self.messages.append({"role": "assistant", "content": text})
+
+        # Generation prompt (not trainable)
+        self._add_tokens(
+            self.gen_prompt_tokens,
+            trainable=False,
+            logprobs=[0.0] * len(self.gen_prompt_tokens),
+            role="assistant_prompt",
+            ends_with_eos=False,
         )
 
-        # Check budget - reject if would exceed max_seq_len
-        if len(assistant_tokens) > self.get_remaining_budget():
-            return self._mark_truncated(TruncationReason.AGENT_TOO_LONG)
-        else:
-            self.messages.append({"role": "assistant", "content": response_text})
+        # Response tokens (trainable)
+        self._add_tokens(
+            token_ids,
+            trainable=True,
+            logprobs=logprobs,
+            role="assistant",
+            ends_with_eos=True,
+        )
 
-        # Map logprobs: vLLM returns content tokens only, align from end (EOS)
-        if response_logprobs and len(response_logprobs) == len(response_token_ids):
-            prefix_len = len(assistant_tokens) - len(response_token_ids)
-            logprobs = [0.0] * prefix_len + response_logprobs
-        else:
-            logprobs = None
+        # Suffix if needed (not trainable)
+        if self.suffix:
+            self._add_tokens(
+                self.suffix,
+                trainable=False,
+                logprobs=[0.0] * len(self.suffix),
+                role="assistant_suffix",
+                ends_with_eos=False,
+            )
 
-        self._accumulate(assistant_tokens, is_response=True, logprobs=logprobs)
         return True
 
     def format_prompt(self) -> str:
-        """Format current conversation for generation."""
-        with self._tokenizer_lock:
+        """Format conversation for vLLM generation."""
+        with self._lock:
             return self.tokenizer.apply_chat_template(
-                self.messages, add_generation_prompt=True, tokenize=False
+                self.messages,
+                add_generation_prompt=True,
+                tokenize=False,
+                enable_thinking=self.thinking,
             )
 
-    def get_remaining_budget(self) -> int:
+    def get_data(self) -> EpisodeData:
         """
-        Get remaining tokens available for generation.
+        Convert to tensors, validate, and return episode data.
 
-        We reserve generation_prompt_len tokens (e.g., "<|im_start|>assistant\n")
-        because format_prompt() adds these when preparing input for the model.
+        Returns:
+            EpisodeData with torch tensors
+
+        Raises:
+            AssertionError/ValueError: If validation fails in STRICT mode
         """
-        used = len(self.accumulated_tokens) + self.generation_prompt_len
-        return max(0, self.max_seq_len - used)
+        # Convert to tensors
+        token_ids = torch.tensor(self._tokens, dtype=torch.long)
+        response_mask = torch.tensor(self._mask, dtype=torch.bool)
+        logprobs = torch.tensor(self._logprobs, dtype=torch.float)
 
-    def finalize(self) -> bool:
-        """
-        Validate final episode state.
-        Returns True if valid, raises ValueError if critical issue detected.
-        """
-        self._check_structure()
+        # Validate on tensors
+        if self.validation != ValidationMode.OFF:
+            self._validate(token_ids, response_mask, logprobs)
 
-        if self.sanity_check_mode != SanityCheckMode.DISABLE:
-            self._check_ground_truth()
-
-        return True
-
-    # ============ Private Helpers ============
-
-    def _setup_anchor(self, messages: list[dict]):
-        """
-        Setup anchor conversation for delta tokenization.
-
-        Delta tokenization: Instead of re-tokenizing the full conversation after each message,
-        we tokenize only the new message against a fixed anchor ([system, empty_user]). The dummy anchor is necessary to ensure that all special tokens are added.
-
-        Computes key lengths for budget calculation:
-        - anchor_len: tokens in [system, empty_user]
-        - generation_prompt_len: tokens added by add_generation_prompt=True (e.g., "<|im_start|>assistant\n")
-        - system_len: tokens in [system] alone
-        """
-        if not messages:
-            raise ValueError("Must provide at least system message")
-
-        system_msg = (
-            messages[0]
-            if messages[0]["role"] == "system"
-            else {"role": "system", "content": ""}
+        return EpisodeData(
+            token_ids=token_ids,
+            response_mask=response_mask,
+            logprobs=logprobs,
+            is_truncated=self.truncated,
+            truncation_reason=(
+                self.truncation_reason.value if self.truncation_reason else None
+            ),
         )
 
-        # Anchor: [system, empty_user] - stays constant for consistent tokenization
-        self.anchor = [system_msg, {"role": "user", "content": ""}]
+    def show_messages(self, max_chars: int = 5000) -> None:
+        """
+        Show token stream with trainability highlighted.
 
-        # Length of anchor without generation prompt
-        anchor_tokens = self.tokenizer.apply_chat_template(
-            self.anchor, add_generation_prompt=False, tokenize=True
+        Uses colored text runs for readability (similar to tinker-cookbook's format_colorized).
+        Groups consecutive tokens with same trainability and decodes together for proper
+        multi-byte character handling.
+
+        Args:
+            max_chars: Maximum characters to show in decoded output (default: 5000)
+        """
+        print("=" * 80)
+        print(f"TokenAccumulator: {len(self._tokens)}/{self.max_len} tokens")
+        trainable_count = sum(self._mask)
+        trainable_pct = 100 * trainable_count / len(self._tokens) if self._tokens else 0
+        print(
+            f"Trainable: {trainable_count}/{len(self._tokens)} ({trainable_pct:.1f}%)"
         )
-        self.anchor_len = len(anchor_tokens)
+        print("=" * 80)
 
-        # Length of anchor WITH generation prompt - difference is the prompt overhead
-        anchor_with_gen = self.tokenizer.apply_chat_template(
-            self.anchor, add_generation_prompt=True, tokenize=True
-        )
-        self.generation_prompt_len = len(anchor_with_gen) - self.anchor_len
-
-        # System message length alone (for user message delta slicing), e.g. full[self.system_len:]
-        system_tokens = self.tokenizer.apply_chat_template(
-            [system_msg], add_generation_prompt=False, tokenize=True
-        )
-        self.system_len = len(system_tokens)
-
-    def _initialize_messages(self, messages: list[dict]):
-        """Initialize conversation with provided messages."""
-        if not messages:
+        if not self._tokens:
+            print("(no tokens)")
+            print("=" * 80)
             return
 
-        initial_tokens = self.tokenizer.apply_chat_template(
-            messages, add_generation_prompt=False, tokenize=True
+        # Show messages list
+        print("\nMessages:")
+        for i, msg in enumerate(self.messages):
+            role = msg["role"]
+            content = msg["content"]
+            preview = content[:100] + "..." if len(content) > 100 else content
+            print(f"  [{i}] {role:10s} {preview!r}")
+
+        # Show colorized token stream
+        print("\nToken stream:")
+        self._show_colorized_token_stream(max_chars)
+
+        print("=" * 80)
+
+    def _show_colorized_token_stream(self, max_chars: int) -> None:
+        """
+        Show full token stream with color coding by trainability.
+
+        Groups consecutive tokens with same trainability into "runs" and decodes
+        them together. This handles multi-byte characters correctly.
+        """
+        chunks = []
+        current_ids = []
+        current_trainable = None
+        total_chars = 0
+
+        def flush_run():
+            nonlocal total_chars
+            if not current_ids:
+                return
+
+            # Decode entire run at once
+            with self._lock:
+                decoded = self.tokenizer.decode(current_ids)
+
+            # Check if we've exceeded max_chars
+            if total_chars >= max_chars:
+                return
+
+            # Truncate if needed
+            if total_chars + len(decoded) > max_chars:
+                remaining = max_chars - total_chars
+                decoded = decoded[:remaining] + "..."
+
+            total_chars += len(decoded)
+
+            # Color based on trainability
+            if current_trainable:
+                color_code = "\033[92m"  # Green for trainable
+                symbol = "✓"
+            else:
+                color_code = "\033[90m"  # Gray for not trainable
+                symbol = "·"
+
+            # Escape special characters for display
+            decoded_repr = repr(decoded)[1:-1]  # Remove outer quotes
+            chunks.append(f"{color_code}{symbol} {decoded_repr}\033[0m")
+
+        # Group tokens into runs
+        for i in range(len(self._tokens)):
+            trainable = self._mask[i]
+
+            # Flush when trainability changes
+            if trainable != current_trainable and current_ids:
+                flush_run()
+                current_ids = []
+
+            current_ids.append(self._tokens[i])
+            current_trainable = trainable
+
+        # Flush final run
+        flush_run()
+
+        # Print runs
+        if chunks:
+            print("  " + " ".join(chunks))
+
+        if total_chars >= max_chars:
+            print(f"\n  (output truncated at {max_chars} chars)")
+
+    def _show_colorized_tokens(self, start_idx: int, end_idx: int) -> None:
+        """
+        DEPRECATED: Old method, kept for compatibility.
+        Use _show_colorized_token_stream instead.
+        """
+        pass
+
+    # Internal helpers
+    def _validate_init(
+        self, tokenizer, messages: list[dict], max_len: int, eos_id: int
+    ) -> None:
+        """Validate initialization parameters."""
+        if not hasattr(tokenizer, "apply_chat_template"):
+            raise ValueError("Tokenizer must have apply_chat_template method")
+        if not messages:
+            raise ValueError("Must provide at least a system message")
+        if not isinstance(messages, list):
+            raise TypeError(f"messages must be list, got {type(messages)}")
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                raise TypeError(f"Message {i} must be dict")
+            if "role" not in msg or "content" not in msg:
+                raise ValueError(f"Message {i} missing 'role' or 'content'")
+        if not isinstance(max_len, int) or max_len <= 0:
+            raise ValueError(f"max_len must be positive int, got {max_len}")
+        if not isinstance(eos_id, int):
+            raise TypeError(f"eos_id must be int, got {type(eos_id)}")
+
+    def _setup_anchor(self, msgs: list[dict]) -> None:
+        """
+        Setup anchor for delta tokenization and compute suffix.
+
+        The suffix is anything after EOS in the chat template. We create a test
+        conversation with EOS and extract any tokens that follow it.
+        """
+        sys = (
+            msgs[0]
+            if msgs[0]["role"] == "system"
+            else {"role": "system", "content": ""}
         )
+        self.anchor = [sys, {"role": "user", "content": ""}]
 
-        if len(initial_tokens) > self.max_seq_len:
-            self._mark_truncated(TruncationReason.USER_TOO_LONG)
-            initial_tokens = initial_tokens[: self.max_seq_len]
-
-        self.messages = messages.copy()
-        self._accumulate(initial_tokens, is_response=False)
-
-    def _tokenize_delta(self, message: dict, role: str) -> list[int]:
-        """Tokenize single message using anchor conversation."""
-        if role == "assistant":
-            temp = [self.anchor[0], {"role": "user", "content": ""}, message]
-            offset = self.anchor_len
-        else:  # user
-            temp = [self.anchor[0], message]
-            offset = self.system_len
-
-        with self._tokenizer_lock:
-            full = self.tokenizer.apply_chat_template(
-                temp, add_generation_prompt=False, tokenize=True
+        with self._lock:
+            # Compute generation prompt
+            without = self.tokenizer.apply_chat_template(
+                self.anchor,
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.thinking,
             )
-        return full[offset:]
+            with_gen = self.tokenizer.apply_chat_template(
+                self.anchor,
+                add_generation_prompt=True,
+                tokenize=True,
+                enable_thinking=self.thinking,
+            )
+            self.gen_prompt_tokens = with_gen[len(without) :]
+            self.gen_prompt_len = len(self.gen_prompt_tokens)
 
-    def _truncate_to_fit(
-        self, tokens: list[int], available: int, reason: TruncationReason
-    ) -> list[int]:
-        """
-        Truncate tokens to fit available space. Marks truncation if needed.
-        Returns truncated tokens.
-        """
-        if len(tokens) > available:
-            self._mark_truncated(reason)
-            return tokens[: max(0, available)]
-        return tokens
+            # Compute system length
+            sys_tokens = self.tokenizer.apply_chat_template(
+                [sys],
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.thinking,
+            )
+            self.sys_len = len(sys_tokens)
 
-    def _accumulate(
-        self, tokens: list[int], is_response: bool, logprobs: list[float] | None = None
-    ):
-        """Add tokens to accumulator."""
-        self.accumulated_tokens.extend(tokens)
-        self.response_mask.extend([int(is_response)] * len(tokens))
-        self.logprobs.extend(logprobs or [0.0] * len(tokens))
+            # Compute suffix by tokenizing a test conversation
+            test_conv = [
+                sys,
+                {"role": "user", "content": "test"},
+                {"role": "assistant", "content": "response"},
+            ]
+            test_tokens = self.tokenizer.apply_chat_template(
+                test_conv,
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.thinking,
+            )
+
+            # Find last EOS
+            eos_idx = -1
+            for i in range(len(test_tokens) - 1, -1, -1):
+                if test_tokens[i] == self.eos_id:
+                    eos_idx = i
+                    break
+
+            # Extract suffix (everything after EOS, or empty if nothing)
+            if eos_idx >= 0 and eos_idx < len(test_tokens) - 1:
+                self.suffix = test_tokens[eos_idx + 1 :]
+            else:
+                self.suffix = []
+
+    def _init_messages(self, msgs: list[dict]) -> None:
+        """Initialize with starting messages."""
+        if not msgs:
+            return
+
+        with self._lock:
+            tokens = self.tokenizer.apply_chat_template(
+                msgs,
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.thinking,
+            )
+
+        if len(tokens) > self.max_len:
+            self._mark_truncated(TruncationReason.USER_TOO_LONG)
+            tokens = tokens[: self.max_len]
+
+        self.messages = msgs.copy()
+        self._add_tokens(tokens, trainable=False, role="initial", ends_with_eos=False)
+
+    def _add_tokens(
+        self,
+        tokens: list[int],
+        trainable: bool,
+        logprobs: Optional[list[float]] = None,
+        role: str = "",
+        ends_with_eos: bool = False,
+    ) -> None:
+        """Add tokens to parallel arrays and track message boundary."""
+        if not tokens:
+            return
+
+        self._tokens.extend(tokens)
+        self._mask.extend([trainable] * len(tokens))
+        self._logprobs.extend(logprobs if logprobs else [0.0] * len(tokens))
+
+        # Track message end for validation
+        end_idx = len(self._tokens) - 1
+        self._message_ends.append((end_idx, role, ends_with_eos))
 
     def _mark_truncated(self, reason: TruncationReason) -> bool:
-        """Mark episode as truncated and return False."""
-        self.is_truncated = True
+        """Mark as truncated."""
+        self.truncated = True
         self.truncation_reason = reason
         return False
 
-    def _check_structure(self):
-        """Verify basic structural invariants."""
-        assert (
-            len(self.accumulated_tokens)
-            == len(self.response_mask)
-            == len(self.logprobs)
-        )
+    def _validate(
+        self,
+        token_ids: torch.Tensor,
+        response_mask: torch.Tensor,
+        logprobs: torch.Tensor,
+    ) -> None:
+        """
+        Run validation checks on tensors.
 
-        if len(self.accumulated_tokens) > self.max_seq_len:
-            raise ValueError(
-                f"Budget overflow: {len(self.accumulated_tokens)} > {self.max_seq_len}"
+        Args:
+            token_ids: Token IDs tensor (shape: T)
+            response_mask: Response mask tensor (shape: T)
+            logprobs: Log probabilities tensor (shape: T)
+        """
+        # Check 1: Shapes match
+        if not (token_ids.shape == response_mask.shape == logprobs.shape):
+            raise AssertionError(
+                f"Shape mismatch: token_ids={token_ids.shape}, "
+                f"mask={response_mask.shape}, logprobs={logprobs.shape}"
             )
 
-    def _check_ground_truth(self):
-        """
-        Compare with ground truth tokenization.
-        May fail with chat templates that modify history (e.g., Qwen deletes <think> tokens from older messages. This would cause a disparate between accumulated tokens and tokenized messages, since we accumulated the tokens with the <think> tokens).
-        """
-        ground_truth = self.tokenizer.apply_chat_template(
-            self.messages, add_generation_prompt=False, tokenize=True
-        )
+        # Check 2: Budget not exceeded
+        if len(token_ids) > self.max_len:
+            raise ValueError(f"Budget overflow: {len(token_ids)} > {self.max_len}")
 
-        if len(self.accumulated_tokens) == len(ground_truth):
-            return
+        # Check 3: Message boundaries are correct
+        for end_idx, role, should_end_with_eos in self._message_ends:
+            if should_end_with_eos:
+                # Token at end_idx should be eos_id
+                if token_ids[end_idx].item() != self.eos_id:
+                    msg = f"{role} at {end_idx} has token {token_ids[end_idx].item()}, expected EOS {self.eos_id}"
+                    if self.validation == ValidationMode.STRICT:
+                        raise ValueError(msg)
+                    print(f"WARNING: {msg}")
 
-        if self.sanity_check_mode == SanityCheckMode.STRICT:
-            diff = len(ground_truth) - len(self.accumulated_tokens)
-            raise ValueError(
-                f"Token count mismatch: {len(self.accumulated_tokens)} accumulated vs "
-                f"{len(ground_truth)} ground truth (diff: {diff}). "
-                f"This happens when chat template modifies history."
-            )
+                # For assistant: end_idx should be trainable
+                if role == "assistant" and not response_mask[end_idx].item():
+                    msg = f"Assistant EOS at {end_idx} is not trainable"
+                    if self.validation == ValidationMode.STRICT:
+                        raise ValueError(msg)
+                    print(f"WARNING: {msg}")
+
+                # Token after EOS should not be trainable
+                if end_idx + 1 < len(token_ids) and response_mask[end_idx + 1].item():
+                    msg = (
+                        f"Token after EOS at {end_idx+1} is trainable (should be False)"
+                    )
+                    if self.validation == ValidationMode.STRICT:
+                        raise ValueError(msg)
+                    print(f"WARNING: {msg}")
+
+        # Check 4: Prefix consistency (incremental == full tokenization)
+        # DISABLED: Qwen always adds think tags to LAST assistant message only,
+        # but in incremental accumulation every assistant response IS the last one
+        # at the time we add it. This causes mismatches:
+        # - thinking=True: missing 4 tokens (last gets think tags in full tokenization)
+        # - thinking=False: extra 4 tokens (first doesn't get think tags in full tokenization)
+        # This is expected behavior for Qwen and not a bug.
+        #
+        # with self._lock:
+        #     full_tokens = self.tokenizer.apply_chat_template(
+        #         self.messages, add_generation_prompt=False, tokenize=True, enable_thinking=self.thinking
+        #     )
+        #
+        # accumulated_len = len(token_ids)
+        # expected_len = len(full_tokens)
+        #
+        # if accumulated_len != expected_len:
+        #     msg = (
+        #         f"Prefix consistency failed: "
+        #         f"accumulated={accumulated_len} tokens, "
+        #         f"expected={expected_len}"
+        #     )
+        #     if self.validation == ValidationMode.STRICT:
+        #         raise AssertionError(msg)
+        #     print(f"WARNING: {msg}")
 
 
 # ============================================================================
@@ -518,11 +802,25 @@ class BlackjackEnv:
         """
 
         # Parse action
-        action_name = self._parse_action(action_text)
-        if action_name == "INVALID":
+        action_name, error_type = self._parse_action(action_text)
+
+        # Track invalid actions
+        is_invalid = action_name == "INVALID"
+        if is_invalid:
             self.has_invalid_action = True
-            action_name = "STAND"  # Fallback
+            action_name = "STAND"  # Treat invalid as STAND
             record_metric("game/invalid_action_rate", 1, Reduce.MEAN)
+
+            if error_type == "NO_TAGS":
+                print(f"[ENV] ⚠️  INVALID action: Missing <answer> tags!")
+                print(f"[ENV]     Text: '{action_text}...'")
+                record_metric("game/missing_answer_tags", 1, Reduce.SUM)
+            elif error_type == "INVALID_CONTENT":
+                print(f"[ENV] ⚠️  INVALID action: Bad content in <answer> tags!")
+                print(f"[ENV]     Text: '{action_text}...'")
+                record_metric("game/invalid_answer_content", 1, Reduce.SUM)
+
+            print(f"[ENV]     Treating as STAND")
         else:
             record_metric("game/invalid_action_rate", 0, Reduce.MEAN)
 
@@ -537,6 +835,12 @@ class BlackjackEnv:
         # Compute reward
         if result.done:
             reward = self._compute_reward(result.reward)
+
+            # Apply penalty for invalid action format
+            if self.has_invalid_action:
+                reward -= 10.0  # Penalty for not ending with HIT/STAND
+                record_metric("game/invalid_action_penalty", 1, Reduce.SUM)
+
             # Record game outcome metrics
             record_metric("game/games_played", 1, Reduce.SUM)
             record_metric("game/average_turns", self.turn_count, Reduce.MEAN)
@@ -571,15 +875,32 @@ class BlackjackEnv:
 
         return f"Hand: {player_total}, Dealer: {dealer_str}"
 
-    def _parse_action(self, text: str) -> str:
-        """Parse action from assistant text."""
-        text_lower = text.lower().strip()
-        if text_lower.endswith("hit"):
-            return "HIT"
-        elif text_lower.endswith("stand"):
-            return "STAND"
+    def _parse_action(self, text: str) -> tuple[str, str]:
+        """Parse action from assistant text using <answer> tags.
+
+        Returns:
+            (action, error_type): action is "HIT", "STAND", or "INVALID"
+                                  error_type is "" for valid, "NO_TAGS" or "INVALID_CONTENT"
+        """
+        import re
+
+        # Try to extract content from <answer> tags
+        match = re.search(
+            r"<answer>\s*(.*?)\s*</answer>", text, re.IGNORECASE | re.DOTALL
+        )
+
+        if match:
+            answer = match.group(1).strip().upper()
+            if answer == "HIT":
+                return ("HIT", "")
+            elif answer == "STAND":
+                return ("STAND", "")
+            else:
+                # Has <answer> tags but invalid content
+                return ("INVALID", "INVALID_CONTENT")
         else:
-            return "INVALID"
+            # No <answer> tags found
+            return ("INVALID", "NO_TAGS")
 
     def _compute_reward(self, env_reward: float) -> float:
         """Compute final reward."""
@@ -632,84 +953,63 @@ async def do_single_rollout(
     accumulator = TokenAccumulator(
         tokenizer=tokenizer,
         messages=messages,
-        max_seq_len=max_seq_len,
-        eos_token_id=tokenizer.eos_token_id,
-        sanity_check_mode=SanityCheckMode.DISABLE,  # Disable in production for speed
+        max_len=max_seq_len,
+        eos_id=tokenizer.eos_token_id,
+        validation=ValidationMode.OFF,
+        thinking=False,
     )
 
     try:
         # ============ Reset environment ============
         initial_obs = env.reset()
-        accumulator.add_user_message(initial_obs)
+        accumulator.add_user(initial_obs)
 
         # ============ Multi-turn loop ============
         final_reward = 0.0
         turn_num = 0
         game_done = False
-        generator_version = 0
+        policy_version = 0
 
         while not game_done and turn_num < max_turns:
-            print(f"\n[do_single_rollout] Turn {turn_num}")
-
             # Check budget
-            remaining = accumulator.get_remaining_budget()
-            print(f"  Remaining budget: {remaining}")
-            print(f"  Current tokens: {len(accumulator.accumulated_tokens)}")
-            print(f"  Max seq len: {max_seq_len}")
+            remaining = accumulator.budget
 
             if remaining <= 0:
-                print(f"  ❌ No budget left, breaking")
                 break
+
             # Format prompt
             prompt = accumulator.format_prompt()
 
             # ============ Generate ============
             # Create sampling params with remaining budget to prevent exceeding max_seq_len
-            print(f"  Calling vLLM with max_tokens={remaining}")
             sampling_params = SamplingParams(max_tokens=remaining)
             responses = await policy.generate.route(
                 prompt, sampling_params=sampling_params
             )
             response = responses[0]
-            print(f"  vLLM returned {len(response.token_ids)} tokens")
-            print(f"  [DEBUG] About to get generator_version")
 
-            generator_version = (
-                response.generator_version
-                if hasattr(response, "generator_version")
-                else 0
-            )
-            print(f"  [DEBUG] Got generator_version: {generator_version}")
+            policy_version = response.generator_version
 
             # Extract logprobs from response
-            print(f"  [DEBUG] About to extract logprobs")
             response_logprobs = (
                 response.logprobs if hasattr(response, "logprobs") else None
             )
-            print(f"  [DEBUG] Got logprobs: {response_logprobs is not None}")
 
             # ============ Add assistant response ============
-            print(f"  [DEBUG] About to access response.text")
             response_text = response.text
-            print(f"  [DEBUG] Got response.text, length: {len(response_text)}")
-            print(f"  [DEBUG] About to access response.token_ids as list")
+
             response_token_ids_list = list(
                 response.token_ids
             )  # Explicitly convert to list
-            print(
-                f"  [DEBUG] Got response.token_ids, length: {len(response_token_ids_list)}"
-            )
 
-            print(f"  [DEBUG] About to call add_assistant_response")
-            success = accumulator.add_assistant_response(
-                response_text=response_text,
-                response_token_ids=response_token_ids_list,
-                response_logprobs=response_logprobs,
+            success = accumulator.add_assistant(
+                text=response_text,
+                token_ids=response_token_ids_list,
+                logprobs=response_logprobs,
             )
 
             # If generation truncated, break
             if not success:
-                print(f"  ❌ Generation failed, breaking")
                 break
 
             # ============ Step environment ============
@@ -721,7 +1021,7 @@ async def do_single_rollout(
             # ============ Add environment observation ============
             if not result.done:
                 obs_text = result.observation["content"]
-                success = accumulator.add_user_message(obs_text)
+                success = accumulator.add_user(obs_text)
 
                 # If env obs would exceed budget, break
                 if not success:
@@ -730,58 +1030,42 @@ async def do_single_rollout(
         # Check if hit max_turns - just for metadata, accumulator tracks token truncation
         hit_max_turns = turn_num >= max_turns and not game_done
 
-        # Optional: Validate token accumulation (useful in dev/staging)
-        # accumulator.finalize()
+        # ============ Get validated episode data ============
+        episode_data = accumulator.get_data()
 
         # Record metrics once at the end
-        if accumulator.truncation_reason:
+        if episode_data.truncation_reason:
             record_metric(
-                f"episode/truncated_{accumulator.truncation_reason.value}",
+                f"episode/truncated_{episode_data.truncation_reason}",
                 1,
                 Reduce.SUM,
             )
-        record_metric(
-            "episode/total_tokens", len(accumulator.accumulated_tokens), Reduce.MEAN
-        )
+        record_metric("episode/total_tokens", len(episode_data.token_ids), Reduce.MEAN)
         record_metric("episode/turns", turn_num, Reduce.MEAN)
 
         # ============ Create episode ============
-        print(f"\n[do_single_rollout] Creating episode {game_id}")
-        print(f"  Final tokens: {len(accumulator.accumulated_tokens)}")
-        print(f"  Final mask: {len(accumulator.response_mask)}")
-        print(f"  Final logprobs: {len(accumulator.logprobs)}")
-        print(f"  Is truncated: {accumulator.is_truncated}")
-        print(
-            f"  Truncation reason: {accumulator.truncation_reason.value if accumulator.truncation_reason else None}"
-        )
-        print(f"  Hit max turns: {hit_max_turns}")
-        print(f"  Max seq len: {max_seq_len}")
-
-        if len(accumulator.accumulated_tokens) > max_seq_len:
-            print(
-                f"  ❌❌❌ EPISODE EXCEEDS max_seq_len by {len(accumulator.accumulated_tokens) - max_seq_len} tokens!"
-            )
+        # Create loss_mask by shifting response_mask using torch.roll
+        loss_mask_tensor = torch.roll(
+            episode_data.response_mask, shifts=-1, dims=0
+        ).float()
+        loss_mask_tensor[-1] = 0.0  # Last position should not train
 
         return Episode(
             episode_id=game_id,
             task_name="blackjack",
-            generator_version=generator_version,
-            is_truncated=accumulator.is_truncated,
-            all_token_ids=torch.tensor(
-                accumulator.accumulated_tokens, dtype=torch.long
-            ),
-            logprobs=torch.tensor(accumulator.logprobs, dtype=torch.float),
-            response_mask=torch.tensor(accumulator.response_mask, dtype=torch.float),
+            policy_version=policy_version,
+            is_truncated=episode_data.is_truncated,
+            all_token_ids=episode_data.token_ids,
+            response_mask=episode_data.response_mask,
+            loss_mask=loss_mask_tensor,
             reward=final_reward,
+            logprobs=episode_data.logprobs,
             message_log=accumulator.messages.copy(),
             metadata={
-                "truncation_reason": (
-                    accumulator.truncation_reason.value
-                    if accumulator.truncation_reason
-                    else None
-                ),
+                "truncation_reason": episode_data.truncation_reason,
                 "hit_max_turns": hit_max_turns,
                 "num_turns": turn_num,
+                "num_trainable_tokens": episode_data.response_mask.sum().item(),
                 **(result.metadata if "result" in locals() else {}),
             },
         )
@@ -857,7 +1141,6 @@ class EnvironmentActor(ForgeActor):
     @endpoint
     def setup(self):
         self._tokenizer = get_tokenizer(self.model)
-        print(f"EnvironmentActor initialized (model: {self.model})")
 
     @endpoint
     async def get_tokenizer(self):
@@ -879,12 +1162,14 @@ class EnvironmentActor(ForgeActor):
 
 def collate(
     batches: list[list[Episode]],
+    pad_id: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Collates a list of batches (groups) into inputs and targets.
 
     Args:
         batches: List of groups, where each group is a list of Episodes
+        pad_id: Padding token ID from tokenizer
 
     Returns:
         (inputs, targets) for training
@@ -893,53 +1178,31 @@ def collate(
     targets = []
 
     for batch in batches:
-        # Find max sequence length in this batch
-        max_len = max(len(e.all_token_ids) for e in batch)
+        # Stack all tensors (pad to max length in batch)
+        all_tokens = [e.all_token_ids for e in batch]
+        all_tokens = torch.nn.utils.rnn.pad_sequence(
+            all_tokens, batch_first=True, padding_value=pad_id
+        )
 
-        # Get pad_id from tokenizer (we'll use 0 as default)
-        # In practice, this should come from the tokenizer
-        pad_id = 0
+        loss_masks = [e.loss_mask for e in batch]
+        loss_masks = torch.nn.utils.rnn.pad_sequence(
+            loss_masks, batch_first=True, padding_value=0.0
+        )
 
-        # Stack all tokens with padding
-        all_tokens = []
-        response_masks = []
-        ref_logprobs_list = []
-        advantages_list = []
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.nn.utils.rnn.pad_sequence(
+            ref_logprobs, batch_first=True, padding_value=0.0
+        )
 
-        for e in batch:
-            seq_len = len(e.all_token_ids)
-            pad_len = max_len - seq_len
+        advantages = torch.tensor([e.advantage for e in batch]).unsqueeze(-1)  # [b, 1]
 
-            # Pad tokens (right padding)
-            padded_tokens = F.pad(e.all_token_ids, (0, pad_len), value=pad_id)
-            all_tokens.append(padded_tokens)
-
-            # Pad response mask (right padding with 0)
-            padded_mask = F.pad(e.response_mask, (0, pad_len), value=0)
-            response_masks.append(padded_mask)
-
-            # Pad ref_logprobs (right padding with 0)
-            padded_ref_logprobs = F.pad(e.ref_logprobs, (0, pad_len), value=0.0)
-            ref_logprobs_list.append(padded_ref_logprobs)
-
-            # Advantage is scalar
-            advantages_list.append(e.advantage)
-
-        # Stack everything
-        all_tokens_tensor = torch.stack(all_tokens)  # [b, max_len]
-        response_mask = torch.stack(response_masks)  # [b, max_len]
-        ref_logprobs = torch.stack(ref_logprobs_list)  # [b, max_len]
-        advantages = torch.tensor(advantages_list).unsqueeze(-1)  # [b, 1]
-
-        # Input is all tokens
-        input = {"tokens": all_tokens_tensor}
-
-        # Target includes response tokens (all tokens), ref_logprobs, advantages, and mask
+        # Create input and target dicts
+        input = {"tokens": all_tokens}
         target = {
-            "response": all_tokens_tensor,  # Use all tokens as response
+            "input_ids": all_tokens,  # For torch.roll in loss
+            "loss_mask": loss_masks,  # Trainable positions
             "ref_logprobs": ref_logprobs,
             "advantages": advantages,
-            "padding_mask": response_mask,
         }
 
         inputs.append(input)
@@ -949,35 +1212,282 @@ def collate(
 
 
 def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
+    logits: torch.Tensor,  # [b, seq_len, vocab]
+    input_ids: torch.Tensor,  # [b, seq_len]
+    loss_mask: torch.Tensor,  # [b, seq_len] float
+    ref_logprobs: torch.Tensor,  # [b, seq_len]
+    advantages: torch.Tensor,  # [b, 1]
     beta: float = 0.1,
 ) -> torch.Tensor:
     """
-    Simple GRPO loss function.
+    GRPO loss with proper next-token prediction using torch.roll.
+
+    Per-sequence normalization: Each sequence's loss is averaged by its own
+    trainable token count, then averaged across the batch.
 
     Args:
-        logits: Model logits [b, s, v]
-        response: Response tokens [b, s]
-        ref_logprobs: Reference model logprobs [b, s]
+        logits: Model logits [b, seq_len, vocab_size]
+        input_ids: Input token IDs [b, seq_len]
+        loss_mask: Loss mask [b, seq_len] - 1.0 for trainable positions
+        ref_logprobs: Reference logprobs [b, seq_len]
         advantages: Advantages [b, 1]
-        padding_mask: Mask for valid tokens [b, s]
         beta: KL penalty coefficient
 
     Returns:
         Loss scalar
     """
-    logprobs: torch.Tensor = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
+    # Create targets using utility function
+    targets = create_shifted_targets(input_ids, loss_mask)  # [b, seq_len]
+
+    # Compute policy logprobs (ignore_index automatically zeros masked positions)
+    logprobs = compute_logprobs(
+        logits, targets, ignore_index=CROSS_ENTROPY_IGNORE_IDX
+    )  # [b, seq_len] - masked positions already 0.0!
+
+    # ========================================================================
+    # LOGGING: Input validation
+    # ========================================================================
+    record_metric("loss_debug/batch_size", float(input_ids.shape[0]), Reduce.MEAN)
+    record_metric("loss_debug/seq_len", float(input_ids.shape[1]), Reduce.MEAN)
+    record_metric(
+        "loss_debug/num_trainable_tokens", loss_mask.sum().item(), Reduce.MEAN
+    )
+    record_metric("loss_debug/targets_min", targets.float().min().item(), Reduce.MEAN)
+    record_metric("loss_debug/targets_max", targets.float().max().item(), Reduce.MEAN)
+
+    # ========================================================================
+    # LOGGING: Logprobs statistics
+    # ========================================================================
+    # Mask logprobs for stats (only look at trainable positions)
+    masked_logprobs = logprobs * loss_mask
+    masked_ref_logprobs = ref_logprobs * loss_mask
+    num_trainable = loss_mask.sum().clamp(min=1.0)
+
+    record_metric(
+        "loss_debug/logprobs_mean",
+        (masked_logprobs.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_min",
+        logprobs[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_max",
+        logprobs[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_std",
+        logprobs[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    record_metric(
+        "loss_debug/ref_logprobs_mean",
+        (masked_ref_logprobs.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_min",
+        ref_logprobs[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_max",
+        ref_logprobs[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_std",
+        ref_logprobs[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # Logprob difference
+    logprob_diff = ref_logprobs - logprobs
+    masked_logprob_diff = logprob_diff * loss_mask
+    record_metric(
+        "loss_debug/logprob_diff_mean",
+        (masked_logprob_diff.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprob_diff_min",
+        logprob_diff[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprob_diff_max",
+        logprob_diff[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # KL divergence (masked positions are 0.0, so they don't contribute)
+    # Following VERL's approach: clip log difference before exp for numerical stability
+    # See: verl/trainer/ppo/core_algos.py kl_penalty_forward()
+    logprob_diff_clipped = torch.clamp(logprob_diff, min=-20.0, max=20.0)
+    kl = torch.exp(logprob_diff_clipped) - logprob_diff_clipped - 1
+    # Clip final KL to prevent extreme values
+    kl = torch.clamp(kl, min=-10.0, max=10.0)
+
+    # ========================================================================
+    # LOGGING: KL divergence statistics
+    # ========================================================================
+    masked_kl = kl * loss_mask
+    record_metric(
+        "loss_debug/kl_mean", (masked_kl.sum() / num_trainable).item(), Reduce.MEAN
+    )
+    record_metric(
+        "loss_debug/kl_min",
+        kl[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/kl_max",
+        kl[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/kl_std",
+        kl[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/beta_times_kl_mean",
+        (beta * masked_kl.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+
+    # ========================================================================
+    # LOGGING: Advantages statistics
+    # ========================================================================
+    record_metric("loss_debug/advantages_mean", advantages.mean().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_min", advantages.min().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_max", advantages.max().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_std", advantages.std().item(), Reduce.MEAN)
+
+    # Policy loss
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
+    per_token_loss = -(per_token_policy_loss - beta * kl)  # [b, seq_len]
+
+    # ========================================================================
+    # LOGGING: Per-token loss statistics
+    # ========================================================================
+    masked_policy_loss = per_token_policy_loss * loss_mask
+    masked_per_token_loss = per_token_loss * loss_mask
+
+    record_metric(
+        "loss_debug/policy_loss_mean",
+        (masked_policy_loss.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/policy_loss_min",
+        (
+            per_token_policy_loss[loss_mask.bool()].min().item()
+            if num_trainable > 0
+            else 0.0
+        ),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/policy_loss_max",
+        (
+            per_token_policy_loss[loss_mask.bool()].max().item()
+            if num_trainable > 0
+            else 0.0
+        ),
+        Reduce.MEAN,
+    )
+
+    record_metric(
+        "loss_debug/per_token_loss_mean",
+        (masked_per_token_loss.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/per_token_loss_min",
+        per_token_loss[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/per_token_loss_max",
+        per_token_loss[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # Masked average (per sample, then batch average)
     loss = (
-        (per_token_loss * padding_mask).sum(dim=1)
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
+        (per_token_loss * loss_mask).sum(dim=1) / loss_mask.sum(dim=1).clamp(min=1.0)
     ).mean()
+
+    # ========================================================================
+    # LOGGING: Final loss
+    # ========================================================================
+    record_metric("loss_debug/final_loss", loss.item(), Reduce.MEAN)
+
+    # ========================================================================
+    # EMERGENCY DUMP: If any value is huge, save tensors to file
+    # ========================================================================
+    huge_threshold = 1000.0
+    all_stats = [
+        ("logprobs_mean", (masked_logprobs.sum() / num_trainable).item()),
+        ("ref_logprobs_mean", (masked_ref_logprobs.sum() / num_trainable).item()),
+        ("kl_mean", (masked_kl.sum() / num_trainable).item()),
+        ("kl_max", kl[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0),
+        ("advantages_mean", advantages.mean().item()),
+        ("advantages_max", advantages.max().item()),
+        ("policy_loss_mean", (masked_policy_loss.sum() / num_trainable).item()),
+        (
+            "policy_loss_max",
+            (
+                per_token_policy_loss[loss_mask.bool()].max().item()
+                if num_trainable > 0
+                else 0.0
+            ),
+        ),
+        ("per_token_loss_mean", (masked_per_token_loss.sum() / num_trainable).item()),
+        (
+            "per_token_loss_max",
+            per_token_loss[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        ),
+        ("final_loss", loss.item()),
+    ]
+
+    for name, value in all_stats:
+        if abs(value) > huge_threshold:
+            # Save all tensors to file for debugging
+            import datetime
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            dump_file = f"/tmp/grpo_loss_debug_{timestamp}.pt"
+            torch.save(
+                {
+                    "logits": logits.cpu(),
+                    "input_ids": input_ids.cpu(),
+                    "targets": targets.cpu(),
+                    "loss_mask": loss_mask.cpu(),
+                    "logprobs": logprobs.cpu(),
+                    "ref_logprobs": ref_logprobs.cpu(),
+                    "advantages": advantages.cpu(),
+                    "kl": kl.cpu(),
+                    "per_token_policy_loss": per_token_policy_loss.cpu(),
+                    "per_token_loss": per_token_loss.cpu(),
+                    "loss": loss.cpu(),
+                    "beta": beta,
+                    "trigger_stat": name,
+                    "trigger_value": value,
+                },
+                dump_file,
+            )
+            print(f"\n{'='*80}")
+            print(f"⚠️  HUGE VALUE DETECTED: {name} = {value:.2f}")
+            print(f"Dumped all tensors to: {dump_file}")
+            print(f"{'='*80}\n")
+            break  # Only dump once
+
     return loss
 
 
@@ -1005,49 +1515,73 @@ async def drop_weights(version: int):
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
 
-    # ---- Start OpenSpiel Server ---- #
+    # ---- Start Multiple OpenSpiel Servers (one per rollout thread) ---- #
     game_name = cfg.blackjack_env.game_name
-    server_port = cfg.blackjack_env.server_port
+    base_server_port = cfg.blackjack_env.server_port
+    num_rollout_threads = cfg.get("rollout_threads", 1)
 
-    # Clean up any existing server on this port
-    if kill_process_on_port(server_port):
-        print(f"Cleaned up existing server on port {server_port}")
+    # Start one server per rollout thread to avoid race conditions
+    server_processes = []
+    server_ports = []
 
-    print(f"Starting OpenSpiel server for game '{game_name}' on port {server_port}...")
-    server_process = multiprocessing.Process(
-        target=start_openspiel_server, args=(game_name, server_port)
-    )
-    server_process.start()
+    for i in range(num_rollout_threads):
+        server_port = base_server_port + i
+        server_ports.append(server_port)
 
-    # Wait for server to be ready
-    print("Waiting for OpenSpiel server to be ready...")
-    server_ready = False
-    for i in range(30):  # Try for 30 seconds
-        if not server_process.is_alive():
-            print(f"[ERROR] Server process died unexpectedly!")
-            print(f"[ERROR] Exit code: {server_process.exitcode}")
-            raise RuntimeError(
-                f"OpenSpiel server process crashed during startup (exit code: {server_process.exitcode})"
-            )
+        # Clean up any existing server on this port
+        if kill_process_on_port(server_port):
+            print(f"Cleaned up existing server on port {server_port}")
 
-        try:
-            resp = requests.get(
-                f"http://localhost:{server_port}/health",
-                timeout=1,
-                proxies={"http": None, "https": None},
-            )
-            print(f"[DEBUG] Health check attempt {i+1}: status={resp.status_code}")
-            if resp.status_code == 200:
-                server_ready = True
-                print(f"✓ OpenSpiel server ready (took {i+1}s)")
+        print(
+            f"Starting OpenSpiel server {i} for game '{game_name}' on port {server_port}..."
+        )
+        server_process = multiprocessing.Process(
+            target=start_openspiel_server, args=(game_name, server_port)
+        )
+        server_process.start()
+        server_processes.append(server_process)
+
+    # Wait for all servers to be ready
+    print(f"Waiting for {num_rollout_threads} OpenSpiel servers to be ready...")
+    all_ready = True
+    for i, server_port in enumerate(server_ports):
+        server_ready = False
+        for attempt in range(30):  # Try for 30 seconds per server
+            if not server_processes[i].is_alive():
+                print(f"[ERROR] Server {i} process died unexpectedly!")
+                print(f"[ERROR] Exit code: {server_processes[i].exitcode}")
+                all_ready = False
                 break
-        except Exception as e:
-            print(f"[DEBUG] Health check attempt {i+1} failed: {type(e).__name__}: {e}")
-            time.sleep(1)
 
-    if not server_ready:
-        server_process.terminate()
-        raise RuntimeError(f"OpenSpiel server never became ready on port {server_port}")
+            try:
+                resp = requests.get(
+                    f"http://localhost:{server_port}/health",
+                    timeout=1,
+                    proxies={"http": None, "https": None},
+                )
+                if resp.status_code == 200:
+                    server_ready = True
+                    print(
+                        f"✓ OpenSpiel server {i} ready on port {server_port} (took {attempt+1}s)"
+                    )
+                    break
+            except Exception as e:
+                if attempt == 0:
+                    print(
+                        f"[DEBUG] Server {i} health check attempt {attempt+1} failed: {type(e).__name__}"
+                    )
+                time.sleep(1)
+
+        if not server_ready:
+            print(f"[ERROR] Server {i} never became ready on port {server_port}")
+            all_ready = False
+            break
+
+    if not all_ready:
+        # Clean up all servers and exit
+        for process in server_processes:
+            process.terminate()
+        raise RuntimeError("Failed to start all OpenSpiel servers")
 
     # ---- Global setups ---- #
     provisioner = None
@@ -1067,23 +1601,29 @@ async def main(cfg: DictConfig):
         "model": cfg.blackjack_env.model,
     }
 
+    # First, initialize env_actor to get pad_id
+    env_actor = await EnvironmentActor.options(**cfg.actors.blackjack_env).as_actor(
+        **env_actor_config
+    )
+    pad_id = await env_actor.pad_token.call_one()
+
+    # Create collate function with pad_id
+    collate_fn = partial(collate, pad_id=pad_id)
+
+    # Now initialize remaining services
     (
-        env_actor,
         policy,
         trainer,
         replay_buffer,
         compute_advantages,
         ref_model,
     ) = await asyncio.gather(
-        EnvironmentActor.options(**cfg.actors.blackjack_env).as_actor(
-            **env_actor_config
-        ),
         Generator.options(**cfg.services.policy).as_service(**cfg.policy),
         TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
-            **cfg.replay_buffer, collate=collate
+            **cfg.replay_buffer, collate=collate_fn
         ),
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
@@ -1117,46 +1657,67 @@ async def main(cfg: DictConfig):
     except Exception as e:
         raise RuntimeError(f"Policy warmup failed: {e}")
 
-    # ---- Test OpenSpiel server ---- #
-    print("Testing OpenSpiel server connection...")
-    test_env = OpenSpielEnv(base_url=cfg.blackjack_env.server_url)
-    test_env._http.trust_env = False
-    try:
-        print(
-            f"[DEBUG] Test env base_url={test_env._base}, timeout={test_env._timeout}"
-        )
-        print(f"[DEBUG] Test env trust_env={test_env._http.trust_env}")
-        print(f"[DEBUG] Calling test_env.reset()...")
-        test_result = test_env.reset()
-        print(
-            f"✓ OpenSpiel server test successful, legal_actions={test_result.observation.legal_actions}"
-        )
-        test_env.close()
-    except Exception as e:
-        print(f"[ERROR] OpenSpiel server test failed: {type(e).__name__}: {e}")
-        import traceback
+    # ---- Test OpenSpiel servers ---- #
+    print("Testing OpenSpiel server connections...")
+    for i, server_port in enumerate(server_ports):
+        test_url = f"http://localhost:{server_port}"
+        test_env = OpenSpielEnv(base_url=test_url)
+        test_env._http.trust_env = False
+        try:
+            test_result = test_env.reset()
+            print(
+                f"✓ Server {i} test successful (port {server_port}), legal_actions={test_result.observation.legal_actions}"
+            )
+            test_env.close()
+        except Exception as e:
+            print(f"[ERROR] Server {i} test failed: {type(e).__name__}: {e}")
+            import traceback
 
-        traceback.print_exc()
-        raise RuntimeError(f"OpenSpiel server test failed: {e}")
+            traceback.print_exc()
+            # Clean up all servers
+            for process in server_processes:
+                process.terminate()
+            raise RuntimeError(f"OpenSpiel server {i} test failed: {e}")
 
     # ---- Core RL loops ---- #
-    async def continuous_rollouts():
+    async def continuous_rollouts(thread_id: int):
         """Main GRPO rollout loop using new architecture."""
         rollout_count = 0
         pad_id = await env_actor.pad_token.call_one()
         tokenizer = await env_actor.get_tokenizer.call_one()
 
-        # Config
-        server_url = cfg.blackjack_env.server_url
+        # Config - use dedicated server for this thread
+        server_url = f"http://localhost:{server_ports[thread_id]}"
         max_seq_len = cfg.blackjack_env.max_seq_len
         max_turns = cfg.blackjack_env.max_turns
         group_size = cfg.group_size
+
+        print(f"[Thread {thread_id}] Using server at {server_url}")
 
         # Initial messages
         initial_messages = [
             {
                 "role": "system",
-                "content": "You are an expert BlackJack player. Output only 'HIT' or 'STAND'. You must think briefly. Do not think for long.",
+                "content": """You are an expert Blackjack player.
+
+GOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).
+
+RULES:
+- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value
+- If you go over 21, you bust and lose immediately
+- The dealer plays after you and must hit until reaching 17+
+
+ACTIONS:
+- HIT: Take another card (increases your hand total)
+- STAND: Keep your current hand and end your turn
+
+WIN CONDITIONS:
+- Your hand is closer to 21 than the dealer's final hand
+- Dealer busts (goes over 21) and you don't
+- You get exactly 21
+
+IMPORTANT: You MUST output your action in the following format:
+<answer>HIT</answer> or <answer>STAND</answer>""",
             }
         ]
 
@@ -1165,23 +1726,66 @@ async def main(cfg: DictConfig):
             t.start()
 
             # ============ Step 1: Create environments ============
-            envs = [BlackjackEnv(server_url=server_url) for _ in range(group_size)]
+            # Run games SEQUENTIALLY to avoid race conditions on shared server
+            # (each thread has its own server, but games within a thread share it)
 
-            # ============ Step 2: Rollout group ============
-            episodes = await do_group_rollout(
-                envs=envs,
-                policy=policy,
-                tokenizer=tokenizer,
-                max_seq_len=max_seq_len,
-                max_turns=max_turns,
-                messages=initial_messages,
-            )
+            # ============ Step 2: Rollout group (SEQUENTIALLY) ============
+            episodes = []
+            for i in range(group_size):
+                env = BlackjackEnv(server_url=server_url)
+                game_id = f"game_{i}_{uuid.uuid4().hex[:8]}"
+
+                episode = await do_single_rollout(
+                    env=env,
+                    policy=policy,
+                    tokenizer=tokenizer,
+                    max_seq_len=max_seq_len,
+                    max_turns=max_turns,
+                    messages=initial_messages,
+                    game_id=game_id,
+                )
+                episodes.append(episode)
 
             t.step("play_games")
+
+            # ============ Debug: Print first episode ============
+            if episodes:
+                ep = episodes[0]
+                print(f"\n{'='*80}")
+                print(f"[ROLLOUT {rollout_count}] Episode 0 Debug Info")
+                print(f"{'='*80}")
+                print(
+                    f"Reward: {ep.reward}, Truncated: {ep.is_truncated}, Turns: {ep.metadata.get('num_turns', '?')}"
+                )
+                print(
+                    f"Total tokens: {len(ep.all_token_ids)}, Trainable tokens: {ep.response_mask.sum().item()}"
+                )
+                print(f"\n--- Messages ---")
+                for i, msg in enumerate(ep.message_log):
+                    content_preview = (
+                        msg["content"][:100] + "..."
+                        if len(msg["content"]) > 100
+                        else msg["content"]
+                    )
+                    print(f"  [{i}] {msg['role']:10s}: {content_preview}")
+                print(f"\n--- Decoded all_token_ids ---")
+                decoded_text = tokenizer.decode(ep.all_token_ids.tolist())
+                print(decoded_text)
+
+                print(f"{'='*80}\n")
+                print(f"\n--- decoded_response_text ---")
+                decoded_response_text = tokenizer.decode(
+                    ep.all_token_ids[ep.response_mask].tolist()
+                )
+                print(decoded_response_text)
+                print(f"{'='*80}\n")
 
             # ============ Step 3: Filter groups (constant rewards) ============
             rewards = [e.reward for e in episodes]
             if len(set(rewards)) == 1:
+                print(
+                    f"[ROLLOUT {rollout_count}] ⚠️  DROPPED GROUP - All {len(episodes)} episodes have same reward: {rewards[0]}"
+                )
                 record_metric("groups/rate_dropped", 1, Reduce.MEAN)
                 rollout_count += 1
                 t.stop()
@@ -1189,47 +1793,46 @@ async def main(cfg: DictConfig):
             record_metric("groups/rate_dropped", 0, Reduce.MEAN)
 
             # ============ Step 4: Compute ref_model ============
-            print(f"\n[continuous_rollouts] Preparing ref_model input")
             max_len = max(len(e.all_token_ids) for e in episodes)
-            print(f"  Max episode length: {max_len}")
-            print(f"  Max seq len config: {max_seq_len}")
+
+            # Pad input_ids and loss_masks
+            padded_input_ids = []
+            padded_loss_masks = []
 
             for i, e in enumerate(episodes):
-                print(
-                    f"  Episode {i}: tokens={len(e.all_token_ids)}, truncated={e.is_truncated}"
-                )
-                if len(e.all_token_ids) > max_seq_len:
-                    print(
-                        f"    ❌ Episode {i} EXCEEDS max_seq_len by {len(e.all_token_ids) - max_seq_len}!"
-                    )
+                seq_len = len(e.all_token_ids)
+                pad_len = max_len - seq_len
 
-            padded_tokens = [
-                F.pad(
-                    e.all_token_ids, (0, max_len - len(e.all_token_ids)), value=pad_id
-                )
-                for e in episodes
-            ]
-            input_ids = torch.stack(padded_tokens)
+                # Pad tokens
+                padded_tokens = F.pad(e.all_token_ids, (0, pad_len), value=pad_id)
+                padded_input_ids.append(padded_tokens)
 
-            print(f"  input_ids shape: {input_ids.shape}")
-            print(f"  Calling ref_model with max_req_tokens=0")
+                # Pad loss_mask
+                padded_mask = F.pad(e.loss_mask, (0, pad_len), value=0.0)
+                padded_loss_masks.append(padded_mask)
 
-            if input_ids.shape[1] > max_seq_len:
-                print(
-                    f"  ❌❌❌ input_ids seq_len={input_ids.shape[1]} EXCEEDS max_seq_len={max_seq_len}!"
-                )
-                print(f"  This will cause RoPE assertion error in the model!")
+            input_ids = torch.stack(padded_input_ids)  # [batch, max_len]
+            loss_mask_batch = torch.stack(padded_loss_masks)  # [batch, max_len]
 
+            # Call ref_model with loss_mask - returns [batch, max_len]
             ref_logprobs_padded = await ref_model.forward.route(
-                input_ids, 0, return_logprobs=True
+                input_ids, return_logprobs=True, loss_mask=loss_mask_batch
             )
+
             t.step("reference_model_calculate_logprobs")
 
+            # Assign ref_logprobs to episodes (unpad to original length)
             for i, episode in enumerate(episodes):
                 seq_len = len(episode.all_token_ids)
-                episode.ref_logprobs = ref_logprobs_padded[i, :seq_len]
+                episode.ref_logprobs = ref_logprobs_padded[i, :seq_len]  # [seq_len]
+                # Verify shape matches other tensors
+                assert (
+                    episode.ref_logprobs.shape
+                    == episode.loss_mask.shape
+                    == episode.all_token_ids.shape
+                ), f"Shape mismatch in episode {i}"
 
-            del ref_logprobs_padded, input_ids
+            del ref_logprobs_padded, input_ids, loss_mask_batch
 
             # ============ Step 5: Compute advantages ============
             advantages = await compute_advantages.compute.call_one(episodes)
@@ -1257,6 +1860,12 @@ async def main(cfg: DictConfig):
                 Reduce.MEAN,
             )
 
+            # Log buffer additions
+            if accepted:
+                print(
+                    f"[BUFFER ADD] Added {len(accepted)}/{len(episodes)} episodes with policy_v={accepted[0].policy_version}"
+                )
+
             rollout_count += 1
             record_metric(
                 "main/continuous_rollouts/count_rollout_iterations", 1, Reduce.SUM
@@ -1278,9 +1887,15 @@ async def main(cfg: DictConfig):
                 curr_policy_version=training_step
             )
             if batch is None:
-                await asyncio.sleep(0.1)
+                # Log only when stuck after initial training
+                if training_step > 2 and training_step % 5 == 0:
+                    print(
+                        f"[TRAINING] Step {training_step}: Waiting for buffer to have enough data..."
+                    )
+                await asyncio.sleep(1.0)
             else:
                 t.step("waiting_for_buffer")
+                print(f"[TRAINING] Step {training_step}: Starting training")
 
                 inputs, targets = batch
                 await trainer.train_step.call(inputs, targets)
@@ -1310,7 +1925,8 @@ async def main(cfg: DictConfig):
     num_rollout_threads = cfg.rollout_threads
     print(f"Starting GRPO with {num_rollout_threads} rollout threads")
     rollout_tasks = [
-        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+        asyncio.create_task(continuous_rollouts(thread_id=i))
+        for i in range(num_rollout_threads)
     ]
     training_task = asyncio.create_task(continuous_training())
 
@@ -1349,15 +1965,16 @@ async def main(cfg: DictConfig):
         except asyncio.TimeoutError:
             print("⚠ Forge shutdown timed out after 10s, forcing exit...")
 
-        # Shutdown OpenSpiel server
-        print("Stopping OpenSpiel server...")
-        server_process.terminate()
-        server_process.join(timeout=2)
-        if server_process.is_alive():
-            print("⚠ Server didn't stop gracefully, killing...")
-            server_process.kill()
-            server_process.join(timeout=1)
-        print("✓ OpenSpiel server stopped")
+        # Shutdown OpenSpiel servers
+        print(f"Stopping {len(server_processes)} OpenSpiel servers...")
+        for i, server_process in enumerate(server_processes):
+            server_process.terminate()
+            server_process.join(timeout=2)
+            if server_process.is_alive():
+                print(f"⚠ Server {i} didn't stop gracefully, killing...")
+                server_process.kill()
+                server_process.join(timeout=1)
+        print("✓ All OpenSpiel servers stopped")
 
 
 if __name__ == "__main__":

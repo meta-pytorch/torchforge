@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import threading
 from enum import Enum
 
 
@@ -78,17 +79,22 @@ class TokenAccumulator:
             ...)
     """
 
+    # Class-level lock for thread-safe tokenizer access across all instances
+    _tokenizer_lock = threading.Lock()
+
     def __init__(
         self,
         tokenizer,
         messages: list[dict],
         max_seq_len: int,
         eos_token_id: int,
+        enable_thinking: bool = True,
         sanity_check_mode: SanityCheckMode = SanityCheckMode.STRICT,
     ):
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.eos_token_id = eos_token_id
+        self.enable_thinking = enable_thinking
         self.sanity_check_mode = sanity_check_mode
 
         # Core state
@@ -120,7 +126,8 @@ class TokenAccumulator:
 
         if user_tokens:
             self.messages.append({"role": "user", "content": content})
-            self._accumulate(user_tokens, is_response=False)
+            mask = [False] * len(user_tokens)
+            self._accumulate(user_tokens, mask=mask)
 
         return len(user_tokens) == original_len
 
@@ -147,21 +154,36 @@ class TokenAccumulator:
         else:
             self.messages.append({"role": "assistant", "content": response_text})
 
-        # Map logprobs: vLLM returns content tokens only, align from end (EOS)
-        if response_logprobs and len(response_logprobs) == len(response_token_ids):
-            prefix_len = len(assistant_tokens) - len(response_token_ids)
+        # Use pre-calculated generation_prompt_len for prefix
+        # assistant_tokens includes prefix + content, so we mask prefix as False
+        prefix_len = self.generation_prompt_len
+        mask = [False] * prefix_len + [True] * (len(assistant_tokens) - prefix_len)
+
+        # Map logprobs: vLLM returns content tokens only, pad at start for prefix
+        if (
+            response_logprobs
+            and len(response_logprobs) <= len(assistant_tokens) - prefix_len
+        ):
             logprobs = [0.0] * prefix_len + response_logprobs
+            # Pad any remaining tokens after vLLM tokens (e.g., trailing newline)
+            remaining = len(assistant_tokens) - prefix_len - len(response_logprobs)
+            if remaining > 0:
+                logprobs.extend([0.0] * remaining)
         else:
             logprobs = None
 
-        self._accumulate(assistant_tokens, is_response=True, logprobs=logprobs)
+        self._accumulate(assistant_tokens, mask=mask, logprobs=logprobs)
         return True
 
     def format_prompt(self) -> str:
         """Format current conversation for generation."""
-        return self.tokenizer.apply_chat_template(
-            self.messages, add_generation_prompt=True, tokenize=False
-        )
+        with self._tokenizer_lock:
+            return self.tokenizer.apply_chat_template(
+                self.messages,
+                add_generation_prompt=True,
+                tokenize=False,
+                enable_thinking=self.enable_thinking,
+            )
 
     def get_remaining_budget(self) -> int:
         """
@@ -213,19 +235,29 @@ class TokenAccumulator:
 
         # Length of anchor without generation prompt
         anchor_tokens = self.tokenizer.apply_chat_template(
-            self.anchor, add_generation_prompt=False, tokenize=True
+            self.anchor,
+            add_generation_prompt=False,
+            tokenize=True,
+            enable_thinking=self.enable_thinking,
         )
         self.anchor_len = len(anchor_tokens)
 
-        # Length of anchor WITH generation prompt - difference is the prompt overhead
+        # Length of anchor WITH generation prompt (VERL approach)
         anchor_with_gen = self.tokenizer.apply_chat_template(
-            self.anchor, add_generation_prompt=True, tokenize=True
+            self.anchor,
+            add_generation_prompt=True,
+            tokenize=True,
+            enable_thinking=self.enable_thinking,
         )
-        self.generation_prompt_len = len(anchor_with_gen) - self.anchor_len
+        self.anchor_with_gen_len = len(anchor_with_gen)
+        self.generation_prompt_len = self.anchor_with_gen_len - self.anchor_len
 
         # System message length alone (for user message delta slicing), e.g. full[self.system_len:]
         system_tokens = self.tokenizer.apply_chat_template(
-            [system_msg], add_generation_prompt=False, tokenize=True
+            [system_msg],
+            add_generation_prompt=False,
+            tokenize=True,
+            enable_thinking=self.enable_thinking,
         )
         self.system_len = len(system_tokens)
 
@@ -235,7 +267,10 @@ class TokenAccumulator:
             return
 
         initial_tokens = self.tokenizer.apply_chat_template(
-            messages, add_generation_prompt=False, tokenize=True
+            messages,
+            add_generation_prompt=False,
+            tokenize=True,
+            enable_thinking=self.enable_thinking,
         )
 
         if len(initial_tokens) > self.max_seq_len:
@@ -243,20 +278,26 @@ class TokenAccumulator:
             initial_tokens = initial_tokens[: self.max_seq_len]
 
         self.messages = messages.copy()
-        self._accumulate(initial_tokens, is_response=False)
+        mask = [False] * len(initial_tokens)
+        self._accumulate(initial_tokens, mask=mask)
 
     def _tokenize_delta(self, message: dict, role: str) -> list[int]:
         """Tokenize single message using anchor conversation."""
         if role == "assistant":
             temp = [self.anchor[0], {"role": "user", "content": ""}, message]
+            # Slice from anchor_len to include prefix tokens in accumulated_tokens
             offset = self.anchor_len
         else:  # user
             temp = [self.anchor[0], message]
             offset = self.system_len
 
-        full = self.tokenizer.apply_chat_template(
-            temp, add_generation_prompt=False, tokenize=True
-        )
+        with self._tokenizer_lock:
+            full = self.tokenizer.apply_chat_template(
+                temp,
+                add_generation_prompt=False,
+                tokenize=True,
+                enable_thinking=self.enable_thinking,
+            )
         return full[offset:]
 
     def _truncate_to_fit(
@@ -272,11 +313,11 @@ class TokenAccumulator:
         return tokens
 
     def _accumulate(
-        self, tokens: list[int], is_response: bool, logprobs: list[float] | None = None
+        self, tokens: list[int], mask: list[bool], logprobs: list[float] | None = None
     ):
         """Add tokens to accumulator."""
         self.accumulated_tokens.extend(tokens)
-        self.response_mask.extend([int(is_response)] * len(tokens))
+        self.response_mask.extend(mask)
         self.logprobs.extend(logprobs or [0.0] * len(tokens))
 
     def _mark_truncated(self, reason: TruncationReason) -> bool:
@@ -304,7 +345,10 @@ class TokenAccumulator:
         May fail with chat templates that modify history (e.g., Qwen deletes <think> tokens from older messages. This would cause a disparate between accumulated tokens and tokenized messages, since we accumulated the tokens with the <think> tokens).
         """
         ground_truth = self.tokenizer.apply_chat_template(
-            self.messages, add_generation_prompt=False, tokenize=True
+            self.messages,
+            add_generation_prompt=False,
+            tokenize=True,
+            enable_thinking=self.enable_thinking,
         )
 
         if len(self.accumulated_tokens) == len(ground_truth):
