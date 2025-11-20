@@ -248,8 +248,8 @@ class MastLauncher(BaseLauncher):
             scheduler_args={
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
-                "hpcClusterUuid": "MastProdCluster",
-                "rmAttribution": "pytorch4all_clients_approved",
+                "hpcClusterUuid": "MastGenAICluster",
+                "rmAttribution": "msl_infra_hw_enab_agentrl",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
