@@ -136,6 +136,13 @@ class ReferenceModel(ForgeActor):
         Args:
             input_ids: Input token ids [batch, seq_len]
             return_logprobs: Whether to return logprobs
+                return_logprobs flag significantly impacts the amount of data transferred to the caller:
+                - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
+                This includes the full vocabulary distribution for each token position.
+
+                - When True: Returns log probabilities with shape [group_size, req_length].
+                This only includes probabilities for the request tokens, significantly reducing memory
+                usage and transfer overhead.
             loss_mask: Optional mask for which positions to compute logprobs [batch, seq_len]
         """
         # Record reference model metrics
