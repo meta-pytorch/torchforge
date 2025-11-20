@@ -1,0 +1,1949 @@
+Warning: setting HYPERACTOR_CODEC_MAX_FRAME_LENGTH since this needs to be set to enable large RPC calls via Monarch
+INFO 11-20 14:04:03 [__init__.py:235] Automatically detected platform cuda.
+Using game string: blackjack
+[SERVER] Starting uvicorn for game 'blackjack' on port 9000
+INFO:     Started server process [608036]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9000 (Press CTRL+C to quit)
+✓ Started 1 OpenSpiel server(s)
+Launcher not provided, remote allocations will not work.
+wandb: Currently logged in as: felipemello (cabernet-team) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run ae4ah9u2
+wandb: Tracking run with wandb version 0.23.0
+wandb: Run data is saved locally in /home/felipemello/forge/wandb/run-20251120_140408-ae4ah9u2
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run genial-monkey-94
+wandb: ⭐️ View project at https://wandb.ai/cabernet-team/blackjack-grpo
+wandb: 🚀 View run at https://wandb.ai/cabernet-team/blackjack-grpo/runs/ae4ah9u2
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Spawning service Generator
+Spawning actor TitanTrainer
+Spawning actor ReplayBuffer
+Spawning actor ComputeAdvantages
+Spawning service ReferenceModel
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:19 INFO[0m Compiling loss
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:21 INFO[0m Building 0-D device mesh with [], []
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:21 INFO[0m [GC] Initial GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m Total parameter count: dense 2,031,739,904, sparse 0, active 2,031,739,904
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m Applied selective activation checkpointing to the model
+NCCL version 2.27.5+cuda12.9
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to ./checkpoint
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m Mixed precision training is handled by AMP
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m loading from HF safetensors from --checkpoint.initial_load_path: /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:22 INFO[0m Loading the checkpoint from /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e.
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:23 INFO[0m [GC] GC collection for checkpoint loading. took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:04:23 INFO[0m Finished loading the checkpoint in 0.85 seconds.
+INFO 11-20 14:04:25 [__init__.py:235] Automatically detected platform cuda.
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:26 INFO[0m Building 0-D device mesh with [], []
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:26 INFO[0m [GC] Initial GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m Total parameter count: dense 2,031,739,904, sparse 0, active 2,031,739,904
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m Applied selective activation checkpointing to the model
+NCCL version 2.27.5+cuda12.9
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m Checkpointing active. Checkpoints will be loaded from and saved to
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m Mixed precision training is handled by AMP
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m loading from HF safetensors from --checkpoint.initial_load_path: /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:27 INFO[0m Loading the checkpoint from /home/felipemello/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e.
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:28 INFO[0m [GC] GC collection for checkpoint loading. took 0.04 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:04:28 INFO[0m Finished loading the checkpoint in 0.74 seconds.
+`torch_dtype` is deprecated! Use `dtype` instead!
+INFO 11-20 14:04:33 [config.py:1604] Using max model len 40960
+INFO 11-20 14:04:33 [config.py:2434] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 11-20 14:04:35 [__init__.py:235] Automatically detected platform cuda.
+WARNING 11-20 14:04:36 [multiproc_worker_utils.py:307] Reducing Torch parallelism from 192 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+[W1120 14:04:39.901188155 ProcessGroupNCCL.cpp:924] Warning: TORCH_NCCL_AVOID_RECORD_STREAMS is the default now, this environment variable is thus deprecated. (function operator())
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+INFO 11-20 14:04:39 [parallel_state.py:1102] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+WARNING 11-20 14:04:39 [topk_topp_sampler.py:59] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+INFO 11-20 14:04:39 [gpu_model_runner.py:1843] Starting to load model Qwen/Qwen3-1.7B...
+INFO 11-20 14:04:39 [gpu_model_runner.py:1875] Loading model from scratch...
+INFO 11-20 14:04:39 [cuda.py:290] Using Flash Attention backend on V1 engine.
+INFO 11-20 14:04:39 [weight_utils.py:296] Using model weights format ['*.safetensors']
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.84it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:00<00:00,  4.83it/s]
+
+INFO 11-20 14:04:40 [default_loader.py:262] Loading weights took 0.56 seconds
+INFO 11-20 14:04:40 [gpu_model_runner.py:1892] Model loading took 3.2152 GiB and 0.867346 seconds
+INFO 11-20 14:04:45 [backends.py:530] Using cache directory: /home/felipemello/.cache/vllm/torch_compile_cache/8e68fa2fc8/rank_0_0/backbone for vLLM's torch.compile
+INFO 11-20 14:04:45 [backends.py:541] Dynamo bytecode transform time: 4.06 s
+INFO 11-20 14:04:47 [backends.py:161] Directly load the compiled graph(s) for dynamic shape from the cache, took 1.508 s
+[-]E1120 14:04:49.512550 606018 hyperactor/src/channel/net.rs:872] error_msg:session unix:@AheperVhNM9ZF1MXJIhDujfz.14600378836878009827: failed to deliver message within timeout
+INFO 11-20 14:04:51 [monitor.py:34] torch.compile takes 4.06 s in total
+INFO 11-20 14:04:52 [gpu_worker.py:255] Available KV cache memory: 76.61 GiB
+INFO 11-20 14:04:52 [kv_cache_utils.py:833] GPU KV cache size: 717,264 tokens
+INFO 11-20 14:04:52 [kv_cache_utils.py:837] Maximum concurrency for 40,960 tokens per request: 17.51x
+Capturing CUDA graph shapes:   0%|          | 0/67 [00:00<?, ?it/s]Capturing CUDA graph shapes:   3%|▎         | 2/67 [00:00<00:03, 18.32it/s]Capturing CUDA graph shapes:   6%|▌         | 4/67 [00:00<00:08,  7.43it/s]Capturing CUDA graph shapes:  10%|█         | 7/67 [00:00<00:05, 10.11it/s]Capturing CUDA graph shapes:  13%|█▎        | 9/67 [00:01<00:07,  7.80it/s]Capturing CUDA graph shapes:  18%|█▊        | 12/67 [00:01<00:06,  8.39it/s]Capturing CUDA graph shapes:  19%|█▉        | 13/67 [00:01<00:06,  8.26it/s]Capturing CUDA graph shapes:  21%|██        | 14/67 [00:01<00:06,  8.44it/s]Capturing CUDA graph shapes:  24%|██▍       | 16/67 [00:01<00:06,  7.95it/s]Capturing CUDA graph shapes:  25%|██▌       | 17/67 [00:02<00:06,  7.23it/s]Capturing CUDA graph shapes:  30%|██▉       | 20/67 [00:02<00:05,  8.50it/s]Capturing CUDA graph shapes:  31%|███▏      | 21/67 [00:02<00:06,  7.63it/s]Capturing CUDA graph shapes:  34%|███▍      | 23/67 [00:02<00:04,  9.52it/s]Capturing CUDA graph shapes:  42%|████▏     | 28/67 [00:02<00:02, 16.52it/s]Capturing CUDA graph shapes:  48%|████▊     | 32/67 [00:02<00:01, 21.20it/s]Capturing CUDA graph shapes:  54%|█████▎    | 36/67 [00:03<00:01, 24.83it/s]Capturing CUDA graph shapes:  60%|█████▉    | 40/67 [00:03<00:00, 27.90it/s]Capturing CUDA graph shapes:  66%|██████▌   | 44/67 [00:03<00:00, 28.67it/s]Capturing CUDA graph shapes:  72%|███████▏  | 48/67 [00:03<00:00, 28.71it/s]Capturing CUDA graph shapes:  78%|███████▊  | 52/67 [00:03<00:00, 27.52it/s]Capturing CUDA graph shapes:  84%|████████▎ | 56/67 [00:03<00:00, 28.81it/s]Capturing CUDA graph shapes:  90%|████████▉ | 60/67 [00:03<00:00, 30.89it/s]Capturing CUDA graph shapes:  96%|█████████▌| 64/67 [00:03<00:00, 32.47it/s]Capturing CUDA graph shapes: 100%|██████████| 67/67 [00:03<00:00, 16.89it/s]
+INFO 11-20 14:04:58 [gpu_model_runner.py:2485] Graph capturing finished in 5 secs, took 1.89 GiB
+[-]E1120 14:05:03.344870 606018 hyperactor/src/channel/net.rs:872] error_msg:session unix:@AheperVhNM9ZF1MXJIhDujfz.14688674826839017762: failed to deliver message within timeout
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+INFO 11-20 14:05:10 [__init__.py:235] Automatically detected platform cuda.
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:1598: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.datetime.now.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0] Graph break from `Tensor.item()`, consider setting:
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]     torch._dynamo.config.capture_scalar_outputs = True
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0] or:
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]     env TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0] to include these operations in the captured graph.
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0] Graph break: from user code at:
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]   File "/home/felipemello/forge/apps/blackjack/main.py", line 526, in torch_dynamo_resume_in_simple_grpo_loss_at_524
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]     "loss_debug/num_trainable_tokens", loss_mask.sum().item(), Reduce.MEAN
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]
+[rank0]:W1120 14:05:16.315000 610714 site-packages/torch/_dynamo/variables/tensor.py:1048] [2/0]
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:17 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:19 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:20 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:22 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:24 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:25 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:27 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:29 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:30 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:30 INFO[0m Pushing weights for policy version 1
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:31 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:33 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:34 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:34 INFO[0m Completed weights push in 4.12 seconds
+[34m[Generator-0/1] 2025-11-20 14:05:34 INFO[0m [Generator] Fetching weights for v1 to shared memory
+INFO 11-20 14:05:38 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:05:38 INFO[0m Weight update completed (now v1)
+All services initialized successfully!
+Torchstore successfully initialized with local rank strategy
+Starting GRPO with 1 rollout threads
+[Thread 0] Using server at http://localhost:9000
+
+[ROLLOUT 0] Episode Debug
+Reward: -10.00, Tokens: 227, Trainable: 4, Truncated: False
+================================================================================
+TokenAccumulator: 227/227 tokens
+Trainable: 4/227 (1.8%)
+================================================================================
+
+Messages:
+  [0] system     'You are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without goi...'
+  [1] user       'Hand: 18, Dealer: 10'
+  [2] assistant  '<HIT>'
+
+Token stream:
+  [90m· <|im_start|>system\nYou are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).\n\nRULES:\n- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value\n- If you go over 21, you bust and lose immediately\n- The dealer plays after you and must hit until reaching 17+\n\nACTIONS:\n- HIT: Take another card (increases your hand total)\n- STAND: Keep your current hand and end your turn\n\nWIN CONDITIONS:\n- Your hand is closer to 21 than the dealer's final hand\n- Dealer busts (goes over 21) and you don't\n- You get exactly 21\n\nIMPORTANT: You MUST output your action in the following format:\n<answer>HIT</answer> or <answer>STAND</answer><|im_end|>\n<|im_start|>user\nHand: 18, Dealer: 10<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n[0m [92m✓ <HIT><|im_end|>[0m [90m· \n[0m
+================================================================================
+[TRAINING] Step 0: Starting training
+
+[ROLLOUT 10] Episode Debug
+Reward: -1.00, Tokens: 230, Trainable: 8, Truncated: False
+================================================================================
+TokenAccumulator: 230/230 tokens
+Trainable: 8/230 (3.5%)
+================================================================================
+
+Messages:
+  [0] system     'You are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without goi...'
+  [1] user       'Hand: 17, Dealer: 8'
+  [2] assistant  '<answer>HIT</answer>'
+
+Token stream:
+  [90m· <|im_start|>system\nYou are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).\n\nRULES:\n- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value\n- If you go over 21, you bust and lose immediately\n- The dealer plays after you and must hit until reaching 17+\n\nACTIONS:\n- HIT: Take another card (increases your hand total)\n- STAND: Keep your current hand and end your turn\n\nWIN CONDITIONS:\n- Your hand is closer to 21 than the dealer's final hand\n- Dealer busts (goes over 21) and you don't\n- You get exactly 21\n\nIMPORTANT: You MUST output your action in the following format:\n<answer>HIT</answer> or <answer>STAND</answer><|im_end|>\n<|im_start|>user\nHand: 17, Dealer: 8<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n[0m [92m✓ <answer>HIT</answer><|im_end|>[0m [90m· \n[0m
+================================================================================
+WandbBackend: Logged 126 metrics at step 1
+=== [global_reduce] - METRICS STEP 1 ===
+  buffer/add/count_episodes_added: 224.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 224.0
+  buffer/evict/sum_episodes_evicted: 0.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 1.0
+  buffer/sample/avg_sampled_policy_age: 0.0
+  buffer/sample/count_sample_requests: 57.0
+  buffer/sample/max_sampled_policy_age: 0.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 0.00013452353315395222
+  buffer_perf/sample/total_duration_max_s: 0.003208107315003872
+  episode/total_tokens: 251.07359307359306
+  episode/turns: 1.670995670995671
+  game/average_turns: 1.670995670995671
+  game/env_reward: -0.18614718614718614
+  game/games_played: 231.0
+  game/invalid_action_penalty: 35.0
+  game/invalid_action_rate: 0.09067357512953368
+  game/missing_answer_tags: 35.0
+  game/win_rate: 0.38095238095238093
+  generator/generate/avg_tokens_generated: 7.919689119170984
+  generator/generate/count_requests: 387.0
+  generator/generate/count_sequences_completed: 386.0
+  generator/generate/sum_tokens_generated: 3057.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 2.070949375629425
+  generator_perf/_fetch_weights/total_duration_max_s: 2.070949375629425
+  generator_perf/generate/generate/duration_avg_s: 0.036190518413800624
+  generator_perf/generate/generate/duration_max_s: 0.052950462341308596
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0009902085800862688
+  generator_perf/generate/process_inputs/duration_max_s: 0.021865663528442384
+  generator_perf/generate/total_duration_avg_s: 0.03726067725296731
+  generator_perf/generate/total_duration_max_s: 0.05419407831132412
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 2.066969017498195
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 2.066969017498195
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7281963536515832
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7281963536515832
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.0356719493865967
+  loss_debug/advantages_mean: 1.1175870895385742e-08
+  loss_debug/advantages_min: -3.0288517475128174
+  loss_debug/advantages_std: 0.9999687671661377
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.0
+  loss_debug/final_loss: -2.2351741790771484e-08
+  loss_debug/kl_max: 0.0
+  loss_debug/kl_mean: 0.0
+  loss_debug/kl_min: 0.0
+  loss_debug/kl_std: 0.0
+  loss_debug/logprob_diff_max: 2.3841812435421161e-07
+  loss_debug/logprob_diff_mean: 6.215537862175324e-09
+  loss_debug/logprob_diff_min: -1.1920926823449918e-07
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.04208068177103996
+  loss_debug/logprobs_min: -6.501502513885498
+  loss_debug/logprobs_std: 0.4528466761112213
+  loss_debug/num_trainable_tokens: 211.0
+  loss_debug/per_token_loss_max: 3.0288517475128174
+  loss_debug/per_token_loss_mean: -0.23551048338413239
+  loss_debug/per_token_loss_min: -1.0356719493865967
+  loss_debug/policy_loss_max: 1.0356719493865967
+  loss_debug/policy_loss_mean: 0.23551048338413239
+  loss_debug/policy_loss_min: -3.0288517475128174
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.042080678045749664
+  loss_debug/ref_logprobs_min: -6.501502513885498
+  loss_debug/ref_logprobs_std: 0.4528466761112213
+  loss_debug/seq_len: 293.0
+  loss_debug/targets_max: 151645.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 14.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 1.459522642793932
+  main_perf/continuous_rollouts/play_games/duration_max_s: 5.0866497019305825
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.3144628941746695
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.6669673463329673
+  main_perf/continuous_rollouts/total_duration_avg_s: 1.8157524533702858
+  main_perf/continuous_rollouts/total_duration_max_s: 5.804719903506339
+  main_perf/continuous_training/push_weights/duration_avg_s: 4.121600323356688
+  main_perf/continuous_training/push_weights/duration_max_s: 4.121600323356688
+  main_perf/continuous_training/total_duration_avg_s: 28.982652397826314
+  main_perf/continuous_training/total_duration_max_s: 28.982652397826314
+  main_perf/continuous_training/train_step/duration_avg_s: 16.031388712115586
+  main_perf/continuous_training/train_step/duration_max_s: 16.031388712115586
+  main_perf/continuous_training/update_weights/duration_avg_s: 3.0493497271090746
+  main_perf/continuous_training/update_weights/duration_max_s: 3.0493497271090746
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 5.780310088768601
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 5.780310088768601
+  reference_perf/forward/avg_sequence_length: 301.2857142857143
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.02357832741524492
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.05348016228526831
+  reference_perf/forward/count_forward_passes: 14.0
+  reference_perf/forward/forward/duration_avg_s: 0.2778362456842193
+  reference_perf/forward/forward/duration_max_s: 0.6030334224924445
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004796906640487058
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0007250197231769562
+  reference_perf/forward/memory_delta_end_start_avg_gb: 1.3665408747536796
+  reference_perf/forward/memory_peak_max_gb: 12.728936672210693
+  reference_perf/forward/to_device/duration_avg_s: 0.00015642294394118444
+  reference_perf/forward/to_device/duration_max_s: 0.0001846402883529663
+  reference_perf/forward/total_duration_avg_s: 0.30205346510878633
+  reference_perf/forward/total_duration_max_s: 0.657258945517242
+  rl_trainer/avg_loss: -2.2351741790771484e-08
+  rl_trainer/learning_rate: 1e-05
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005250964313745499
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005250964313745499
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0004981057718396187
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0004981057718396187
+  rl_trainer_perf/push_weights/total_duration_avg_s: 4.119459525682032
+  rl_trainer_perf/push_weights/total_duration_max_s: 4.119459525682032
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 4.118428040295839
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 4.118428040295839
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 15.965938549488783
+  rl_trainer_perf/step/forward_backward/duration_max_s: 15.965938549488783
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 7.6316022872924805
+  rl_trainer_perf/step/memory_peak_max_gb: 15.202403545379639
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.04134064354002476
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.04134064354002476
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.018991364166140556
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.018991364166140556
+  rl_trainer_perf/step/total_duration_avg_s: 16.026275975629687
+  rl_trainer_perf/step/total_duration_max_s: 16.026275975629687
+==============================
+
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:38 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:38 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:39 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:40 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:41 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:43 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:43 INFO[0m Pushing weights for policy version 2
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:44 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:45 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:46 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:46 INFO[0m Completed weights push in 3.06 seconds
+[34m[Generator-0/1] 2025-11-20 14:05:46 INFO[0m [Generator] Fetching weights for v2 to shared memory
+INFO 11-20 14:05:49 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:05:49 INFO[0m Weight update completed (now v2)
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:50 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[TRAINING] Step 1: Starting training
+
+[ROLLOUT 20] Episode Debug
+Reward: -1.00, Tokens: 261, Trainable: 17, Truncated: False
+================================================================================
+TokenAccumulator: 261/261 tokens
+Trainable: 17/261 (6.5%)
+================================================================================
+
+Messages:
+  [0] system     'You are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without goi...'
+  [1] user       'Hand: 9, Dealer: 7'
+  [2] assistant  '<answer>HIT</answer>'
+  [3] user       'Hand: 19, Dealer: 7'
+  [4] assistant  '<answer>STAND</answer>'
+
+Token stream:
+  [90m· <|im_start|>system\nYou are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).\n\nRULES:\n- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value\n- If you go over 21, you bust and lose immediately\n- The dealer plays after you and must hit until reaching 17+\n\nACTIONS:\n- HIT: Take another card (increases your hand total)\n- STAND: Keep your current hand and end your turn\n\nWIN CONDITIONS:\n- Your hand is closer to 21 than the dealer's final hand\n- Dealer busts (goes over 21) and you don't\n- You get exactly 21\n\nIMPORTANT: You MUST output your action in the following format:\n<answer>HIT</answer> or <answer>STAND</answer><|im_end|>\n<|im_start|>user\nHand: 9, Dealer: 7<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n[0m [92m✓ <answer>HIT</answer><|im_end|>[0m [90m· \n<|im_start|>user\nHand: 19, Dealer: 7<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n[0m [92m✓ <answer>STAND</answer><|im_end|>[0m [90m· \n[0m
+================================================================================
+Dropping weights @ version 1
+Dropped weights @ version 1, took 1.13 seconds
+WandbBackend: Logged 126 metrics at step 2
+=== [global_reduce] - METRICS STEP 2 ===
+  buffer/add/count_episodes_added: 144.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 144.0
+  buffer/evict/sum_episodes_evicted: 16.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 0.07692307692307693
+  buffer/sample/avg_sampled_policy_age: 1.0
+  buffer/sample/count_sample_requests: 1.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 1.0
+  buffer_perf/sample/total_duration_avg_s: 0.0011422336101531982
+  buffer_perf/sample/total_duration_max_s: 0.0011422336101531982
+  episode/total_tokens: 240.6058394160584
+  episode/turns: 1.3065693430656935
+  game/average_turns: 1.3065693430656935
+  game/env_reward: -0.24817518248175183
+  game/games_played: 137.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.34306569343065696
+  generator/generate/avg_tokens_generated: 8.644444444444444
+  generator/generate/count_requests: 180.0
+  generator/generate/count_sequences_completed: 180.0
+  generator/generate/sum_tokens_generated: 1556.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.5593976210802794
+  generator_perf/_fetch_weights/total_duration_max_s: 1.5593976210802794
+  generator_perf/generate/generate/duration_avg_s: 0.0699954210917155
+  generator_perf/generate/generate/duration_max_s: 3.076110107421875
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0009136199129861779
+  generator_perf/generate/process_inputs/duration_max_s: 0.0024436800479888917
+  generator_perf/generate/total_duration_avg_s: 0.07097139833822146
+  generator_perf/generate/total_duration_max_s: 3.07702085942775
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.5140781411901116
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.5140781411901116
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.773454250767827
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.773454250767827
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.067192554473877
+  loss_debug/advantages_mean: 0.581451416015625
+  loss_debug/advantages_min: -0.031135909259319305
+  loss_debug/advantages_std: 0.4451667368412018
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.016012847423553467
+  loss_debug/final_loss: -0.5581278800964355
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.16012845933437347
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 0.9955930113792419
+  loss_debug/logprob_diff_max: 3.724658489227295
+  loss_debug/logprob_diff_mean: 0.08589686453342438
+  loss_debug/logprob_diff_min: -1.2482342720031738
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.19408488273620605
+  loss_debug/logprobs_min: -6.002475738525391
+  loss_debug/logprobs_std: 0.797370970249176
+  loss_debug/num_trainable_tokens: 225.0
+  loss_debug/per_token_loss_max: 0.7818195223808289
+  loss_debug/per_token_loss_mean: -0.6140969395637512
+  loss_debug/per_token_loss_min: -1.067192554473877
+  loss_debug/policy_loss_max: 1.067192554473877
+  loss_debug/policy_loss_mean: 0.6301099061965942
+  loss_debug/policy_loss_min: -0.031135909259319305
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.10818801820278168
+  loss_debug/ref_logprobs_min: -7.2507100105285645
+  loss_debug/ref_logprobs_std: 0.7641489505767822
+  loss_debug/seq_len: 295.0
+  loss_debug/targets_max: 151645.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 9.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 1.6513780509639118
+  main_perf/continuous_rollouts/play_games/duration_max_s: 4.227649093605578
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.10191588569432497
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.4988386742770672
+  main_perf/continuous_rollouts/total_duration_avg_s: 1.804957859735522
+  main_perf/continuous_rollouts/total_duration_max_s: 4.321036725305021
+  main_perf/continuous_training/drop_weights/duration_avg_s: 1.1325379256159067
+  main_perf/continuous_training/drop_weights/duration_max_s: 1.1325379256159067
+  main_perf/continuous_training/push_weights/duration_avg_s: 3.0573599711060524
+  main_perf/continuous_training/push_weights/duration_max_s: 3.0573599711060524
+  main_perf/continuous_training/total_duration_avg_s: 12.685573656111956
+  main_perf/continuous_training/total_duration_max_s: 12.685573656111956
+  main_perf/continuous_training/train_step/duration_avg_s: 5.887144868262112
+  main_perf/continuous_training/train_step/duration_max_s: 5.887144868262112
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.604850417934358
+  main_perf/continuous_training/update_weights/duration_max_s: 2.604850417934358
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 0.0036774296313524246
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 0.0036774296313524246
+  reference_perf/forward/avg_sequence_length: 280.6666666666667
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.023230573990278773
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.026099019683897495
+  reference_perf/forward/count_forward_passes: 9.0
+  reference_perf/forward/forward/duration_avg_s: 0.06560807726863357
+  reference_perf/forward/forward/duration_max_s: 0.4624328389763832
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004859372145599789
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0005104951560497284
+  reference_perf/forward/memory_delta_end_start_avg_gb: 1.2709386613633897
+  reference_perf/forward/memory_peak_max_gb: 11.859524726867676
+  reference_perf/forward/to_device/duration_avg_s: 0.00015626692523558935
+  reference_perf/forward/to_device/duration_max_s: 0.00017969124019145966
+  reference_perf/forward/total_duration_avg_s: 0.08948311996128824
+  reference_perf/forward/total_duration_max_s: 0.48344094306230545
+  rl_trainer/avg_loss: -0.5581278800964355
+  rl_trainer/learning_rate: 1e-05
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005222819745540619
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005222819745540619
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005140304565429688
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005140304565429688
+  rl_trainer_perf/push_weights/total_duration_avg_s: 3.0555120073258877
+  rl_trainer_perf/push_weights/total_duration_max_s: 3.0555120073258877
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 3.0544722098857164
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 3.0544722098857164
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 5.850442382507026
+  rl_trainer_perf/step/forward_backward/duration_max_s: 5.850442382507026
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.00010633468627929688
+  rl_trainer_perf/step/memory_peak_max_gb: 18.738662242889404
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.002999049611389637
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.002999049611389637
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.029928429052233696
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.029928429052233696
+  rl_trainer_perf/step/total_duration_avg_s: 5.883371633477509
+  rl_trainer_perf/step/total_duration_max_s: 5.883371633477509
+==============================
+
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:50 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:52 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:52 INFO[0m Pushing weights for policy version 3
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:53 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:54 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:55 INFO[0m Completed weights push in 2.84 seconds
+[34m[Generator-0/1] 2025-11-20 14:05:55 INFO[0m [Generator] Fetching weights for v3 to shared memory
+INFO 11-20 14:05:58 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:05:58 INFO[0m Weight update completed (now v3)
+[34m[ReferenceModel-0/1] 2025-11-20 14:05:58 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[TRAINING] Step 2: Starting training
+Dropping weights @ version 2
+Dropped weights @ version 2, took 0.92 seconds
+WandbBackend: Logged 126 metrics at step 3
+=== [global_reduce] - METRICS STEP 3 ===
+  buffer/add/count_episodes_added: 64.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 64.0
+  buffer/evict/sum_episodes_evicted: 215.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 0.11678832116788321
+  buffer/sample/avg_sampled_policy_age: 0.9375
+  buffer/sample/count_sample_requests: 1.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 0.0024561267346143723
+  buffer_perf/sample/total_duration_max_s: 0.0024561267346143723
+  episode/total_tokens: 249.57575757575756
+  episode/turns: 1.606060606060606
+  game/average_turns: 1.606060606060606
+  game/env_reward: -0.2878787878787879
+  game/games_played: 66.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.3333333333333333
+  generator/generate/avg_tokens_generated: 8.438095238095238
+  generator/generate/count_requests: 105.0
+  generator/generate/count_sequences_completed: 105.0
+  generator/generate/sum_tokens_generated: 886.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.5335284313187003
+  generator_perf/_fetch_weights/total_duration_max_s: 1.5335284313187003
+  generator_perf/generate/generate/duration_avg_s: 0.0628453088306245
+  generator_perf/generate/generate/duration_max_s: 2.55975634765625
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0009036833512596789
+  generator_perf/generate/process_inputs/duration_max_s: 0.002413248062133789
+  generator_perf/generate/total_duration_avg_s: 0.06386321084862796
+  generator_perf/generate/total_duration_max_s: 2.560851867645979
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.487169824540615
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.487169824540615
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7762398580089211
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7762398580089211
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.436065673828125
+  loss_debug/advantages_mean: -0.26530542969703674
+  loss_debug/advantages_min: -1.2499375343322754
+  loss_debug/advantages_std: 0.7573458552360535
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.012786153703927994
+  loss_debug/final_loss: 0.27828025817871094
+  loss_debug/kl_max: 5.502093315124512
+  loss_debug/kl_mean: 0.12786152958869934
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 0.5440264940261841
+  loss_debug/logprob_diff_max: 0.09988030791282654
+  loss_debug/logprob_diff_mean: -0.21638254821300507
+  loss_debug/logprob_diff_min: -6.500590801239014
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.21455632150173187
+  loss_debug/logprobs_min: -6.002475738525391
+  loss_debug/logprobs_std: 0.8806055784225464
+  loss_debug/num_trainable_tokens: 175.0
+  loss_debug/per_token_loss_max: 1.25277578830719
+  loss_debug/per_token_loss_mean: 0.17101198434829712
+  loss_debug/per_token_loss_min: -1.436065673828125
+  loss_debug/policy_loss_max: 1.436065673828125
+  loss_debug/policy_loss_mean: -0.15822583436965942
+  loss_debug/policy_loss_min: -1.2499375343322754
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.43093883991241455
+  loss_debug/ref_logprobs_min: -8.250261306762695
+  loss_debug/ref_logprobs_std: 1.4589133262634277
+  loss_debug/seq_len: 264.0
+  loss_debug/targets_max: 151645.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 4.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 1.8869345393031836
+  main_perf/continuous_rollouts/play_games/duration_max_s: 3.8472054125741124
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.16386598092503846
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.5021627191454172
+  main_perf/continuous_rollouts/total_duration_avg_s: 2.0945844277739525
+  main_perf/continuous_rollouts/total_duration_max_s: 3.9392299251630902
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.922244650311768
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.922244650311768
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.8387606348842382
+  main_perf/continuous_training/push_weights/duration_max_s: 2.8387606348842382
+  main_perf/continuous_training/total_duration_avg_s: 8.444993914104998
+  main_perf/continuous_training/total_duration_max_s: 8.444993914104998
+  main_perf/continuous_training/train_step/duration_avg_s: 2.105557043105364
+  main_perf/continuous_training/train_step/duration_max_s: 2.105557043105364
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.57364531327039
+  main_perf/continuous_training/update_weights/duration_max_s: 2.57364531327039
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 0.004784079268574715
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 0.004784079268574715
+  reference_perf/forward/avg_sequence_length: 271.75
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.022105216281488538
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.02664895262569189
+  reference_perf/forward/count_forward_passes: 4.0
+  reference_perf/forward/forward/duration_avg_s: 0.12949018413200974
+  reference_perf/forward/forward/duration_max_s: 0.4695697370916605
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.00046434253454208374
+  reference_perf/forward/garbage_collection/duration_max_s: 0.00046847108751535416
+  reference_perf/forward/memory_delta_end_start_avg_gb: 1.2305607795715332
+  reference_perf/forward/memory_peak_max_gb: 11.859524726867676
+  reference_perf/forward/to_device/duration_avg_s: 0.00014646444469690323
+  reference_perf/forward/to_device/duration_max_s: 0.00016328692436218262
+  reference_perf/forward/total_duration_avg_s: 0.1522080407012254
+  reference_perf/forward/total_duration_max_s: 0.49052336905151606
+  rl_trainer/avg_loss: 0.27828025817871094
+  rl_trainer/learning_rate: 9.989989989989992e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005660587921738625
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005660587921738625
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005038343369960785
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005038343369960785
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.8369816057384014
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.8369816057384014
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.8359089475125074
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.8359089475125074
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 2.077265677973628
+  rl_trainer_perf/step/forward_backward/duration_max_s: 2.077265677973628
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 9.489059448242188e-05
+  rl_trainer_perf/step/memory_peak_max_gb: 17.969362258911133
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.003130650147795677
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.003130650147795677
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.02159952186048031
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.02159952186048031
+  rl_trainer_perf/step/total_duration_avg_s: 2.101998564787209
+  rl_trainer_perf/step/total_duration_max_s: 2.101998564787209
+==============================
+
+[34m[TitanTrainer-0/1] 2025-11-20 14:05:59 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:00 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+/home/felipemello/.conda/envs/forge/lib/python3.12/site-packages/torch/cuda/memory.py:491: FutureWarning: torch.cuda.reset_max_memory_allocated now calls torch.cuda.reset_peak_memory_stats, which resets /all/ peak memory stats.
+  warnings.warn(
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:00 INFO[0m Pushing weights for policy version 4
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:01 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:03 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:03 INFO[0m Completed weights push in 2.82 seconds
+[34m[Generator-0/1] 2025-11-20 14:06:03 INFO[0m [Generator] Fetching weights for v4 to shared memory
+INFO 11-20 14:06:06 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:06:06 INFO[0m Weight update completed (now v4)
+[TRAINING] Step 3: Starting training
+Dropping weights @ version 3
+Dropped weights @ version 3, took 0.80 seconds
+WandbBackend: Logged 126 metrics at step 4
+=== [global_reduce] - METRICS STEP 4 ===
+  buffer/add/count_episodes_added: 48.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 48.0
+  buffer/evict/sum_episodes_evicted: 125.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 0.21052631578947367
+  buffer/sample/avg_sampled_policy_age: 0.875
+  buffer/sample/count_sample_requests: 1.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 0.001729062758386135
+  buffer_perf/sample/total_duration_max_s: 0.001729062758386135
+  episode/total_tokens: 249.48076923076923
+  episode/turns: 1.4807692307692308
+  game/average_turns: 1.4807692307692308
+  game/env_reward: -0.4423076923076923
+  game/games_played: 52.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.23076923076923078
+  generator/generate/avg_tokens_generated: 11.961538461538462
+  generator/generate/count_requests: 78.0
+  generator/generate/count_sequences_completed: 78.0
+  generator/generate/sum_tokens_generated: 933.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.6130020515993237
+  generator_perf/_fetch_weights/total_duration_max_s: 1.6130020515993237
+  generator_perf/generate/generate/duration_avg_s: 0.08152738316853839
+  generator_perf/generate/generate/duration_max_s: 1.81939013671875
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0009358457414588576
+  generator_perf/generate/process_inputs/duration_max_s: 0.0024599039554595945
+  generator_perf/generate/total_duration_avg_s: 0.08257616142345928
+  generator_perf/generate/total_duration_max_s: 1.8208210487365724
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 0.760873724706471
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 0.760873724706471
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7629204392433167
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7629204392433167
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 2.015439510345459
+  loss_debug/advantages_mean: 0.13169419765472412
+  loss_debug/advantages_min: -0.8538709878921509
+  loss_debug/advantages_std: 0.9879710078239441
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.028144292533397675
+  loss_debug/final_loss: -0.10789532959461212
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.28144294023513794
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 1.469673752784729
+  loss_debug/logprob_diff_max: 1.2519495487213135
+  loss_debug/logprob_diff_mean: -0.3808794319629669
+  loss_debug/logprob_diff_min: -31.59905433654785
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.04748979210853577
+  loss_debug/logprobs_min: -1.7487739324569702
+  loss_debug/logprobs_std: 0.20832890272140503
+  loss_debug/num_trainable_tokens: 236.0
+  loss_debug/per_token_loss_max: 1.528764247894287
+  loss_debug/per_token_loss_mean: -0.22307108342647552
+  loss_debug/per_token_loss_min: -2.015439510345459
+  loss_debug/policy_loss_max: 2.015439510345459
+  loss_debug/policy_loss_mean: 0.2512153387069702
+  loss_debug/policy_loss_min: -0.8538709878921509
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.4283691644668579
+  loss_debug/ref_logprobs_min: -33.34782791137695
+  loss_debug/ref_logprobs_std: 2.799142599105835
+  loss_debug/seq_len: 296.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 3.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 1.1517927926033735
+  main_perf/continuous_rollouts/play_games/duration_max_s: 1.2092910474166274
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.1972587713971734
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.486285088583827
+  main_perf/continuous_rollouts/total_duration_avg_s: 1.404357218183577
+  main_perf/continuous_rollouts/total_duration_max_s: 1.7371549103409052
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.8043157355859876
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.8043157355859876
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.8186867479234934
+  main_perf/continuous_training/push_weights/duration_max_s: 2.8186867479234934
+  main_perf/continuous_training/total_duration_avg_s: 7.9500285452231765
+  main_perf/continuous_training/total_duration_max_s: 7.9500285452231765
+  main_perf/continuous_training/train_step/duration_avg_s: 1.6791697647422552
+  main_perf/continuous_training/train_step/duration_max_s: 1.6791697647422552
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.6437806440517306
+  main_perf/continuous_training/update_weights/duration_max_s: 2.6437806440517306
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 0.004072688519954681
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 0.004072688519954681
+  reference_perf/forward/avg_sequence_length: 274.6666666666667
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.022888149755696457
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.025617116130888462
+  reference_perf/forward/count_forward_passes: 3.0
+  reference_perf/forward/forward/duration_avg_s: 0.1619641644259294
+  reference_perf/forward/forward/duration_max_s: 0.45362938195466995
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004669952516754468
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0004760315641760826
+  reference_perf/forward/memory_delta_end_start_avg_gb: 1.2437691688537598
+  reference_perf/forward/memory_peak_max_gb: 11.750850677490234
+  reference_perf/forward/to_device/duration_avg_s: 0.00015869705627361932
+  reference_perf/forward/to_device/duration_max_s: 0.0001738928258419037
+  reference_perf/forward/total_duration_avg_s: 0.18548035683731237
+  reference_perf/forward/total_duration_max_s: 0.47501846496015787
+  rl_trainer/avg_loss: -0.10789532959461212
+  rl_trainer/learning_rate: 9.979979979979981e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005928901955485344
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005928901955485344
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0004955017939209938
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0004955017939209938
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.8164742114022374
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.8164742114022374
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.815382975153625
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.815382975153625
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.6393073229119182
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.6393073229119182
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.00010633468627929688
+  rl_trainer_perf/step/memory_peak_max_gb: 18.763476848602295
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.0029968470335006714
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.0029968470335006714
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.03315285127609968
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.03315285127609968
+  rl_trainer_perf/step/total_duration_avg_s: 1.6754590347409248
+  rl_trainer_perf/step/total_duration_max_s: 1.6754590347409248
+==============================
+
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:07 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:08 INFO[0m Pushing weights for policy version 5
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:09 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:11 INFO[0m Completed weights push in 2.42 seconds
+[34m[Generator-0/1] 2025-11-20 14:06:11 INFO[0m [Generator] Fetching weights for v5 to shared memory
+INFO 11-20 14:06:13 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:06:13 INFO[0m Weight update completed (now v5)
+[TRAINING] Step 4: Starting training
+
+[ROLLOUT 30] Episode Debug
+Reward: -1.00, Tokens: 230, Trainable: 8, Truncated: False
+================================================================================
+TokenAccumulator: 230/230 tokens
+Trainable: 8/230 (3.5%)
+================================================================================
+
+Messages:
+  [0] system     'You are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without goi...'
+  [1] user       'Hand: 20, Dealer: 4'
+  [2] assistant  '<answer>HIT</answer>'
+
+Token stream:
+  [90m· <|im_start|>system\nYou are an expert Blackjack player.\n\nGOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).\n\nRULES:\n- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value\n- If you go over 21, you bust and lose immediately\n- The dealer plays after you and must hit until reaching 17+\n\nACTIONS:\n- HIT: Take another card (increases your hand total)\n- STAND: Keep your current hand and end your turn\n\nWIN CONDITIONS:\n- Your hand is closer to 21 than the dealer's final hand\n- Dealer busts (goes over 21) and you don't\n- You get exactly 21\n\nIMPORTANT: You MUST output your action in the following format:\n<answer>HIT</answer> or <answer>STAND</answer><|im_end|>\n<|im_start|>user\nHand: 20, Dealer: 4<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n[0m [92m✓ <answer>HIT</answer><|im_end|>[0m [90m· \n[0m
+================================================================================
+Dropping weights @ version 4
+Dropped weights @ version 4, took 0.74 seconds
+WandbBackend: Logged 126 metrics at step 5
+=== [global_reduce] - METRICS STEP 5 ===
+  buffer/add/count_episodes_added: 16.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 16.0
+  buffer/evict/sum_episodes_evicted: 70.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 0.2962962962962963
+  buffer/sample/avg_sampled_policy_age: 1.0
+  buffer/sample/count_sample_requests: 1.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 1.0
+  buffer_perf/sample/total_duration_avg_s: 0.0013123909011483192
+  buffer_perf/sample/total_duration_max_s: 0.0013123909011483192
+  episode/total_tokens: 283.3333333333333
+  episode/turns: 1.8666666666666667
+  game/average_turns: 1.8666666666666667
+  game/env_reward: 0.06666666666666667
+  game/games_played: 15.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.5333333333333333
+  generator/generate/avg_tokens_generated: 28.285714285714285
+  generator/generate/count_requests: 28.0
+  generator/generate/count_sequences_completed: 28.0
+  generator/generate/sum_tokens_generated: 792.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.562032408080995
+  generator_perf/_fetch_weights/total_duration_max_s: 1.562032408080995
+  generator_perf/generate/generate/duration_avg_s: 0.13368113204411097
+  generator_perf/generate/generate/duration_max_s: 1.30879833984375
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0012048845762120824
+  generator_perf/generate/process_inputs/duration_max_s: 0.0024765119552612306
+  generator_perf/generate/total_duration_avg_s: 0.13498800290607113
+  generator_perf/generate/total_duration_max_s: 1.309924835845828
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.1963357916101813
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.1963357916101813
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.754157142713666
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.754157142713666
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.2499375343322754
+  loss_debug/advantages_mean: -0.17864593863487244
+  loss_debug/advantages_min: -0.8538709878921509
+  loss_debug/advantages_std: 0.7240597605705261
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.12525951862335205
+  loss_debug/final_loss: 0.31251436471939087
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 1.2525951862335205
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 3.2558956146240234
+  loss_debug/logprob_diff_max: 7.639401435852051
+  loss_debug/logprob_diff_mean: -1.2864282131195068
+  loss_debug/logprob_diff_min: -33.42333984375
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.36187776923179626
+  loss_debug/logprobs_min: -7.766443729400635
+  loss_debug/logprobs_std: 1.4749904870986938
+  loss_debug/num_trainable_tokens: 212.0
+  loss_debug/per_token_loss_max: 1.8538709878921509
+  loss_debug/per_token_loss_mean: 0.21400852501392365
+  loss_debug/per_token_loss_min: -1.2499375343322754
+  loss_debug/policy_loss_max: 1.2499375343322754
+  loss_debug/policy_loss_mean: -0.0887490063905716
+  loss_debug/policy_loss_min: -0.8538709878921509
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -1.6483060121536255
+  loss_debug/ref_logprobs_min: -33.444393157958984
+  loss_debug/ref_logprobs_std: 6.239964008331299
+  loss_debug/seq_len: 292.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 1.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 5.856492641381919
+  main_perf/continuous_rollouts/play_games/duration_max_s: 5.856492641381919
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.5418734988197684
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.5418734988197684
+  main_perf/continuous_rollouts/total_duration_avg_s: 6.439733014442027
+  main_perf/continuous_rollouts/total_duration_max_s: 6.439733014442027
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.7370778694748878
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.7370778694748878
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.419655184261501
+  main_perf/continuous_training/push_weights/duration_max_s: 2.419655184261501
+  main_perf/continuous_training/total_duration_avg_s: 7.368567313067615
+  main_perf/continuous_training/total_duration_max_s: 7.368567313067615
+  main_perf/continuous_training/train_step/duration_avg_s: 1.6282023238018155
+  main_perf/continuous_training/train_step/duration_max_s: 1.6282023238018155
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.579950778745115
+  main_perf/continuous_training/update_weights/duration_max_s: 2.579950778745115
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 0.00367836095392704
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 0.00367836095392704
+  reference_perf/forward/avg_sequence_length: 529.0
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.07682457100600004
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.07682457100600004
+  reference_perf/forward/count_forward_passes: 1.0
+  reference_perf/forward/forward/duration_avg_s: 0.4487868547439575
+  reference_perf/forward/forward/duration_max_s: 0.4487868547439575
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004560118541121483
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0004560118541121483
+  reference_perf/forward/memory_delta_end_start_avg_gb: 2.3954787254333496
+  reference_perf/forward/memory_peak_max_gb: 18.18980312347412
+  reference_perf/forward/to_device/duration_avg_s: 0.00017671845853328705
+  reference_perf/forward/to_device/duration_max_s: 0.00017671845853328705
+  reference_perf/forward/total_duration_avg_s: 0.5262473104521632
+  reference_perf/forward/total_duration_max_s: 0.5262473104521632
+  rl_trainer/avg_loss: 0.31251436471939087
+  rl_trainer/learning_rate: 9.96996996996997e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0006150230765342712
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0006150230765342712
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005286820232868195
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005286820232868195
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.4175938460975885
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.4175938460975885
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.4164471374824643
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.4164471374824643
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.5906664226204157
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.5906664226204157
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.00010538101196289062
+  rl_trainer_perf/step/memory_peak_max_gb: 18.664216995239258
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.003095717169344425
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.003095717169344425
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.03019754681736231
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.03019754681736231
+  rl_trainer_perf/step/total_duration_avg_s: 1.6239617001265287
+  rl_trainer_perf/step/total_duration_max_s: 1.6239617001265287
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:15 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:16 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:17 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:17 INFO[0m Pushing weights for policy version 6
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:20 INFO[0m Completed weights push in 2.63 seconds
+[34m[Generator-0/1] 2025-11-20 14:06:20 INFO[0m [Generator] Fetching weights for v6 to shared memory
+INFO 11-20 14:06:23 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:06:23 INFO[0m Weight update completed (now v6)
+[TRAINING] Step 5: Starting training
+Dropping weights @ version 5
+Dropped weights @ version 5, took 0.74 seconds
+WandbBackend: Logged 126 metrics at step 6
+=== [global_reduce] - METRICS STEP 6 ===
+  buffer/add/count_episodes_added: 32.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 32.0
+  buffer/evict/sum_episodes_evicted: 57.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 1.1883289124668432
+  buffer/sample/avg_sampled_policy_age: 0.5625
+  buffer/sample/count_sample_requests: 16.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 0.0001603093114681542
+  buffer_perf/sample/total_duration_max_s: 0.0007462119683623314
+  episode/total_tokens: 292.78125
+  episode/turns: 1.53125
+  game/average_turns: 1.53125
+  game/env_reward: -0.625
+  game/games_played: 32.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.15625
+  generator/generate/avg_tokens_generated: 33.4375
+  generator/generate/count_requests: 48.0
+  generator/generate/count_sequences_completed: 48.0
+  generator/generate/sum_tokens_generated: 1605.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.6461108047515154
+  generator_perf/_fetch_weights/total_duration_max_s: 1.6461108047515154
+  generator_perf/generate/generate/duration_avg_s: 0.22717151602109276
+  generator_perf/generate/generate/duration_max_s: 2.94178857421875
+  generator_perf/generate/process_inputs/duration_avg_s: 0.001058195997946314
+  generator_perf/generate/process_inputs/duration_max_s: 0.002452224016189575
+  generator_perf/generate/total_duration_avg_s: 0.22833230001973182
+  generator_perf/generate/total_duration_max_s: 2.944326430186629
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.973472535610199e-06
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.973472535610199e-06
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.8434728644788265
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.8434728644788265
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.436065673828125
+  loss_debug/advantages_mean: -0.18367646634578705
+  loss_debug/advantages_min: -0.749962568283081
+  loss_debug/advantages_std: 0.8843710422515869
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.057657383382320404
+  loss_debug/final_loss: 0.3309321999549866
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.5765738487243652
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 2.2032175064086914
+  loss_debug/logprob_diff_max: 1.4993114471435547
+  loss_debug/logprob_diff_mean: -1.2310233116149902
+  loss_debug/logprob_diff_min: -34.656150817871094
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.2865523099899292
+  loss_debug/logprobs_min: -40.5
+  loss_debug/logprobs_std: 2.317390203475952
+  loss_debug/num_trainable_tokens: 799.0
+  loss_debug/per_token_loss_max: 1.749962568283081
+  loss_debug/per_token_loss_mean: 0.2617538273334503
+  loss_debug/per_token_loss_min: -1.436065673828125
+  loss_debug/policy_loss_max: 1.436065673828125
+  loss_debug/policy_loss_mean: -0.2040964663028717
+  loss_debug/policy_loss_min: -0.749962568283081
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -1.5175755023956299
+  loss_debug/ref_logprobs_min: -46.625
+  loss_debug/ref_logprobs_std: 6.07943058013916
+  loss_debug/seq_len: 679.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 2.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 3.486482124775648
+  main_perf/continuous_rollouts/play_games/duration_max_s: 5.719673874787986
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.5160142234526575
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.5558852078393102
+  main_perf/continuous_rollouts/total_duration_avg_s: 4.043933788314462
+  main_perf/continuous_rollouts/total_duration_max_s: 6.3173341657966375
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.7403995152562857
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.7403995152562857
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.6327676670625806
+  main_perf/continuous_training/push_weights/duration_max_s: 2.6327676670625806
+  main_perf/continuous_training/total_duration_avg_s: 9.567346637137234
+  main_perf/continuous_training/total_duration_max_s: 9.567346637137234
+  main_perf/continuous_training/train_step/duration_avg_s: 1.739685875363648
+  main_perf/continuous_training/train_step/duration_max_s: 1.739685875363648
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.9171524308621883
+  main_perf/continuous_training/update_weights/duration_max_s: 2.9171524308621883
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 1.5373389041051269
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 1.5373389041051269
+  reference_perf/forward/avg_sequence_length: 473.5
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.04779767012223601
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.09137254394590855
+  reference_perf/forward/count_forward_passes: 2.0
+  reference_perf/forward/forward/duration_avg_s: 0.45397721510380507
+  reference_perf/forward/forward/duration_max_s: 0.4595512980595231
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004756818525493145
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0004879506304860115
+  reference_perf/forward/memory_delta_end_start_avg_gb: 2.144134759902954
+  reference_perf/forward/memory_peak_max_gb: 22.265088081359863
+  reference_perf/forward/to_device/duration_avg_s: 0.00017101923003792763
+  reference_perf/forward/to_device/duration_max_s: 0.00017134007066488266
+  reference_perf/forward/total_duration_avg_s: 0.5024238550104201
+  reference_perf/forward/total_duration_max_s: 0.54043785110116
+  rl_trainer/avg_loss: 0.3309321999549866
+  rl_trainer/learning_rate: 9.95995995995996e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005969060584902763
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005969060584902763
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005211606621742249
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005211606621742249
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.6309156781062484
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.6309156781062484
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.6297954078763723
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.6297954078763723
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.6431314051151276
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.6431314051151276
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.00024366378784179688
+  rl_trainer_perf/step/memory_peak_max_gb: 28.268077850341797
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.0075210705399513245
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.0075210705399513245
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.08491276949644089
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.08491276949644089
+  rl_trainer_perf/step/total_duration_avg_s: 1.7355684600770473
+  rl_trainer_perf/step/total_duration_max_s: 1.7355684600770473
+==============================
+
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:24 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:25 INFO[0m Pushing weights for policy version 7
+[34m[TitanTrainer-0/1] 2025-11-20 14:06:27 INFO[0m Completed weights push in 2.32 seconds
+[34m[Generator-0/1] 2025-11-20 14:06:27 INFO[0m [Generator] Fetching weights for v7 to shared memory
+INFO 11-20 14:06:30 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:06:30 INFO[0m Weight update completed (now v7)
+[TRAINING] Step 6: Starting training
+Dropping weights @ version 6
+Dropped weights @ version 6, took 0.70 seconds
+WandbBackend: Logged 100 metrics at step 7
+=== [global_reduce] - METRICS STEP 7 ===
+  buffer/evict/sum_episodes_evicted: 25.0
+  buffer/sample/avg_data_utilization: 0.8
+  buffer/sample/avg_sampled_policy_age: 1.0
+  buffer/sample/count_sample_requests: 1.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 1.0
+  buffer_perf/sample/total_duration_avg_s: 0.0008659828454256058
+  buffer_perf/sample/total_duration_max_s: 0.0008659828454256058
+  episode/total_tokens: 370.4
+  episode/turns: 1.6
+  game/average_turns: 1.6
+  game/env_reward: -0.2
+  game/games_played: 5.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.4
+  generator/generate/avg_tokens_generated: 101.77777777777777
+  generator/generate/count_requests: 9.0
+  generator/generate/count_sequences_completed: 9.0
+  generator/generate/sum_tokens_generated: 916.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.6614852780476213
+  generator_perf/_fetch_weights/total_duration_max_s: 1.6614852780476213
+  generator_perf/generate/generate/duration_avg_s: 0.45497827021280934
+  generator_perf/generate/generate/duration_max_s: 1.2452686767578125
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0008831928968429564
+  generator_perf/generate/process_inputs/duration_max_s: 0.0010410560369491578
+  generator_perf/generate/total_duration_avg_s: 0.45595132622076195
+  generator_perf/generate/total_duration_max_s: 1.2460876207635738
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.4284553276374936
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.4284553276374936
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7923781666904688
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7923781666904688
+  loss_debug/advantages_max: 3.7496249675750732
+  loss_debug/advantages_mean: 0.08020366728305817
+  loss_debug/advantages_min: -0.6527571082115173
+  loss_debug/advantages_std: 1.0726128816604614
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.16017933189868927
+  loss_debug/final_loss: 0.09452226758003235
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 1.6017932891845703
+  loss_debug/kl_min: 0.0
+  loss_debug/kl_std: 3.6247787475585938
+  loss_debug/logprob_diff_max: 0.05512123927474022
+  loss_debug/logprob_diff_mean: -3.748018741607666
+  loss_debug/logprob_diff_min: -34.09544372558594
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -1.0218476057052612
+  loss_debug/logprobs_min: -45.25
+  loss_debug/logprobs_std: 5.807605266571045
+  loss_debug/num_trainable_tokens: 233.0
+  loss_debug/per_token_loss_max: 1.652757167816162
+  loss_debug/per_token_loss_mean: -0.15736086666584015
+  loss_debug/per_token_loss_min: -3.7496249675750732
+  loss_debug/policy_loss_max: 3.7496249675750732
+  loss_debug/policy_loss_mean: 0.31754016876220703
+  loss_debug/policy_loss_min: -0.6527571082115173
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -4.769866466522217
+  loss_debug/ref_logprobs_min: -48.1875
+  loss_debug/ref_logprobs_std: 11.382586479187012
+  loss_debug/seq_len: 297.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.6980953318998218
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.6980953318998218
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.322842880152166
+  main_perf/continuous_training/push_weights/duration_max_s: 2.322842880152166
+  main_perf/continuous_training/total_duration_avg_s: 7.3328180853277445
+  main_perf/continuous_training/total_duration_max_s: 7.3328180853277445
+  main_perf/continuous_training/train_step/duration_avg_s: 1.5707345306873322
+  main_perf/continuous_training/train_step/duration_max_s: 1.5707345306873322
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.738172092474997
+  main_perf/continuous_training/update_weights/duration_max_s: 2.738172092474997
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 0.0029711872339248657
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 0.0029711872339248657
+  rl_trainer/avg_loss: 0.09452226758003235
+  rl_trainer/learning_rate: 9.949949949949951e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0006130393594503403
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0006130393594503403
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005212705582380295
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005212705582380295
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.3208404714241624
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.3208404714241624
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.3197039077058434
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.3197039077058434
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.5357843125239015
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.5357843125239015
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.00010824203491210938
+  rl_trainer_perf/step/memory_peak_max_gb: 18.788300037384033
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.0030636172741651535
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.0030636172741651535
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.02772499807178974
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.02772499807178974
+  rl_trainer_perf/step/total_duration_avg_s: 1.566575481556356
+  rl_trainer_perf/step/total_duration_max_s: 1.566575481556356
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:06:37 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[ReferenceModel-0/1] 2025-11-20 14:07:08 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:09 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:11 INFO[0m Pushing weights for policy version 8
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:13 INFO[0m Completed weights push in 2.53 seconds
+[34m[Generator-0/1] 2025-11-20 14:07:13 INFO[0m [Generator] Fetching weights for v8 to shared memory
+INFO 11-20 14:07:16 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:07:16 INFO[0m Weight update completed (now v8)
+[TRAINING] Step 7: Starting training
+Dropping weights @ version 7
+Dropped weights @ version 7, took 0.82 seconds
+WandbBackend: Logged 128 metrics at step 8
+=== [global_reduce] - METRICS STEP 8 ===
+  buffer/add/count_episodes_added: 32.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 32.0
+  buffer/evict/sum_episodes_evicted: 22.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 1.1436797975003998
+  buffer/sample/avg_sampled_policy_age: 0.25
+  buffer/sample/count_sample_requests: 371.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 9.09150319520354e-05
+  buffer_perf/sample/total_duration_max_s: 0.0004378734156489372
+  episode/total_tokens: 614.2222222222222
+  episode/turns: 1.6666666666666667
+  game/average_turns: 1.6666666666666667
+  game/env_reward: -0.2962962962962963
+  game/games_played: 27.0
+  game/invalid_action_penalty: 1.0
+  game/invalid_action_rate: 0.022727272727272728
+  game/missing_answer_tags: 1.0
+  game/win_rate: 0.2962962962962963
+  generator/generate/avg_tokens_generated: 225.70454545454547
+  generator/generate/count_requests: 44.0
+  generator/generate/count_sequences_completed: 44.0
+  generator/generate/sum_tokens_generated: 9931.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.5912463925778866
+  generator_perf/_fetch_weights/total_duration_max_s: 1.5912463925778866
+  generator_perf/generate/generate/duration_avg_s: 1.0697640243443574
+  generator_perf/generate/generate/duration_max_s: 3.547175537109375
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0011477745446291838
+  generator_perf/generate/process_inputs/duration_max_s: 0.0022069759368896482
+  generator_perf/generate/total_duration_avg_s: 1.0710253654343385
+  generator_perf/generate/total_duration_max_s: 3.54908948905766
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 0.7131971167400479
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 0.7131971167400479
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7768337726593018
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7768337726593018
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.6769572496414185
+  loss_debug/advantages_mean: -0.09185683727264404
+  loss_debug/advantages_min: -3.0288517475128174
+  loss_debug/advantages_std: 1.1682833433151245
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.0142167704179883
+  loss_debug/final_loss: 0.1173517107963562
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.14216770231723785
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 0.950945258140564
+  loss_debug/logprob_diff_max: 7.199211120605469
+  loss_debug/logprob_diff_mean: -0.23519453406333923
+  loss_debug/logprob_diff_min: -34.16819763183594
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.2729402780532837
+  loss_debug/logprobs_min: -45.15625
+  loss_debug/logprobs_std: 1.6579363346099854
+  loss_debug/num_trainable_tokens: 5827.0
+  loss_debug/per_token_loss_max: 4.0288519859313965
+  loss_debug/per_token_loss_mean: 0.06921182572841644
+  loss_debug/per_token_loss_min: -1.6769572496414185
+  loss_debug/policy_loss_max: 1.6769572496414185
+  loss_debug/policy_loss_mean: -0.054995059967041016
+  loss_debug/policy_loss_min: -3.0288517475128174
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.5081347823143005
+  loss_debug/ref_logprobs_min: -47.691627502441406
+  loss_debug/ref_logprobs_std: 2.8996949195861816
+  loss_debug/seq_len: 1213.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 2.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 25.04080678895116
+  main_perf/continuous_rollouts/play_games/duration_max_s: 29.89236263372004
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.6206454234197736
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.6713258260861039
+  main_perf/continuous_rollouts/total_duration_avg_s: 25.704861825797707
+  main_perf/continuous_rollouts/total_duration_max_s: 30.607907122001052
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.8167291143909097
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.8167291143909097
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.5342760924249887
+  main_perf/continuous_training/push_weights/duration_max_s: 2.5342760924249887
+  main_perf/continuous_training/total_duration_avg_s: 45.76094245072454
+  main_perf/continuous_training/total_duration_max_s: 45.76094245072454
+  main_perf/continuous_training/train_step/duration_avg_s: 1.9915027767419815
+  main_perf/continuous_training/train_step/duration_max_s: 1.9915027767419815
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.6414357041940093
+  main_perf/continuous_training/update_weights/duration_max_s: 2.6414357041940093
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 37.776995807886124
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 37.776995807886124
+  reference_perf/forward/avg_sequence_length: 1002.5
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.1537363100796938
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.1963936761021614
+  reference_perf/forward/count_forward_passes: 2.0
+  reference_perf/forward/forward/duration_avg_s: 0.4445807128213346
+  reference_perf/forward/forward/duration_max_s: 0.4489899380132556
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004531973972916603
+  reference_perf/forward/garbage_collection/duration_max_s: 0.00046136975288391113
+  reference_perf/forward/memory_delta_end_start_avg_gb: 4.539633274078369
+  reference_perf/forward/memory_peak_max_gb: 36.77310609817505
+  reference_perf/forward/to_device/duration_avg_s: 0.00014652730897068977
+  reference_perf/forward/to_device/duration_max_s: 0.00015082862228155136
+  reference_perf/forward/total_duration_avg_s: 0.5989199024625123
+  reference_perf/forward/total_duration_max_s: 0.6459984770044684
+  rl_trainer/avg_loss: 0.1173517107963562
+  rl_trainer/learning_rate: 9.93993993993994e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005876524373888969
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005876524373888969
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005230726674199104
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005230726674199104
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.5320559944957495
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.5320559944957495
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.5309428554028273
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.5309428554028273
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.831643283367157
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.831643283367157
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.0004353523254394531
+  rl_trainer_perf/step/memory_peak_max_gb: 41.520267486572266
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.013786138035356998
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.013786138035356998
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.14138053450733423
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.14138053450733423
+  rl_trainer_perf/step/total_duration_avg_s: 1.986812749877572
+  rl_trainer_perf/step/total_duration_max_s: 1.986812749877572
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:07:34 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:35 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:37 INFO[0m Pushing weights for policy version 9
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:40 INFO[0m Completed weights push in 2.52 seconds
+[34m[Generator-0/1] 2025-11-20 14:07:40 INFO[0m [Generator] Fetching weights for v9 to shared memory
+INFO 11-20 14:07:42 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:07:42 INFO[0m Weight update completed (now v9)
+[TRAINING] Step 8: Starting training
+Dropping weights @ version 8
+Dropped weights @ version 8, took 0.75 seconds
+WandbBackend: Logged 126 metrics at step 9
+=== [global_reduce] - METRICS STEP 9 ===
+  buffer/add/count_episodes_added: 16.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 16.0
+  buffer/evict/sum_episodes_evicted: 20.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 1.5945299145299132
+  buffer/sample/avg_sampled_policy_age: 0.4375
+  buffer/sample/count_sample_requests: 180.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 9.84305360664924e-05
+  buffer_perf/sample/total_duration_max_s: 0.0005329884588718414
+  episode/total_tokens: 573.8666666666667
+  episode/turns: 1.4666666666666666
+  game/average_turns: 1.4666666666666666
+  game/env_reward: -0.26666666666666666
+  game/games_played: 15.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.3333333333333333
+  generator/generate/avg_tokens_generated: 232.3181818181818
+  generator/generate/count_requests: 22.0
+  generator/generate/count_sequences_completed: 22.0
+  generator/generate/sum_tokens_generated: 5111.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.580508922226727
+  generator_perf/_fetch_weights/total_duration_max_s: 1.580508922226727
+  generator_perf/generate/generate/duration_avg_s: 1.0028974664861507
+  generator_perf/generate/generate/duration_max_s: 1.767310546875
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0010654458149166948
+  generator_perf/generate/process_inputs/duration_max_s: 0.0026735999584197997
+  generator_perf/generate/total_duration_avg_s: 1.0040793515737803
+  generator_perf/generate/total_duration_max_s: 1.7690879548341036
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.4788131341338158
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.4788131341338158
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7550980551168323
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7550980551168323
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.0356719493865967
+  loss_debug/advantages_mean: -0.23505206406116486
+  loss_debug/advantages_min: -0.9681990146636963
+  loss_debug/advantages_std: 0.874975323677063
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.016835153102874756
+  loss_debug/final_loss: 0.2567300796508789
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.16835151612758636
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 1.0267438888549805
+  loss_debug/logprob_diff_max: 3.0714669227600098
+  loss_debug/logprob_diff_mean: -0.30136576294898987
+  loss_debug/logprob_diff_min: -34.59897232055664
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.2710995376110077
+  loss_debug/logprobs_min: -40.738182067871094
+  loss_debug/logprobs_std: 1.3402847051620483
+  loss_debug/num_trainable_tokens: 5367.0
+  loss_debug/per_token_loss_max: 1.9681990146636963
+  loss_debug/per_token_loss_mean: 0.01149035431444645
+  loss_debug/per_token_loss_min: -1.0356719493865967
+  loss_debug/policy_loss_max: 1.0356719493865967
+  loss_debug/policy_loss_mean: 0.005344805307686329
+  loss_debug/policy_loss_min: -0.9681990146636963
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.5724653005599976
+  loss_debug/ref_logprobs_min: -47.445186614990234
+  loss_debug/ref_logprobs_std: 2.9124107360839844
+  loss_debug/seq_len: 1365.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 1.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 25.45370960328728
+  main_perf/continuous_rollouts/play_games/duration_max_s: 25.45370960328728
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.682504934258759
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.682504934258759
+  main_perf/continuous_rollouts/total_duration_avg_s: 26.17939332872629
+  main_perf/continuous_rollouts/total_duration_max_s: 26.17939332872629
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.7479675784707069
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.7479675784707069
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.525798031128943
+  main_perf/continuous_training/push_weights/duration_max_s: 2.525798031128943
+  main_perf/continuous_training/total_duration_avg_s: 26.170378523878753
+  main_perf/continuous_training/total_duration_max_s: 26.170378523878753
+  main_perf/continuous_training/train_step/duration_avg_s: 2.0612693587318063
+  main_perf/continuous_training/train_step/duration_max_s: 2.0612693587318063
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.590230042114854
+  main_perf/continuous_training/update_weights/duration_max_s: 2.590230042114854
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 18.24511060770601
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 18.24511060770601
+  reference_perf/forward/avg_sequence_length: 1365.0
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.20935671590268612
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.20935671590268612
+  reference_perf/forward/count_forward_passes: 1.0
+  reference_perf/forward/forward/duration_avg_s: 0.44480002485215664
+  reference_perf/forward/forward/duration_max_s: 0.44480002485215664
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.00045849569141864777
+  reference_perf/forward/garbage_collection/duration_max_s: 0.00045849569141864777
+  reference_perf/forward/memory_delta_end_start_avg_gb: 6.181117534637451
+  reference_perf/forward/memory_peak_max_gb: 40.90272903442383
+  reference_perf/forward/to_device/duration_avg_s: 0.0001803133636713028
+  reference_perf/forward/to_device/duration_max_s: 0.0001803133636713028
+  reference_perf/forward/total_duration_avg_s: 0.6547992955893278
+  reference_perf/forward/total_duration_max_s: 0.6547992955893278
+  rl_trainer/avg_loss: 0.2567300796508789
+  rl_trainer/learning_rate: 9.929929929929931e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005339393392205238
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005339393392205238
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.000542202964425087
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.000542202964425087
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.5239439783617854
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.5239439783617854
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.5228658337146044
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.5228658337146044
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.8878911202773452
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.8878911202773452
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.0004897117614746094
+  rl_trainer_perf/step/memory_peak_max_gb: 45.292272090911865
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.015081457793712616
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.015081457793712616
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.154585731215775
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.154585731215775
+  rl_trainer_perf/step/total_duration_avg_s: 2.057561202906072
+  rl_trainer_perf/step/total_duration_max_s: 2.057561202906072
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:07:58 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:07:59 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:01 INFO[0m Pushing weights for policy version 10
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:04 INFO[0m Completed weights push in 2.82 seconds
+[34m[Generator-0/1] 2025-11-20 14:08:04 INFO[0m [Generator] Fetching weights for v10 to shared memory
+INFO 11-20 14:08:06 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:08:06 INFO[0m Weight update completed (now v10)
+[TRAINING] Step 9: Starting training
+Dropping weights @ version 9
+Dropped weights @ version 9, took 0.68 seconds
+WandbBackend: Logged 126 metrics at step 10
+=== [global_reduce] - METRICS STEP 10 ===
+  buffer/add/count_episodes_added: 16.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 16.0
+  buffer/evict/sum_episodes_evicted: 23.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 5.3047267851156645
+  buffer/sample/avg_sampled_policy_age: 0.375
+  buffer/sample/count_sample_requests: 157.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 9.351285399904677e-05
+  buffer_perf/sample/total_duration_max_s: 0.0005680015310645103
+  episode/total_tokens: 563.2666666666667
+  episode/turns: 1.4
+  game/average_turns: 1.4
+  game/env_reward: 0.0
+  game/games_played: 15.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.4
+  generator/generate/avg_tokens_generated: 236.8095238095238
+  generator/generate/count_requests: 21.0
+  generator/generate/count_sequences_completed: 21.0
+  generator/generate/sum_tokens_generated: 4973.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.5937847327440977
+  generator_perf/_fetch_weights/total_duration_max_s: 1.5937847327440977
+  generator_perf/generate/generate/duration_avg_s: 1.1601869884672622
+  generator_perf/generate/generate/duration_max_s: 3.714212158203125
+  generator_perf/generate/process_inputs/duration_avg_s: 0.001252707038606916
+  generator_perf/generate/process_inputs/duration_max_s: 0.002096927881240845
+  generator_perf/generate/total_duration_avg_s: 1.1615532040762648
+  generator_perf/generate/total_duration_max_s: 3.7156438381820918
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 0.1707156589254737
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 0.1707156589254737
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7786026755347848
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7786026755347848
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.436065673828125
+  loss_debug/advantages_mean: -0.04895677790045738
+  loss_debug/advantages_min: -0.9681990146636963
+  loss_debug/advantages_std: 0.977975070476532
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.0207586158066988
+  loss_debug/final_loss: 0.07206648588180542
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.2075861692428589
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 1.1359820365905762
+  loss_debug/logprob_diff_max: 3.3837220668792725
+  loss_debug/logprob_diff_mean: -0.3498058617115021
+  loss_debug/logprob_diff_min: -41.6722297668457
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.2870432436466217
+  loss_debug/logprobs_min: -39.42892074584961
+  loss_debug/logprobs_std: 1.5666180849075317
+  loss_debug/num_trainable_tokens: 4840.0
+  loss_debug/per_token_loss_max: 1.9681990146636963
+  loss_debug/per_token_loss_mean: -0.010850086808204651
+  loss_debug/per_token_loss_min: -1.436065673828125
+  loss_debug/policy_loss_max: 1.436065673828125
+  loss_debug/policy_loss_mean: 0.031608693301677704
+  loss_debug/policy_loss_min: -0.9681990146636963
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.6368491053581238
+  loss_debug/ref_logprobs_min: -44.46283721923828
+  loss_debug/ref_logprobs_std: 3.2653908729553223
+  loss_debug/seq_len: 823.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 1.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 23.250417586416006
+  main_perf/continuous_rollouts/play_games/duration_max_s: 23.250417586416006
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.5794623214751482
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.5794623214751482
+  main_perf/continuous_rollouts/total_duration_avg_s: 24.093161826953292
+  main_perf/continuous_rollouts/total_duration_max_s: 24.093161826953292
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.6786647448316216
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.6786647448316216
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.823426882736385
+  main_perf/continuous_training/push_weights/duration_max_s: 2.823426882736385
+  main_perf/continuous_training/total_duration_avg_s: 24.115894697606564
+  main_perf/continuous_training/total_duration_max_s: 24.115894697606564
+  main_perf/continuous_training/train_step/duration_avg_s: 1.8030005851760507
+  main_perf/continuous_training/train_step/duration_max_s: 1.8030005851760507
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.648453203961253
+  main_perf/continuous_training/update_weights/duration_max_s: 2.648453203961253
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 16.16234686691314
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 16.16234686691314
+  reference_perf/forward/avg_sequence_length: 823.0
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.09808915667235851
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.09808915667235851
+  reference_perf/forward/count_forward_passes: 1.0
+  reference_perf/forward/forward/duration_avg_s: 0.45137856528162956
+  reference_perf/forward/forward/duration_max_s: 0.45137856528162956
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0005600601434707642
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0005600601434707642
+  reference_perf/forward/memory_delta_end_start_avg_gb: 3.72674560546875
+  reference_perf/forward/memory_peak_max_gb: 26.1773624420166
+  reference_perf/forward/to_device/duration_avg_s: 0.0001890258863568306
+  reference_perf/forward/to_device/duration_max_s: 0.0001890258863568306
+  reference_perf/forward/total_duration_avg_s: 0.5502205342054367
+  reference_perf/forward/total_duration_max_s: 0.5502205342054367
+  rl_trainer/avg_loss: 0.07206648588180542
+  rl_trainer/learning_rate: 9.91991991991992e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.000542493537068367
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.000542493537068367
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005217716097831726
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005217716097831726
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.821443154476583
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.821443154476583
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.8203763756901026
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.8203763756901026
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.685934578999877
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.685934578999877
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.0002951622009277344
+  rl_trainer_perf/step/memory_peak_max_gb: 31.84191131591797
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.009431728161871433
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.009431728161871433
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.10348888952285051
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.10348888952285051
+  rl_trainer_perf/step/total_duration_avg_s: 1.7988584116101265
+  rl_trainer_perf/step/total_duration_max_s: 1.7988584116101265
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:08:22 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:22 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:24 INFO[0m Pushing weights for policy version 11
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:27 INFO[0m Completed weights push in 2.49 seconds
+[34m[Generator-0/1] 2025-11-20 14:08:27 INFO[0m [Generator] Fetching weights for v11 to shared memory
+INFO 11-20 14:08:29 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:08:29 INFO[0m Weight update completed (now v11)
+[TRAINING] Step 10: Starting training
+Dropping weights @ version 10
+Dropped weights @ version 10, took 0.74 seconds
+WandbBackend: Logged 126 metrics at step 11
+=== [global_reduce] - METRICS STEP 11 ===
+  buffer/add/count_episodes_added: 16.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 16.0
+  buffer/evict/sum_episodes_evicted: 17.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 7.953216374269006
+  buffer/sample/avg_sampled_policy_age: 0.3125
+  buffer/sample/count_sample_requests: 152.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 9.046555619294707e-05
+  buffer_perf/sample/total_duration_max_s: 0.0004458557814359665
+  episode/total_tokens: 514.375
+  episode/turns: 1.25
+  game/average_turns: 1.25
+  game/env_reward: -0.0625
+  game/games_played: 16.0
+  game/invalid_action_penalty: 1.0
+  game/invalid_action_rate: 0.05
+  game/missing_answer_tags: 1.0
+  game/win_rate: 0.4375
+  generator/generate/avg_tokens_generated: 229.25
+  generator/generate/count_requests: 20.0
+  generator/generate/count_sequences_completed: 20.0
+  generator/generate/sum_tokens_generated: 4585.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.5657078213989735
+  generator_perf/_fetch_weights/total_duration_max_s: 1.5657078213989735
+  generator_perf/generate/generate/duration_avg_s: 1.1947544453144077
+  generator_perf/generate/generate/duration_max_s: 3.0529658203125
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0010847311943769458
+  generator_perf/generate/process_inputs/duration_max_s: 0.002168191909790039
+  generator_perf/generate/total_duration_avg_s: 1.1959576101094254
+  generator_perf/generate/total_duration_max_s: 3.054090556293726
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 1.5658554350957274
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 1.5658554350957274
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.8694700179621577
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.8694700179621577
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.436065673828125
+  loss_debug/advantages_mean: 0.018827855587005615
+  loss_debug/advantages_min: -3.022162437438965
+  loss_debug/advantages_std: 1.0539320707321167
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.02396743930876255
+  loss_debug/final_loss: 0.051068857312202454
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.2396743893623352
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 1.2607730627059937
+  loss_debug/logprob_diff_max: 2.5959537029266357
+  loss_debug/logprob_diff_mean: -0.4750981628894806
+  loss_debug/logprob_diff_min: -43.44378662109375
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.2739025354385376
+  loss_debug/logprobs_min: -38.53258514404297
+  loss_debug/logprobs_std: 1.1142007112503052
+  loss_debug/num_trainable_tokens: 4831.0
+  loss_debug/per_token_loss_max: 4.022162437438965
+  loss_debug/per_token_loss_mean: -0.06451404839754105
+  loss_debug/per_token_loss_min: -1.436065673828125
+  loss_debug/policy_loss_max: 1.436065673828125
+  loss_debug/policy_loss_mean: 0.08848149329423904
+  loss_debug/policy_loss_min: -3.022162437438965
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.7490007281303406
+  loss_debug/ref_logprobs_min: -43.6601676940918
+  loss_debug/ref_logprobs_std: 3.67386794090271
+  loss_debug/seq_len: 947.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 1.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 22.80180023238063
+  main_perf/continuous_rollouts/play_games/duration_max_s: 22.80180023238063
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.5873627085238695
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.5873627085238695
+  main_perf/continuous_rollouts/total_duration_avg_s: 23.43121592514217
+  main_perf/continuous_rollouts/total_duration_max_s: 23.43121592514217
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.7373719746246934
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.7373719746246934
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.4882871732115746
+  main_perf/continuous_training/push_weights/duration_max_s: 2.4882871732115746
+  main_perf/continuous_training/total_duration_avg_s: 23.22333862259984
+  main_perf/continuous_training/total_duration_max_s: 23.22333862259984
+  main_perf/continuous_training/train_step/duration_avg_s: 1.8571073831990361
+  main_perf/continuous_training/train_step/duration_max_s: 1.8571073831990361
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.7126486226916313
+  main_perf/continuous_training/update_weights/duration_max_s: 2.7126486226916313
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 15.427920985035598
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 15.427920985035598
+  reference_perf/forward/avg_sequence_length: 947.0
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.1134612075984478
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.1134612075984478
+  reference_perf/forward/count_forward_passes: 1.0
+  reference_perf/forward/forward/duration_avg_s: 0.44056856632232666
+  reference_perf/forward/forward/duration_max_s: 0.44056856632232666
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.0004883715882897377
+  reference_perf/forward/garbage_collection/duration_max_s: 0.0004883715882897377
+  reference_perf/forward/memory_delta_end_start_avg_gb: 4.28829288482666
+  reference_perf/forward/memory_peak_max_gb: 29.546265602111816
+  reference_perf/forward/to_device/duration_avg_s: 0.00017106998711824417
+  reference_perf/forward/to_device/duration_max_s: 0.00017106998711824417
+  reference_perf/forward/total_duration_avg_s: 0.5546922199428082
+  reference_perf/forward/total_duration_max_s: 0.5546922199428082
+  rl_trainer/avg_loss: 0.051068857312202454
+  rl_trainer/learning_rate: 9.90990990990991e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005803611129522324
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005803611129522324
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005684616044163704
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005684616044163704
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.486258376389742
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.486258376389742
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.4851075801998377
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.4851075801998377
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.7284254413098097
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.7284254413098097
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.0003399848937988281
+  rl_trainer_perf/step/memory_peak_max_gb: 34.91910934448242
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.01110345683991909
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.01110345683991909
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.11348164826631546
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.11348164826631546
+  rl_trainer_perf/step/total_duration_avg_s: 1.85301355086267
+  rl_trainer_perf/step/total_duration_max_s: 1.85301355086267
+==============================
+
+[34m[ReferenceModel-0/1] 2025-11-20 14:08:45 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:46 INFO[0m [GC] Performing periodic GC collection took 0.00 seconds
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:47 INFO[0m Pushing weights for policy version 12
+[34m[TitanTrainer-0/1] 2025-11-20 14:08:50 INFO[0m Completed weights push in 2.71 seconds
+[34m[Generator-0/1] 2025-11-20 14:08:50 INFO[0m [Generator] Fetching weights for v12 to shared memory
+INFO 11-20 14:08:53 [block_pool.py:321] Successfully reset prefix cache
+[34m[Generator-0/1] 2025-11-20 14:08:53 INFO[0m Weight update completed (now v12)
+[TRAINING] Step 11: Starting training
+Dropping weights @ version 11
+Dropped weights @ version 11, took 0.67 seconds
+WandbBackend: Logged 126 metrics at step 12
+=== [global_reduce] - METRICS STEP 12 ===
+  buffer/add/count_episodes_added: 16.0
+  buffer/episode_acceptance_rate: 1.0
+  buffer/episodes_accepted: 16.0
+  buffer/evict/sum_episodes_evicted: 16.0
+  buffer/rate_rejected_truncated: 0.0
+  buffer/sample/avg_data_utilization: 7.935672514619883
+  buffer/sample/avg_sampled_policy_age: 0.1875
+  buffer/sample/count_sample_requests: 152.0
+  buffer/sample/max_sampled_policy_age: 1.0
+  buffer/sample/min_sampled_policy_age: 0.0
+  buffer_perf/sample/total_duration_avg_s: 8.400263705928075e-05
+  buffer_perf/sample/total_duration_max_s: 0.0005032829940319061
+  episode/total_tokens: 513.9375
+  episode/turns: 1.1875
+  game/average_turns: 1.1875
+  game/env_reward: -0.1875
+  game/games_played: 16.0
+  game/invalid_action_rate: 0.0
+  game/win_rate: 0.375
+  generator/generate/avg_tokens_generated: 242.0
+  generator/generate/count_requests: 19.0
+  generator/generate/count_sequences_completed: 19.0
+  generator/generate/sum_tokens_generated: 4598.0
+  generator/update_weights/count_weight_updates: 1.0
+  generator_perf/_fetch_weights/total_duration_avg_s: 1.6169703090563416
+  generator_perf/_fetch_weights/total_duration_max_s: 1.6169703090563416
+  generator_perf/generate/generate/duration_avg_s: 1.067120856034128
+  generator_perf/generate/generate/duration_max_s: 1.78333154296875
+  generator_perf/generate/process_inputs/duration_avg_s: 0.0009968808343830077
+  generator_perf/generate/process_inputs/duration_max_s: 0.0016827199459075928
+  generator_perf/generate/total_duration_avg_s: 1.0682343330798232
+  generator_perf/generate/total_duration_max_s: 1.784955894947052
+  generator_perf/update_weights/avg_pending_requests: 1.0
+  generator_perf/update_weights/max_pending_requests: 1.0
+  generator_perf/waiting_for_fetch_weights/total_duration_avg_s: 0.8402370596304536
+  generator_perf/waiting_for_fetch_weights/total_duration_max_s: 0.8402370596304536
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_avg_s: 0.7731631137430668
+  generator_worker_perf/update_weights_from_shared_memory/total_duration_max_s: 0.7731631137430668
+  groups/rate_dropped: 0.0
+  loss_debug/advantages_max: 1.2499375343322754
+  loss_debug/advantages_mean: 0.09901884198188782
+  loss_debug/advantages_min: -0.749962568283081
+  loss_debug/advantages_std: 0.9991764426231384
+  loss_debug/batch_size: 16.0
+  loss_debug/beta_times_kl_mean: 0.02451959438621998
+  loss_debug/final_loss: -0.07001194357872009
+  loss_debug/kl_max: 10.0
+  loss_debug/kl_mean: 0.24519594013690948
+  loss_debug/kl_min: -5.960464477539063e-08
+  loss_debug/kl_std: 1.286012053489685
+  loss_debug/logprob_diff_max: 2.591315269470215
+  loss_debug/logprob_diff_mean: -0.5279163122177124
+  loss_debug/logprob_diff_min: -43.51372146606445
+  loss_debug/logprobs_max: 0.0
+  loss_debug/logprobs_mean: -0.25038695335388184
+  loss_debug/logprobs_min: -35.422019958496094
+  loss_debug/logprobs_std: 0.9793646931648254
+  loss_debug/num_trainable_tokens: 4654.0
+  loss_debug/per_token_loss_max: 1.749962568283081
+  loss_debug/per_token_loss_mean: 0.03553946316242218
+  loss_debug/per_token_loss_min: -1.2499375343322754
+  loss_debug/policy_loss_max: 1.2499375343322754
+  loss_debug/policy_loss_mean: -0.011019868776202202
+  loss_debug/policy_loss_min: -0.749962568283081
+  loss_debug/ref_logprobs_max: 0.0
+  loss_debug/ref_logprobs_mean: -0.7783032655715942
+  loss_debug/ref_logprobs_min: -43.515625
+  loss_debug/ref_logprobs_std: 3.857363700866699
+  loss_debug/seq_len: 965.0
+  loss_debug/targets_max: 151668.0
+  loss_debug/targets_min: -100.0
+  main/continuous_rollouts/count_rollout_iterations: 1.0
+  main_perf/continuous_rollouts/play_games/duration_avg_s: 22.51335560530424
+  main_perf/continuous_rollouts/play_games/duration_max_s: 22.51335560530424
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_avg_s: 0.604053202085197
+  main_perf/continuous_rollouts/reference_model_calculate_logprobs/duration_max_s: 0.604053202085197
+  main_perf/continuous_rollouts/total_duration_avg_s: 23.160460960119963
+  main_perf/continuous_rollouts/total_duration_max_s: 23.160460960119963
+  main_perf/continuous_training/drop_weights/duration_avg_s: 0.6687612989917397
+  main_perf/continuous_training/drop_weights/duration_max_s: 0.6687612989917397
+  main_perf/continuous_training/push_weights/duration_avg_s: 2.7081380086019635
+  main_perf/continuous_training/push_weights/duration_max_s: 2.7081380086019635
+  main_perf/continuous_training/total_duration_avg_s: 23.345395422540605
+  main_perf/continuous_training/total_duration_max_s: 23.345395422540605
+  main_perf/continuous_training/train_step/duration_avg_s: 1.86399881914258
+  main_perf/continuous_training/train_step/duration_max_s: 1.86399881914258
+  main_perf/continuous_training/update_weights/duration_avg_s: 2.695824056863785
+  main_perf/continuous_training/update_weights/duration_max_s: 2.695824056863785
+  main_perf/continuous_training/waiting_for_buffer/duration_avg_s: 15.408670724369586
+  main_perf/continuous_training/waiting_for_buffer/duration_max_s: 15.408670724369586
+  reference_perf/forward/avg_sequence_length: 965.0
+  reference_perf/forward/compute_logprobs/duration_avg_s: 0.11613925267010927
+  reference_perf/forward/compute_logprobs/duration_max_s: 0.11613925267010927
+  reference_perf/forward/count_forward_passes: 1.0
+  reference_perf/forward/forward/duration_avg_s: 0.45437645073980093
+  reference_perf/forward/forward/duration_max_s: 0.45437645073980093
+  reference_perf/forward/garbage_collection/duration_avg_s: 0.00044993218034505844
+  reference_perf/forward/garbage_collection/duration_max_s: 0.00044993218034505844
+  reference_perf/forward/memory_delta_end_start_avg_gb: 4.369795799255371
+  reference_perf/forward/memory_peak_max_gb: 30.035300254821777
+  reference_perf/forward/to_device/duration_avg_s: 0.00016339775174856186
+  reference_perf/forward/to_device/duration_max_s: 0.00016339775174856186
+  reference_perf/forward/total_duration_avg_s: 0.5711329691112041
+  reference_perf/forward/total_duration_max_s: 0.5711329691112041
+  rl_trainer/avg_loss: -0.07001194357872009
+  rl_trainer/learning_rate: 9.899899899899901e-06
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_avg_s: 0.0005535101518034935
+  rl_trainer_perf/push_weights/flatten_state_dict/duration_max_s: 0.0005535101518034935
+  rl_trainer_perf/push_weights/memory_delta_end_start_avg_gb: 0.0
+  rl_trainer_perf/push_weights/memory_peak_max_gb: 11.417872905731201
+  rl_trainer_perf/push_weights/to_hf/duration_avg_s: 0.0005400190129876137
+  rl_trainer_perf/push_weights/to_hf/duration_max_s: 0.0005400190129876137
+  rl_trainer_perf/push_weights/total_duration_avg_s: 2.7062896750867367
+  rl_trainer_perf/push_weights/total_duration_max_s: 2.7062896750867367
+  rl_trainer_perf/push_weights/ts_save/duration_avg_s: 2.705192631110549
+  rl_trainer_perf/push_weights/ts_save/duration_max_s: 2.705192631110549
+  rl_trainer_perf/step/forward_backward/duration_avg_s: 1.732587629929185
+  rl_trainer_perf/step/forward_backward/duration_max_s: 1.732587629929185
+  rl_trainer_perf/step/memory_delta_end_start_avg_gb: 0.0003466606140136719
+  rl_trainer_perf/step/memory_peak_max_gb: 35.36578989028931
+  rl_trainer_perf/step/optimizer_step/duration_avg_s: 0.010909290052950382
+  rl_trainer_perf/step/optimizer_step/duration_max_s: 0.010909290052950382
+  rl_trainer_perf/step/save_checkpoint/duration_avg_s: 0.11634991131722927
+  rl_trainer_perf/step/save_checkpoint/duration_max_s: 0.11634991131722927
+  rl_trainer_perf/step/total_duration_avg_s: 1.859850506298244
+  rl_trainer_perf/step/total_duration_max_s: 1.859850506298244
+==============================
+
+Traceback (most recent call last):
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/runners.py", line 118, in run
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [608036]
+Shutting down... (this may take a few seconds)
+Timeout waiting for rollouts; forcing cancellation...
+Shutting down Forge actors...
+Shutting down metric logger...
+Metric logging fetcher shutdown timed out likely due to the child process being terminated before the parent.
+wandb: updating run metadata
+wandb: uploading history steps 11-11, summary, console lines 1647-1652
+wandb:
+wandb: Run history:
+wandb:      buffer/add/count_episodes_added █▅▃▂▁▂▂▁▁▁▁
+wandb:       buffer/episode_acceptance_rate ▁▁▁▁▁▁▁▁▁▁▁
+wandb:             buffer/episodes_accepted █▅▃▂▁▂▂▁▁▁▁
+wandb:    buffer/evict/sum_episodes_evicted ▁▂█▅▃▃▂▂▂▂▂▂
+wandb:       buffer/rate_rejected_truncated ▁▁▁▁▁▁▁▁▁▁▁
+wandb:   buffer/sample/avg_data_utilization ▂▁▁▁▁▂▂▂▂▆██
+wandb: buffer/sample/avg_sampled_policy_age ▁██▇█▅█▃▄▄▃▂
+wandb:  buffer/sample/count_sample_requests ▂▁▁▁▁▁▁█▄▄▄▄
+wandb: buffer/sample/max_sampled_policy_age ▁███████████
+wandb: buffer/sample/min_sampled_policy_age ▁█▁▁█▁█▁▁▁▁▁
+wandb:                                 +118 ...
+wandb:
+wandb: Run summary:
+wandb:      buffer/add/count_episodes_added 16
+wandb:       buffer/episode_acceptance_rate 1
+wandb:             buffer/episodes_accepted 16
+wandb:    buffer/evict/sum_episodes_evicted 16
+wandb:       buffer/rate_rejected_truncated 0
+wandb:   buffer/sample/avg_data_utilization 7.93567
+wandb: buffer/sample/avg_sampled_policy_age 0.1875
+wandb:  buffer/sample/count_sample_requests 152
+wandb: buffer/sample/max_sampled_policy_age 1
+wandb: buffer/sample/min_sampled_policy_age 0
+wandb:                                 +118 ...
+wandb:
+wandb: 🚀 View run genial-monkey-94 at: https://wandb.ai/cabernet-team/blackjack-grpo/runs/ae4ah9u2
+wandb: ⭐️ View project at: https://wandb.ai/cabernet-team/blackjack-grpo
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20251120_140408-ae4ah9u2/logs
+WandbBackend global_reduce: Finished run
+Shutting down provisioner..
+Shutting down 2 service(s) and 3 actor(s)...
+Health loop stopped gracefully.
+Traceback (most recent call last):
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/apps/blackjack/main.py", line 1054, in main
+    await training_task
+  File "/home/felipemello/forge/apps/blackjack/main.py", line 1016, in continuous_training
+    await asyncio.sleep(0.1)
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/tasks.py", line 665, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/felipemello/forge/apps/blackjack/main.py", line 1098, in <module>
+    _main()  # @parse grabs the cfg from CLI
+    ^^^^^^^
+  File "/home/felipemello/forge/src/forge/util/config.py", line 313, in wrapper
+    sys.exit(recipe_main(conf))
+             ^^^^^^^^^^^^^^^^^
+  File "/home/felipemello/forge/apps/blackjack/main.py", line 1096, in _main
+    asyncio.run(main(cfg))
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/home/felipemello/.conda/envs/forge/lib/python3.12/asyncio/runners.py", line 123, in run
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+⚠ Forge shutdown timed out after 10s, forcing exit...

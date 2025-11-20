@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# Usage: python -m apps.blackjack.main --config apps/blackjack/qwen3_1_7b.yaml
+# Usage: python -m apps.blackjack.main_v2 --config apps/blackjack/qwen3_1_7b.yaml
 
 import asyncio
 import multiprocessing
@@ -13,13 +13,24 @@ import signal
 import subprocess
 import time
 import uuid
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import lru_cache, partial
+from typing import Any, Optional
 
 import requests
+
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+
+from apps.blackjack.blackjack_env import BlackjackEnv, EnvStepResult
+from apps.blackjack.token_accumulator import (
+    EpisodeData,
+    TokenAccumulator,
+    TruncationReason,
+    ValidationMode,
+)
 from envs.openspiel_env import OpenSpielAction, OpenSpielEnv
 from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
@@ -31,17 +42,22 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
-from forge.data_models.completion import Completion
+from forge.data.common import CROSS_ENTROPY_IGNORE_IDX
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
-from forge.util.ops import compute_logprobs
+from forge.util.ops import compute_logprobs, create_shifted_targets
 from monarch.actor import endpoint
 from omegaconf import DictConfig
+from vllm import SamplingParams
 from vllm.transformers_utils.tokenizer import get_tokenizer
+
+# ============================================================================
+# Server Management Functions for OpenSpiel / OpenEnv
+# TODO: Written by claude, probably very messy
+# ============================================================================
 
 
 def start_openspiel_server(game_name: str, port: int):
@@ -52,12 +68,11 @@ def start_openspiel_server(game_name: str, port: int):
     from envs.openspiel_env.server.app import app
 
     print(f"[SERVER] Starting uvicorn for game '{game_name}' on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info", access_log=False)
 
 
 def kill_process_on_port(port: int):
     """Kill any process using the specified port."""
-    # Find process using the port
     result = subprocess.run(
         ["lsof", "-ti", f":{port}"],
         capture_output=True,
@@ -69,243 +84,344 @@ def kill_process_on_port(port: int):
         for pid in pids:
             try:
                 os.kill(int(pid), signal.SIGKILL)
-                print(f"[DEBUG] Killed existing process {pid} on port {port}")
             except ProcessLookupError:
-                pass  # Process already dead
-        time.sleep(0.5)  # Give OS time to release port
-        return True
+                pass
+        time.sleep(0.5)
+
+
+def _wait_for_server_health(port: int, timeout: int = 30) -> bool:
+    """Wait for server health check to pass."""
+    for attempt in range(timeout):
+        try:
+            resp = requests.get(
+                f"http://localhost:{port}/health",
+                timeout=1,
+                proxies={"http": None, "https": None},
+            )
+            if resp.status_code == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
     return False
+
+
+def start_servers(
+    num_servers: int, base_port: int, game_name: str
+) -> tuple[list, list]:
+    """Start OpenSpiel servers and wait for them to be ready.
+
+    Args:
+        num_servers: Number of servers to start
+        base_port: Base port (will use base_port, base_port+1, ...)
+        game_name: Name of the game (e.g., "blackjack")
+
+    Returns:
+        (server_processes, server_ports)
+
+    Raises:
+        RuntimeError: If any server fails to start
+    """
+    server_processes = []
+    server_ports = []
+
+    # Start all servers
+    for i in range(num_servers):
+        port = base_port + i
+        server_ports.append(port)
+
+        kill_process_on_port(port)  # Clean up existing
+
+        proc = multiprocessing.Process(
+            target=start_openspiel_server, args=(game_name, port)
+        )
+        proc.start()
+        server_processes.append(proc)
+
+    # Wait for health checks
+    time.sleep(1)  # Give servers time to start
+    for i, port in enumerate(server_ports):
+        if not _wait_for_server_health(port, timeout=30):
+            # Cleanup and fail
+            for proc in server_processes:
+                proc.terminate()
+            raise RuntimeError(f"Server on port {port} failed to start")
+
+    print(f"✓ Started {num_servers} OpenSpiel server(s)")
+    return server_processes, server_ports
+
+
+def shutdown_servers(server_processes: list):
+    """Shutdown all OpenSpiel servers gracefully."""
+    for proc in server_processes:
+        proc.terminate()
+        proc.join(timeout=2)
+        if proc.is_alive():
+            proc.kill()
+            proc.join(timeout=1)
+
+
+# ============================================================================
+# debugging
+# ============================================================================
+
+
+def print_episode_debug(episode, tokenizer, rollout_count: int):
+    """Print detailed episode debug info using TokenAccumulator's visualization.
+
+    Creates a temporary TokenAccumulator and populates it with episode data
+    to reuse the colorized token stream display.
+    """
+    print(f"\n[ROLLOUT {rollout_count}] Episode Debug")
+    print(
+        f"Reward: {episode.reward:.2f}, Tokens: {len(episode.all_token_ids)}, "
+        f"Trainable: {episode.response_mask.sum().item()}, Truncated: {episode.is_truncated}"
+    )
+
+    # Create a minimal TokenAccumulator just for visualization
+    # We need to provide the required init params, but we'll override internals
+    dummy_messages = [{"role": "system", "content": ""}]
+    acc = TokenAccumulator(
+        tokenizer=tokenizer,
+        messages=dummy_messages,
+        max_len=len(episode.all_token_ids),
+        eos_id=tokenizer.eos_token_id,
+        thinking=False,
+        validation=ValidationMode.OFF,
+    )
+
+    # Replace internal state with episode data
+    acc._tokens = episode.all_token_ids.tolist()
+    acc._mask = episode.response_mask.tolist()
+    acc._logprobs = [0.0] * len(episode.all_token_ids)  # Dummy logprobs
+    acc.messages = episode.message_log if episode.message_log else []
+
+    # Use TokenAccumulator's existing show_messages method
+    acc.show_messages(max_chars=2000)
+
+
+# ============================================================================
+# Episode
+# ============================================================================
 
 
 @dataclass
 class Episode:
+    """Episode data for GRPO training (new structure)."""
+
     episode_id: str
-    pad_id: int
-    request_len: int
-    response_len: int
-    target: Any | None = None
-    # Processed data
-    completion: Completion | None = None
-    ref_logprobs: torch.Tensor | None = None
-    reward: float | None = None
+    all_token_ids: torch.Tensor  # [seq_len]
+    response_mask: torch.Tensor  # [seq_len]
+    loss_mask: torch.Tensor  # [seq_len]
+    reward: float
+
+    task_name: str = "blackjack"
+    policy_version: int = 0
+    is_truncated: bool = False
     advantage: float | None = None
-
-    @property
-    def policy_version(self) -> int | None:
-        return self.completion.generator_version
-
-    @property
-    def request_tensor(self) -> torch.Tensor:
-        request_tokens: torch.Tensor = self.completion.prompt_ids
-        # Use clone() instead of torch.tensor() to avoid UserWarning
-        if isinstance(request_tokens, torch.Tensor):
-            tensor = request_tokens.clone().detach()
-        else:
-            tensor = torch.tensor(request_tokens, dtype=torch.long)
-        if tensor.shape[0] < self.request_len:  # left pad
-            diff = self.request_len - tensor.shape[0]
-            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
-        return tensor
-
-    @property
-    def response_tensor(self) -> torch.Tensor:
-        response_tokens: torch.Tensor = self.completion.token_ids
-        # Use clone() instead of torch.tensor() to avoid UserWarning
-        if isinstance(response_tokens, torch.Tensor):
-            tensor = response_tokens.clone().detach()
-        else:
-            tensor = torch.tensor(response_tokens, dtype=torch.long)
-        if tensor.shape[0] < self.response_len:  # right pad
-            diff = self.response_len - tensor.shape[0]
-            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
-        return tensor
+    logprobs: torch.Tensor | None = None  # [seq_len]
+    ref_logprobs: torch.Tensor | None = None  # [seq_len]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    message_log: list[dict[str, str]] | None = None
 
 
-# Represents the group (G) of episodes in GRPO
-Group = list[Episode]
-
-# Represents the Policy Model to collect data from
-Policy = Generator
+# ============================================================================
+# Rollout Functions (from v5)
+# ============================================================================
 
 
-def collate(
-    batches: list[Group],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+async def do_single_rollout(
+    env: BlackjackEnv,
+    policy,
+    tokenizer,
+    max_seq_len: int,
+    max_turns: int,
+    messages: list[dict],
+    game_id: str | None = None,
+) -> Episode:
     """
-    Collates a list of batches into a single batch of inputs and targets.
-    Each batch is a list of episodes, and each episode is a dict of tensors.
-    """
-    inputs = []
-    targets = []
-    for batch in batches:
-        request = [e.request_tensor for e in batch]
-        request = torch.stack(request)  # [b x s]
+    Play one game and return one Episode.
 
-        response = [e.response_tensor for e in batch]
-        response = torch.stack(response)  # [b x s]
-
-        ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
-
-        advantages = [e.advantage for e in batch]
-        advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
-
-        pad_id = batch[0].pad_id
-        mask = response != pad_id
-
-        input = {"tokens": torch.cat([request, response], dim=1)}
-        target = {
-            "response": response,
-            "ref_logprobs": ref_logprobs,
-            "advantages": advantages,
-            "padding_mask": mask,
-        }
-        inputs.append(input)
-        targets.append(target)
-    return inputs, targets
-
-
-# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
-def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
-    beta: float = 0.1,
-) -> torch.Tensor:
-    logprobs: torch.Tensor = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
-    ).mean()
-    return loss
-
-
-# Blackjack-specific helper functions
-def format_prompt(step_num: int, action_history: list, obs, tokenizer) -> str:
-    """
-    Format game state as text prompt for LLM with full game information.
+    Uses TokenAccumulator for efficient multi-turn token management with BASE anchor pattern.
 
     Args:
-        step_num: Current step number
-        action_history: List of (action_name, player_total_after) tuples
-        obs: OpenSpiel observation with metadata
-        tokenizer: Tokenizer for chat template
+        env: BlackjackEnv instance
+        policy: Policy for generation
+        tokenizer: Tokenizer with apply_chat_template
+        max_seq_len: Maximum tokens for full conversation
+        max_turns: Maximum game turns
+        messages: Initial messages (e.g., [{"role": "system", "content": "..."}])
+        game_id: Optional game ID
 
     Returns:
-        Formatted prompt string with game state
+        Episode with accumulated tokens, masks, and logprobs
     """
-    system = """You are an expert BlackJack player. Analyze the game state and output only 'HIT' or 'STAND'."""
 
-    # Get game state from metadata (populated by OpenEnv server)
-    player_total = obs.metadata.get("player_total", "?")
-    dealer_card = obs.metadata.get("dealer_card", "?")
+    if game_id is None:
+        game_id = str(uuid.uuid4())
 
-    state_desc = f"=== BlackJack Game (Step {step_num + 1}) ===\n\n"
-
-    # Add game state information
-    state_desc += "Current State:\n"
-    state_desc += f"  Your hand total: {player_total}\n"
-
-    # Format dealer card - just show the value (Ace or 2-10)
-    if dealer_card == 1:
-        dealer_str = "Ace"
-    elif dealer_card != "?":
-        dealer_str = str(dealer_card)
-    else:
-        dealer_str = "?"
-    state_desc += f"  Dealer shows: {dealer_str}\n"
-    state_desc += f"  Legal actions: {', '.join('HIT' if a == 0 else 'STAND' for a in obs.legal_actions)}\n"
-    state_desc += "\n"
-
-    # Add action history with hand totals for card counting
-    if action_history:
-        state_desc += "Previous actions:\n"
-        for i, (action_name, hand_total) in enumerate(action_history):
-            state_desc += f"  {i + 1}. {action_name} (hand became {hand_total})\n"
-        state_desc += "\n"
-
-    state_desc += "What do you do? Output only 'HIT' or 'STAND'. You have a small limit for thinking tokens, so avoid thinking for long."
-
-    chat = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": state_desc},
-    ]
-
-    return tokenizer.apply_chat_template(
-        chat, tokenize=False, add_generation_prompt=True
+    # Initialize TokenAccumulator with BASE anchor pattern
+    accumulator = TokenAccumulator(
+        tokenizer=tokenizer,
+        messages=messages,
+        max_len=max_seq_len,
+        eos_id=tokenizer.eos_token_id,
+        validation=ValidationMode.OFF,
+        thinking=False,
     )
 
+    try:
+        # ============ Reset environment ============
+        initial_obs = env.reset()
+        accumulator.add_user(initial_obs)
 
-def parse_action(response_text: str, legal_actions: list[int]) -> int:
-    """Parse action from model's text response."""
-    text_lower = response_text.lower()
+        # ============ Multi-turn loop ============
+        final_reward = 0.0
+        turn_num = 0
+        game_done = False
+        policy_version = 0
 
-    if text_lower.endswith("hit"):
-        action_id = 0
-    elif text_lower.endswith("stand"):
-        action_id = 1
-    else:
-        action_id = 2
+        while not game_done and turn_num < max_turns:
+            remaining_budget = accumulator.budget
 
-    return action_id
+            if remaining_budget <= 0:
+                break
+
+            # ============ Generate ============
+            prompt = accumulator.format_prompt()
+            sampling_params = SamplingParams(max_tokens=remaining_budget)
+            responses = await policy.generate.route(
+                prompt, sampling_params=sampling_params
+            )
+            response = responses[0]
+
+            policy_version = response.generator_version
+
+            # ============ Add assistant response ============
+            response_logprobs = response.logprobs
+            response_text = response.text
+            response_token_ids_list = list(response.token_ids)
+
+            # success means not truncated. We drop the entire response if truncated.
+            success = accumulator.add_assistant(
+                text=response_text,
+                token_ids=response_token_ids_list,
+                logprobs=response_logprobs,
+            )
+
+            # If generation truncated, break
+            if not success:
+                break
+
+            # ============ Step environment ============
+            result = env.step(action_text=response.text)
+            final_reward = result.reward
+            game_done = result.done
+            turn_num += 1
+
+            # ============ Add environment observation ============
+            if not result.done:
+                obs_text = result.observation["content"]
+                success = accumulator.add_user(obs_text)
+
+                # If env obs would exceed budget, break
+                if not success:
+                    break
+
+        # ============ Get episode data ============
+        episode_data = accumulator.get_data()
+
+        # Record metrics
+        if episode_data.truncation_reason:
+            record_metric(
+                f"episode/truncated_{episode_data.truncation_reason}",
+                1,
+                Reduce.SUM,
+            )
+        record_metric("episode/total_tokens", len(episode_data.token_ids), Reduce.MEAN)
+        record_metric("episode/turns", turn_num, Reduce.MEAN)
+
+        # ============ Create episode ============
+        # Create loss_mask by shifting response_mask
+        loss_mask_tensor = torch.roll(
+            episode_data.response_mask, shifts=-1, dims=0
+        ).float()
+        loss_mask_tensor[-1] = 0.0  # Last position should not train
+
+        return Episode(
+            episode_id=game_id,
+            task_name="blackjack",
+            policy_version=policy_version,
+            is_truncated=episode_data.is_truncated,
+            all_token_ids=episode_data.token_ids,
+            response_mask=episode_data.response_mask,
+            loss_mask=loss_mask_tensor,
+            reward=final_reward,
+            logprobs=episode_data.logprobs,
+            message_log=accumulator.messages.copy(),
+            metadata={
+                "truncation_reason": episode_data.truncation_reason,
+                "num_turns": turn_num,
+                "num_trainable_tokens": episode_data.response_mask.sum().item(),
+                **(result.metadata if "result" in locals() else {}),
+            },
+        )
+
+    finally:
+        env.close()
 
 
-@dataclass
-class BlackJackReward(ForgeActor):
-    """Reward actor for evaluating game outcomes."""
+async def do_group_rollout(
+    envs: list[BlackjackEnv],
+    policy,
+    tokenizer,
+    max_seq_len: int,
+    max_turns: int,
+    messages: list[dict],
+) -> list[Episode]:
+    """
+    Rollout multiple games in parallel.
 
-    @endpoint
-    async def evaluate_response(
-        self, prompt: str, response: str, game_reward: float
-    ) -> float:
-        """
-        Evaluate episode reward with improved shaping.
+    Args:
+        envs: List of N BlackjackEnv instances
+        policy: Policy for generation
+        tokenizer: Tokenizer for chat template
+        max_seq_len: Episode-level token budget
+        max_turns: Max turns per game
+        messages: Initial messages for all games (e.g., [{"role": "system", ...}])
 
-        Args:
-            prompt: Game state prompt
-            response: Model's action
-            game_reward: Raw game outcome (+1/-1/0)
+    Returns:
+        List of N Episodes
+    """
+    tasks = [
+        do_single_rollout(
+            env=envs[i],
+            policy=policy,
+            tokenizer=tokenizer,
+            max_seq_len=max_seq_len,
+            max_turns=max_turns,
+            messages=messages,
+            game_id=f"game_{i}_{uuid.uuid4().hex[:8]}",
+        )
+        for i in range(len(envs))
+    ]
 
-        Returns:
-            Shaped reward value
-        """
-        # Check if the response ends with a valid action
-        response_lower = response.lower().strip()
-        last_words = response_lower.split()[-3:] if response_lower else []
+    episodes = await asyncio.gather(*tasks)
+    return list(episodes)
 
-        has_valid_action = any(word in ["hit", "stand"] for word in last_words)
 
-        # Base reward from game outcome
-        reward = float(game_reward)
-
-        # Penalize invalid format (didn't end with HIT or STAND)
-        if not has_valid_action:
-            reward -= 1.0  # Strong penalty for invalid format
-            record_metric("reward/invalid_action_rate", 1, Reduce.MEAN)
-        else:
-            record_metric("reward/invalid_action_rate", 0, Reduce.MEAN)
-
-        # Optional reward shaping: Scale up wins
-        if game_reward > 0:
-            reward = max(reward, 1.5)  # Make wins more valuable (but respect penalty)
-        elif game_reward == 0:
-            reward = max(reward, 0.3)  # Pushes better than losses (but respect penalty)
-
-        record_metric("reward/evaluate_response/avg_reward", reward, Reduce.MEAN)
-
-        return reward
+# ============================================================================
+# Helper Actors (from main.py)
+# ============================================================================
 
 
 @dataclass
 class ComputeAdvantages(ForgeActor):
+    """Compute advantages for a group of episodes."""
+
     @endpoint
-    async def compute(self, group: Group) -> list[float]:
-        # TODO: add batch processing
+    async def compute(self, group: list[Episode]) -> list[float]:
+        """Compute advantages using reward standardization."""
         rewards = torch.tensor([[e.reward for e in group]])
         mean = rewards.mean(1, keepdim=True)
         std = rewards.std(1, keepdim=True)
@@ -313,39 +429,347 @@ class ComputeAdvantages(ForgeActor):
         return advantages.squeeze(0).tolist()
 
 
-@dataclass
-class EnvironmentActor(ForgeActor):
-    """Actor that manages OpenEnv connections and tokenizer."""
+# ============================================================================
+# Training Functions (from main.py)
+# ============================================================================
 
-    server_url: str = "http://localhost:8004"
-    model: str = "Qwen/Qwen3-1.7B"
 
-    @endpoint
-    def setup(self):
-        self._tokenizer = get_tokenizer(self.model)
-        print(f"EnvironmentActor initialized (server: {self.server_url})")
+def collate(
+    batches: list[list[Episode]],
+    pad_id: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Collates a list of batches (groups) into inputs and targets.
 
-    @endpoint
-    async def get_tokenizer(self):
-        return self._tokenizer
+    Args:
+        batches: List of groups, where each group is a list of Episodes
+        pad_id: Padding token ID from tokenizer
 
-    @endpoint
-    async def pad_token(self):
-        # Use pad_token_id if available, otherwise use eos_token_id
-        # Llama models don't have a pad token by default
-        if self._tokenizer.pad_token_id is not None:
-            return self._tokenizer.pad_token_id
-        else:
-            return self._tokenizer.eos_token_id
+    Returns:
+        (inputs, targets) for training
+    """
+    inputs = []
+    targets = []
+
+    for batch in batches:
+        # Stack all tensors (pad to max length in batch)
+        all_tokens = [e.all_token_ids for e in batch]
+        all_tokens = torch.nn.utils.rnn.pad_sequence(
+            all_tokens, batch_first=True, padding_value=pad_id
+        )
+
+        loss_masks = [e.loss_mask for e in batch]
+        loss_masks = torch.nn.utils.rnn.pad_sequence(
+            loss_masks, batch_first=True, padding_value=0.0
+        )
+
+        ref_logprobs = [e.ref_logprobs for e in batch]
+        ref_logprobs = torch.nn.utils.rnn.pad_sequence(
+            ref_logprobs, batch_first=True, padding_value=0.0
+        )
+
+        advantages = torch.tensor([e.advantage for e in batch]).unsqueeze(-1)  # [b, 1]
+
+        # Create input and target dicts
+        input = {"tokens": all_tokens}
+        target = {
+            "input_ids": all_tokens,  # For torch.roll in loss
+            "loss_mask": loss_masks,  # Trainable positions
+            "ref_logprobs": ref_logprobs,
+            "advantages": advantages,
+        }
+
+        inputs.append(input)
+        targets.append(target)
+
+    return inputs, targets
+
+
+# TODO: delete extensive debugging
+# TODO: make KL clipping optional
+def simple_grpo_loss(
+    logits: torch.Tensor,  # [b, seq_len, vocab]
+    input_ids: torch.Tensor,  # [b, seq_len]
+    loss_mask: torch.Tensor,  # [b, seq_len] float
+    ref_logprobs: torch.Tensor,  # [b, seq_len]
+    advantages: torch.Tensor,  # [b, 1]
+    beta: float = 0.1,
+) -> torch.Tensor:
+    """
+    GRPO loss with KL clipping
+
+    Args:
+        logits: Model logits [b, seq_len, vocab_size]
+        input_ids: Input token IDs [b, seq_len]
+        loss_mask: Loss mask [b, seq_len] - 1.0 for trainable positions
+        ref_logprobs: Reference logprobs [b, seq_len]
+        advantages: Advantages [b, 1]
+        beta: KL penalty coefficient
+
+    Returns:
+        Loss scalar
+    """
+    # Create targets using utility function
+    targets = create_shifted_targets(input_ids, loss_mask)  # [b, seq_len]
+
+    # Compute policy logprobs (ignore_index automatically zeros masked positions)
+    logprobs = compute_logprobs(
+        logits, targets, ignore_index=CROSS_ENTROPY_IGNORE_IDX
+    )  # [b, seq_len] - masked positions already 0.0!
+
+    # ========================================================================
+    # LOGGING: Input validation
+    # ========================================================================
+    record_metric("loss_debug/batch_size", float(input_ids.shape[0]), Reduce.MEAN)
+    record_metric("loss_debug/seq_len", float(input_ids.shape[1]), Reduce.MEAN)
+    record_metric(
+        "loss_debug/num_trainable_tokens", loss_mask.sum().item(), Reduce.MEAN
+    )
+    record_metric("loss_debug/targets_min", targets.float().min().item(), Reduce.MEAN)
+    record_metric("loss_debug/targets_max", targets.float().max().item(), Reduce.MEAN)
+
+    # ========================================================================
+    # LOGGING: Logprobs statistics
+    # ========================================================================
+    # Mask logprobs for stats (only look at trainable positions)
+    masked_logprobs = logprobs * loss_mask
+    masked_ref_logprobs = ref_logprobs * loss_mask
+    num_trainable = loss_mask.sum().clamp(min=1.0)
+
+    record_metric(
+        "loss_debug/logprobs_mean",
+        (masked_logprobs.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_min",
+        logprobs[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_max",
+        logprobs[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprobs_std",
+        logprobs[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    record_metric(
+        "loss_debug/ref_logprobs_mean",
+        (masked_ref_logprobs.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_min",
+        ref_logprobs[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_max",
+        ref_logprobs[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/ref_logprobs_std",
+        ref_logprobs[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # Logprob difference
+    logprob_diff = ref_logprobs - logprobs
+    masked_logprob_diff = logprob_diff * loss_mask
+    record_metric(
+        "loss_debug/logprob_diff_mean",
+        (masked_logprob_diff.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprob_diff_min",
+        logprob_diff[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/logprob_diff_max",
+        logprob_diff[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # KL divergence (masked positions are 0.0, so they don't contribute)
+    # Following VERL's approach: clip log difference before exp for numerical stability
+    # See: verl/trainer/ppo/core_algos.py kl_penalty_forward()
+    logprob_diff_clipped = torch.clamp(logprob_diff, min=-20.0, max=20.0)
+    kl = torch.exp(logprob_diff_clipped) - logprob_diff_clipped - 1
+    # Clip final KL to prevent extreme values
+    kl = torch.clamp(kl, min=-10.0, max=10.0)
+
+    # ========================================================================
+    # LOGGING: KL divergence statistics
+    # ========================================================================
+    masked_kl = kl * loss_mask
+    record_metric(
+        "loss_debug/kl_mean", (masked_kl.sum() / num_trainable).item(), Reduce.MEAN
+    )
+    record_metric(
+        "loss_debug/kl_min",
+        kl[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/kl_max",
+        kl[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/kl_std",
+        kl[loss_mask.bool()].std().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/beta_times_kl_mean",
+        (beta * masked_kl.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+
+    # ========================================================================
+    # LOGGING: Advantages statistics
+    # ========================================================================
+    record_metric("loss_debug/advantages_mean", advantages.mean().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_min", advantages.min().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_max", advantages.max().item(), Reduce.MEAN)
+    record_metric("loss_debug/advantages_std", advantages.std().item(), Reduce.MEAN)
+
+    # Policy loss
+    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
+    per_token_loss = -(per_token_policy_loss - beta * kl)  # [b, seq_len]
+
+    # ========================================================================
+    # LOGGING: Per-token loss statistics
+    # ========================================================================
+    masked_policy_loss = per_token_policy_loss * loss_mask
+    masked_per_token_loss = per_token_loss * loss_mask
+
+    record_metric(
+        "loss_debug/policy_loss_mean",
+        (masked_policy_loss.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/policy_loss_min",
+        (
+            per_token_policy_loss[loss_mask.bool()].min().item()
+            if num_trainable > 0
+            else 0.0
+        ),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/policy_loss_max",
+        (
+            per_token_policy_loss[loss_mask.bool()].max().item()
+            if num_trainable > 0
+            else 0.0
+        ),
+        Reduce.MEAN,
+    )
+
+    record_metric(
+        "loss_debug/per_token_loss_mean",
+        (masked_per_token_loss.sum() / num_trainable).item(),
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/per_token_loss_min",
+        per_token_loss[loss_mask.bool()].min().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+    record_metric(
+        "loss_debug/per_token_loss_max",
+        per_token_loss[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        Reduce.MEAN,
+    )
+
+    # Masked average (per sample, then batch average)
+    loss = (
+        (per_token_loss * loss_mask).sum(dim=1) / loss_mask.sum(dim=1).clamp(min=1.0)
+    ).mean()
+
+    # ========================================================================
+    # LOGGING: Final loss
+    # ========================================================================
+    record_metric("loss_debug/final_loss", loss.item(), Reduce.MEAN)
+
+    # ========================================================================
+    # EMERGENCY DUMP: If any value is huge, save tensors to file
+    # ========================================================================
+    huge_threshold = 1000.0
+    all_stats = [
+        ("logprobs_mean", (masked_logprobs.sum() / num_trainable).item()),
+        ("ref_logprobs_mean", (masked_ref_logprobs.sum() / num_trainable).item()),
+        ("kl_mean", (masked_kl.sum() / num_trainable).item()),
+        ("kl_max", kl[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0),
+        ("advantages_mean", advantages.mean().item()),
+        ("advantages_max", advantages.max().item()),
+        ("policy_loss_mean", (masked_policy_loss.sum() / num_trainable).item()),
+        (
+            "policy_loss_max",
+            (
+                per_token_policy_loss[loss_mask.bool()].max().item()
+                if num_trainable > 0
+                else 0.0
+            ),
+        ),
+        ("per_token_loss_mean", (masked_per_token_loss.sum() / num_trainable).item()),
+        (
+            "per_token_loss_max",
+            per_token_loss[loss_mask.bool()].max().item() if num_trainable > 0 else 0.0,
+        ),
+        ("final_loss", loss.item()),
+    ]
+
+    # for name, value in all_stats:
+    #     if abs(value) > huge_threshold:
+    #         # Save all tensors to file for debugging
+    #         import datetime
+
+    #         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    #         dump_file = f"/tmp/grpo_loss_debug_{timestamp}.pt"
+    #         torch.save(
+    #             {
+    #                 "logits": logits.cpu(),
+    #                 "input_ids": input_ids.cpu(),
+    #                 "targets": targets.cpu(),
+    #                 "loss_mask": loss_mask.cpu(),
+    #                 "logprobs": logprobs.cpu(),
+    #                 "ref_logprobs": ref_logprobs.cpu(),
+    #                 "advantages": advantages.cpu(),
+    #                 "kl": kl.cpu(),
+    #                 "per_token_policy_loss": per_token_policy_loss.cpu(),
+    #                 "per_token_loss": per_token_loss.cpu(),
+    #                 "loss": loss.cpu(),
+    #                 "beta": beta,
+    #                 "trigger_stat": name,
+    #                 "trigger_value": value,
+    #             },
+    #             dump_file,
+    #         )
+    #         print(f"\n{'='*80}")
+    #         print(f"⚠️  HUGE VALUE DETECTED: {name} = {value:.2f}")
+    #         print(f"Dumped all tensors to: {dump_file}")
+    #         print(f"{'='*80}\n")
+    #         break  # Only dump once
+
+    return loss
 
 
 async def drop_weights(version: int):
+    """Drop old weights from torchstore."""
     print(f"Dropping weights @ version {version}")
     start_time = time.perf_counter()
     prefix = get_param_prefix(version)
     matching_keys = await ts.keys(prefix)
-    # TODO: once we have something like `get_meta()` in torchstore, we can just
-    # query the type of the object instead of relying on keys.
     dcp_key = get_dcp_whole_state_dict_key(version)
     if dcp_key in matching_keys:
         dcp_handle = await ts.get(dcp_key)
@@ -356,257 +780,20 @@ async def drop_weights(version: int):
     print(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
 
 
-async def play_game(
-    game_idx: int,
-    game_id: str,
-    server_url: str,
-    policy: Generator,
-    tokenizer,
-    rollout_count: int = 0,
-):
-    """
-    Play a single blackjack game and collect episode data.
-
-    Args:
-        game_idx: Index of this game in the rollout
-        game_id: Unique game identifier
-        server_url: OpenEnv server URL
-        policy: Policy (Generator) for action selection
-        tokenizer: Tokenizer for prompt formatting
-        rollout_count: Current rollout iteration
-
-    Returns:
-        List of step results with prompts, responses, and final reward
-    """
-    env = OpenSpielEnv(base_url=server_url)
-
-    # Bypass corporate proxy for localhost connections
-    env._http.trust_env = False
-
-    print(f"\n🎮 GAME {game_idx + 1} (Rollout #{rollout_count + 1}) - ID: {game_id}")
-
-    try:
-        result = env.reset()
-        obs = result.observation
-        done = False
-        step_num = 0
-        action_history = []
-        game_steps = []
-
-        while not done and step_num < 10:  # Max 10 steps per game
-            # Format prompt with game state
-            prompt = format_prompt(step_num, action_history, obs, tokenizer)
-
-            # Generate action with policy (with timeout)
-            try:
-                responses = await asyncio.wait_for(
-                    policy.generate.route(prompt), timeout=60.0
-                )
-            except asyncio.TimeoutError:
-                print(
-                    f"[ERROR] Policy generation timed out for {game_id} at step {step_num}"
-                )
-                raise
-
-            response = responses[0]
-
-            # Parse and execute action
-            action_id = parse_action(response.text, obs.legal_actions)
-            action_name = "HIT" if action_id == 0 else "STAND"
-
-            # Store step data (reward assigned later)
-            game_steps.append(
-                {
-                    "step_num": step_num,
-                    "prompt": prompt,
-                    "response": response,
-                }
-            )
-
-            # Take action in environment
-            result = env.step(
-                OpenSpielAction(action_id=action_id, game_name="blackjack")
-            )
-            obs = result.observation
-            done = result.done
-
-            # Add action to history with the resulting hand total (for card counting)
-            hand_total_after = obs.metadata.get("player_total", "?")
-            action_history.append((action_name, hand_total_after))
-
-            step_num += 1
-
-        # Get final game outcome
-        final_game_reward = result.reward  # +1 (win), -1 (loss), or 0 (push)
-
-        outcome_text = (
-            "WIN"
-            if final_game_reward > 0
-            else ("LOSS" if final_game_reward < 0 else "PUSH")
-        )
-        print(
-            f"  Result: {outcome_text} (reward={final_game_reward}, steps={len(game_steps)})"
-        )
-
-        # Print all steps with full model thinking
-        if game_steps:
-            print(f"\n  === GAME SUMMARY ===")
-            for step_data in game_steps:
-                print(f"\n  Step {step_data['step_num'] + 1}:")
-
-                # Parse prompt to show key information
-                prompt_lines = step_data["prompt"].split("\n")
-                for line in prompt_lines:
-                    if "Your hand total:" in line or "Dealer shows:" in line:
-                        print(f"    {line.strip()}")
-
-                # Show action taken
-                action_text = step_data["response"].text
-                if "hit" in action_text.lower():
-                    action_taken = "HIT"
-                elif "stand" in action_text.lower():
-                    action_taken = "STAND"
-                else:
-                    action_taken = "UNKNOWN"
-                print(f"    Action: {action_taken}")
-
-                # Show full thinking process
-                print(f"\n    Full AI thinking:")
-                print(f"    {'-' * 60}")
-                # Print the complete response text with proper indentation
-                for line in step_data["response"].text.split("\n"):
-                    print(f"    {line}")
-                print(f"    {'-' * 60}")
-
-            print(f"\n  Final outcome: {outcome_text} (reward={final_game_reward})")
-            print(f"  ===================\n")
-
-        # Assign final reward to all steps
-        all_step_results = []
-        total_steps = len(game_steps)
-        for step_data in game_steps:
-            all_step_results.append(
-                {
-                    "game_id": game_id,
-                    "final_reward": final_game_reward,
-                    "total_steps": total_steps,
-                    **step_data,
-                }
-            )
-
-        # Record game outcome metrics with clearer names
-        record_metric("game/total_games_played", 1, Reduce.SUM)
-        record_metric("game/average_game_length_in_steps", len(game_steps), Reduce.MEAN)
-
-        # Average reward: +1 for win, -1 for loss, 0 for push
-        record_metric("game/average_reward", final_game_reward, Reduce.MEAN)
-
-        # Track wins, losses, pushes separately
-        if final_game_reward > 0:
-            record_metric("game/count_wins", 1, Reduce.SUM)
-            record_metric("game/win_rate", 1, Reduce.MEAN)  # 1 = win, 0 = not win
-        elif final_game_reward < 0:
-            record_metric("game/count_losses", 1, Reduce.SUM)
-            record_metric("game/win_rate", 0, Reduce.MEAN)  # 0 = loss
-        else:
-            record_metric("game/count_pushes", 1, Reduce.SUM)
-            record_metric("game/win_rate", 0, Reduce.MEAN)  # 0 = push (not a win)
-
-        # Parse the last observation before game ended to get final state
-        # Note: We use the observation from the last step (before done=True)
-        if game_steps:
-            # Get the observation from the last action step
-            last_step_obs = obs  # This is the final obs after the last step
-
-            player_final = last_step_obs.metadata.get("player_total")
-            dealer_card = last_step_obs.metadata.get("dealer_card")
-
-            if player_final is not None and dealer_card is not None:
-                # Record final state metrics
-                record_metric(
-                    "game/average_player_final_hand", player_final, Reduce.MEAN
-                )
-                record_metric("game/average_dealer_upcard", dealer_card, Reduce.MEAN)
-
-                # Player busted if > 21
-                if player_final > 21:
-                    record_metric("game/bust_rate", 1, Reduce.MEAN)
-                else:
-                    record_metric("game/bust_rate", 0, Reduce.MEAN)
-
-                # Track average hand totals by outcome (for strategy analysis)
-                if final_game_reward > 0:  # Win
-                    record_metric(
-                        "game/average_winning_hand_total", player_final, Reduce.MEAN
-                    )
-                elif final_game_reward < 0:  # Loss
-                    record_metric(
-                        "game/average_losing_hand_total", player_final, Reduce.MEAN
-                    )
-
-        return all_step_results
-
-    except Exception as e:
-        print(f"[ERROR] play_game {game_id} failed with {type(e).__name__}: {e}")
-        import traceback
-
-        traceback.print_exc()
-        raise
-    finally:
-        env.close()
+# ============================================================================
+# Main Training Loop
+# ============================================================================
 
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    group_size = cfg.group_size
-    max_req_tokens = cfg.max_req_tokens
-    max_res_tokens = cfg.max_res_tokens
 
-    # ---- Start OpenSpiel Server ---- #
-    game_name = cfg.blackjack_env.get("game_name", "blackjack")
-    server_port = cfg.blackjack_env.get("server_port", 8004)
-
-    # Clean up any existing server on this port
-    if kill_process_on_port(server_port):
-        print(f"Cleaned up existing server on port {server_port}")
-
-    print(f"Starting OpenSpiel server for game '{game_name}' on port {server_port}...")
-    server_process = multiprocessing.Process(
-        target=start_openspiel_server, args=(game_name, server_port)
+    # ---- Start OpenSpiel Servers ---- #
+    server_processes, server_ports = start_servers(
+        num_servers=cfg.get("rollout_threads", 1),
+        base_port=cfg.blackjack_env.server_port,
+        game_name=cfg.blackjack_env.game_name,
     )
-    server_process.start()
-
-    # Wait for server to be ready
-    print("Waiting for OpenSpiel server to be ready...")
-    server_ready = False
-    for i in range(30):  # Try for 30 seconds
-        # Check if server process is still alive
-        if not server_process.is_alive():
-            print(f"[ERROR] Server process died unexpectedly!")
-            print(f"[ERROR] Exit code: {server_process.exitcode}")
-            raise RuntimeError(
-                f"OpenSpiel server process crashed during startup (exit code: {server_process.exitcode})"
-            )
-
-        try:
-            # Skip proxy for localhost to avoid corporate proxy blocking with 403
-            resp = requests.get(
-                f"http://localhost:{server_port}/health",
-                timeout=1,
-                proxies={"http": None, "https": None},  # Bypass proxy
-            )
-            print(f"[DEBUG] Health check attempt {i+1}: status={resp.status_code}")
-            if resp.status_code == 200:
-                server_ready = True
-                print(f"✓ OpenSpiel server ready (took {i+1}s)")
-                break
-        except Exception as e:
-            print(f"[DEBUG] Health check attempt {i+1} failed: {type(e).__name__}: {e}")
-            time.sleep(1)
-
-    if not server_ready:
-        server_process.terminate()
-        raise RuntimeError(f"OpenSpiel server never became ready on port {server_port}")
 
     # ---- Global setups ---- #
     provisioner = None
@@ -617,52 +804,50 @@ async def main(cfg: DictConfig):
     else:
         provisioner = await init_provisioner()
 
-    metric_logging_cfg = cfg.get("metric_logging", {})
+    metric_logging_cfg = cfg.metric_logging
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 
+    # ---- Setup tokenizers ---- #
+    # Create N tokenizers for N rollout threads (one per thread, no sharing)
+    num_rollout_threads = cfg.rollout_threads
+    tokenizers = [
+        get_tokenizer(cfg.blackjack_env.model) for _ in range(num_rollout_threads)
+    ]
+    pad_id = (
+        tokenizers[0].pad_token_id
+        if tokenizers[0].pad_token_id is not None
+        else tokenizers[0].eos_token_id
+    )
+
+    # Create collate function with pad_id
+    collate_fn = partial(collate, pad_id=pad_id)
+
     # ---- Setup services ---- #
-
-    # Extract only the fields needed for EnvironmentActor
-    env_actor_config = {
-        "server_url": cfg.blackjack_env.server_url,
-        "model": cfg.blackjack_env.model,
-    }
-
     (
-        env_actor,
         policy,
         trainer,
         replay_buffer,
         compute_advantages,
         ref_model,
-        reward_actor,
     ) = await asyncio.gather(
-        EnvironmentActor.options(**cfg.actors.blackjack_env).as_actor(
-            **env_actor_config
-        ),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
         TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
-            **cfg.replay_buffer, collate=collate
+            **cfg.replay_buffer, collate=collate_fn
         ),
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
-        BlackJackReward.options(**cfg.services.reward_actor).as_service(),
     )
 
-    # Set max_steps to the configured value, or -1 if not specified or Null
     max_steps = cfg.trainer.training.steps or -1
 
     print("All services initialized successfully!")
     shutdown_event = asyncio.Event()
-    # Here we spawn a torchstore storage volume per trainer process.
-    # We initialize after service initialization because torchstore currently
-    # requires access to the underlying proc meshes in the local rank strategy.
-    # We should be able to hide this in the future.
-    # TODO: support multiple host meshes
+
+    # Initialize torchstore
     trainer_num_procs = cfg.actors.trainer["procs"]
     trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
     trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
@@ -672,112 +857,140 @@ async def main(cfg: DictConfig):
     )
     print("Torchstore successfully initialized with local rank strategy")
 
-    # ---- Warmup policy ---- #
-    print("Warming up policy with test generation...")
-    test_prompt = "Test prompt to warm up the model."
-    try:
-        test_response = await asyncio.wait_for(
-            policy.generate.route(test_prompt), timeout=120.0
-        )
-        print(f"✓ Policy ready, test response: '{test_response[0].text[:50]}...'")
-    except asyncio.TimeoutError:
-        raise RuntimeError("Policy warmup timed out after 120s")
-    except Exception as e:
-        raise RuntimeError(f"Policy warmup failed: {e}")
-
-    # ---- Test OpenSpiel server ---- #
-    print("Testing OpenSpiel server connection...")
-    test_env = OpenSpielEnv(
-        base_url=cfg.blackjack_env.get("server_url", "http://localhost:9000")
-    )
-    # Bypass corporate proxy for localhost - must set trust_env=False
-    test_env._http.trust_env = False
-    try:
-        print(
-            f"[DEBUG] Test env base_url={test_env._base}, timeout={test_env._timeout}"
-        )
-        print(f"[DEBUG] Test env trust_env={test_env._http.trust_env}")
-        print(f"[DEBUG] Calling test_env.reset()...")
-        test_result = test_env.reset()
-        print(
-            f"✓ OpenSpiel server test successful, legal_actions={test_result.observation.legal_actions}"
-        )
-        test_env.close()
-    except Exception as e:
-        print(f"[ERROR] OpenSpiel server test failed: {type(e).__name__}: {e}")
-        import traceback
-
-        traceback.print_exc()
-        raise RuntimeError(f"OpenSpiel server test failed: {e}")
-
     # ---- Core RL loops ---- #
-    async def continuous_rollouts():
+    async def continuous_rollouts(thread_id: int, tokenizer):
+        """Main GRPO rollout loop using new architecture."""
         rollout_count = 0
-        pad_id = await env_actor.pad_token.call_one()
-        tokenizer = await env_actor.get_tokenizer.call_one()
-        server_url = cfg.blackjack_env.get("server_url", "http://localhost:8004")
+
+        # Config - use dedicated server for this thread
+        server_url = f"http://localhost:{server_ports[thread_id]}"
+        max_seq_len = cfg.blackjack_env.max_seq_len
+        max_turns = cfg.blackjack_env.max_turns
+        group_size = cfg.group_size
+
+        print(f"[Thread {thread_id}] Using server at {server_url}")
+
+        # Initial messages
+        initial_messages = [
+            {
+                "role": "system",
+                "content": """You are an expert Blackjack player.
+
+GOAL: Get a hand total closer to 21 than the dealer without going over 21 (busting).
+
+RULES:
+- Card values: Ace=1 or 11, Face cards (J,Q,K)=10, Number cards=face value
+- If you go over 21, you bust and lose immediately
+- The dealer plays after you and must hit until reaching 17+
+
+ACTIONS:
+- HIT: Take another card (increases your hand total)
+- STAND: Keep your current hand and end your turn
+
+WIN CONDITIONS:
+- Your hand is closer to 21 than the dealer's final hand
+- Dealer busts (goes over 21) and you don't
+- You get exactly 21
+
+IMPORTANT: You MUST output your action in the following format:
+<answer>HIT</answer> or <answer>STAND</answer>""",
+            }
+        ]
 
         while not shutdown_event.is_set():
             t = Tracer("main_perf/continuous_rollouts")
             t.start()
 
-            # Play group_size games
-            all_step_results = []
-            for game_idx in range(group_size):
-                game_id = str(uuid.uuid4())[:8]
-                step_results = await play_game(
-                    game_idx=game_idx,
-                    game_id=game_id,
-                    server_url=server_url,
+            # ============ Step 1: Rollout group ============
+            # TODO: currently done serially
+            episodes = []
+            for i in range(group_size):
+                env = BlackjackEnv(server_url=server_url)
+                game_id = f"game_{i}_{uuid.uuid4().hex[:8]}"
+
+                episode = await do_single_rollout(
+                    env=env,
                     policy=policy,
                     tokenizer=tokenizer,
-                    rollout_count=rollout_count,
-                )
-                all_step_results.extend(step_results)
-
-            t.step("play_games")
-
-            # Construct episodes and calculate rewards
-            episodes = []
-            input_ids = torch.ones(
-                (len(all_step_results), max_req_tokens + max_res_tokens),
-                dtype=torch.long,
-            )
-            for i, step_result in enumerate(all_step_results):
-                episode = Episode(
-                    episode_id=str(uuid.uuid4()),
-                    pad_id=pad_id,
-                    request_len=max_req_tokens,
-                    response_len=max_res_tokens,
-                    target=None,
-                    completion=step_result["response"],
-                )
-                episode.reward = await reward_actor.evaluate_response.route(
-                    prompt=step_result["prompt"],
-                    response=step_result["response"].text,
-                    game_reward=step_result["final_reward"],
+                    max_seq_len=max_seq_len,
+                    max_turns=max_turns,
+                    messages=initial_messages,
+                    game_id=game_id,
                 )
                 episodes.append(episode)
 
-                # Build input_ids for reference logprobs
-                input_ids[i, :max_req_tokens] = episode.request_tensor
-                input_ids[i, max_req_tokens:] = episode.response_tensor
+            t.step("play_games")
 
-            t.step("reward_evaluation")
+            # Print episode details every 10 rollouts
+            if episodes and rollout_count % 10 == 0:
+                print_episode_debug(episodes[0], tokenizer, rollout_count)
 
-            ref_logprobs = await ref_model.forward.route(
-                input_ids, max_req_tokens, return_logprobs=True
+            # ============ Step 2: Filter groups (constant rewards) ============
+            rewards = [e.reward for e in episodes]
+            if len(set(rewards)) == 1:
+                print(
+                    f"[ROLLOUT {rollout_count}] ⚠️  DROPPED GROUP - All {len(episodes)} episodes have same reward: {rewards[0]}"
+                )
+                record_metric("groups/rate_dropped", 1, Reduce.MEAN)
+                rollout_count += 1
+                t.stop()
+                continue
+            record_metric("groups/rate_dropped", 0, Reduce.MEAN)
+
+            # ============ Step 3: Compute ref_model ============
+            max_len = max(len(e.all_token_ids) for e in episodes)
+
+            # Pad input_ids and loss_masks
+            padded_input_ids, padded_loss_masks = [], []
+            for i, e in enumerate(episodes):
+                pad_len = max_len - len(e.all_token_ids)
+
+                padded_input_ids.append(
+                    F.pad(e.all_token_ids, (0, pad_len), value=pad_id)
+                )
+                padded_loss_masks.append(F.pad(e.loss_mask, (0, pad_len), value=0.0))
+
+            input_ids = torch.stack(padded_input_ids)  # [batch, max_len]
+            loss_mask_batch = torch.stack(padded_loss_masks)  # [batch, max_len]
+
+            # Call ref_model with loss_mask - returns [batch, max_len]
+            ref_logprobs_padded = await ref_model.forward.route(
+                input_ids, return_logprobs=True, loss_mask=loss_mask_batch
             )
+
             t.step("reference_model_calculate_logprobs")
 
+            # Assign ref_logprobs to episodes (unpad to original length)
             for i, episode in enumerate(episodes):
-                episode.ref_logprobs = ref_logprobs[i]
-            del ref_logprobs, input_ids
+                seq_len = len(episode.all_token_ids)
+                episode.ref_logprobs = ref_logprobs_padded[i, :seq_len]  # [seq_len]
 
+            del ref_logprobs_padded, input_ids, loss_mask_batch
+
+            # ============ Step 4: Compute advantages ============
             advantages = await compute_advantages.compute.call_one(episodes)
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
+
+            # ============ Step 5: Episode-level acceptance ============
+            accepted = []
+            for episode in episodes:
+                if episode.is_truncated and not cfg.accept_truncated:
+                    record_metric("buffer/rate_rejected_truncated", 1, Reduce.MEAN)
+                else:
+                    record_metric("buffer/rate_rejected_truncated", 0, Reduce.MEAN)
+                    accepted.append(episode)
+
+            # ============ Step 6: Add to buffer ============
+            for episode in accepted:
                 await replay_buffer.add.call_one(episode)
+
+            record_metric("buffer/episodes_accepted", len(accepted), Reduce.SUM)
+            record_metric(
+                "buffer/episode_acceptance_rate",
+                len(accepted) / len(episodes) if episodes else 0,
+                Reduce.MEAN,
+            )
 
             rollout_count += 1
             record_metric(
@@ -786,12 +999,11 @@ async def main(cfg: DictConfig):
             t.stop()
 
     async def continuous_training():
+        """Training loop."""
         training_step = 0
-        restart_tracer = True  # Flag to control when to restart tracer
+        restart_tracer = True
 
         while max_steps == -1 or training_step < max_steps:
-            # Restart tracer when needed (initial start or after completing a training step)
-            # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
                 t = Tracer("main_perf/continuous_training")
                 t.start()
@@ -804,6 +1016,7 @@ async def main(cfg: DictConfig):
                 await asyncio.sleep(0.1)
             else:
                 t.step("waiting_for_buffer")
+                print(f"[TRAINING] Step {training_step}: Starting training")
 
                 inputs, targets = batch
                 await trainer.train_step.call(inputs, targets)
@@ -823,20 +1036,17 @@ async def main(cfg: DictConfig):
                 t.stop()
                 restart_tracer = True
 
-                # Flush metrics every training step to WandB
+                # Flush metrics every training step
                 await mlogger.flush.call_one(training_step)
 
         print(
             f"Reached training limit ({max_steps} steps). Exiting continuous_training loop."
         )
 
-    num_rollout_threads = cfg.get("rollout_threads", 1)
-    num_training_threads = cfg.get("training_threads", 1)
-    print(
-        f"Starting GRPO with {num_rollout_threads} rollout threads, {num_training_threads} training threads"
-    )
+    print(f"Starting GRPO with {num_rollout_threads} rollout threads")
     rollout_tasks = [
-        asyncio.create_task(continuous_rollouts()) for _ in range(num_rollout_threads)
+        asyncio.create_task(continuous_rollouts(thread_id=i, tokenizer=tokenizers[i]))
+        for i in range(num_rollout_threads)
     ]
     training_task = asyncio.create_task(continuous_training())
 
@@ -850,7 +1060,6 @@ async def main(cfg: DictConfig):
 
         # Cancel rollout tasks
         try:
-            # Give rollouts up to 5s to finish naturally
             await asyncio.wait_for(
                 asyncio.gather(*rollout_tasks, return_exceptions=True),
                 timeout=5,
@@ -868,7 +1077,7 @@ async def main(cfg: DictConfig):
         except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
 
-        # Shutdown forge actors/services with timeout
+        # Shutdown forge actors/services
         print("Shutting down Forge actors...")
         try:
             await asyncio.wait_for(shutdown(), timeout=10)
@@ -876,15 +1085,8 @@ async def main(cfg: DictConfig):
         except asyncio.TimeoutError:
             print("⚠ Forge shutdown timed out after 10s, forcing exit...")
 
-        # Shutdown OpenSpiel server
-        print("Stopping OpenSpiel server...")
-        server_process.terminate()
-        server_process.join(timeout=2)
-        if server_process.is_alive():
-            print("⚠ Server didn't stop gracefully, killing...")
-            server_process.kill()
-            server_process.join(timeout=1)
-        print("✓ OpenSpiel server stopped")
+        # Shutdown OpenSpiel servers
+        shutdown_servers(server_processes)
 
 
 if __name__ == "__main__":

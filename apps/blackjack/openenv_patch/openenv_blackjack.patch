@@ -1,0 +1,160 @@
+diff --git a/src/core/env_server/http_server.py b/src/core/env_server/http_server.py
+index d18873f..31b99df 100644
+--- a/src/core/env_server/http_server.py
++++ b/src/core/env_server/http_server.py
+@@ -17,9 +17,11 @@ import os
+ from dataclasses import asdict
+ from typing import Any, Dict, Type
+
++from fastapi import Body, FastAPI
++
+ from .interfaces import Environment
+ from .types import Action, Observation
+-from fastapi import Body, FastAPI
++
+
+ class HTTPEnvServer:
+     """
+@@ -107,7 +109,6 @@ class HTTPEnvServer:
+             """Health check endpoint."""
+             return {"status": "healthy"}
+
+-
+     def _deserialize_action(self, action_data: Dict[str, Any]) -> Action:
+         """
+         Convert JSON dict to Action instance.
+@@ -150,7 +151,7 @@ class HTTPEnvServer:
+         # Extract reward and done (these are part of StepResult on client side)
+         reward = obs_dict.pop("reward", None)
+         done = obs_dict.pop("done", False)
+-        obs_dict.pop("metadata", None)  # Remove metadata from observation
++        # obs_dict.pop("metadata", None)  # Remove metadata from observation
+
+         # Return in HTTPEnvClient expected format
+         return {
+@@ -159,6 +160,7 @@ class HTTPEnvServer:
+             "done": done,
+         }
+
++
+ def create_app(
+     env: Environment,
+     action_cls: Type[Action],
+@@ -167,33 +169,36 @@ def create_app(
+ ) -> Any:
+     """
+     Create a FastAPI application with or without web interface.
+-
++
+     This function creates a FastAPI app with the web interface enabled by default,
+     including README integration for better user experience.
+-
++
+     Args:
+         env: The Environment instance to serve
+         action_cls: The Action subclass this environment expects
+         observation_cls: The Observation subclass this environment returns
+         env_name: Optional environment name for README loading
+-
++
+     Returns:
+         FastAPI application instance with or without web interface and README integration
+     """
+     # Check if web interface should be enabled
+     # This can be controlled via environment variable or build argument
+-    enable_web = (
+-        os.getenv("ENABLE_WEB_INTERFACE", "false").lower() in ("true", "1", "yes")
++    enable_web = os.getenv("ENABLE_WEB_INTERFACE", "false").lower() in (
++        "true",
++        "1",
++        "yes",
+     )
+
+     if enable_web:
+         # Import web interface only when needed
+         from .web_interface import create_web_interface_app
++
+         return create_web_interface_app(env, action_cls, observation_cls, env_name)
+     else:
+         # Use standard FastAPI app without web interface
+         return create_fastapi_app(env, action_cls, observation_cls)
+-
++
+
+ def create_fastapi_app(
+     env: Environment,
+diff --git a/src/envs/openspiel_env/server/openspiel_environment.py b/src/envs/openspiel_env/server/openspiel_environment.py
+index 481aefb..580ec81 100644
+--- a/src/envs/openspiel_env/server/openspiel_environment.py
++++ b/src/envs/openspiel_env/server/openspiel_environment.py
+@@ -21,8 +21,8 @@ from .opponent_policies import get_opponent_policy, OpponentPolicy
+
+ # Import OpenSpiel
+ try:
+-    from open_spiel.python import rl_environment
+     import pyspiel
++    from open_spiel.python import rl_environment
+ except ImportError as e:
+     raise ImportError(
+         "OpenSpiel is not installed. "
+@@ -73,9 +73,7 @@ class OpenSpielEnvironment(Environment):
+
+         # Create OpenSpiel environment
+         try:
+-            self._ospiel_env = rl_environment.Environment(
+-                game_name, **self.game_params
+-            )
++            self._ospiel_env = rl_environment.Environment(game_name, **self.game_params)
+         except Exception as e:
+             raise ValueError(
+                 f"Failed to create OpenSpiel game '{game_name}': {e}"
+@@ -252,15 +250,48 @@ class OpenSpielEnvironment(Environment):
+         if time_step.rewards is not None:
+             reward = float(time_step.rewards[self.agent_player])
+
++        # Extract game-specific metadata for blackjack
++        metadata = {}
++        if self.game_name == "blackjack" and not time_step.last():
++            # Get underlying OpenSpiel state to access blackjack-specific methods
++            try:
++                state = self._ospiel_env.get_state  # Property, not method - no ()
++                if hasattr(state, "get_best_player_total"):
++                    metadata["player_total"] = state.get_best_player_total(
++                        self.agent_player
++                    )
++                if hasattr(state, "dealers_visible_card"):
++                    dealer_card_idx = state.dealers_visible_card()
++                    # Convert card index (0-51) to blackjack value (1-10)
++                    # This matches the C++ CardValue() logic in blackjack.cc
++                    # Cards are indexed from 0 to kDeckSize-1 (52 cards total)
++                    # Rank = card_idx % 13, where 0=Ace, 1-9=2-10, 10=J, 11=Q, 12=K
++                    rank = dealer_card_idx % 13
++                    if rank == 0:
++                        dealer_value = 1  # Ace
++                    elif rank <= 9:
++                        dealer_value = rank + 1  # 2-10
++                    else:
++                        dealer_value = 10  # Jack, Queen, King
++                    metadata["dealer_card"] = dealer_value
++            except Exception:
++                # If extraction fails, continue without metadata
++                pass
++
+         # Create observation
+         obs = OpenSpielObservation(
+-            info_state=info_state.tolist() if hasattr(info_state, "tolist") else list(info_state),
++            info_state=(
++                info_state.tolist()
++                if hasattr(info_state, "tolist")
++                else list(info_state)
++            ),
+             legal_actions=legal_actions,
+             game_phase=game_phase,
+             current_player_id=current_player_id,
+             opponent_last_action=self._last_opponent_action,
+             done=time_step.last(),
+             reward=reward,
++            metadata=metadata,
+         )
+
+         return obs
