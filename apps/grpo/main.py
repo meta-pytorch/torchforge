@@ -231,6 +231,7 @@ class DatasetActor(ForgeActor):
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
 
+    @endpoint
     async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
         self._epoch = 0
