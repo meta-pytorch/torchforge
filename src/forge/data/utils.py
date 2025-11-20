@@ -225,7 +225,7 @@ class StopAfterOneEpoch:
     In distributed eval, we may have len(dataset) % num_ranks != 0. This means that some ranks may be on epoch 0
     while others are already in epoch 1. To avoid hangs, all ranks *must* stop at the same time, requiring communication.
 
-    This function minimzes this impact by fetching one batch in advance and perfoming overlapping async all_reduce.
+    This function minimzes this impact by fetching one batch in advance and performing overlapping async all_reduce.
 
     Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
     `forge.src.data.datasets.HfIterableDataset`.
