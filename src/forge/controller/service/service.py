@@ -37,8 +37,6 @@ import logging
 import pprint
 import uuid
 
-from monarch.actor import Actor, endpoint
-
 from forge.controller.service.interface import _session_context, Session
 
 from forge.controller.service.metrics import ServiceMetrics
@@ -50,6 +48,8 @@ from forge.controller.service.router import (
     SessionRouter,
 )
 from forge.types import ServiceConfig
+
+from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -285,8 +285,8 @@ class Service:
             return
 
         # Distribute requests among healthy replicas
-        for i, request in enumerate(migrated_requests):
-            target_replica = healthy_replicas[i % len(healthy_replicas)]
+        for request in migrated_requests:
+            target_replica = self._default_router.get_replica(healthy_replicas)
             await target_replica.enqueue_request(request)
 
             # Update session mapping if needed

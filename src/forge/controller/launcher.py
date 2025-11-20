@@ -16,6 +16,8 @@ from typing import Any
 
 import monarch
 import torchx.specs as specs
+
+from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 from monarch._rust_bindings.monarch_hyperactor.config import configure
@@ -23,9 +25,8 @@ from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocIniti
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import create, info
+from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
-
-from forge.types import Launcher, LauncherConfig
 
 _MAST_AVAILABLE = False
 
@@ -126,7 +127,7 @@ class Slurmlauncher(BaseLauncher):
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
         # This can be removed in the future once this has been removed.
-        configure(default_transport=ChannelTransport.Tcp)
+        configure(default_transport=ChannelTransport.TcpWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
@@ -269,7 +270,6 @@ class MastLauncher(BaseLauncher):
         return packages
 
     def build_appdef(self) -> specs.AppDef:
-
         # create the app definition for the worker
         remote_end_python_path = ":".join(
             [

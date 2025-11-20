@@ -11,11 +11,11 @@ from dataclasses import dataclass
 from operator import itemgetter
 from typing import Any, Callable
 
-from monarch.actor import endpoint
-
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import trace
+
+from monarch.actor import endpoint
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

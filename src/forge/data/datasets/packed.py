@@ -10,13 +10,13 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, TypeVar
 
 import torch
+
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
+from forge.observability.metrics import Metric, Reduce
 from torch.nn.attention.flex_attention import (
     create_block_mask as create_block_mask_flex,
 )
 from torchdata.stateful_dataloader import Stateful
-
-from forge.data import CROSS_ENTROPY_IGNORE_IDX
-from forge.observability.metrics import Metric, Reduce
 
 from .dataset import DatasetInfo, InfiniteTuneIterableDataset
 
@@ -343,9 +343,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
         # exhausted: whether the dataset is exhausted
         self._exhausted: bool = False
 
-        # resuming: whether the packer is resuming from a checkpoint
-        self._resuming: bool = False
-
     def _fill_buffer(self, iterator: Iterator[SampleType]) -> None:
         """
         Fills the buffer with samples from the dataset.
@@ -452,19 +449,11 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
         if not isinstance(self.dataset, Iterable):
             raise TypeError("Dataset is not an iterable")
 
-        if not self._resuming:
-            self._reset_packer_state()
-            self._iterator = iter(self.dataset)
-
-        # If resuming, the iterator must be recreated from the loaded state
-        if self._iterator is None:
-            self._iterator = iter(self.dataset)
-
-        self._resuming = False  # Consume the resume flag
+        self._reset_packer_state()
+        self._iterator = iter(self.dataset)
 
         # Main packing loop
         while True:
-
             # Stop if the source is exhausted and there's no data left to pack
             if self._exhausted and not self._buffer and self._current_pack_size == 0:
                 break
@@ -502,7 +491,6 @@ class PackedDataset(InfiniteTuneIterableDataset, Generic[SampleType]):
             raise ValueError("Dataset is not stateful.")
 
         self._reset_packer_state()
-        self._resuming = True
 
 
 class TextPacker(Packer[SampleDict]):

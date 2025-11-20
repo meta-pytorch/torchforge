@@ -17,6 +17,28 @@ from typing import Optional
 
 import torch
 import torchstore as ts
+
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+    rdma_available,
+)
+
+from forge.controller import (
+    ForgeActor,
+    get_proc_mesh,
+    host_mesh_from_proc,
+    stop_proc_mesh,
+)
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
+from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 from monarch.actor import current_rank, endpoint, ProcMesh, this_host
 
 from vllm.config import VllmConfig
@@ -41,28 +63,6 @@ from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.actors._torchstore_utils import (
-    extract_param_name,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-    rdma_available,
-)
-
-from forge.controller import (
-    ForgeActor,
-    get_proc_mesh,
-    host_mesh_from_proc,
-    stop_proc_mesh,
-)
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.types import ProcessConfig
-from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -579,16 +579,16 @@ class Generator(ForgeActor):
         await stop_proc_mesh(actor._fetcher_procs)
 
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
+    async def save_model_params(self):
+        """Save model parameters before weight update, used for testing purposes only."""
         logger.info("[Generator] save model parameters for testing.")
-        await self.worker._test_save_model_params.call()
+        await self.worker.save_model_params.call()
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
+    async def validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[Generator] start validating model parameters.")
-        return await self.worker._test_validate_model_params.call(validate_fn)
+        return await self.worker.validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -603,6 +603,9 @@ class GeneratorWorker(ForgeActor):
     vllm_config: VllmConfig
     # TODO: Remove below param
     _test_prev_params = {}
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -720,8 +723,8 @@ class GeneratorWorker(ForgeActor):
         t.stop()
 
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
+    async def save_model_params(self):
+        """Save model parameters before weight update, used for testing purposes only."""
         logger.info("[GeneratorWorker] save model parameters for testing.")
         for name, param in self.worker.model_runner.model.named_parameters():
             self._test_prev_params[name] = param.detach().cpu()
@@ -731,7 +734,7 @@ class GeneratorWorker(ForgeActor):
         )
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
+    async def validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[GeneratorWorker] start validating model parameters.")
         return validate_fn(
