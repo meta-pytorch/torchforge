@@ -30,23 +30,9 @@ You can also find our notebook tutorials (coming soon)
 
 ## Installation
 
-### Basic
-
 torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan).
 
-You can install Forge with:
-```
-$ conda create -n forge python=3.10
-$ conda activate forge
-$ uv pip install .
-```
-
-(conda-less uv install is a wip)
-
-For your reference, we also include a basic install script that installs other system dependencies
-along with torchforge:
-(note that this basic install script
-uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.)
+Install torchforge with:
 
 ```bash
 conda create -n forge python=3.12
@@ -54,16 +40,13 @@ conda activate forge
 ./scripts/install.sh
 ```
 
-Optional: By default, the packages installation uses conda. If user wants to install system packages on the target machine instead of conda, they can pass the `--use-sudo` to the installation script: `./script/install.sh --use-sudo`.
+The install script installs system dependencies along with torchforge. Note that this install script uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.
+
+Optional: By default, the packages installation uses conda. If you want to install system packages on the target machine instead of conda, you can pass the `--use-sudo` flag to the installation script: `./scripts/install.sh --use-sudo`.
+
+> **Note:** We are actively working on enabling pure `uv` installation. Currently, Conda is the recommended approach. `uv` support is not fully working at the moment but is being tracked in [issue #494](https://github.com/meta-pytorch/torchforge/issues/494).
 
 After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
-
-
-```
-uv run apps/grpo/main.py --config apps/grpo/qwen3_1_7b.yaml
-```
-
-or if not using uv:
 
 ```
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml

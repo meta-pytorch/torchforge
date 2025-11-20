@@ -7,17 +7,17 @@
 The Trainer manages model training in TorchForge, built on top of TorchTitan.
 It handles forward/backward passes, weight updates, and checkpoint management for reinforcement learning workflows.
 
-## RLTrainer
+## TitanTrainer
 
 ```{eval-rst}
-.. autoclass:: RLTrainer
+.. autoclass:: TitanTrainer
    :members: train_step, push_weights, cleanup
    :exclude-members: __init__
 ```
 
 ## Configuration
 
-The RLTrainer uses TorchTitan's configuration system with the following components:
+The TitanTrainer uses TorchTitan's configuration system with the following components:
 
 ### Job Configuration
 

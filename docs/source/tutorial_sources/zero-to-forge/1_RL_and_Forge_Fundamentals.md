@@ -96,7 +96,7 @@ graph LR
         S3["RewardActor"]
         S4["ReferenceModel"]
         S5["ReplayBuffer"]
-        S6["RLTrainer"]
+        S6["TitanTrainer"]
     end
 
     C1 --> S1
@@ -306,7 +306,7 @@ TorchForge handles behind the scenes:
 from forge.actors.generator import Generator as Policy
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.reference_model import ReferenceModel
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from apps.grpo.main import DatasetActor, RewardActor, ComputeAdvantages
 from forge.data.rewards import MathReward, ThinkingReward
 import asyncio
@@ -348,7 +348,7 @@ group_size = 1
             }
         ),
         # Trainer actor with GPU
-        RLTrainer.options(procs=1, with_gpus=True).as_actor(
+        TitanTrainer.options(procs=1, with_gpus=True).as_actor(
             # Trainer config would come from YAML in real usage
             model={"name": "qwen3", "flavor": "1.7B", "hf_assets_path": f"hf://{model}"},
             optimizer={"name": "AdamW", "lr": 1e-5},
@@ -378,12 +378,12 @@ group_size = 1
 
 TorchForge has two types of distributed components:
 - **Services**: Multiple replicas with automatic load balancing (like Policy, RewardActor)
-- **Actors**: Single instances that handle their own internal distribution (like RLTrainer, ReplayBuffer)
+- **Actors**: Single instances that handle their own internal distribution (like TitanTrainer, ReplayBuffer)
 
 We cover this distinction in detail in Part 2, but for now this explains the scaling patterns:
 - Policy service: num_replicas=8 for high inference demand
 - RewardActor service: num_replicas=16 for parallel evaluation
-- RLTrainer actor: Single instance with internal distributed training
+- TitanTrainer actor: Single instance with internal distributed training
 
 
 ### Fault Tolerance

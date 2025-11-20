@@ -31,9 +31,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-GitHub = "https://github.com/pytorch-labs/forge"
-Documentation = "https://github.com/pytorch-labs/forge/tree/main/docs"
-Issues = "https://github.com/pytorch-labs/forge/issues"
+GitHub = "https://github.com/meta-pytorch/torchforge"
+Documentation = "https://meta-pytorch.org/torchforge"
+Issues = "https://github.com/meta-pytorch/torchforge/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -101,4 +101,9 @@ prerelease = "allow"
 environments = [
     "sys_platform == 'linux'",
 ]
-# override-dependencies = ["torch>2.7.1", "torchaudio>=2.7.1", "torchvision>=0.22.0"]
+
+[tool.black]
+target-version = ["py310"] # match the minium supported python version
+
+[tool.usort]
+first_party_detection = false

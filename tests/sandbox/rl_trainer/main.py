@@ -10,7 +10,7 @@ import asyncio
 
 import torch
 import torchstore as ts
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.launcher import JOB_NAME_KEY, LAUNCHER_KEY
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
@@ -182,7 +182,7 @@ async def main(cfg: DictConfig):
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
     # Initialize trainer only
     print("Initializing trainer...")
-    trainer = await RLTrainer.options(**cfg.actors.trainer).as_actor(
+    trainer = await TitanTrainer.options(**cfg.actors.trainer).as_actor(
         **cfg.trainer, loss=simple_grpo_loss
     )
     print("Trainer initialized successfully with following configs!")

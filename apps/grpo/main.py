@@ -23,7 +23,7 @@ from forge.actors._torchstore_utils import (
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
-from forge.actors.trainer import RLTrainer
+from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.data.rewards import LanguageReward, MathReward, ThinkingReward
@@ -31,7 +31,6 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from forge.util.ops import compute_logprobs
@@ -118,7 +117,12 @@ def collate(
     return inputs, targets
 
 
-# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
+# TODO (T245547773): Consolidate with SimpleGRPOLoss in losses/grpo_loss.py
+# Currently duplicated because of function signature differences:
+# - This function takes logits + response, computes logprobs internally
+# - SimpleGRPOLoss takes pre-computed logprobs
+# - TitanTrainer passes logits, so would need wrapper or signature change
+# Consider refactoring TitanTrainer's loss interface to standardize this.
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
@@ -130,17 +134,35 @@ def simple_grpo_loss(
     logprobs: torch.Tensor = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
+
+    # Compute mean KL per valid token
+    mean_kl = (
+        ((kl * padding_mask).sum(dim=1)) / (padding_mask.sum(dim=1).clamp(min=1.0))
+    ).mean()
+
+    # Compute mean policy loss per valid token
+    mean_policy_loss = (
+        ((per_token_policy_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
     ).mean()
+
+    # Compute loss using the means (mathematically equivalent)
+    loss = -(mean_policy_loss - beta * mean_kl)
+
+    # Log metrics
+    record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
+    record_metric(
+        "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
+    )
+    record_metric("grpo_loss/policy_loss", mean_policy_loss.item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
+
     return loss
 
 
 @dataclass
 class RewardActor(ForgeActor):
-
     reward_functions: list[Callable]
 
     @endpoint
@@ -209,10 +231,9 @@ class DatasetActor(ForgeActor):
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
 
-    @endpoint
-    def setup(self):
-        self._epoch = 0
+    async def setup(self):
         self._tokenizer = get_tokenizer(self.model)
+        self._epoch = 0
 
         def gsm8k_transform(sample):
             system_prompt = """You are a helpful AI assistant that solves math problems.
@@ -256,18 +277,32 @@ Question: What is 12 + 5?
                 len(sample["request"]),
                 Reduce.MEAN,
             )
+            record_metric(
+                "dataset/sample/max_sample_len",
+                len(sample["request"]),
+                Reduce.MAX,
+            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
         except StopIteration:
-            # Restart the iterator and increment epoch counter for multi-epoch training
-            self._iterator = iter(self._base_dataset)
+            # Restart iterator for next epoch with reshuffling
             self._epoch += 1
+            print(
+                f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
+            )
+            self._base_dataset.set_epoch(self._epoch)
+            self._iterator = iter(self._base_dataset)
             return next(self._iterator)
 
     @endpoint
     async def pad_token(self):
-        return self._tokenizer.pad_token_id
+        # Use pad_token_id if available, otherwise use eos_token_id
+        # Llama models don't have a pad token by default
+        if self._tokenizer.pad_token_id is not None:
+            return self._tokenizer.pad_token_id
+        else:
+            return self._tokenizer.eos_token_id
 
 
 async def drop_weights(version: int):
@@ -319,7 +354,7 @@ async def main(cfg: DictConfig):
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Policy.options(**cfg.services.policy).as_service(**cfg.policy),
-        RLTrainer.options(**cfg.actors.trainer).as_actor(
+        TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
@@ -402,6 +437,24 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+                # drop episodes if
+                # 1> reward std-dev is very small (including all 0s and all 1s)
+                # 2> response is potentially truncated (response_len >= max_res_tokens)
+                rewards = [e.reward for e in episodes]
+                rewards_std = torch.std(torch.tensor(rewards))
+                max_response_len = max(
+                    e.completion.token_ids.shape[0] for e in episodes
+                )
+                drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+                record_metric(
+                    "main/continuous_rollouts/dropped_episodes",
+                    1 if drop else 0,
+                    Reduce.SUM,
+                )
+                if drop:
+                    del input_ids, episodes
+                    continue
 
             t.step("reward_evaluation")
 

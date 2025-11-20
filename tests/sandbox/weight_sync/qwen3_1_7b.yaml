@@ -1,0 +1,74 @@
+# Weight Sync Sandbox Configuration
+# >>> python -m tests.sandbox.weight_sync.main --config tests/sandbox/weight_sync/qwen3_1_7b.yaml
+
+model: "Qwen/Qwen3-1.7B"
+local_batch_size: 4
+max_req_tokens: 64
+max_res_tokens: 64
+
+metric_logging:
+  console:
+    logging_mode: global_reduce
+
+policy:
+  prefetch_weights_to_shm: false  # Disable to avoid shared memory warnings in test
+  engine_args:
+    model: ${model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: true
+  sampling_params:
+    n: 1
+    max_tokens: 32  # Just for verification forward pass
+    temperature: 1.0
+    top_p: 1.0
+
+trainer:
+  model:
+    name: qwen3
+    flavor: 1.7B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+  lr_scheduler:
+    warmup_steps: 1
+  training:
+    local_batch_size: ${local_batch_size}
+    seq_len: 128  # max_req_tokens + max_res_tokens
+    max_norm: 1.0
+    steps: 1  # We only run 1 step
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1  # Single GPU, no FSDP
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    folder: ./checkpoint
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    async_mode: "disabled"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Resource allocation - both as actors
+actors:
+  policy:
+    procs: 1  # Single process for generator
+    with_gpus: true
+    mesh_name: policy
+  trainer:
+    procs: 1  # Single process for trainer
+    with_gpus: true
+    mesh_name: trainer
