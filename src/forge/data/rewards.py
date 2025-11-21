@@ -112,7 +112,7 @@ class LanguageReward:
         match_reward: Reward when detected language matches target (default: 1.0)
         no_match_reward: Reward when language doesn't match (default: 0.0)
         tag: Tag name to use (default "思考" for multilingual, can use "think", etc.)
-        debug: If True, print debug samples showing model outputs and detected language for every sample
+        debug: If True, print debug samples showing model outputs and detected language
         debug_sample_rate: Fraction of calls to debug (e.g., 0.1 = 10% of calls)
 
     Note: Requires langid to be installed. Install with: pip install langid
@@ -167,7 +167,7 @@ class LanguageReward:
         """
 
         # TODO: refactor pending https://github.com/meta-pytorch/torchforge/issues/187
-        should_debug = self.debug or (random.random() < self.debug_sample_rate)
+        should_debug = self.debug and (random.random() < self.debug_sample_rate)
 
         if not response:
             if should_debug:
