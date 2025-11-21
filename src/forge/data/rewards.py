@@ -167,7 +167,7 @@ class LanguageReward:
         """
 
         # TODO: refactor pending https://github.com/meta-pytorch/torchforge/issues/187
-        should_debug = debug or (random.random() < self.debug_sample_rate)
+        should_debug = self.debug or (random.random() < self.debug_sample_rate)
 
         if not response:
             if should_debug:
