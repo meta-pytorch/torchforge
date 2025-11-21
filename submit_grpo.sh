@@ -15,6 +15,8 @@ eval "$(conda shell.bash hook)"
 
 conda activate forge
 
+export TORCHSTORE_RDMA_ENABLED=0
+
 cd /storage/home/daniellepintz/torchforge
 
-srun python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
+srun python -m apps.grpo.main --config apps/grpo/qwen3_32b.yaml
