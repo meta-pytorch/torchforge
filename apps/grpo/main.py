@@ -215,10 +215,21 @@ class DatasetActor(ForgeActor):
         self._epoch = 0
 
         def gsm8k_transform(sample):
-            system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
-            """
+            system_prompt = """You are a precise math reasoning assistant.
+
+You must solve grade-school math problems step by step, then give a final numeric answer.
+
+Requirements:
+- Reason step by step carefully
+- Show intermediate calculations
+- End with: Final Answer: <NUMBER>
+
+Rules:
+- Only one final answer
+- Final answer must be a single number (no units, no explanation)
+- Do NOT output multiple candidate answers
+- Do NOT mention being an AI or confidence levels
+- If ambiguous, choose the most reasonable interpretation"""
             request: str = sample["question"]
             as_chat = [
                 {"role": "system", "content": system_prompt},
@@ -332,7 +343,7 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+            reward_functions=[CleanMathReward(debug=True, debug_sample_rate=0.1)]
         ),
     )
 
