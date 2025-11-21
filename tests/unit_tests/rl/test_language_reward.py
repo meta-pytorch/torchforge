@@ -185,7 +185,7 @@ class TestLanguageReward(unittest.TestCase):
         response_en = "<思考>This is English.</思考>"
         response_none = ""
 
-        custom_reward = LanguageReward(
+        custom_reward = self.LanguageReward(
             target_language="ja",
             match_reward=0.9,
             no_match_reward=0.1,
