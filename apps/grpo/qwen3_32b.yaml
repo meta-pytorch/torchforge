@@ -4,7 +4,7 @@
 
 # Global configuration
 group_size: 16
-local_batch_size: 32 # per-device batch size
+local_batch_size: 2 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 1024
 model: "Qwen/Qwen3-32B"
