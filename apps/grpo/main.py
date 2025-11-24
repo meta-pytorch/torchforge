@@ -31,7 +31,6 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from forge.util.ops import compute_logprobs
@@ -147,7 +146,12 @@ def collate(
     return inputs, targets
 
 
-# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
+# TODO (T245547773): Consolidate with SimpleGRPOLoss in losses/grpo_loss.py
+# Currently duplicated because of function signature differences:
+# - This function takes logits + response, computes logprobs internally
+# - SimpleGRPOLoss takes pre-computed logprobs
+# - TitanTrainer passes logits, so would need wrapper or signature change
+# Consider refactoring TitanTrainer's loss interface to standardize this.
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
@@ -159,11 +163,30 @@ def simple_grpo_loss(
     logprobs: torch.Tensor = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
+
+    # Compute mean KL per valid token
+    mean_kl = (
+        ((kl * padding_mask).sum(dim=1)) / (padding_mask.sum(dim=1).clamp(min=1.0))
+    ).mean()
+
+    # Compute mean policy loss per valid token
+    mean_policy_loss = (
+        ((per_token_policy_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
     ).mean()
+
+    # Compute loss using the means (mathematically equivalent)
+    loss = -(mean_policy_loss - beta * mean_kl)
+
+    # Log metrics
+    record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
+    record_metric(
+        "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
+    )
+    record_metric("grpo_loss/policy_loss", mean_policy_loss.item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
+
     return loss
 
 
@@ -282,6 +305,11 @@ class DatasetActor(ForgeActor):
                 "dataset/sample/avg_sample_len",
                 len(sample["request"]),
                 Reduce.MEAN,
+            )
+            record_metric(
+                "dataset/sample/max_sample_len",
+                len(sample["request"]),
+                Reduce.MAX,
             )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
@@ -433,6 +461,22 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+            # drop episodes if
+            # 1> reward std-dev is very small (including all 0s and all 1s)
+            # 2> response is potentially truncated (response_len >= max_res_tokens)
+            rewards = [e.reward for e in episodes]
+            rewards_std = torch.std(torch.tensor(rewards))
+            max_response_len = max(e.completion.token_ids.shape[0] for e in episodes)
+            drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+            record_metric(
+                "main/continuous_rollouts/dropped_episodes",
+                1 if drop else 0,
+                Reduce.SUM,
+            )
+            if drop:
+                del input_ids, episodes
+                continue
 
             t.step("reward_evaluation")
 
