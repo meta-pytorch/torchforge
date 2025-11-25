@@ -128,7 +128,7 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
 
 
 def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metric]:
-    """Reduce metric accumulators states to a list of metrics.
+    """Reduce metric accumulators states to a list of Metrics.
 
     Can be used when reducing metrics across ranks or services, as merging
     states is more precise than merging locally reduced metrics.
@@ -143,20 +143,26 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
     Example:
         >>> states = [
         ...     {
-        ...         "loss": {"count": 5, "sum": 14, "reduction_type": "mean"},
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN},
         ...         "reward/sample": {
-        ...             "reduction_type": "sample",
+        ...             "reduction_type": Reduce.Sample,
         ...             "samples": [{"episode_id": 1, "reward": 0.5}],
         ...         },
         ...     },
-        ...     {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
+        ...     {
+        ...         "loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN},
+        ...         "reward/sample": {
+        ...             "reduction_type": Reduce.Sample,
+        ...             "samples": [{"episode_id": 2, "reward": 1.0}],
+        ...         },
+        ...     },
         ... ]
         >>> reduce_metrics_states(states)
         [
-            Metric(key='loss', value=2.0, reduction=Reduce.MEAN),
+            Metric(key='loss', value=2.0, reduction=Reduce.MEAN), # (14 + 16) / (5 + 10) = 2.0
             Metric(
                 key='reward/sample',
-                value=[{'episode_id': 1, 'reward': 0.5}],
+                value=[{'episode_id': 1, 'reward': 0.5}, {"episode_id": 2, "reward": 1.0}],
                 reduction=Reduce.SAMPLE,
             )
         ]
@@ -170,6 +176,7 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
+    # For each metric key, reduce the states
     reduced_metrics = []
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
@@ -416,6 +423,10 @@ class SampleAccumulator(MetricAccumulator):
 
     Keeps the top-k and bottom-k samples by a given key (e.g., reward).
     Useful for logging only the best and worst samples from a batch.
+
+    **NOTE**: Currently the init attributes are not exposed to the user. It will always use the "score" key
+    to select highest/lowest score. The user can use it to define how to select the top/bottom samples, e.g.
+    "score" = reward or length or any other value.
     """
 
     def __init__(
@@ -811,6 +822,16 @@ class LoggerBackend(ABC):
         pass
 
     @abstractmethod
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
+        """Log samples to backend.
+
+        Args:
+            samples: List of Metric objects to log.
+            step: Step number for x-axis alignment across metrics.
+        """
+        pass
+
+    @abstractmethod
     async def finish(self) -> None:
         pass
 
@@ -852,9 +873,6 @@ class ConsoleBackend(LoggerBackend):
     def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -> None:
         logger.info(f"{metric.key}: {metric.value}")
 
-    async def finish(self) -> None:
-        pass
-
     async def log_samples(self, samples: List[Metric], step: int) -> None:
         """Pretty-print sample-level logs to console."""
 
@@ -862,6 +880,9 @@ class ConsoleBackend(LoggerBackend):
             table_name, table_rows = sample.key, sample.value
             logger.info(f"[{table_name}] ({len(table_rows)} samples)")
             logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
+
+    async def finish(self) -> None:
+        pass
 
 
 class WandbBackend(LoggerBackend):
@@ -1021,10 +1042,6 @@ class WandbBackend(LoggerBackend):
             table_name, table_rows = sample.key, sample.value
             if not table_rows:
                 continue
-
-            # Convert to list if single sample. This happens when logging stream
-            if isinstance(table_rows, dict):
-                table_rows = [table_rows]
 
             # If table doesn't exist yet, create it in INCREMENTAL mode
             if table_name not in self._tables:
