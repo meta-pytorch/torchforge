@@ -336,8 +336,6 @@ class Generator(ForgeActor):
             priority=priority,
             data_parallel_rank=None,  # We do not support DP
         )
-        t.step("process_inputs")
-
         # Wait until we're accepting requests (releases lock while waiting)
         # If accepting_requests is True, continue immediately (holding the lock)
         # If False, release lock, wait for notification, re-acquire and recheck
@@ -369,7 +367,6 @@ class Generator(ForgeActor):
                 self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
-        t.step("generate")
 
         # Log some metrics
         record_metric(
@@ -380,12 +377,6 @@ class Generator(ForgeActor):
 
         for completion in completions:
             num_generated_tokens = len(completion.token_ids)
-            record_metric(
-                "generator/generate/sum_tokens_generated",
-                num_generated_tokens,
-                Reduce.SUM,
-            )
-
             record_metric(
                 "generator/generate/avg_tokens_generated",
                 num_generated_tokens,

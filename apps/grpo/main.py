@@ -211,11 +211,6 @@ class RewardActor(ForgeActor):
             reward_breakdown[reward_fn_name] = reward
             # per function reward
             record_metric(
-                f"reward/evaluate_response/sum_{reward_fn_name}_reward",
-                reward,
-                Reduce.SUM,
-            )
-            record_metric(
                 f"reward/evaluate_response/avg_{reward_fn_name}_reward",
                 reward,
                 Reduce.MEAN,
@@ -226,16 +221,11 @@ class RewardActor(ForgeActor):
                 Reduce.STD,
             )
 
+            # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
                 Reduce.MEAN,
-            )
-
-            record_metric(
-                f"reward/evaluate_response/count_{reward_fn_name}_calls",
-                1,
-                Reduce.SUM,
             )
 
         avg_reward: float = total_rewards / len(self.reward_functions)
@@ -305,17 +295,6 @@ Question: What is 12 + 5?
         try:
             sample = next(self._iterator)
 
-            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
-            record_metric(
-                "dataset/sample/avg_sample_len",
-                len(sample["request"]),
-                Reduce.MEAN,
-            )
-            record_metric(
-                "dataset/sample/max_sample_len",
-                len(sample["request"]),
-                Reduce.MAX,
-            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
@@ -442,8 +421,6 @@ async def main(cfg: DictConfig):
                 print("Dataloader is empty, exiting continuous rollout")
                 return
 
-            t.step("data_loading")
-
             prompt, target = sample["request"], sample["target"]
             responses: list[Completion] = await policy.generate.route(prompt)
             t.step("policy_generation")
@@ -476,6 +453,23 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+                # Track token-based metrics (computed for free from already-tokenized data)
+                prompt_tokens = episode.completion.prompt_ids.shape[0]
+                response_tokens = episode.completion.token_ids.shape[0]
+
+                record_metric("episode/avg_prompt_tokens", prompt_tokens, Reduce.MEAN)
+                record_metric("episode/max_prompt_tokens", prompt_tokens, Reduce.MAX)
+                record_metric("episode/min_prompt_tokens", prompt_tokens, Reduce.MIN)
+                record_metric(
+                    "episode/avg_response_tokens", response_tokens, Reduce.MEAN
+                )
+                record_metric(
+                    "episode/max_response_tokens", response_tokens, Reduce.MAX
+                )
+                record_metric(
+                    "episode/min_response_tokens", response_tokens, Reduce.MIN
+                )
 
             # drop episodes if
             # 1> reward std-dev is very small (including all 0s and all 1s)

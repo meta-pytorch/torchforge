@@ -144,21 +144,15 @@ class ReferenceModel(ForgeActor):
         """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
-        record_metric(
-            "reference_perf/forward/avg_sequence_length",
-            input_ids.shape[1],
-            Reduce.MEAN,
-        )
 
         t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
         t.start()
         self.engine.gc_handler.run(self.step)
-        t.step("garbage_collection")
 
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
-        t.step("to_device")
+
         # optional_context_parallel_ctx = (
         #     dist_utils.create_context_parallel_ctx(
         #         cp_mesh=parallel_dims.world_mesh["cp"],
