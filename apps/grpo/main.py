@@ -454,7 +454,7 @@ async def main(cfg: DictConfig):
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
 
-                # Track token-based metrics (computed for free from already-tokenized data)
+                # Track token-based metrics
                 prompt_tokens = episode.completion.prompt_ids.shape[0]
                 response_tokens = episode.completion.token_ids.shape[0]
 
