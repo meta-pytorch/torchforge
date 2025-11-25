@@ -447,9 +447,10 @@ class MetricCollector:
     async def init_backends(
         self,
         metadata_per_controller_backend: dict[str, dict[str, Any]] | None,
-        config: dict[str, Any],
+        backend_config: dict[str, Any],
         global_step: int = 0,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize per-rank logger backends and MetricCollector state.
 
@@ -460,12 +461,13 @@ class MetricCollector:
             metadata_per_controller_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from controller
                 for backends that require shared state across processes, e.g.,
                 {"wandb": {"shared_run_id": "abc123"}}.
-            config (Dict[str, Any]): Backend configurations where each key is a backend name
+            backend_config (Dict[str, Any]): Backend configurations where each key is a backend name
                 and value contains logging_mode and backend-specific settings.
                 e.g., {"wandb": {"logging_mode": "per_rank_no_reduce", "project": "my_proj"}}
             global_step (int, default 0): Initial step for logging. Can be used when
                 resuming from a checkpoint.
             process_name (str | None): The meaningful process name for logging.
+            run_config (dict[str, Any] | None): Run configuration to log to backends (e.g., for WandB).
         """
         if self._is_initialized:
             logger.debug(
@@ -480,8 +482,8 @@ class MetricCollector:
         self.per_rank_no_reduce_backends: list[LoggerBackend] = []
 
         # Initialize backends based on logging mode
-        for backend_name, backend_config in config.items():
-            mode = backend_config["logging_mode"]
+        for backend_name, cfg in backend_config.items():
+            mode = cfg["logging_mode"]
 
             # sanity check
             if not isinstance(mode, LoggingMode):
@@ -502,13 +504,12 @@ class MetricCollector:
                 )
 
             # instantiate local backend
-            backend: LoggerBackend = get_logger_backend_class(backend_name)(
-                **backend_config
-            )
+            backend: LoggerBackend = get_logger_backend_class(backend_name)(**cfg)
             await backend.init(
                 role=BackendRole.LOCAL,
                 controller_logger_metadata=controller_metadata,
                 process_name=self.proc_name_with_rank,
+                run_config=run_config,
             )
 
             # Categorize by logging mode
@@ -664,6 +665,7 @@ class LoggerBackend(ABC):
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -674,6 +676,7 @@ class LoggerBackend(ABC):
             controller_logger_metadata (dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
             process_name (str | None): Process name for logging.
+            run_config (dict[str, Any] | None): Run configuration to log to backend (e.g., for WandB).
 
         Raises: ValueError if missing metadata for shared local init.
         """
@@ -729,6 +732,7 @@ class ConsoleBackend(LoggerBackend):
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         self.process_name = process_name
 
@@ -791,6 +795,7 @@ class WandbBackend(LoggerBackend):
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         if controller_logger_metadata is None:
             controller_logger_metadata = {}
@@ -798,6 +803,7 @@ class WandbBackend(LoggerBackend):
         # Pop name, if any, to concat to process_name.
         run_name = self.backend_kwargs.pop("name", None)
         self.process_name = process_name
+        self.run_config = run_config
 
         # Format run name based on mode and role
         if self.logging_mode == LoggingMode.GLOBAL_REDUCE:
@@ -828,12 +834,16 @@ class WandbBackend(LoggerBackend):
     async def _init_global(self, run_name: str | None):
         import wandb
 
-        self.run = wandb.init(name=run_name, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name, config=self.run_config, **self.backend_kwargs
+        )
 
     async def _init_per_rank(self, run_name: str):
         import wandb
 
-        self.run = wandb.init(name=run_name, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name, config=self.run_config, **self.backend_kwargs
+        )
 
     async def _init_shared_global(self, run_name: str | None):
         import wandb
@@ -841,7 +851,12 @@ class WandbBackend(LoggerBackend):
         settings = wandb.Settings(
             mode="shared", x_primary=True, x_label="controller_primary"
         )
-        self.run = wandb.init(name=run_name, settings=settings, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name,
+            config=self.run_config,
+            settings=settings,
+            **self.backend_kwargs,
+        )
 
     async def _init_shared_local(
         self, run_name: str, shared_id: str, process_name: str
@@ -858,7 +873,11 @@ class WandbBackend(LoggerBackend):
 
         settings = wandb.Settings(mode="shared", x_primary=False, x_label=process_name)
         self.run = wandb.init(
-            name=run_name, id=shared_id, settings=settings, **self.backend_kwargs
+            name=run_name,
+            id=shared_id,
+            config=self.run_config,
+            settings=settings,
+            **self.backend_kwargs,
         )
 
     async def log_batch(

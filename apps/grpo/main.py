@@ -15,6 +15,7 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+import yaml
 from datasets import load_dataset
 from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
@@ -34,10 +35,13 @@ from forge.observability.perf_tracker import Tracer
 
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
+from forge.util.logging import get_logger
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from vllm.transformers_utils.tokenizer import get_tokenizer
+
+logger = get_logger("INFO")
 
 
 @dataclass
@@ -292,9 +296,17 @@ async def drop_weights(version: int):
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    group_size = cfg.group_size
-    max_req_tokens = cfg.max_req_tokens
-    max_res_tokens = cfg.max_res_tokens
+    # Convert OmegaConf config to plain dict
+    run_config_for_logging = OmegaConf.to_container(cfg, resolve=True)
+
+    # Log config
+    logger.info("=" * 30)
+    logger.info("CONFIGURATION:")
+    logger.info(
+        "\n"
+        + yaml.dump(run_config_for_logging, default_flow_style=False, sort_keys=False)
+    )
+    logger.info("=" * 30)
 
     # ---- Global setups ---- #
     provisioner = None
@@ -306,8 +318,11 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {})
+
     mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(metric_logging_cfg)
+    await mlogger.init_backends.call_one(
+        backend_config=metric_logging_cfg, run_config=run_config_for_logging
+    )
 
     # ---- Setup services ---- #
 
@@ -334,6 +349,10 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+
+    group_size = cfg.group_size
+    max_req_tokens = cfg.max_req_tokens
+    max_res_tokens = cfg.max_res_tokens
 
     # Set max_steps to the configured value, or -1 if not specified or Null
     max_steps = cfg.trainer.training.steps or -1
