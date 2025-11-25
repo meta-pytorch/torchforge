@@ -467,7 +467,9 @@ class MetricCollector:
             global_step (int, default 0): Initial step for logging. Can be used when
                 resuming from a checkpoint.
             process_name (str | None): The meaningful process name for logging.
-            run_config (dict[str, Any] | None): Run configuration to log to backends (e.g., for WandB).
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
         """
         if self._is_initialized:
             logger.debug(
@@ -676,7 +678,9 @@ class LoggerBackend(ABC):
             controller_logger_metadata (dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
             process_name (str | None): Process name for logging.
-            run_config (dict[str, Any] | None): Run configuration to log to backend (e.g., for WandB).
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backend for
+                experiment tracking.
 
         Raises: ValueError if missing metadata for shared local init.
         """

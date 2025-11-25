@@ -177,7 +177,9 @@ class LocalFetcherActor(ForgeActor):
         Args:
             metadata_per_controller_backend (dict[str, dict[str, Any]]): Metadata from controller backends for shared state.
             backend_config (dict[str, Any]): Backend configurations with logging modes and settings.
-            run_config (dict[str, Any] | None): Run configuration to log to backends (e.g., for WandB).
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
             global_step (int): Initial step for metrics.
         """
         collector = MetricCollector()
@@ -296,7 +298,9 @@ class GlobalLoggingActor(ForgeActor):
                         "project": "my_project",
                     }
                 }
-            run_config (dict[str, Any] | None): Run configuration to log to backends (e.g., for WandB).
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
 
         Raises:
             ValueError: If backend config is invalid or missing required fields.

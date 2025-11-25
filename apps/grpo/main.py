@@ -300,13 +300,10 @@ async def main(cfg: DictConfig):
     run_config_for_logging = OmegaConf.to_container(cfg, resolve=True)
 
     # Log config
-    logger.info("=" * 30)
-    logger.info("CONFIGURATION:")
+    logger.info("=" * 30 + " CONFIGURATION " + "=" * 30)
     logger.info(
-        "\n"
-        + yaml.dump(run_config_for_logging, default_flow_style=False, sort_keys=False)
+        yaml.dump(run_config_for_logging, default_flow_style=False, sort_keys=False)
     )
-    logger.info("=" * 30)
 
     # ---- Global setups ---- #
     provisioner = None
