@@ -26,7 +26,7 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
-from forge.data.rewards import MathReward, ThinkingReward
+from forge.data.rewards import LanguageReward, MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -158,7 +158,7 @@ def simple_grpo_loss(
     ref_logprobs: torch.Tensor,
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
-    beta: float = 0.1,
+    beta: float = 1e-6,
 ) -> torch.Tensor:
     logprobs: torch.Tensor = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
@@ -270,10 +270,15 @@ class DatasetActor(ForgeActor):
         self._epoch = 0
 
         def gsm8k_transform(sample):
-            system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
-            """
+            system_prompt = """You are a helpful AI assistant that solves math problems.
+
+Please show your reasoning inside <思考></思考> tags, then provide your final numerical answer inside <answer></answer> tags.
+
+Example:
+Question: What is 12 + 5?
+<思考>12と5を足します。12 + 5 = 17です。</思考>
+<answer>17</answer>
+"""
             request: str = sample["question"]
             as_chat = [
                 {"role": "system", "content": system_prompt},
@@ -392,7 +397,17 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[MathReward(), ThinkingReward()]
+            reward_functions=[
+                MathReward(),
+                ThinkingReward(tag="思考"),  # Use Japanese tag
+                LanguageReward(
+                    target_language="ja",
+                    tag="思考",
+                    match_reward=2.0,
+                    debug=True,
+                    debug_sample_rate=0.1,
+                ),  # Japanese language reward with debug
+            ]
         ),
     )
 
