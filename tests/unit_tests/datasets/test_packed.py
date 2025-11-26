@@ -949,3 +949,49 @@ class TestPackedDataset:
         # Verify that checkpointing and resumption work
         assert len(result["post_checkpoint_batches"]) == steps_after_checkpoint
         assert len(result["resumed_batches"]) == steps_after_checkpoint
+
+    def test_iter_restart_determinism(self, dataset_factory):
+        """Test that calling iter() multiple times produces deterministic results.
+
+        This is critical for evaluation: each eval run should start from the
+        same state (epoch 0, step 0) regardless of previous iterations.
+        """
+        samples = [
+            {"tokens": [0] * 3},
+            {"tokens": [1] * 2},
+            {"tokens": [2] * 4},
+        ]
+        target_tokens_per_pack = 6
+
+        # Create packed dataset
+        dataset = dataset_factory(samples)
+        packer = TextPacker(padding_idx=999, ignore_idx=-100)
+        packed_dataset = PackedDataset(
+            dataset=dataset,
+            packer=packer,
+            target_tokens_per_pack=target_tokens_per_pack,
+            buffer_size=1,
+        )
+
+        # First iteration - get first 2 packs
+        iter1 = iter(packed_dataset)
+        packs_iter1 = list(islice(iter1, 2))
+
+        # Second iteration - should get same first 2 packs
+        iter2 = iter(packed_dataset)
+        packs_iter2 = list(islice(iter2, 2))
+
+        # Verify both iterations produce identical packs
+        assert len(packs_iter1) == len(packs_iter2) == 2
+
+        for i, (pack1, pack2) in enumerate(zip(packs_iter1, packs_iter2)):
+            torch.testing.assert_close(
+                pack1["tokens"],
+                pack2["tokens"],
+                msg=f"Pack {i}: tokens mismatch between iterations",
+            )
+            torch.testing.assert_close(
+                pack1["document_ids"],
+                pack2["document_ids"],
+                msg=f"Pack {i}: document_ids mismatch between iterations",
+            )

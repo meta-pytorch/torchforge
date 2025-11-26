@@ -1,5 +1,5 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen32b.yaml
+# >>> python -m apps.grpo.main --config apps/grpo/qwen3_32b.yaml
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 
 # Global configuration
