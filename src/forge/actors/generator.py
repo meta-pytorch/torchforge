@@ -450,7 +450,7 @@ class Generator(ForgeActor):
                 if curr_requests:
                     # Record pending requests count
                     record_metric(
-                        "generator_perf/update_weights/sum_pending_requests",
+                        "generator_perf/update_weights/sum_pending_gen_requests",
                         len(curr_requests),
                         Reduce.SUM,
                     )

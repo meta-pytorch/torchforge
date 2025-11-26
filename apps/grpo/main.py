@@ -484,7 +484,7 @@ async def main(cfg: DictConfig):
             max_response_len = max(e.completion.token_ids.shape[0] for e in episodes)
             drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
             record_metric(
-                "main/continuous_rollouts/dropped_episodes",
+                "main/continuous_rollouts/unfit_for_training_dropped_episodes",
                 1 if drop else 0,
                 Reduce.SUM,
             )
