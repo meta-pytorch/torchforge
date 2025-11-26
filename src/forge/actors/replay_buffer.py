@@ -13,7 +13,6 @@ from typing import Any, Callable
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import trace
 
 from monarch.actor import endpoint
 
@@ -75,7 +74,6 @@ class ReplayBuffer(ForgeActor):
         record_metric("buffer/add/count_episodes_added", 1, Reduce.SUM)
 
     @endpoint
-    @trace("buffer_perf/sample", track_memory=False)
     async def sample(
         self, curr_policy_version: int
     ) -> tuple[tuple[Any, ...], ...] | None:

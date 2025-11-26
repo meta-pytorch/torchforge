@@ -179,14 +179,19 @@ def simple_grpo_loss(
     loss = -(mean_policy_loss - beta * mean_kl)
 
     # Log metrics
+    # TODO: Better design - have loss function return all metrics as a dict,
+    # then record them in rl_trainer so all training metrics are in one namespace
+    # and we avoid doing .item here, which is not compile friendly
     record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
     record_metric(
         "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
     )
-    record_metric("grpo_loss/policy_loss", mean_policy_loss.item(), Reduce.MEAN)
+    record_metric(
+        "grpo_loss/policy_gradient_loss", mean_policy_loss.item(), Reduce.MEAN
+    )
+    record_metric("grpo_loss/total_loss", loss.item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
-
     return loss
 
 

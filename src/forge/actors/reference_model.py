@@ -176,13 +176,11 @@ class ReferenceModel(ForgeActor):
         self.step += 1
         if isinstance(logits, DTensor):
             logits = logits.full_tensor()
-        t.step("forward")
 
         if not return_logprobs:
             t.stop()
             return logits
         else:
             logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
-            t.step("compute_logprobs")
             t.stop()
             return logprobs

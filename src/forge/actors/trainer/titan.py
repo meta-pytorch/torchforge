@@ -176,7 +176,7 @@ class TitanTrainer(ForgeActor):
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
-        record_metric("rl_trainer/avg_loss", loss, Reduce.MEAN)
+        record_metric("rl_trainer/loss", loss, Reduce.MEAN)
 
         # These are placeholder values until the loss function exposes these metrics
         # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
@@ -195,8 +195,6 @@ class TitanTrainer(ForgeActor):
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
-        t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
-        t.start()
         logger.info(f"Pushing weights for policy version {policy_version}")
 
         start_time = time.perf_counter()
@@ -227,7 +225,6 @@ class TitanTrainer(ForgeActor):
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
                 await ts.put(key, param)
-        t.stop()
         end_time = time.perf_counter()
         logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 
