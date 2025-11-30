@@ -18,6 +18,7 @@ from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.util.ops import compute_logprobs
+from forge.util.parallel_logprobs import compute_logprobs_parallel
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 
@@ -174,13 +175,24 @@ class ReferenceModel(ForgeActor):
                     with torch.inference_mode():
                         logits = self.model(input_ids)
         self.step += 1
-        if isinstance(logits, DTensor):
-            logits = logits.full_tensor()
+        t.step("forward")
 
         if not return_logprobs:
+            # Only gather full tensor when returning raw logits
+            if isinstance(logits, DTensor):
+                logits = logits.full_tensor()
             t.stop()
             return logits
         else:
-            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
+            # Compute logprobs in parallel without gathering full vocab tensor
+            response_tokens = input_ids[:, max_req_tokens:]
+            if isinstance(logits, DTensor):
+                # Use parallel logprobs - avoids materializing full vocab on each GPU
+                logprobs = compute_logprobs_parallel(
+                    logits, response_tokens, align=True
+                )
+            else:
+                logprobs = compute_logprobs(logits, response_tokens)
+            t.step("compute_logprobs")
             t.stop()
             return logprobs
