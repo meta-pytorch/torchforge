@@ -46,10 +46,13 @@ def compute_logprobs_parallel(
     align: bool = True,
 ) -> torch.Tensor:
     """
-    Compute log probabilities for target tokens from vocab-sharded logits.
+    Compute log probabilities for target tokens from vocab-sharded DTensor logits.
 
     This function computes log_softmax(logits)[target_ids] distributedly,
     without ever gathering the full vocabulary dimension.
+
+    IMPORTANT: Only use this when logits is a DTensor sharded on vocab dimension.
+    For regular tensors or non-vocab-sharded DTensors, use compute_logprobs instead.
 
     Args:
         logits: DTensor of shape [batch_size, seq_len, vocab_size], sharded on dim=-1.
@@ -64,7 +67,7 @@ def compute_logprobs_parallel(
     tp_group, tp_rank, tp_size, vocab_start, vocab_end = get_vocab_shard_info(logits)
 
     if tp_group is None:
-        # Not sharded on vocab (TP=1 or Replicate), use regular computation
+        # DTensor but not sharded on vocab (Replicate or other dim sharding)
         return compute_logprobs(logits.full_tensor(), target_ids, temperature, align)
 
     # Get the local shard

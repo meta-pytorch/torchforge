@@ -185,9 +185,9 @@ class ReferenceModel(ForgeActor):
             return logits
         else:
             # Compute logprobs in parallel without gathering full vocab tensor
+            # Use parallel version when TP is enabled (vocab sharded across GPUs)
             response_tokens = input_ids[:, max_req_tokens:]
-            if isinstance(logits, DTensor):
-                # Use parallel logprobs - avoids materializing full vocab on each GPU
+            if parallel_dims.tp_enabled and isinstance(logits, DTensor):
                 logprobs = compute_logprobs_parallel(
                     logits, response_tokens, align=True
                 )
