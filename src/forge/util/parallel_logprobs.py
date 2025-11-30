@@ -83,26 +83,21 @@ def compute_logprobs_parallel(
     local_logits = local_logits / temperature
 
     batch_size, seq_len, local_vocab_size = local_logits.shape
-    device = local_logits.device
 
-    # Move target_ids to the same device
-    target_ids = target_ids.to(device)
+    # Move target_ids to the same device as local_logits
+    target_ids = target_ids.to(local_logits.device)
 
     # Cast to float32 for numerical stability
     local_logits_fp32 = local_logits.float()
 
-    # ============================================================
-    # Step 1: Compute global max for numerical stability
-    # ============================================================
-    local_max = local_logits_fp32.max(dim=-1, keepdim=True).values  # [batch, seq, 1]
+    # Compute global max across all shards for numerical stability
+    local_max = local_logits_fp32.max(dim=-1, keepdim=True).values
     global_max = local_max.clone()
     dist.all_reduce(global_max, op=dist.ReduceOp.MAX, group=tp_group)
 
-    # ============================================================
-    # Step 2: Compute global sum(exp(x - max))
-    # ============================================================
-    local_exp = torch.exp(local_logits_fp32 - global_max)  # [batch, seq, local_vocab]
-    local_sum_exp = local_exp.sum(dim=-1, keepdim=True)  # [batch, seq, 1]
+    # Compute global sum(exp(x - max)) for the log-sum-exp trick
+    local_exp = torch.exp(local_logits_fp32 - global_max)
+    local_sum_exp = local_exp.sum(dim=-1, keepdim=True)
     global_sum_exp = local_sum_exp.clone()
     dist.all_reduce(global_sum_exp, op=dist.ReduceOp.SUM, group=tp_group)
 
@@ -110,39 +105,23 @@ def compute_logprobs_parallel(
     log_normalizer = global_max + torch.log(global_sum_exp)  # [batch, seq, 1]
     log_normalizer = log_normalizer.squeeze(-1)  # [batch, seq]
 
-    # ============================================================
-    # Step 3: Extract logits at target positions (only on owning rank)
-    # ============================================================
-    # Create mask for tokens owned by this rank (vocab_start/vocab_end from helper)
+    # Extract logits at target positions - each rank only has part of the vocab
     is_local = (target_ids >= vocab_start) & (target_ids < vocab_end)
 
     # Convert global indices to local indices (only valid where is_local=True)
     local_indices = target_ids - vocab_start
     local_indices = local_indices.clamp(0, local_vocab_size - 1)  # Clamp for safety
 
-    # Gather logits at target positions
-    # local_logits_fp32: [batch, seq, local_vocab]
-    # local_indices: [batch, seq]
-    # We need logits_fp32[b, s, local_indices[b, s]]
     target_logits = torch.gather(
         local_logits_fp32,
         dim=-1,
         index=local_indices.unsqueeze(-1).long(),
-    ).squeeze(
-        -1
-    )  # [batch, seq]
+    ).squeeze(-1)
 
-    # Zero out logits where this rank doesn't own the token
+    # Zero out where this rank doesn't own the token, then reduce
     target_logits = target_logits * is_local.float()
-
-    # ============================================================
-    # Step 4: All-reduce to combine (only one rank has non-zero value)
-    # ============================================================
     dist.all_reduce(target_logits, op=dist.ReduceOp.SUM, group=tp_group)
 
-    # ============================================================
-    # Step 5: Compute final log probability
-    # ============================================================
     logprobs = target_logits - log_normalizer
 
     return logprobs
