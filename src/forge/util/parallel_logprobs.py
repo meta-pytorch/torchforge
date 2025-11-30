@@ -58,32 +58,17 @@ def compute_logprobs_parallel(
     Returns:
         Tensor of shape [batch_size, target_len] with log probabilities.
     """
-    # Get the local shard and sharding info
-    local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
-    placements = logits.placements
-    device_mesh = logits.device_mesh
+    # Get sharding info using helper
+    tp_group, tp_rank, tp_size, vocab_start, vocab_end = get_vocab_shard_info(logits)
 
-    # Find the Shard placement for vocab dimension
-    from torch.distributed.tensor.placement_types import Shard
-
-    shard_dim = None
-    shard_placement = None
-    for i, p in enumerate(placements):
-        if isinstance(p, Shard) and p.dim == 2:  # vocab dimension
-            shard_dim = i
-            shard_placement = p
-            break
-
-    if shard_placement is None:
+    if tp_group is None:
         # Not sharded on vocab, fall back to regular computation
         return _compute_logprobs_local(
             logits.full_tensor(), target_ids, temperature, align
         )
 
-    # Get TP process group from device mesh
-    tp_group = device_mesh.get_group(mesh_dim=shard_dim)
-    tp_size = dist.get_world_size(tp_group)
-    tp_rank = dist.get_rank(tp_group)
+    # Get the local shard
+    local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
 
     # Align logits with target if needed
     if align:
@@ -95,7 +80,6 @@ def compute_logprobs_parallel(
     local_logits = local_logits / temperature
 
     batch_size, seq_len, local_vocab_size = local_logits.shape
-    full_vocab_size = local_vocab_size * tp_size
     device = local_logits.device
 
     # Move target_ids to the same device
@@ -126,11 +110,7 @@ def compute_logprobs_parallel(
     # ============================================================
     # Step 3: Extract logits at target positions (only on owning rank)
     # ============================================================
-    # Calculate which rank owns each target token
-    vocab_start = tp_rank * local_vocab_size
-    vocab_end = vocab_start + local_vocab_size
-
-    # Create mask for tokens owned by this rank
+    # Create mask for tokens owned by this rank (vocab_start/vocab_end from helper)
     is_local = (target_ids >= vocab_start) & (target_ids < vocab_end)
 
     # Convert global indices to local indices (only valid where is_local=True)
@@ -189,12 +169,18 @@ def _compute_logprobs_local(
     return logprobs.reshape(batch_size, seq_len)
 
 
-def get_vocab_shard_info(logits: DTensor) -> tuple[int, int, int, int]:
+def get_vocab_shard_info(
+    logits: DTensor,
+) -> tuple[dist.ProcessGroup | None, int, int, int, int]:
     """
     Get vocabulary sharding information from a DTensor.
 
+    Args:
+        logits: DTensor with shape [..., vocab_size], potentially sharded on vocab dim.
+
     Returns:
-        Tuple of (tp_rank, tp_size, vocab_start, vocab_end) for this rank.
+        Tuple of (tp_group, tp_rank, tp_size, vocab_start, vocab_end).
+        If not sharded, returns (None, 0, 1, 0, vocab_size).
     """
     from torch.distributed.tensor.placement_types import Shard
 
@@ -203,14 +189,14 @@ def get_vocab_shard_info(logits: DTensor) -> tuple[int, int, int, int]:
     device_mesh = logits.device_mesh
 
     for i, p in enumerate(placements):
-        if isinstance(p, Shard) and p.dim == 2:
+        if isinstance(p, Shard) and p.dim == 2:  # vocab dimension
             tp_group = device_mesh.get_group(mesh_dim=i)
             tp_size = dist.get_world_size(tp_group)
             tp_rank = dist.get_rank(tp_group)
             local_vocab_size = local_logits.shape[-1]
             vocab_start = tp_rank * local_vocab_size
             vocab_end = vocab_start + local_vocab_size
-            return tp_rank, tp_size, vocab_start, vocab_end
+            return tp_group, tp_rank, tp_size, vocab_start, vocab_end
 
     # Not sharded
-    return 0, 1, 0, local_logits.shape[-1]
+    return None, 0, 1, 0, local_logits.shape[-1]
