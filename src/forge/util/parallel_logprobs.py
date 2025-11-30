@@ -34,6 +34,8 @@ Memory: O(batch * seq_len) per GPU instead of O(batch * seq_len * vocab_size)
 
 import torch
 import torch.distributed as dist
+
+from forge.util.ops import compute_logprobs
 from torch.distributed.tensor import DTensor
 
 
@@ -62,10 +64,8 @@ def compute_logprobs_parallel(
     tp_group, tp_rank, tp_size, vocab_start, vocab_end = get_vocab_shard_info(logits)
 
     if tp_group is None:
-        # Not sharded on vocab, fall back to regular computation
-        return _compute_logprobs_local(
-            logits.full_tensor(), target_ids, temperature, align
-        )
+        # Not sharded on vocab (TP=1 or Replicate), use regular computation
+        return compute_logprobs(logits.full_tensor(), target_ids, temperature, align)
 
     # Get the local shard
     local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
@@ -143,30 +143,6 @@ def compute_logprobs_parallel(
     logprobs = target_logits - log_normalizer
 
     return logprobs
-
-
-def _compute_logprobs_local(
-    logits: torch.Tensor,
-    target_ids: torch.Tensor,
-    temperature: float = 1.0,
-    align: bool = True,
-) -> torch.Tensor:
-    """Fallback for non-sharded tensors."""
-    import torch.nn.functional as F
-
-    if align:
-        logits = logits[:, -target_ids.size(1) - 1 : -1, :]
-
-    scaled_logits = logits / temperature
-    scaled_logits_fp32 = scaled_logits.float()
-
-    batch_size, seq_len, vocab_size = scaled_logits_fp32.shape
-    logprobs = -F.cross_entropy(
-        scaled_logits_fp32.reshape(-1, vocab_size),
-        target_ids.reshape(-1).long().to(logits.device),
-        reduction="none",
-    )
-    return logprobs.reshape(batch_size, seq_len)
 
 
 def get_vocab_shard_info(
