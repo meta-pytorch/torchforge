@@ -303,7 +303,7 @@ Question: What is 12 + 5?
         )
         self._base_dataset = self._base_dataset.map(gsm8k_transform)
         self._base_dataset = self._base_dataset.shuffle(seed=self.seed)
-        self._base_dataset.set_epoch(self._epoch)  # Set initial epoch for determinism
+        self._base_dataset.set_epoch(self._epoch)  # for determinism
         self._iterator = iter(self._base_dataset)
 
     @endpoint
@@ -331,9 +331,7 @@ Question: What is 12 + 5?
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
-            self._base_dataset.set_epoch(
-                self._epoch
-            )  # Set epoch for deterministic iteration
+            self._base_dataset.set_epoch(self._epoch)  # for determinism
             self._iterator = iter(self._base_dataset)
             return next(self._iterator)
 
