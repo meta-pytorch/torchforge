@@ -351,6 +351,65 @@ class TestParallelLogprobs(FSDPTest):
         )
 
     @gpu_test(gpu_count=2)
+    def test_parallel_logprobs_uneven_vocab_shards(self):
+        """Ensure uneven vocab shards still produce correct logprobs."""
+        torch.manual_seed(321)
+
+        batch_size = 2
+        seq_len = 12
+        vocab_size = 1001  # Not divisible by world_size
+        target_len = 6
+
+        rank = dist.get_rank()
+        device = torch.device(f"cuda:{rank}")
+
+        if rank == 0:
+            full_logits = torch.randn(
+                batch_size, seq_len, vocab_size, dtype=torch.float32, device=device
+            )
+            target_ids = torch.randint(
+                0, vocab_size, (batch_size, target_len), device=device
+            )
+        else:
+            full_logits = torch.empty(
+                batch_size, seq_len, vocab_size, dtype=torch.float32, device=device
+            )
+            target_ids = torch.empty(
+                batch_size, target_len, dtype=torch.int64, device=device
+            )
+
+        dist.broadcast(full_logits, src=0)
+        dist.broadcast(target_ids, src=0)
+
+        expected = compute_logprobs(full_logits, target_ids, align=True)
+
+        mesh = init_device_mesh("cuda", (self.world_size,), mesh_dim_names=("tp",))
+        base_shard = vocab_size // self.world_size
+        remainder = vocab_size % self.world_size
+        extra = 1 if rank < remainder else 0
+        vocab_start = rank * base_shard + min(rank, remainder)
+        vocab_end = vocab_start + base_shard + extra
+        local_slice = full_logits[:, :, vocab_start:vocab_end].contiguous()
+
+        dtensor_logits = DTensor.from_local(
+            local_slice,
+            mesh,
+            placements=[Shard(2)],
+            shape=torch.Size((batch_size, seq_len, vocab_size)),
+            stride=full_logits.stride(),
+        )
+
+        result = compute_logprobs_parallel(dtensor_logits, target_ids, align=True)
+
+        torch.testing.assert_close(
+            result,
+            expected,
+            atol=1e-5,
+            rtol=1e-5,
+            msg="Parallel logprobs should support uneven vocab shards",
+        )
+
+    @gpu_test(gpu_count=2)
     def test_parallel_logprobs_numerical_stability(self):
         """Test parallel logprobs handles extreme values correctly."""
         torch.manual_seed(789)

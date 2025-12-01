@@ -155,6 +155,20 @@ def compute_logprobs_parallel(
     return target_logits - log_normalizer
 
 
+def _get_vocab_shard_bounds(
+    vocab_size: int, tp_rank: int, tp_size: int
+) -> tuple[int, int, int]:
+    """
+    Return (start, end, width) for a shard when vocab dimension is unevenly split.
+    """
+    base_shard = vocab_size // tp_size
+    remainder = vocab_size % tp_size
+    shard_width = base_shard + (1 if tp_rank < remainder else 0)
+    vocab_start = tp_rank * base_shard + min(tp_rank, remainder)
+    vocab_end = vocab_start + shard_width
+    return vocab_start, vocab_end, shard_width
+
+
 def get_vocab_shard_info(
     logits: DTensor,
 ) -> tuple[dist.ProcessGroup | None, int, int, int, int]:
@@ -171,19 +185,26 @@ def get_vocab_shard_info(
     local_logits = logits._local_tensor
     placements = logits.placements
     device_mesh = logits.device_mesh
+    global_vocab_size = logits.shape[-1]
 
     for i, p in enumerate(placements):
         if isinstance(p, Shard) and p.dim == 2:  # vocab dimension
             tp_group = device_mesh.get_group(mesh_dim=i)
             tp_size = dist.get_world_size(tp_group)
             tp_rank = dist.get_rank(tp_group)
+            vocab_start, vocab_end, shard_width = _get_vocab_shard_bounds(
+                global_vocab_size, tp_rank, tp_size
+            )
             local_vocab_size = local_logits.shape[-1]
-            vocab_start = tp_rank * local_vocab_size
-            vocab_end = vocab_start + local_vocab_size
+            if local_vocab_size != shard_width:
+                raise ValueError(
+                    "DTensor local shard width does not match inferred shard size "
+                    f"(rank={tp_rank}, local={local_vocab_size}, expected={shard_width})"
+                )
             return tp_group, tp_rank, tp_size, vocab_start, vocab_end
 
     # Not sharded
-    return None, 0, 1, 0, local_logits.shape[-1]
+    return None, 0, 1, 0, global_vocab_size
 
 
 def _distributed_log_normalizer(
