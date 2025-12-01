@@ -14,8 +14,11 @@ compute_logprobs when the logits are sharded across GPUs.
 import torch
 import torch.distributed as dist
 
-from forge.util.ops import compute_logprobs
-from forge.util.parallel_logprobs import compute_logprobs_parallel, get_vocab_shard_info
+from forge.util.ops import (
+    compute_logprobs,
+    compute_logprobs_parallel,
+    get_vocab_shard_info,
+)
 from tests.test_utils import gpu_test
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.tensor import DTensor, Shard
