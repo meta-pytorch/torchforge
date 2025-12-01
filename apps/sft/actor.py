@@ -13,7 +13,6 @@ This provides a base class that can be extended for different types of actors
 
 import logging
 import math
-import os
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -45,6 +44,9 @@ class BaseForgeActor(ForgeActor, ForgeEngine, ABC):
 
     This class handles common initialization, distributed setup, and provides
     abstract methods that must be implemented by concrete actor classes.
+
+    Args:
+        config: Configuration dictionary containing job settings
     """
 
     job_config: ForgeJobConfig
@@ -60,12 +62,6 @@ class BaseForgeActor(ForgeActor, ForgeEngine, ABC):
     device: torch.device
 
     def __init__(self, config: DictConfig):
-        """
-        Initialize the base actor with configuration.
-
-        Args:
-            config: Configuration dictionary containing job settings
-        """
         job_config = ForgeJobConfig().to_dict()
         job_config = OmegaConf.merge(job_config, config)
 
@@ -75,30 +71,7 @@ class BaseForgeActor(ForgeActor, ForgeEngine, ABC):
         self._rank = current_rank().rank
         self._size = math.prod(current_size().values())
 
-        self._init_dist()
         super().__init__(job_config)
-
-    def _init_dist(self):
-        """
-        Initialize torch distributed environment.
-
-        Sets up environment variables required for distributed training
-        in the Monarch actor framework.
-        """
-        env = {
-            "RANK": str(self._rank),
-            "LOCAL_RANK": str(self._rank),
-            "LOCAL_WORLD_SIZE": str(self._size),
-            "GROUP_RANK": str(self._size),
-            "GROUP_WORLD_SIZE": str(self._size),
-            "ROLE_RANK": str(self._rank),
-            "ROLE_WORLD_SIZE": str(self._size),
-            "ROLE_NAME": "rank",
-            "WORLD_SIZE": str(self._size),
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        }
-        os.environ.update(env)
-        logger.info(f"Initialized distributed environment: {env}")
 
     @abstractmethod
     async def setup(self):
