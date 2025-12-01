@@ -124,68 +124,36 @@ def compute_logprobs_parallel(
     Returns:
         Tensor of shape [batch_size, target_len] with log probabilities.
     """
-    # Get sharding info using helper
-    tp_group, tp_rank, tp_size, vocab_start, vocab_end = get_vocab_shard_info(logits)
+    tp_group, _, _, vocab_start, vocab_end = get_vocab_shard_info(logits)
 
     if tp_group is None:
         # DTensor but not sharded on vocab (Replicate or other dim sharding)
         return compute_logprobs(logits.full_tensor(), target_ids, temperature, align)
 
-    # Get the local shard
     local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
+    target_len = target_ids.size(1)
 
-    # Align logits with target if needed
     if align:
-        # Slice to match target length: logits[:, -target_len-1:-1, :]
-        target_len = target_ids.size(1)
         local_logits = local_logits[:, -target_len - 1 : -1, :]
 
-    # Scale by temperature
-    local_logits = local_logits / temperature
-
-    batch_size, seq_len, local_vocab_size = local_logits.shape
-
-    # Move target_ids to the same device as local_logits
     target_ids = target_ids.to(local_logits.device)
+    local_logits_fp32 = local_logits.float() / temperature
 
-    # Cast to float32 for numerical stability
-    local_logits_fp32 = local_logits.float()
+    log_normalizer = _distributed_log_normalizer(local_logits_fp32, tp_group)
 
-    # Compute global max across all shards for numerical stability
-    local_max = local_logits_fp32.max(dim=-1, keepdim=True).values
-    global_max = local_max.clone()
-    dist.all_reduce(global_max, op=dist.ReduceOp.MAX, group=tp_group)
-
-    # Compute global sum(exp(x - max)) for the log-sum-exp trick
-    local_exp = torch.exp(local_logits_fp32 - global_max)
-    local_sum_exp = local_exp.sum(dim=-1, keepdim=True)
-    global_sum_exp = local_sum_exp.clone()
-    dist.all_reduce(global_sum_exp, op=dist.ReduceOp.SUM, group=tp_group)
-
-    # log_normalizer = global_max + log(global_sum_exp)
-    log_normalizer = global_max + torch.log(global_sum_exp)  # [batch, seq, 1]
-    log_normalizer = log_normalizer.squeeze(-1)  # [batch, seq]
-
-    # Extract logits at target positions - each rank only has part of the vocab
+    local_vocab_size = local_logits_fp32.shape[-1]
+    local_indices = (target_ids - vocab_start).clamp(0, local_vocab_size - 1)
     is_local = (target_ids >= vocab_start) & (target_ids < vocab_end)
-
-    # Convert global indices to local indices (only valid where is_local=True)
-    local_indices = target_ids - vocab_start
-    local_indices = local_indices.clamp(0, local_vocab_size - 1)  # Clamp for safety
 
     target_logits = torch.gather(
         local_logits_fp32,
         dim=-1,
         index=local_indices.unsqueeze(-1).long(),
     ).squeeze(-1)
-
-    # Zero out where this rank doesn't own the token, then reduce
-    target_logits = target_logits * is_local.float()
+    target_logits = target_logits.masked_fill(~is_local, 0.0)
     dist.all_reduce(target_logits, op=dist.ReduceOp.SUM, group=tp_group)
 
-    logprobs = target_logits - log_normalizer
-
-    return logprobs
+    return target_logits - log_normalizer
 
 
 def get_vocab_shard_info(
@@ -219,3 +187,19 @@ def get_vocab_shard_info(
 
     # Not sharded
     return None, 0, 1, 0, local_logits.shape[-1]
+
+
+def _distributed_log_normalizer(
+    local_logits_fp32: torch.Tensor,
+    tp_group: dist.ProcessGroup,
+) -> torch.Tensor:
+    """
+    Compute logsumexp across vocab shards without materializing the full vocab.
+    """
+    global_max = local_logits_fp32.max(dim=-1, keepdim=True).values
+    dist.all_reduce(global_max, op=dist.ReduceOp.MAX, group=tp_group)
+
+    sum_exp = torch.exp(local_logits_fp32 - global_max).sum(dim=-1, keepdim=True)
+    dist.all_reduce(sum_exp, op=dist.ReduceOp.SUM, group=tp_group)
+
+    return (global_max + torch.log(sum_exp)).squeeze(-1)
