@@ -267,6 +267,7 @@ class DatasetActor(ForgeActor):
     data_split: str = "train"
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
+    seed: int = 36
 
     @endpoint
     async def setup(self):
@@ -301,7 +302,8 @@ Question: What is 12 + 5?
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
         self._base_dataset = self._base_dataset.map(gsm8k_transform)
-        self._base_dataset = self._base_dataset.shuffle()
+        self._base_dataset = self._base_dataset.shuffle(seed=self.seed)
+        self._base_dataset.set_epoch(self._epoch)  # Set initial epoch for determinism
         self._iterator = iter(self._base_dataset)
 
     @endpoint
@@ -329,7 +331,9 @@ Question: What is 12 + 5?
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
-            self._base_dataset.set_epoch(self._epoch)
+            self._base_dataset.set_epoch(
+                self._epoch
+            )  # Set epoch for deterministic iteration
             self._iterator = iter(self._base_dataset)
             return next(self._iterator)
 
