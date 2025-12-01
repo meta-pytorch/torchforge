@@ -185,3 +185,56 @@ def log_training_step(
         logger: Logger instance
     """
     logger.info(f"Step {step}/{total_steps} | Loss: {loss.item():.4f}")
+
+
+def setup_eval_dataloaders(
+    tokenizer: HuggingFaceModelTokenizer,
+    eval_datasets_config: list[dict],
+    target_tokens_per_pack: int,
+    batch_size: int,
+    device: torch.device,
+    padding_idx: int = 0,
+    message_transform: Optional[Any] = None,
+    dp_mesh: Optional[Any] = None,
+) -> dict[str, StatefulDataLoader]:
+    """
+    Setup multiple evaluation dataloaders from config.
+
+    Args:
+        tokenizer: Tokenizer to use for processing text
+        eval_datasets_config: List of eval dataset configurations
+        target_tokens_per_pack: Target sequence length for packing
+        batch_size: Batch size for evaluation
+        device: Device to move tensors to
+        padding_idx: Padding token index
+        message_transform: Transform to convert dataset format to messages
+        dp_mesh: Data parallel mesh for distributed evaluation
+
+    Returns:
+        Dictionary mapping dataset names to their dataloaders
+    """
+    if message_transform is None:
+        message_transform = AlpacaToMessages()
+
+    val_dataloaders = {}
+
+    for i, dataset_config in enumerate(eval_datasets_config):
+        ds_name = dataset_config.get("dataset_name", i)
+
+        logger.info(f"Loading eval dataset: {ds_name}")
+
+        # Use the same setup_sft_dataloader but with eval dataset config
+        dataloader = setup_sft_dataloader(
+            tokenizer=tokenizer,
+            dataset_path=dataset_config["path"],
+            dataset_split=dataset_config["split"],
+            target_tokens_per_pack=target_tokens_per_pack,
+            batch_size=batch_size,
+            device=device,
+            padding_idx=padding_idx,
+            message_transform=message_transform,
+        )
+
+        val_dataloaders[ds_name] = dataloader
+
+    return val_dataloaders
