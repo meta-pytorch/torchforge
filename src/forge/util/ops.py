@@ -131,10 +131,9 @@ def compute_logprobs_parallel(
         return compute_logprobs(logits.full_tensor(), target_ids, temperature, align)
 
     local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
-    target_len = target_ids.size(1)
 
     if align:
-        local_logits = local_logits[:, -target_len - 1 : -1, :]
+        local_logits = local_logits[:, -target_ids.size(1) - 1 : -1, :]
 
     target_ids = target_ids.to(local_logits.device)
     local_logits_fp32 = local_logits.float() / temperature
