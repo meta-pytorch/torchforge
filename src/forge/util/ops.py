@@ -7,8 +7,8 @@
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-
 from torch.distributed.tensor import DTensor
+from torch.distributed.tensor.placement_types import Shard
 
 
 def compute_logprobs(
@@ -169,8 +169,6 @@ def get_vocab_shard_info(
         Tuple of (tp_group, tp_rank, tp_size, vocab_start, vocab_end).
         If not sharded, returns (None, 0, 1, 0, vocab_size).
     """
-    from torch.distributed.tensor.placement_types import Shard
-
     local_logits = logits._local_tensor
     placements = logits.placements
     device_mesh = logits.device_mesh
