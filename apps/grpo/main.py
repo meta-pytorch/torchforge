@@ -416,7 +416,7 @@ async def main(cfg: DictConfig):
                     target_language="ja",
                     tag="思考",
                     match_reward=2.0,
-                    debug=True,
+                    debug=False,  # set to true for verbose logging
                     debug_sample_rate=0.1,
                 ),  # Japanese language reward with debug
             ]
