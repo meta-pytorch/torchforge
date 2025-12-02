@@ -7,6 +7,63 @@
 from typing import Any, Callable
 
 import torch
+import torch.nn.functional as F
+
+from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
+
+
+def collate_padded(batch: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Collate function that pads sequences to the longest sample in the batch.
+
+    Pads 'tokens' with 0 and 'labels' with CROSS_ENTROPY_IGNORE_IDX (-100).
+    Non-tensor fields (like metrics) are collected into lists and flattened
+    if all items are lists.
+
+    Args:
+        batch: List of samples, each containing 'tokens' and 'labels' tensors
+
+    Returns:
+        Batched dict with padded tensors
+    """
+    if not batch:
+        return {}
+
+    # Find max length in batch
+    max_len = max(sample["tokens"].size(0) for sample in batch)
+
+    # Initialize lists for batched tensors
+    tokens_list = []
+    labels_list = []
+
+    # Pad each sample to max_len
+    for sample in batch:
+        seq_len = sample["tokens"].size(0)
+        pad_len = max_len - seq_len
+
+        # Pad tokens with 0
+        padded_tokens = F.pad(sample["tokens"], (0, pad_len), value=0)
+        tokens_list.append(padded_tokens)
+
+        # Pad labels with CROSS_ENTROPY_IGNORE_IDX (-100)
+        padded_labels = F.pad(sample["labels"], (0, pad_len), value=CROSS_ENTROPY_IGNORE_IDX)
+        labels_list.append(padded_labels)
+
+    # Stack into batch
+    result = {
+        "tokens": torch.stack(tokens_list),
+        "labels": torch.stack(labels_list),
+    }
+
+    # Collect non-tensor fields (like metrics)
+    for key in batch[0].keys():
+        if key not in ["tokens", "labels"]:
+            result[key] = [sample[key] for sample in batch]
+            # Flatten if all are lists
+            if all(isinstance(item, list) for item in result[key]):
+                result[key] = [item for sublist in result[key] for item in sublist]
+
+    return result
 
 
 def collate_packed(

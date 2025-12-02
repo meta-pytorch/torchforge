@@ -16,15 +16,13 @@ import logging
 import math
 import os
 import sys
-from functools import partial
 from typing import Any
 
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
-from forge.data.collate import collate_packed
-from forge.data.datasets.packed import PackedDataset, TextPacker
+from forge.data.collate import collate_padded
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
@@ -197,25 +195,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             **dataset_config,
         )
 
-        packer = TextPacker(padding_idx=0)
-        dataset = PackedDataset(
-            dataset=dataset,
-            packer=packer,
-            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
-        )
-
         dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
-            collate_fn=partial(
-                collate_packed, mask_fn=packer.create_block_mask, device=self.device
-            ),
+            collate_fn=collate_padded,
         )
 
-        # Ultimately we probably want something like this
-        # packer = build_packing_strategy(packing_config)
-        # dataset = build_dataset(dataset_config)
-        # dataloader = build_dataloader(dataloader_config, dataset, packer)
         return dataloader
 
     def forward_backward(
