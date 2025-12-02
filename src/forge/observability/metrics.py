@@ -4,13 +4,17 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
+import heapq
+import itertools
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List
 
 import pytz
 
@@ -68,6 +72,7 @@ class Reduce(Enum):
     MAX = "max"
     MIN = "min"
     STD = "std"
+    SAMPLE = "sample"
 
     @property
     def accumulator_class(self):
@@ -77,6 +82,7 @@ class Reduce(Enum):
             Reduce.MAX: MaxAccumulator,
             Reduce.MIN: MinAccumulator,
             Reduce.STD: StdAccumulator,
+            Reduce.SAMPLE: SampleAccumulator,
         }
         return mapping[self]
 
@@ -122,7 +128,7 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
 
 
 def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metric]:
-    """Reduce metric accumulators states to a list of metrics.
+    """Reduce metric accumulators states to a list of Metrics.
 
     Can be used when reducing metrics across ranks or services, as merging
     states is more precise than merging locally reduced metrics.
@@ -135,12 +141,31 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
         list[Metric]: List of reduced metrics
 
     Example:
-        states = [
-            {"loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN}},
-            {"loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN}},
+        >>> states = [
+        ...     {
+        ...         "loss": {"count": 5, "sum": 14, "reduction_type": Reduce.MEAN},
+        ...         "reward/sample": {
+        ...             "reduction_type": Reduce.Sample,
+        ...             "samples": [{"episode_id": 1, "reward": 0.5}],
+        ...         },
+        ...     },
+        ...     {
+        ...         "loss": {"count": 10, "sum": 16, "reduction_type": Reduce.MEAN},
+        ...         "reward/sample": {
+        ...             "reduction_type": Reduce.Sample,
+        ...             "samples": [{"episode_id": 2, "reward": 1.0}],
+        ...         },
+        ...     },
+        ... ]
+        >>> reduce_metrics_states(states)
+        [
+            Metric(key='loss', value=2.0, reduction=Reduce.MEAN), # (14 + 16) / (5 + 10) = 2.0
+            Metric(
+                key='reward/sample',
+                value=[{'episode_id': 1, 'reward': 0.5}, {"episode_id": 2, "reward": 1.0}],
+                reduction=Reduce.SAMPLE,
+            )
         ]
-        reduce_metrics_states(states)
-        >>> [Metric(key="loss", value=2.0, reduction=Reduce.MEAN)]
 
     Raises:
         ValueError: on mismatched reduction types for the same metric key.
@@ -151,6 +176,7 @@ def reduce_metrics_states(states: list[dict[str, dict[str, Any]]]) -> list[Metri
     # Collect unique keys across all
     all_keys = set(k for state in states for k in state)
 
+    # For each metric key, reduce the states
     reduced_metrics = []
     for key in all_keys:
         metric_states = [state.get(key) for state in states if key in state]
@@ -392,6 +418,83 @@ class StdAccumulator(MetricAccumulator):
         self.count = 0
 
 
+class SampleAccumulator(MetricAccumulator):
+    """Accumulator for sample-level metrics with top-k and bottom-k filtering.
+
+    Keeps the top-k and bottom-k samples by a given key (e.g., reward).
+    Useful for logging only the best and worst samples from a batch.
+
+    **NOTE**: Currently the init attributes are not exposed to the user. It will always use the "score" key
+    to select highest/lowest score. The user can use it to define how to select the top/bottom samples, e.g.
+    "score" = reward or length or any other value.
+    """
+
+    def __init__(
+        self, reduction: Reduce, top_k: int = 1, bottom_k: int = 1, key: str = "score"
+    ):
+        super().__init__(reduction)
+        self.samples: List[Dict[str, Any]] = []
+        self.top_k = top_k
+        self.bottom_k = bottom_k
+        self.key = key
+        self._top_heap = []  # min-heap for top-k
+        self._bottom_heap = []  # max-heap for bottom-k (store -value)
+        self._counter = itertools.count()  # tie-breaker id generator
+        self.is_reset = True
+
+    def append(self, value: dict) -> None:
+        if not isinstance(value, dict):
+            raise ValueError(f"Expected dict, got {type(value)}")
+
+        self.is_reset = False
+        val = value.get(self.key, 0.0)
+        idx = next(self._counter)  # unique tiebreaker
+
+        # If top_k or bottom_k <= 0, it means "disable" that side of filtering (i.e., keep none).
+        # maintain top-k
+        if self.top_k > 0:
+            if len(self._top_heap) < self.top_k:
+                heapq.heappush(self._top_heap, (val, idx, value))
+            else:
+                heapq.heappushpop(self._top_heap, (val, idx, value))
+
+        # maintain bottom-k
+        if self.bottom_k > 0:
+            if len(self._bottom_heap) < self.bottom_k:
+                heapq.heappush(self._bottom_heap, (-val, idx, value))
+            else:
+                heapq.heappushpop(self._bottom_heap, (-val, idx, value))
+
+    def get_value(self) -> list[dict]:
+        """Return top-k and bottom-k filtered samples."""
+        tops = [s for _, _, s in self._top_heap]
+        bottoms = [s for _, _, s in self._bottom_heap]
+        return bottoms + tops
+
+    def get_state(self) -> Dict[str, Any]:
+        """Serialize accumulator state for cross-rank reduction."""
+        return {
+            "reduction_type": self.reduction_type.value,
+            "samples": self.get_value(),
+        }
+
+    @classmethod
+    def get_reduced_value_from_states(cls, states: List[Dict[str, Any]]) -> list[dict]:
+        """Merge sample states across ranks."""
+        merged = []
+        for s in states:
+            merged.extend(s.get("samples", []))
+        return merged
+
+    def reset(self) -> None:
+        """Clear local samples and reset filter state."""
+        self.is_reset = True
+        self.samples.clear()
+        self._top_heap = []
+        self._bottom_heap = []
+        self._counter = itertools.count()
+
+
 #############
 # Collector #
 #############
@@ -447,9 +550,10 @@ class MetricCollector:
     async def init_backends(
         self,
         metadata_per_controller_backend: dict[str, dict[str, Any]] | None,
-        config: dict[str, Any],
+        backend_config: dict[str, Any],
         global_step: int = 0,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize per-rank logger backends and MetricCollector state.
 
@@ -460,12 +564,15 @@ class MetricCollector:
             metadata_per_controller_backend (Optional[Dict[str, Dict[str, Any]]]): Metadata from controller
                 for backends that require shared state across processes, e.g.,
                 {"wandb": {"shared_run_id": "abc123"}}.
-            config (Dict[str, Any]): Backend configurations where each key is a backend name
+            backend_config (Dict[str, Any]): Backend configurations where each key is a backend name
                 and value contains logging_mode and backend-specific settings.
                 e.g., {"wandb": {"logging_mode": "per_rank_no_reduce", "project": "my_proj"}}
             global_step (int, default 0): Initial step for logging. Can be used when
                 resuming from a checkpoint.
             process_name (str | None): The meaningful process name for logging.
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
         """
         if self._is_initialized:
             logger.debug(
@@ -480,8 +587,8 @@ class MetricCollector:
         self.per_rank_no_reduce_backends: list[LoggerBackend] = []
 
         # Initialize backends based on logging mode
-        for backend_name, backend_config in config.items():
-            mode = backend_config["logging_mode"]
+        for backend_name, cfg in backend_config.items():
+            mode = cfg["logging_mode"]
 
             # sanity check
             if not isinstance(mode, LoggingMode):
@@ -502,13 +609,12 @@ class MetricCollector:
                 )
 
             # instantiate local backend
-            backend: LoggerBackend = get_logger_backend_class(backend_name)(
-                **backend_config
-            )
+            backend: LoggerBackend = get_logger_backend_class(backend_name)(**cfg)
             await backend.init(
                 role=BackendRole.LOCAL,
                 controller_logger_metadata=controller_metadata,
                 process_name=self.proc_name_with_rank,
+                run_config=run_config,
             )
 
             # Categorize by logging mode
@@ -559,7 +665,10 @@ class MetricCollector:
 
         # For PER_RANK_NO_REDUCE backends: stream without reduce
         for backend in self.per_rank_no_reduce_backends:
-            backend.log_stream(metric=metric, global_step=self.global_step)
+            if metric.reduction == Reduce.SAMPLE:
+                asyncio.create_task(backend.log_samples([metric], self.global_step))
+            else:
+                backend.log_stream(metric=metric, global_step=self.global_step)
 
         # Always accumulate for reduction and state return
         key = metric.key
@@ -614,8 +723,19 @@ class MetricCollector:
         if self.per_rank_reduce_backends:
             metrics_for_backends = reduce_metrics_states([states])
 
+            # Split into scalar metrics and sample metrics
+            scalar_metrics = [
+                m for m in metrics_for_backends if m.reduction != Reduce.SAMPLE
+            ]
+            sample_metrics = [
+                m for m in metrics_for_backends if m.reduction == Reduce.SAMPLE
+            ]
+
             for backend in self.per_rank_reduce_backends:
-                await backend.log_batch(metrics_for_backends, global_step)
+                if scalar_metrics:
+                    await backend.log_batch(scalar_metrics, global_step)
+                if sample_metrics:
+                    await backend.log_samples(sample_metrics, global_step)
 
         # Update step counter for streaming backends
         # Note: This is incremented AFTER flush completes, so metrics recorded between
@@ -664,6 +784,7 @@ class LoggerBackend(ABC):
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         """
         Initializes backend, e.g. wandb.run.init().
@@ -674,6 +795,9 @@ class LoggerBackend(ABC):
             controller_logger_metadata (dict[str, Any] | None): From global backend for
                 backend that required shared info, e.g. {"shared_run_id": "abc123"}.
             process_name (str | None): Process name for logging.
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backend for
+                experiment tracking.
 
         Raises: ValueError if missing metadata for shared local init.
         """
@@ -705,6 +829,16 @@ class LoggerBackend(ABC):
         pass
 
     @abstractmethod
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
+        """Log samples to backend.
+
+        Args:
+            samples: List of Metric objects to log.
+            step: Step number for x-axis alignment across metrics.
+        """
+        pass
+
+    @abstractmethod
     async def finish(self) -> None:
         pass
 
@@ -729,6 +863,7 @@ class ConsoleBackend(LoggerBackend):
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         self.process_name = process_name
 
@@ -745,6 +880,14 @@ class ConsoleBackend(LoggerBackend):
 
     def log_stream(self, metric: Metric, global_step: int, *args, **kwargs) -> None:
         logger.info(f"{metric.key}: {metric.value}")
+
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
+        """Pretty-print sample-level logs to console."""
+
+        for sample in samples:
+            table_name, table_rows = sample.key, sample.value
+            logger.info(f"[{table_name}] ({len(table_rows)} samples)")
+            logger.info(json.dumps(table_rows, indent=2, ensure_ascii=False))
 
     async def finish(self) -> None:
         pass
@@ -785,12 +928,14 @@ class WandbBackend(LoggerBackend):
         )
         self.run = None
         self.process_name = None
+        self._tables: dict[str, "wandb.Table"] = {}
 
     async def init(
         self,
         role: BackendRole,
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
+        run_config: dict[str, Any] | None = None,
     ) -> None:
         if controller_logger_metadata is None:
             controller_logger_metadata = {}
@@ -798,6 +943,7 @@ class WandbBackend(LoggerBackend):
         # Pop name, if any, to concat to process_name.
         run_name = self.backend_kwargs.pop("name", None)
         self.process_name = process_name
+        self.run_config = run_config
 
         # Format run name based on mode and role
         if self.logging_mode == LoggingMode.GLOBAL_REDUCE:
@@ -828,12 +974,16 @@ class WandbBackend(LoggerBackend):
     async def _init_global(self, run_name: str | None):
         import wandb
 
-        self.run = wandb.init(name=run_name, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name, config=self.run_config, **self.backend_kwargs
+        )
 
     async def _init_per_rank(self, run_name: str):
         import wandb
 
-        self.run = wandb.init(name=run_name, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name, config=self.run_config, **self.backend_kwargs
+        )
 
     async def _init_shared_global(self, run_name: str | None):
         import wandb
@@ -841,7 +991,12 @@ class WandbBackend(LoggerBackend):
         settings = wandb.Settings(
             mode="shared", x_primary=True, x_label="controller_primary"
         )
-        self.run = wandb.init(name=run_name, settings=settings, **self.backend_kwargs)
+        self.run = wandb.init(
+            name=run_name,
+            config=self.run_config,
+            settings=settings,
+            **self.backend_kwargs,
+        )
 
     async def _init_shared_local(
         self, run_name: str, shared_id: str, process_name: str
@@ -858,7 +1013,11 @@ class WandbBackend(LoggerBackend):
 
         settings = wandb.Settings(mode="shared", x_primary=False, x_label=process_name)
         self.run = wandb.init(
-            name=run_name, id=shared_id, settings=settings, **self.backend_kwargs
+            name=run_name,
+            id=shared_id,
+            config=self.run_config,
+            settings=settings,
+            **self.backend_kwargs,
         )
 
     async def log_batch(
@@ -895,13 +1054,74 @@ class WandbBackend(LoggerBackend):
         # note: here we dont use step since wandb keeps only the latest value for each step
         self.run.log(log_data)
 
+    async def log_samples(self, samples: List[Metric], step: int) -> None:
+        """Log sample-level data incrementally to persistent WandB Tables."""
+        import wandb
+
+        if not self.run:
+            return
+
+        for sample in samples:
+            table_name, table_rows = sample.key, sample.value
+            if not table_rows:
+                continue
+
+            # If table doesn't exist yet, create it in INCREMENTAL mode
+            if table_name not in self._tables:
+                # Collect all unique columns from all rows
+                columns = set()
+                for row in table_rows:
+                    columns.update(row.keys())
+                columns = sorted(columns)  # Sort for consistent column ordering
+                table = wandb.Table(columns=columns, log_mode="INCREMENTAL")
+                self._tables[table_name] = table
+                logger.debug(
+                    f"WandbBackend: Created new incremental table: {table_name} with columns: {columns}"
+                )
+            else:
+                table = self._tables[table_name]
+
+            # Add rows (fill missing columns with None)
+            for s in table_rows:
+                # Check for extra columns not in the table schema
+                extra_columns = set(s.keys()) - set(table.columns)
+                if extra_columns:
+                    logger.warning(
+                        f"WandbBackend: Row has extra columns not in table '{table_name}': {sorted(extra_columns)}. "
+                        f"These will be ignored."
+                    )
+                values = [s.get(c) for c in table.columns]
+                table.add_data(*values)
+
+            # Log the same table object (INCREMENTAL update)
+            # table_name has to end with _table to be recognized by wandb
+            if not table_name.endswith("_table"):
+                table_name += "_table"
+            self.run.log({f"{table_name}": table})
+
     def get_metadata_for_secondary_ranks(self) -> dict[str, Any]:
         if self.run and self.per_rank_share_run:
             return {"shared_run_id": self.run.id}
         return {}
 
     async def finish(self) -> None:
+        import wandb
+
         if self.run:
+            """
+            Convert each incremental table to immutable before finishing
+            as recommended by wandb:
+            https://docs.wandb.ai/models/tables/log_tables#incremental-mode
+            """
+            for table_name, incr_table in self._tables.items():
+                final_table = wandb.Table(
+                    columns=incr_table.columns,
+                    data=incr_table.data,
+                    log_mode="IMMUTABLE",
+                )
+                self.run.log({table_name: final_table})
+                logger.debug(f"WandbBackend: Finalized table {table_name}")
+
             self.run.finish()
             logger.info(f"WandbBackend {self.process_name}: Finished run")
 
