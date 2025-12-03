@@ -206,7 +206,7 @@ class MastLauncher(BaseLauncher):
         self.timeout_sec = 1 * 60 * 60  # Kill the job if idle for 1 hour
         self.user = getpass.getuser()
         self.work_dir = f"/home/{self.user}"
-        self.edittable_workspaces = ["forge"]
+        self.edittable_workspaces = ["torchforge"]
         self.remote_work_dir = "/packages/monarch_default_workspace/workspace/"
         self.editable_workspace_paths = [
             f"{self.work_dir}/{workspace}" for workspace in self.edittable_workspaces
@@ -367,7 +367,7 @@ class MastLauncher(BaseLauncher):
         # Override with client-specific configuration
         client_role.name = "client"
         # Use the bootstrap script as entrypoint
-        client_role.entrypoint = "workspace/forge/.meta/mast/client_bootstrap.sh"
+        client_role.entrypoint = "workspace/torchforge/.meta/mast/client_bootstrap.sh"
 
         # Build args for the client role (passed to the bootstrap script)
         # These args will be passed to client_bootstrap.sh which forwards them to main.py
