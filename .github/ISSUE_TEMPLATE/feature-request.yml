@@ -11,14 +11,13 @@ body:
     label: 🎯 Context/Motivation
     description: |
       Describe the problem you're trying to solve or the use case for this feature.
-      What is the motivation behind this request? Why would this feature be valuable?
     placeholder: |
       Example: "When training large models, I often need to..."
   validations:
     required: true
 - type: textarea
   attributes:
-    label: 💡 What does this look like in pseudo-code?
+    label: 💡 [Optional] What does this look like in pseudo-code?
     description: |
       Provide a rough sketch of what the API or implementation might look like.
       This helps us understand your vision for how the feature would work.
@@ -32,10 +31,9 @@ body:
     required: false
 - type: textarea
   attributes:
-    label: ✅ Acceptance Criteria
+    label: ✅ [Optional] Acceptance Criteria
     description: |
       What would need to be true for this feature to be considered complete?
-      List the key requirements or behaviors expected.
     placeholder: |
       - [ ] The feature should support X
       - [ ] It should handle edge case Y
