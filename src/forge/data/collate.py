@@ -46,7 +46,9 @@ def collate_padded(batch: list[dict[str, Any]]) -> dict[str, Any]:
         tokens_list.append(padded_tokens)
 
         # Pad labels with CROSS_ENTROPY_IGNORE_IDX (-100)
-        padded_labels = F.pad(sample["labels"], (0, pad_len), value=CROSS_ENTROPY_IGNORE_IDX)
+        padded_labels = F.pad(
+            sample["labels"], (0, pad_len), value=CROSS_ENTROPY_IGNORE_IDX
+        )
         labels_list.append(padded_labels)
 
     # Stack into batch

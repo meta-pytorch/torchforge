@@ -1125,4 +1125,3 @@ class TestCollatePadded:
         assert "metrics" in result
         # Should be flattened from [[metric1, metric2], [metric3]] to [metric1, metric2, metric3]
         assert len(result["metrics"]) == 3
-
