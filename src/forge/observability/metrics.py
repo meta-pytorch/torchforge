@@ -10,13 +10,11 @@ import itertools
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List
-
-import pytz
 
 from forge.observability.utils import get_proc_name_with_rank
 
@@ -91,7 +89,7 @@ class Reduce(Enum):
 class Metric:
     """Container for metric data including key, value, reduction type, and timestamp.
 
-    Timestamp is automatically set to current UTC time if not provided.
+    Timestamp is automatically set to current time if not provided.
     """
 
     key: str
@@ -101,8 +99,7 @@ class Metric:
 
     def __post_init__(self):
         if self.timestamp is None:
-            # Always record in UTC timezone
-            self.timestamp = datetime.now(pytz.UTC).timestamp()
+            self.timestamp = time.time()
 
 
 def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
