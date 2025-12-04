@@ -17,6 +17,7 @@ rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to
 # Observability configuration
 metric_logging:
   wandb:
+    entity: torchforge
     project: "grpo-training"
     group: "grpo_exp_${oc.env:USER}"
     logging_mode: global_reduce
