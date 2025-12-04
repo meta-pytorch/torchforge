@@ -1125,3 +1125,53 @@ class TestCollatePadded:
         assert "metrics" in result
         # Should be flattened from [[metric1, metric2], [metric3]] to [metric1, metric2, metric3]
         assert len(result["metrics"]) == 3
+
+    def test_different_keys_error(self):
+        """Test that different keys across samples raises ValueError"""
+        batch = [
+            {"tokens": torch.tensor([1, 2]), "labels": torch.tensor([3, 4])},
+            {"tokens": torch.tensor([5, 6]), "other_key": torch.tensor([7, 8])},
+        ]
+
+        with pytest.raises(ValueError, match="All samples must have the same keys"):
+            collate_padded(batch)
+
+    def test_generic_tensor_handling(self):
+        """Test that any tensor field gets padded correctly"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+                "custom_tensor": torch.tensor([100, 200, 300]),
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7, 8]),
+                "labels": torch.tensor([9, 10, 11, 12]),
+                "custom_tensor": torch.tensor([400]),
+            },
+        ]
+        result = collate_padded(batch)
+
+        # Tokens padded to length 4
+        assert result["tokens"].shape == (2, 4)
+        torch.testing.assert_close(
+            result["tokens"], torch.tensor([[1, 2, 0, 0], [5, 6, 7, 8]])
+        )
+
+        # Labels padded to length 4 with CROSS_ENTROPY_IGNORE_IDX
+        assert result["labels"].shape == (2, 4)
+        torch.testing.assert_close(
+            result["labels"],
+            torch.tensor(
+                [
+                    [3, 4, CROSS_ENTROPY_IGNORE_IDX, CROSS_ENTROPY_IGNORE_IDX],
+                    [9, 10, 11, 12],
+                ]
+            ),
+        )
+
+        # Custom tensor padded to length 3 with 0
+        assert result["custom_tensor"].shape == (2, 3)
+        torch.testing.assert_close(
+            result["custom_tensor"], torch.tensor([[100, 200, 300], [400, 0, 0]])
+        )

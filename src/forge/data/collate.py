@@ -16,56 +16,63 @@ def collate_padded(batch: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Collate function that pads sequences to the longest sample in the batch.
 
-    Pads 'tokens' with 0 and 'labels' with CROSS_ENTROPY_IGNORE_IDX (-100).
-    Non-tensor fields (like metrics) are collected into lists and flattened
-    if all items are lists.
+    Handles any tensor keys by padding to the longest
+    sequence for that key. Uses 0 as default padding value, and
+    CROSS_ENTROPY_IGNORE_IDX (-100) for 'labels' keys.
+
+    Non-tensor fields are collected into lists. The 'metrics' field is
+    special-cased to be flattened (extended) rather than nested.
 
     Args:
-        batch: List of samples, each containing 'tokens' and 'labels' tensors
+        batch: List of samples, each containing tensor and non-tensor fields
 
     Returns:
-        Batched dict with padded tensors
+        Batched dict with padded tensors and collected non-tensor fields
+
+    Raises:
+        ValueError: If all samples do not have the same keys
     """
     if not batch:
         return {}
 
-    # Find max length in batch
-    max_len = max(sample["tokens"].size(0) for sample in batch)
-
-    # Initialize lists for batched tensors
-    tokens_list = []
-    labels_list = []
-
-    # Pad each sample to max_len
+    # Verify all samples have the same keys
+    first_sample_keys = batch[0].keys()
     for sample in batch:
-        seq_len = sample["tokens"].size(0)
-        pad_len = max_len - seq_len
+        if sample.keys() != first_sample_keys:
+            raise ValueError(
+                f"All samples must have the same keys. Expected {first_sample_keys}, got {sample.keys()}"
+            )
 
-        # Pad tokens with 0
-        padded_tokens = F.pad(sample["tokens"], (0, pad_len), value=0)
-        tokens_list.append(padded_tokens)
+    collated = {}
 
-        # Pad labels with CROSS_ENTROPY_IGNORE_IDX (-100)
-        padded_labels = F.pad(
-            sample["labels"], (0, pad_len), value=CROSS_ENTROPY_IGNORE_IDX
-        )
-        labels_list.append(padded_labels)
+    for key in first_sample_keys:
+        if isinstance(batch[0][key], torch.Tensor):
+            # Find max length for this tensor key
+            max_len = max(sample[key].size(0) for sample in batch)
 
-    # Stack into batch
-    result = {
-        "tokens": torch.stack(tokens_list),
-        "labels": torch.stack(labels_list),
-    }
+            # Determine padding value
+            pad_value = CROSS_ENTROPY_IGNORE_IDX if key == "labels" else 0
 
-    # Collect non-tensor fields (like metrics)
-    for key in batch[0].keys():
-        if key not in ["tokens", "labels"]:
-            result[key] = [sample[key] for sample in batch]
-            # Flatten if all are lists
-            if all(isinstance(item, list) for item in result[key]):
-                result[key] = [item for sublist in result[key] for item in sublist]
+            # Pad each sample to max_len
+            padded_tensors = []
+            for sample in batch:
+                seq_len = sample[key].size(0)
+                pad_len = max_len - seq_len
+                padded = F.pad(sample[key], (0, pad_len), value=pad_value)
+                padded_tensors.append(padded)
 
-    return result
+            # Stack into batch
+            collated[key] = torch.stack(padded_tensors)
+        elif key == "metrics":
+            # Flatten metrics lists
+            collated[key] = []
+            for sample in batch:
+                collated[key].extend(sample[key])
+        else:
+            # Collect other non-tensor fields as lists
+            collated[key] = [sample[key] for sample in batch]
+
+    return collated
 
 
 def collate_packed(
