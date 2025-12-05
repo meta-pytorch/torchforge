@@ -11,6 +11,7 @@ from torch.distributed.tensor import DTensor
 from torch.distributed.tensor.placement_types import Shard
 
 
+@torch.compile
 def compute_logprobs(
     logits: torch.Tensor,
     input_ids: torch.Tensor,
@@ -100,6 +101,7 @@ def compute_logprobs(
     return logprobs.reshape(batch_size, seq_len)
 
 
+@torch.compile
 def compute_logprobs_parallel(
     logits: DTensor,
     target_ids: torch.Tensor,
