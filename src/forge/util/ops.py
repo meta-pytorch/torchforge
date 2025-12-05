@@ -5,15 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
 from torch.distributed.tensor import DTensor
-from torch.distributed.tensor.placement_types import Shard
 
 
 @torch.compile
 def compute_logprobs(
-    logits: torch.Tensor,
+    logits: torch.Tensor | DTensor,
     input_ids: torch.Tensor,
     temperature: float = 1.0,
     align: bool = True,
@@ -56,9 +54,21 @@ def compute_logprobs(
     probabilities for the response portion, you don't need to re-run the model. This
     is a key optimization in RL training where the prompt remains constant.
 
+    **Tensor Parallelism Support:**
+    When logits is a DTensor sharded on the vocab dimension (e.g., from tensor parallel
+    training), wrap calls to this function with `loss_parallel()` context:
+
+        >>> from torch.distributed.tensor.parallel import loss_parallel
+        >>> with loss_parallel():
+        ...     logprobs = compute_logprobs(logits, input_ids)
+
+    The `loss_parallel` context ensures F.cross_entropy works correctly with
+    vocab-sharded DTensors without needing to gather the full tensor.
+
     Args:
         logits (`torch.Tensor`):
             The model output logits of shape `(batch_size, sequence_length, vocab_size)`.
+            Can be a regular Tensor or a DTensor (when using with loss_parallel context).
         input_ids (`torch.Tensor`):
             The target token ids of shape `(batch_size, target_sequence_length)`.
             These are the tokens for which you want to compute log probabilities.
@@ -99,127 +109,3 @@ def compute_logprobs(
     )
 
     return logprobs.reshape(batch_size, seq_len)
-
-
-@torch.compile
-def compute_logprobs_parallel(
-    logits: DTensor,
-    target_ids: torch.Tensor,
-    temperature: float = 1.0,
-    align: bool = True,
-) -> torch.Tensor:
-    """
-    Compute log probabilities for target tokens from vocab-sharded DTensor logits.
-
-    This function computes log_softmax(logits)[target_ids] distributedly,
-    without ever gathering the full vocabulary dimension.
-
-    IMPORTANT: Only use this when logits is a DTensor sharded on vocab dimension.
-    For regular tensors or non-vocab-sharded DTensors, use compute_logprobs instead.
-
-    Args:
-        logits: DTensor of shape [batch_size, seq_len, vocab_size], sharded on dim=-1.
-        target_ids: Tensor of shape [batch_size, target_len] with target token IDs.
-        temperature: Temperature for scaling logits (default 1.0).
-        align: If True, slice logits to align with target_ids (default True).
-
-    Returns:
-        Tensor of shape [batch_size, target_len] with log probabilities.
-    """
-    tp_group, _, _, vocab_start, vocab_end = get_vocab_shard_info(logits)
-
-    if tp_group is None:
-        # DTensor but not sharded on vocab (Replicate or other dim sharding)
-        return compute_logprobs(logits.full_tensor(), target_ids, temperature, align)
-
-    local_logits = logits._local_tensor  # [batch, seq_len, vocab_size / tp_size]
-
-    if align:
-        local_logits = local_logits[:, -target_ids.size(1) - 1 : -1, :]
-
-    target_ids = target_ids.to(local_logits.device)
-    local_logits_fp32 = local_logits.float() / temperature
-
-    log_normalizer = _distributed_log_normalizer(local_logits_fp32, tp_group)
-
-    local_vocab_size = local_logits_fp32.shape[-1]
-    local_indices = (target_ids - vocab_start).clamp(0, local_vocab_size - 1)
-    is_local = (target_ids >= vocab_start) & (target_ids < vocab_end)
-
-    target_logits = torch.gather(
-        local_logits_fp32,
-        dim=-1,
-        index=local_indices.unsqueeze(-1).long(),
-    ).squeeze(-1)
-    target_logits = target_logits.masked_fill(~is_local, 0.0)
-    dist.all_reduce(target_logits, op=dist.ReduceOp.SUM, group=tp_group)
-
-    return target_logits - log_normalizer
-
-
-def _get_vocab_shard_bounds(
-    vocab_size: int, tp_rank: int, tp_size: int
-) -> tuple[int, int, int]:
-    """
-    Return (start, end, width) for a shard when vocab dimension is unevenly split.
-    """
-    base_shard = vocab_size // tp_size
-    remainder = vocab_size % tp_size
-    shard_width = base_shard + (1 if tp_rank < remainder else 0)
-    vocab_start = tp_rank * base_shard + min(tp_rank, remainder)
-    vocab_end = vocab_start + shard_width
-    return vocab_start, vocab_end, shard_width
-
-
-def get_vocab_shard_info(
-    logits: DTensor,
-) -> tuple[dist.ProcessGroup | None, int, int, int, int]:
-    """
-    Get vocabulary sharding information from a DTensor.
-
-    Args:
-        logits: DTensor with shape [..., vocab_size], potentially sharded on vocab dim.
-
-    Returns:
-        Tuple of (tp_group, tp_rank, tp_size, vocab_start, vocab_end).
-        If not sharded, returns (None, 0, 1, 0, vocab_size).
-    """
-    local_logits = logits._local_tensor
-    placements = logits.placements
-    device_mesh = logits.device_mesh
-    global_vocab_size = logits.shape[-1]
-
-    for i, p in enumerate(placements):
-        if isinstance(p, Shard) and p.dim == 2:  # vocab dimension
-            tp_group = device_mesh.get_group(mesh_dim=i)
-            tp_size = dist.get_world_size(tp_group)
-            tp_rank = dist.get_rank(tp_group)
-            vocab_start, vocab_end, shard_width = _get_vocab_shard_bounds(
-                global_vocab_size, tp_rank, tp_size
-            )
-            local_vocab_size = local_logits.shape[-1]
-            if local_vocab_size != shard_width:
-                raise ValueError(
-                    "DTensor local shard width does not match inferred shard size "
-                    f"(rank={tp_rank}, local={local_vocab_size}, expected={shard_width})"
-                )
-            return tp_group, tp_rank, tp_size, vocab_start, vocab_end
-
-    # Not sharded
-    return None, 0, 1, 0, global_vocab_size
-
-
-def _distributed_log_normalizer(
-    local_logits_fp32: torch.Tensor,
-    tp_group: dist.ProcessGroup,
-) -> torch.Tensor:
-    """
-    Compute logsumexp across vocab shards without materializing the full vocab.
-    """
-    global_max = local_logits_fp32.max(dim=-1, keepdim=True).values
-    dist.all_reduce(global_max, op=dist.ReduceOp.MAX, group=tp_group)
-
-    sum_exp = torch.exp(local_logits_fp32 - global_max).sum(dim=-1, keepdim=True)
-    dist.all_reduce(sum_exp, op=dist.ReduceOp.SUM, group=tp_group)
-
-    return (global_max + torch.log(sum_exp)).squeeze(-1)

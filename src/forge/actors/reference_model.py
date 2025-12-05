@@ -17,9 +17,10 @@ import torch
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.util.ops import compute_logprobs, compute_logprobs_parallel
+from forge.util.ops import compute_logprobs
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
+from torch.distributed.tensor.parallel import loss_parallel
 
 from torchtitan.config.job_config import (
     Checkpoint,
@@ -177,19 +178,16 @@ class ReferenceModel(ForgeActor):
         t.step("forward")
 
         if not return_logprobs:
-            # Only gather full tensor when returning raw logits
             if isinstance(logits, DTensor):
                 logits = logits.full_tensor()
             t.stop()
             return logits
         else:
-            # Compute logprobs in parallel without gathering full vocab tensor
-            # Use parallel version when TP is enabled (vocab sharded across GPUs)
+            # When TP is enabled, use loss_parallel context for vocab-sharded DTensors
             response_tokens = input_ids[:, max_req_tokens:]
             if parallel_dims.tp_enabled and isinstance(logits, DTensor):
-                logprobs = compute_logprobs_parallel(
-                    logits, response_tokens, align=True
-                )
+                with loss_parallel():
+                    logprobs = compute_logprobs(logits, response_tokens, align=True)
             else:
                 logprobs = compute_logprobs(logits, response_tokens)
             t.step("compute_logprobs")
