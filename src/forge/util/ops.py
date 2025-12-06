@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from torch.distributed.tensor import DTensor
 
 
-@torch.compile
 def compute_logprobs(
     logits: torch.Tensor | DTensor,
     input_ids: torch.Tensor,

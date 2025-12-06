@@ -99,6 +99,10 @@ class ReferenceModel(ForgeActor):
         self.rank = current_rank().rank
         self.size = math.prod(current_size().values())
 
+        self.compute_log_probs = compute_logprobs
+        if self.compile.enable:
+            self.compute_log_probs = torch.compile(self.compute_log_probs)
+
         env = {
             "RANK": str(self.rank),
             "LOCAL_RANK": str(self.rank),
@@ -187,11 +191,11 @@ class ReferenceModel(ForgeActor):
             response_tokens = input_ids[:, max_req_tokens:]
             if parallel_dims.tp_enabled and isinstance(logits, DTensor):
                 with loss_parallel():
-                    logprobs = compute_logprobs(logits, response_tokens, align=True)
+                    logprobs = self.compute_log_probs(logits, response_tokens)
 
                 logprobs = logprobs.to_local()
             else:
-                logprobs = compute_logprobs(logits, response_tokens)
+                logprobs = self.compute_log_probs(logits, response_tokens)
             t.step("compute_logprobs")
             t.stop()
             return logprobs
