@@ -63,9 +63,10 @@ class ForwardBackwardResult:
 
     Example:
         >>> result = await trainer.forward_backward(batch)
-        >>> print(f"Loss: {result.loss:.4f}")
-        >>> if result.metrics:
-        >>>     print(f"Metrics: {result.metrics}")
+        >>> result.loss
+        0.3542
+        >>> result.metrics
+        {"perplexity": 1.42, "kl_divergence": 0.05}
     """
 
     loss: float
@@ -85,8 +86,12 @@ class OptimStepResult:
 
     Example:
         >>> result = await trainer.optim_step()
-        >>> print(f"Step {result.step}, LR={result.learning_rate:.2e}")
-        >>> print(f"Accumulated {result.accumulated_microbatches} batches")
+        >>> result.step
+        1000
+        >>> result.learning_rate
+        0.0001
+        >>> result.accumulated_microbatches
+        4
     """
 
     step: int
@@ -95,28 +100,41 @@ class OptimStepResult:
 
 
 @dataclass
-class ParallelismInfo:
+class ParallelismConfig:
     """Parallelism configuration for distributed training.
 
     Attributes:
         dp_degree: Data parallel degree (number of data parallel replicas)
         tp_degree: Tensor parallel degree (model sharding across devices)
         pp_degree: Pipeline parallel degree (model sharding across pipeline stages)
+        cp_degree: Context parallel degree (sequence parallelism for long contexts)
+        ep_degree: Expert parallel degree (for MoE models)
         world_size: Total number of processes in the distributed training job
         dp_rank: Current data parallel rank (0 to dp_degree-1)
         tp_rank: Current tensor parallel rank (0 to tp_degree-1)
         device: Device identifier (e.g., "cuda:0", "cuda:1")
 
     Example:
-        >>> info = await trainer.get_info()
-        >>> p = info.parallelism
-        >>> print(f"DP={p.dp_degree}, TP={p.tp_degree}, PP={p.pp_degree}")
-        >>> print(f"Running on {p.device} (DP rank {p.dp_rank})")
+        >>> config = await trainer.get_config()
+        >>> config.parallelism.dp_degree
+        4
+        >>> config.parallelism.tp_degree
+        2
+        >>> config.parallelism.pp_degree
+        1
+        >>> config.parallelism.cp_degree
+        1
+        >>> config.parallelism.ep_degree
+        1
+        >>> config.parallelism.device
+        "cuda:0"
     """
 
     dp_degree: int
     tp_degree: int
     pp_degree: int
+    cp_degree: int
+    ep_degree: int
     world_size: int
     dp_rank: int
     tp_rank: int
@@ -124,15 +142,13 @@ class ParallelismInfo:
 
 
 @dataclass
-class TrainerInfo:
-    """Static trainer and model metadata.
+class TrainerConfig:
+    """Static trainer and model configuration.
 
-    This contains information about the trainer configuration and model architecture
-    that doesn't change during training.
+    This contains configuration information that doesn't change during training.
 
     Attributes:
         model_name: Name or path of the model being trained
-        step: Current training step
         model_config: Model architecture configuration. Common keys include:
             - vocab_size: int - Size of the vocabulary
             - hidden_size: int - Hidden dimension size
@@ -142,17 +158,18 @@ class TrainerInfo:
         parallelism: Parallelism configuration for distributed training
 
     Example:
-        >>> info = await trainer.get_info()
-        >>> print(f"Training {info.model_name} at step {info.step}")
-        >>> print(f"Vocab size: {info.model_config['vocab_size']}")
-        >>> print(f"DP={info.parallelism.dp_degree}, TP={info.parallelism.tp_degree}")
-        >>> print(f"Device: {info.parallelism.device}")
+        >>> config = await trainer.get_config()
+        >>> config.model_name
+        "Qwen/Qwen2.5-7B"
+        >>> config.model_config["vocab_size"]
+        151936
+        >>> config.parallelism.dp_degree
+        4
     """
 
     model_name: str
-    step: int
     model_config: dict[str, Any]
-    parallelism: ParallelismInfo
+    parallelism: ParallelismConfig
 
 
 @dataclass
@@ -169,10 +186,10 @@ class TrainerStatus:
 
     Example:
         >>> status = await trainer.get_status()
-        >>> print(f"Current step: {status.step}")
-        >>> if status.accumulated_microbatches > 0:
-        >>>     print(f"Warning: {status.accumulated_microbatches} batches "
-        >>>           f"accumulated without optimizer step")
+        >>> status.step
+        1000
+        >>> status.accumulated_microbatches
+        2
     """
 
     step: int

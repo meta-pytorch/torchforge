@@ -4,13 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Trainer protocol for Forge.
-
-This module defines the unified training interface that all trainer
-implementations must conform to.
-
-"""
-
 from typing import Protocol, runtime_checkable
 
 import torch
@@ -20,7 +13,7 @@ from forge.api.types import (
     LossFn,
     OptimStepResult,
     TextTrainBatch,
-    TrainerInfo,
+    TrainerConfig,
     TrainerStatus,
 )
 
@@ -102,8 +95,12 @@ class Trainer(Protocol):
             >>> for batch in batches[:4]:
             >>>     await trainer.forward_backward(batch)
             >>> result = await trainer.optim_step()
-            >>> print(f"Step {result.step}, LR {result.learning_rate:.2e}")
-            >>> print(f"Accumulated {result.accumulated_microbatches} batches")
+            >>> result.step
+            1000
+            >>> result.learning_rate
+            0.0001
+            >>> result.accumulated_microbatches
+            4
         """
         ...
 
@@ -188,11 +185,6 @@ class Trainer(Protocol):
             weights_only: If True, saves only model weights (lighter, for inference).
                 If False (default), saves full training state including optimizer.
 
-        Location resolution:
-            - Both provided: path/name (e.g., "/checkpoints" + "best" = "/checkpoints/best")
-            - Only path: use path directly
-            - Only name: default_dir/name
-            - Neither: default_dir/step-{current_step}
 
         Returns:
             Full path/URI where checkpoint was saved
@@ -200,14 +192,18 @@ class Trainer(Protocol):
         Example:
             >>> # Save full training state (default)
             >>> path = await trainer.save(name="checkpoint-1000")
-            >>> print(f"Saved to {path}")  # => "Saved to /default/checkpoint-1000"
+            >>> path
+            "/default/checkpoint-1000"
             >>>
             >>> # Save weights only for inference
             >>> path = await trainer.save(name="policy-v1", weights_only=True)
+            >>> path
+            "/default/policy-v1"
             >>>
             >>> # Save to TorchStore
             >>> path = await trainer.save(name="best", path="ts://checkpoints")
-            >>> # => "ts://checkpoints/best"
+            >>> path
+            "ts://checkpoints/best"
         """
         ...
 
@@ -230,31 +226,40 @@ class Trainer(Protocol):
         Example:
             >>> # Load latest checkpoint from default location
             >>> path = await trainer.load()
-            >>> print(f"Loaded from {path}")
+            >>> path
+            "/default/step-5000"
             >>>
             >>> # Load specific checkpoint by path
             >>> path = await trainer.load("/checkpoints/step-5000")
+            >>> path
+            "/checkpoints/step-5000"
             >>>
             >>> # Load from TorchStore
             >>> path = await trainer.load("ts://checkpoint-key")
+            >>> path
+            "ts://checkpoint-key"
         """
         ...
 
-    async def get_info(self) -> TrainerInfo:
-        """Get static trainer and model metadata.
+    async def get_config(self) -> TrainerConfig:
+        """Get static trainer and model configuration.
 
-        Returns information about the trainer configuration and model architecture
-        that doesn't change during training.
+        Returns configuration information that doesn't change during training.
+        For runtime state like current step, use get_status() instead.
 
         Returns:
-            TrainerInfo containing model name, step, model_config, and parallelism settings
+            TrainerConfig containing model name, model_config, and parallelism settings
 
         Example:
-            >>> info = await trainer.get_info()
-            >>> print(f"Training {info.model_name} at step {info.step}")
-            >>> print(f"Vocab size: {info.model_config['vocab_size']}")
-            >>> print(f"DP={info.parallelism.dp_degree}, TP={info.parallelism.tp_degree}")
-            >>> print(f"Device: {info.parallelism.device}")
+            >>> config = await trainer.get_config()
+            >>> config.model_name
+            "Qwen/Qwen2.5-7B"
+            >>> config.model_config["vocab_size"]
+            151936
+            >>> config.parallelism.dp_degree
+            4
+            >>> config.parallelism.device
+            "cuda:0"
         """
         ...
 
@@ -269,10 +274,10 @@ class Trainer(Protocol):
 
         Example:
             >>> status = await trainer.get_status()
-            >>> print(f"Current step: {status.step}")
-            >>> if status.accumulated_microbatches > 0:
-            >>>     print(f"Warning: {status.accumulated_microbatches} "
-            >>>           f"batches accumulated without optimizer step")
+            >>> status.step
+            1000
+            >>> status.accumulated_microbatches
+            2
         """
         ...
 

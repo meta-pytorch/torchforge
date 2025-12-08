@@ -12,11 +12,11 @@ This module defines the public interfaces that all Forge implementations conform
 from forge.api.trainer import Trainer
 from forge.api.types import (
     ForwardBackwardResult,
-    ForwardResult,
     LossFn,
     OptimStepResult,
+    ParallelismConfig,
     TextTrainBatch,
-    TrainerInfo,
+    TrainerConfig,
     TrainerStatus,
 )
 
@@ -25,8 +25,8 @@ __all__ = [
     "TextTrainBatch",
     "ForwardBackwardResult",
     "OptimStepResult",
-    "ForwardResult",
-    "TrainerInfo",
+    "TrainerConfig",
     "TrainerStatus",
+    "ParallelismConfig",
     "LossFn",
 ]
