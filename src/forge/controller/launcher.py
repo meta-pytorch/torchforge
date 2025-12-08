@@ -84,6 +84,40 @@ def mount_mnt_directory(mount_dst: str) -> None:
             env=clean_env,
         )
         print("Done mounting")
+
+        # add wandb API key to the environment
+        WANDB_HOST = "https://meta.wandb.io/"
+        wandb_api_key = None
+        secret_name = "TORCHFORGE_WANDB_API_KEY"
+        print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
+        try:
+            import base64
+
+            from cif import client  # type: ignore
+
+            response = client.request(
+                "keychain.service",
+                "getSecretV2",
+                {
+                    "request": {
+                        "name": secret_name,
+                    }
+                },
+            )
+            # decode base64 encoded string
+            wandb_api_key = base64.b64decode(
+                # pyrefly: ignore [bad-index]
+                response["result"]["secret"]["value"]
+            ).decode("utf-8")
+            print("[wandb] Successfully retrieved API key from keychain.")
+        except Exception as keychain_exception:
+            print(
+                f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
+            )
+
+        if wandb_api_key is not None:
+            os.environ["WANDB_API_KEY"] = wandb_api_key
+
     except subprocess.CalledProcessError as e:
         print(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
     finally:
@@ -271,20 +305,19 @@ class MastLauncher(BaseLauncher):
 
     def build_appdef(self) -> specs.AppDef:
         # create the app definition for the worker
-        remote_end_python_path = ":".join(
-            [
-                f"{self.remote_work_dir}{workspace}"
-                for workspace in self.editable_workspace_paths
-            ]
-        )
+        additional_python_paths = [
+            f"{self.remote_work_dir}{workspace}"
+            for workspace in self.editable_workspace_paths
+        ]
+        additional_python_paths.append(self.remote_work_dir)
 
+        # needed for wandb api key extraction from secret
+        additional_python_paths.append("/packages/cif")
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
             **meta_hyperactor.DEFAULT_NCCL_ENVS,
             **meta_hyperactor.DEFAULT_TORCH_ENVS,
-            **{
-                "TORCHX_RUN_PYTHONPATH": f"{remote_end_python_path}:{self.remote_work_dir}"
-            },
+            **{"TORCHX_RUN_PYTHONPATH": ":".join(additional_python_paths)},
             **{
                 "HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS": "600",
                 "HYPERACTOR_CODE_MAX_FRAME_LENGTH": "1073741824",
@@ -293,7 +326,8 @@ class MastLauncher(BaseLauncher):
                 "TORCHDYNAMO_VERBOSE": "1",
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
-                "WANDB_MODE": "offline",
+                "WANDB_MODE": "online",
+                "WANDB_BASE_URL": "https://meta.wandb.io",
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
