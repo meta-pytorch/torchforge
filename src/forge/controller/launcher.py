@@ -15,18 +15,17 @@ import uuid
 from typing import Any
 
 import monarch
-
 import torchx.specs as specs
 
 from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.alloc import AllocConstraints
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
-
 from monarch._rust_bindings.monarch_hyperactor.config import configure
 from monarch._src.actor.allocator import RemoteAllocator, TorchXRemoteAllocInitializer
 from monarch.actor import Actor, endpoint, ProcMesh
 from monarch.tools import commands
 from monarch.tools.commands import create, info
+from monarch.tools.components import hyperactor
 from monarch.tools.config import Config, Workspace
 
 _MAST_AVAILABLE = False
@@ -128,7 +127,7 @@ class Slurmlauncher(BaseLauncher):
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
         # This can be removed in the future once this has been removed.
-        configure(default_transport=ChannelTransport.Tcp)
+        configure(default_transport=ChannelTransport.TcpWithHostname)
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         appdef = hyperactor.host_mesh(
@@ -207,7 +206,7 @@ class MastLauncher(BaseLauncher):
         self.timeout_sec = 1 * 60 * 60  # Kill the job if idle for 1 hour
         self.user = getpass.getuser()
         self.work_dir = f"/home/{self.user}"
-        self.edittable_workspaces = ["forge"]
+        self.edittable_workspaces = ["torchforge"]
         self.remote_work_dir = "/packages/monarch_default_workspace/workspace/"
         self.editable_workspace_paths = [
             f"{self.work_dir}/{workspace}" for workspace in self.edittable_workspaces
@@ -234,7 +233,7 @@ class MastLauncher(BaseLauncher):
         return allocator, alloc_constraints, self.create_server_handle()
 
     async def remote_setup(self, procs: ProcMesh) -> None:
-        setup = procs.spawn(f"setup-{uuid.uuid1()}", MastSetupActor)
+        setup = procs.spawn("mast_setup", MastSetupActor)
         await setup.mount.call(mount_dst="/mnt/wsfuse")
 
     async def launch_mast_job(self):
@@ -249,8 +248,8 @@ class MastLauncher(BaseLauncher):
             scheduler_args={
                 "hpcIdentity": "hyper_monarch",
                 "hpcJobOncall": "monarch",
-                "hpcClusterUuid": "MastProdCluster",
-                "rmAttribution": "pytorch4all_clients_approved",
+                "hpcClusterUuid": "MastGenAICluster",
+                "rmAttribution": "msl_infra_hw_enab_agentrl",
             },
             appdef=self.build_appdef(),
             workspace=Workspace(
@@ -267,11 +266,10 @@ class MastLauncher(BaseLauncher):
 
     def add_additional_packages(self, packages: "Packages") -> "Packages":
         packages.add_package("oil.oilfs:stable")
-        packages.add_package("manifold.manifoldfs")
+        packages.add_package("manifold.manifoldfs:prod")
         return packages
 
     def build_appdef(self) -> specs.AppDef:
-
         # create the app definition for the worker
         remote_end_python_path = ":".join(
             [
@@ -369,7 +367,7 @@ class MastLauncher(BaseLauncher):
         # Override with client-specific configuration
         client_role.name = "client"
         # Use the bootstrap script as entrypoint
-        client_role.entrypoint = "workspace/forge/.meta/mast/client_bootstrap.sh"
+        client_role.entrypoint = "workspace/torchforge/.meta/mast/client_bootstrap.sh"
 
         # Build args for the client role (passed to the bootstrap script)
         # These args will be passed to client_bootstrap.sh which forwards them to main.py

@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
@@ -17,6 +18,28 @@ from typing import Optional
 
 import torch
 import torchstore as ts
+
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_dcp_whole_state_dict_key,
+    get_param_key,
+    get_param_prefix,
+    load_tensor_from_dcp,
+    rdma_available,
+)
+
+from forge.controller import (
+    ForgeActor,
+    get_proc_mesh,
+    host_mesh_from_proc,
+    stop_proc_mesh,
+)
+from forge.data_models.completion import Completion
+from forge.data_models.prompt import to_prompt
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
+from forge.types import ProcessConfig
+from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 from monarch.actor import current_rank, endpoint, ProcMesh, this_host
 
 from vllm.config import VllmConfig
@@ -41,28 +64,6 @@ from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.worker.worker_base import WorkerWrapperBase
-
-from forge.actors._torchstore_utils import (
-    extract_param_name,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    get_param_prefix,
-    load_tensor_from_dcp,
-    rdma_available,
-)
-
-from forge.controller import (
-    ForgeActor,
-    get_proc_mesh,
-    host_mesh_from_proc,
-    stop_proc_mesh,
-)
-from forge.data_models.completion import Completion
-from forge.data_models.prompt import to_prompt
-from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
-from forge.types import ProcessConfig
-from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -258,8 +259,6 @@ class Generator(ForgeActor):
         version: int,
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("generator_perf/_fetch_weights")
-        t.start()
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         hf_param_names = [extract_param_name(key) for key in matching_keys]
@@ -282,17 +281,23 @@ class Generator(ForgeActor):
         for sd in sub_state_dicts:
             state_dict.update(sd)
 
-        t.stop()
-
         return state_dict
 
     @endpoint
-    async def generate(self, prompt: str, *, priority: int = 0) -> list[Completion]:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        priority: int = 0,
+        sampling_params: SamplingParams | None = None,
+    ) -> list[Completion]:
         """Generate a response for the given prompt
 
         Args:
             prompt (str): The prompt to generate a response for.
             priority (int, optional): The priority of the request. Defaults to 0.
+            sampling_params (SamplingParams, optional): Sampling parameters to use for this request.
+                If not provided, uses self.sampling_params.
 
         Returns:
             list[Completion]: n completions from vLLM based on your prompt.
@@ -301,12 +306,18 @@ class Generator(ForgeActor):
         t.start()
         record_metric("generator/generate/count_requests", 1, Reduce.SUM)
 
+        if sampling_params is not None:
+            # as in `post_init`
+            sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
+
+        params = sampling_params or self.sampling_params
+
         self.request_id += 1 % sys.maxsize
         request_id = str(self.request_id)
 
         tokenization_kwargs = {}
         # TODO: add truncation support https://github.com/vllm-project/vllm/issues/4507
-        truncate_prompt_tokens = self.sampling_params.truncate_prompt_tokens
+        truncate_prompt_tokens = params.truncate_prompt_tokens
         _validate_truncation_size(
             self.vllm_config.model_config.max_model_len,
             truncate_prompt_tokens,
@@ -315,15 +326,13 @@ class Generator(ForgeActor):
         prompt_str, request = self.processor.process_inputs(
             request_id=request_id,
             prompt={"prompt": prompt},
-            params=self.sampling_params,
+            params=params,
             arrival_time=None,
             tokenization_kwargs=tokenization_kwargs,
             trace_headers=None,
             priority=priority,
             data_parallel_rank=None,  # We do not support DP
         )
-        t.step("process_inputs")
-
         # Wait until we're accepting requests (releases lock while waiting)
         # If accepting_requests is True, continue immediately (holding the lock)
         # If False, release lock, wait for notification, re-acquire and recheck
@@ -331,21 +340,21 @@ class Generator(ForgeActor):
             await self.request_lock.wait_for(lambda: self.accepting_requests)
 
             # Explicitly keeping the redundant logic to make it easier to pick up vLLM changes
-            if (num_samples := self.sampling_params.n) == 1:
+            if (num_samples := params.n) == 1:
                 self.output_processor.add_request(request, prompt_str, None, 0)
                 request, _ = self._preprocess_add_request(request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (None, request_fut)
                 self.scheduler.add_request(request)
             else:
-                parent_req = ParentRequest(request_id, self.sampling_params)
+                parent_req = ParentRequest(request_id, params)
                 for idx in range(num_samples):
                     # Note: `get_child_info` mutates ParentRequest to track the
                     # generated child request
-                    child_request_id, params = parent_req.get_child_info(idx)
+                    child_request_id, params_child = parent_req.get_child_info(idx)
                     child_request = request if idx == num_samples - 1 else copy(request)
                     child_request.request_id = child_request_id
-                    child_request.sampling_params = params
+                    child_request.sampling_params = params_child
                     self.output_processor.add_request(
                         child_request, prompt_str, parent_req, idx
                     )
@@ -355,7 +364,6 @@ class Generator(ForgeActor):
                 self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
-        t.step("generate")
 
         # Log some metrics
         record_metric(
@@ -364,19 +372,6 @@ class Generator(ForgeActor):
             Reduce.SUM,
         )
 
-        for completion in completions:
-            num_generated_tokens = len(completion.token_ids)
-            record_metric(
-                "generator/generate/sum_tokens_generated",
-                num_generated_tokens,
-                Reduce.SUM,
-            )
-
-            record_metric(
-                "generator/generate/avg_tokens_generated",
-                num_generated_tokens,
-                Reduce.MEAN,
-            )
         t.stop()
         return completions
 
@@ -451,37 +446,36 @@ class Generator(ForgeActor):
             async with self.request_lock:
                 self.accepting_requests = False
                 curr_requests = [fut for _, fut in self.requests.values()]
+
                 if curr_requests:
-                    # Record pending requests metrics
+                    # Record pending requests count
                     record_metric(
-                        "generator_perf/update_weights/avg_pending_requests",
+                        "generator_perf/update_weights/sum_pending_gen_requests",
                         len(curr_requests),
-                        Reduce.MEAN,
-                    )
-                    record_metric(
-                        "generator_perf/update_weights/max_pending_requests",
-                        len(curr_requests),
-                        Reduce.MAX,
+                        Reduce.SUM,
                     )
                     logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+
+                    # Start timing the wait
+                    wait_start = time.perf_counter()
 
                 # Wait until all pending requests have been processed
                 # TODO: If generating long sequences, this might be long and will block
                 # generator weight updates
                 await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
-            # Record weight update metrics
-            record_metric(
-                "generator/update_weights/count_weight_updates", 1, Reduce.SUM
-            )
+                if curr_requests:
+                    wait_duration = time.perf_counter() - wait_start
+                    record_metric(
+                        "generator_perf/update_weights/avg_waiting_for_generation_duration_s",
+                        wait_duration,
+                        Reduce.MEAN,
+                    )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
 
             if fetch_fut is not None:
-                t = Tracer("generator_perf/waiting_for_fetch_weights")
-                t.start()
                 fetched_weights = await fetch_fut
-                t.stop()
                 # Call update_weights on every policy_worker
                 await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
@@ -565,16 +559,16 @@ class Generator(ForgeActor):
         await stop_proc_mesh(actor._fetcher_procs)
 
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
+    async def save_model_params(self):
+        """Save model parameters before weight update, used for testing purposes only."""
         logger.info("[Generator] save model parameters for testing.")
-        await self.worker._test_save_model_params.call()
+        await self.worker.save_model_params.call()
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
+    async def validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[Generator] start validating model parameters.")
-        return await self.worker._test_validate_model_params.call(validate_fn)
+        return await self.worker.validate_model_params.call(validate_fn)
 
 
 @dataclass
@@ -589,6 +583,9 @@ class GeneratorWorker(ForgeActor):
     vllm_config: VllmConfig
     # TODO: Remove below param
     _test_prev_params = {}
+
+    def __post_init__(self):
+        super().__init__()
 
     @endpoint
     async def setup(self):
@@ -655,10 +652,6 @@ class GeneratorWorker(ForgeActor):
         model = self.worker.model_runner.model
         if shared_memory_state_dict is not None:
             logger.info("[PolicyWorker] update weights from shared memory.")
-            t = Tracer(
-                "generator_worker_perf/update_weights_from_shared_memory", timer="gpu"
-            )
-            t.start()
             loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
                 # Use context manager for automatic cleanup
@@ -668,7 +661,6 @@ class GeneratorWorker(ForgeActor):
                     del param
                     loaded_weights.update(loaded)
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} parameters")
-            t.stop()
             return
         # normal update_weights without shared memory prefetching
         if version is None:
@@ -681,8 +673,6 @@ class GeneratorWorker(ForgeActor):
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
         loaded_weights = set()
-        t = Tracer("generator_worker_perf/update_weights_from_torchstore", timer="gpu")
-        t.start()
 
         if use_dcp_for_weight_sync:
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
@@ -703,11 +693,9 @@ class GeneratorWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
 
-        t.stop()
-
     @endpoint
-    async def _test_save_model_params(self):
-        """Save model parameters before weight update, used for tesing purposes only."""
+    async def save_model_params(self):
+        """Save model parameters before weight update, used for testing purposes only."""
         logger.info("[GeneratorWorker] save model parameters for testing.")
         for name, param in self.worker.model_runner.model.named_parameters():
             self._test_prev_params[name] = param.detach().cpu()
@@ -717,7 +705,7 @@ class GeneratorWorker(ForgeActor):
         )
 
     @endpoint
-    async def _test_validate_model_params(self, validate_fn):
+    async def validate_model_params(self, validate_fn):
         """Validate updated model params using validate_fn."""
         logger.info("[GeneratorWorker] start validating model parameters.")
         return validate_fn(

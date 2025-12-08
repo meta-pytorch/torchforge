@@ -15,6 +15,7 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+import yaml
 from datasets import load_dataset
 from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
@@ -31,13 +32,15 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
+from forge.util.logging import get_logger
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from vllm.transformers_utils.tokenizer import get_tokenizer
+
+logger = get_logger("INFO")
 
 
 @dataclass
@@ -47,10 +50,13 @@ class Episode:
     request_len: int
     response_len: int
     target: Any | None = None
+    request: str | None = None
+    response: str | None = None
     # Processed data
     completion: Completion | None = None
     ref_logprobs: torch.Tensor | None = None
     reward: float | None = None
+    reward_breakdown: dict[str, float] | None = None
     advantage: float | None = None
 
     @property
@@ -72,6 +78,32 @@ class Episode:
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
+
+    def to_dict(self, exclude: list[str] | None = None) -> dict[str, Any]:
+        """Convert episode to dict, optionally excluding specified fields."""
+        result = {
+            "episode_id": self.episode_id,
+            "policy_version": self.policy_version,
+            "prompt": self.request,
+            "response": self.response,
+            "target": str(self.target),
+            "reward": self.reward,
+            "advantage": self.advantage,
+            "request_len": self.request_len,
+            "response_len": self.response_len,
+            "pad_id": self.pad_id,
+            "ref_logprobs": self.ref_logprobs,
+            "completion": self.completion,
+        }
+
+        if self.reward_breakdown is not None and "reward_breakdown" not in exclude:
+            result.update(self.reward_breakdown)
+
+        if exclude:
+            for key in exclude:
+                result.pop(key, None)
+
+        return result
 
 
 # Represents the group (G) of episodes in GRPO
@@ -118,34 +150,65 @@ def collate(
     return inputs, targets
 
 
-# Note: This is also available in losses.grpo_loss via `SimpleGRPOLoss`
+# TODO (T245547773): Consolidate with SimpleGRPOLoss in losses/grpo_loss.py
+# Currently duplicated because of function signature differences:
+# - This function takes logits + response, computes logprobs internally
+# - SimpleGRPOLoss takes pre-computed logprobs
+# - TitanTrainer passes logits, so would need wrapper or signature change
+# Consider refactoring TitanTrainer's loss interface to standardize this.
 def simple_grpo_loss(
     logits: torch.Tensor,
     response: torch.Tensor,
     ref_logprobs: torch.Tensor,
     advantages: torch.Tensor,
     padding_mask: torch.Tensor,
-    beta: float = 0.1,
+    beta: float = 1e-6,
 ) -> torch.Tensor:
     logprobs: torch.Tensor = compute_logprobs(logits, response)
     kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
     per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-    per_token_loss = -(per_token_policy_loss - beta * kl)
-    loss = (
-        ((per_token_loss * padding_mask).sum(dim=1))
+
+    # Compute mean KL per valid token
+    mean_kl = (
+        ((kl * padding_mask).sum(dim=1)) / (padding_mask.sum(dim=1).clamp(min=1.0))
+    ).mean()
+
+    # Compute mean policy loss per valid token
+    mean_policy_loss = (
+        ((per_token_policy_loss * padding_mask).sum(dim=1))
         / (padding_mask.sum(dim=1).clamp(min=1.0))
     ).mean()
+
+    # Compute loss using the means (mathematically equivalent)
+    loss = -(mean_policy_loss - beta * mean_kl)
+
+    # Log metrics
+    # TODO: Better design - have loss function return all metrics as a dict,
+    # then record them in rl_trainer so all training metrics are in one namespace
+    # and we avoid doing .item here, which is not compile friendly
+    record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
+    record_metric(
+        "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
+    )
+    record_metric(
+        "grpo_loss/policy_gradient_loss", mean_policy_loss.item(), Reduce.MEAN
+    )
+    record_metric("grpo_loss/total_loss", loss.item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
+    record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
     return loss
 
 
 @dataclass
 class RewardActor(ForgeActor):
-
     reward_functions: list[Callable]
 
     @endpoint
-    async def evaluate_response(self, prompt: str, response: str, target: str) -> float:
+    async def evaluate_response(
+        self, prompt: str, response: str, target: str
+    ) -> (dict[str, float], float):
         total_rewards = 0.0
+        reward_breakdown = {}  # reward breakdown by function
         for reward_fn in self.reward_functions:
             reward = reward_fn(prompt, response, target)
             total_rewards += reward
@@ -154,12 +217,9 @@ class RewardActor(ForgeActor):
             reward_fn_name = getattr(
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
-            # per function reward
-            record_metric(
-                f"reward/evaluate_response/sum_{reward_fn_name}_reward",
-                reward,
-                Reduce.SUM,
-            )
+            reward_breakdown[reward_fn_name] = reward
+
+            # log per fn reward and avg total
             record_metric(
                 f"reward/evaluate_response/avg_{reward_fn_name}_reward",
                 reward,
@@ -177,14 +237,8 @@ class RewardActor(ForgeActor):
                 Reduce.MEAN,
             )
 
-            record_metric(
-                f"reward/evaluate_response/count_{reward_fn_name}_calls",
-                1,
-                Reduce.SUM,
-            )
-
-        avg_reward = total_rewards / len(self.reward_functions)
-        return avg_reward
+        avg_reward: float = total_rewards / len(self.reward_functions)
+        return reward_breakdown, avg_reward
 
 
 @dataclass
@@ -245,12 +299,6 @@ class DatasetActor(ForgeActor):
         try:
             sample = next(self._iterator)
 
-            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
-            record_metric(
-                "dataset/sample/avg_sample_len",
-                len(sample["request"]),
-                Reduce.MEAN,
-            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
@@ -293,9 +341,14 @@ async def drop_weights(version: int):
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    group_size = cfg.group_size
-    max_req_tokens = cfg.max_req_tokens
-    max_res_tokens = cfg.max_res_tokens
+    # Convert OmegaConf config to plain dict
+    run_config_for_logging = OmegaConf.to_container(cfg, resolve=True)
+
+    # Log config
+    logger.info("=" * 30 + " CONFIGURATION " + "=" * 30)
+    logger.info(
+        yaml.dump(run_config_for_logging, default_flow_style=False, sort_keys=False)
+    )
 
     # ---- Global setups ---- #
     provisioner = None
@@ -307,8 +360,11 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {})
+
     mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(metric_logging_cfg)
+    await mlogger.init_backends.call_one(
+        backend_config=metric_logging_cfg, run_config=run_config_for_logging
+    )
 
     # ---- Setup services ---- #
 
@@ -335,6 +391,10 @@ async def main(cfg: DictConfig):
             reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+
+    group_size = cfg.group_size
+    max_req_tokens = cfg.max_req_tokens
+    max_res_tokens = cfg.max_res_tokens
 
     # Set max_steps to the configured value, or -1 if not specified or Null
     max_steps = cfg.trainer.training.steps or -1
@@ -367,8 +427,6 @@ async def main(cfg: DictConfig):
                 print("Dataloader is empty, exiting continuous rollout")
                 return
 
-            t.step("data_loading")
-
             prompt, target = sample["request"], sample["target"]
             responses: list[Completion] = await policy.generate.route(prompt)
             t.step("policy_generation")
@@ -386,9 +444,14 @@ async def main(cfg: DictConfig):
                     request_len=max_req_tokens,
                     response_len=max_res_tokens,
                     target=target,
+                    request=prompt,
+                    response=response.text,
                     completion=response,
                 )
-                episode.reward = await reward_actor.evaluate_response.route(
+                (
+                    episode.reward_breakdown,
+                    episode.reward,
+                ) = await reward_actor.evaluate_response.route(
                     prompt=prompt, response=response.text, target=target
                 )
                 episodes.append(episode)
@@ -396,6 +459,57 @@ async def main(cfg: DictConfig):
                 # Build input_ids for reference logprobs
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
+
+                # Track token-based metrics
+                prompt_tokens = episode.completion.prompt_ids.shape[0]
+                response_tokens = episode.completion.token_ids.shape[0]
+
+                record_metric("episode/avg_prompt_tokens", prompt_tokens, Reduce.MEAN)
+                record_metric("episode/max_prompt_tokens", prompt_tokens, Reduce.MAX)
+                record_metric("episode/min_prompt_tokens", prompt_tokens, Reduce.MIN)
+                record_metric(
+                    "episode/avg_response_tokens", response_tokens, Reduce.MEAN
+                )
+                record_metric(
+                    "episode/max_response_tokens", response_tokens, Reduce.MAX
+                )
+                record_metric(
+                    "episode/min_response_tokens", response_tokens, Reduce.MIN
+                )
+
+            # drop episodes if
+            # 1> reward std-dev is very small (including all 0s and all 1s)
+            # 2> any response was truncated (didn't end with EOS)
+            # TODO: change it to filter only truncated episodes instead of dropping entire group
+            rewards = [e.reward for e in episodes]
+            rewards_std = torch.std(torch.tensor(rewards))
+            is_low_variance = rewards_std < 1e-3
+            num_truncated = sum(
+                1 for e in episodes if e.completion.stop_reason == "length"
+            )
+            is_truncated = num_truncated > 0
+            drop = is_low_variance or is_truncated
+
+            n = len(episodes)
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/low_variance",
+                n if is_low_variance else 0,
+                Reduce.SUM,
+            )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/truncated",
+                num_truncated,
+                Reduce.SUM,
+            )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/total",
+                n if drop else 0,
+                Reduce.SUM,
+            )
+
+            if drop:
+                del input_ids, episodes
+                continue
 
             t.step("reward_evaluation")
 
@@ -412,6 +526,14 @@ async def main(cfg: DictConfig):
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
+
+                sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
+                sample["score"] = sample["reward"]
+                record_metric(
+                    "main_samples/continuous_rollouts/sample_table",
+                    sample,
+                    Reduce.SAMPLE,
+                )
 
             rollout_count += 1
             record_metric(

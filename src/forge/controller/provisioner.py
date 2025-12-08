@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """Remote and local resource manager for allocation and provisioning."""
+
 import asyncio
 import logging
 
@@ -14,6 +15,10 @@ import uuid
 
 import torch
 
+from forge.controller.launcher import BaseLauncher, get_launcher
+from forge.env import all_env_vars, FORGE_DISABLE_METRICS
+from forge.types import ProcessConfig, ProvisionerConfig
+
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
@@ -21,10 +26,6 @@ from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
 
 from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
-
-from forge.controller.launcher import BaseLauncher, get_launcher
-from forge.env import all_env_vars, FORGE_DISABLE_METRICS
-from forge.types import ProcessConfig, ProvisionerConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -586,7 +587,6 @@ async def shutdown_metric_logger():
 
 
 async def shutdown():
-
     await shutdown_metric_logger()
 
     logger.info("Shutting down provisioner..")

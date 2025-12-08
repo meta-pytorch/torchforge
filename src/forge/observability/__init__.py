@@ -24,6 +24,7 @@ from .metrics import (
     record_metric,
     Reduce,
     reduce_metrics_states,
+    SampleAccumulator,
     StdAccumulator,
     SumAccumulator,
     WandbBackend,
@@ -64,4 +65,5 @@ __all__ = [
     "MaxAccumulator",
     "MinAccumulator",
     "StdAccumulator",
+    "SampleAccumulator",
 ]
