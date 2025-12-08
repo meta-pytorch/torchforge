@@ -6,6 +6,7 @@
 
 import argparse
 import asyncio
+import os
 import sys
 
 from apps.grpo.main import main as grpo_main
@@ -54,6 +55,39 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
         services={k: ServiceConfig(**v) for k, v in cfg.services.items()},
         actors={k: ProcessConfig(**v) for k, v in cfg.actors.items()},
     )
+
+    # add wandb API key to the environment
+    WANDB_HOST = "https://meta.wandb.io/"
+    wandb_api_key = None
+    secret_name = "TORCHFORGE_WANDB_API_KEY"
+    print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
+    try:
+        import base64
+
+        from cif import client  # type: ignore
+
+        response = client.request(
+            "keychain.service",
+            "getSecretV2",
+            {
+                "request": {
+                    "name": secret_name,
+                }
+            },
+        )
+        # decode base64 encoded string
+        wandb_api_key = base64.b64decode(
+            # pyrefly: ignore [bad-index]
+            response["result"]["secret"]["value"]
+        ).decode("utf-8")
+        print("[wandb] Successfully retrieved API key from keychain.")
+    except Exception as keychain_exception:
+        print(
+            f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
+        )
+
+    if wandb_api_key is not None:
+        os.environ["WANDB_API_KEY"] = wandb_api_key
 
     if mode == "detached":
         # In detached mode, just launch the MAST job with client role included

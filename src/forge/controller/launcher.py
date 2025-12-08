@@ -85,39 +85,6 @@ def mount_mnt_directory(mount_dst: str) -> None:
         )
         print("Done mounting")
 
-        # add wandb API key to the environment
-        WANDB_HOST = "https://meta.wandb.io/"
-        wandb_api_key = None
-        secret_name = "TORCHFORGE_WANDB_API_KEY"
-        print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
-        try:
-            import base64
-
-            from cif import client  # type: ignore
-
-            response = client.request(
-                "keychain.service",
-                "getSecretV2",
-                {
-                    "request": {
-                        "name": secret_name,
-                    }
-                },
-            )
-            # decode base64 encoded string
-            wandb_api_key = base64.b64decode(
-                # pyrefly: ignore [bad-index]
-                response["result"]["secret"]["value"]
-            ).decode("utf-8")
-            print("[wandb] Successfully retrieved API key from keychain.")
-        except Exception as keychain_exception:
-            print(
-                f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
-            )
-
-        if wandb_api_key is not None:
-            os.environ["WANDB_API_KEY"] = wandb_api_key
-
     except subprocess.CalledProcessError as e:
         print(f"Get error during mounting {e}, Stderr: {e.stderr}, Stdout: {e.stdout}")
     finally:
@@ -327,7 +294,7 @@ class MastLauncher(BaseLauncher):
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
                 "WANDB_MODE": "online",
-                "WANDB_BASE_URL": "https://meta.wandb.io",
+                "WANDB_BASE_URL": "https://meta.wandb.io/",
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
