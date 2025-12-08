@@ -183,14 +183,19 @@ def simple_grpo_loss(
     loss = -(mean_policy_loss - beta * mean_kl)
 
     # Log metrics
+    # TODO: Better design - have loss function return all metrics as a dict,
+    # then record them in rl_trainer so all training metrics are in one namespace
+    # and we avoid doing .item here, which is not compile friendly
     record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
     record_metric(
         "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
     )
-    record_metric("grpo_loss/policy_loss", mean_policy_loss.item(), Reduce.MEAN)
+    record_metric(
+        "grpo_loss/policy_gradient_loss", mean_policy_loss.item(), Reduce.MEAN
+    )
+    record_metric("grpo_loss/total_loss", loss.item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
-
     return loss
 
 
@@ -213,12 +218,8 @@ class RewardActor(ForgeActor):
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
             reward_breakdown[reward_fn_name] = reward
-            # per function reward
-            record_metric(
-                f"reward/evaluate_response/sum_{reward_fn_name}_reward",
-                reward,
-                Reduce.SUM,
-            )
+
+            # log per fn reward and avg total
             record_metric(
                 f"reward/evaluate_response/avg_{reward_fn_name}_reward",
                 reward,
@@ -234,12 +235,6 @@ class RewardActor(ForgeActor):
                 "reward/evaluate_response/avg_total_reward",
                 reward,
                 Reduce.MEAN,
-            )
-
-            record_metric(
-                f"reward/evaluate_response/count_{reward_fn_name}_calls",
-                1,
-                Reduce.SUM,
             )
 
         avg_reward: float = total_rewards / len(self.reward_functions)
@@ -304,17 +299,6 @@ class DatasetActor(ForgeActor):
         try:
             sample = next(self._iterator)
 
-            record_metric("dataset/sample/count_samples_generated", 1, Reduce.SUM)
-            record_metric(
-                "dataset/sample/avg_sample_len",
-                len(sample["request"]),
-                Reduce.MEAN,
-            )
-            record_metric(
-                "dataset/sample/max_sample_len",
-                len(sample["request"]),
-                Reduce.MAX,
-            )
             record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
 
             return sample
@@ -443,8 +427,6 @@ async def main(cfg: DictConfig):
                 print("Dataloader is empty, exiting continuous rollout")
                 return
 
-            t.step("data_loading")
-
             prompt, target = sample["request"], sample["target"]
             responses: list[Completion] = await policy.generate.route(prompt)
             t.step("policy_generation")
@@ -478,18 +460,53 @@ async def main(cfg: DictConfig):
                 input_ids[i, :max_req_tokens] = episode.request_tensor
                 input_ids[i, max_req_tokens:] = episode.response_tensor
 
+                # Track token-based metrics
+                prompt_tokens = episode.completion.prompt_ids.shape[0]
+                response_tokens = episode.completion.token_ids.shape[0]
+
+                record_metric("episode/avg_prompt_tokens", prompt_tokens, Reduce.MEAN)
+                record_metric("episode/max_prompt_tokens", prompt_tokens, Reduce.MAX)
+                record_metric("episode/min_prompt_tokens", prompt_tokens, Reduce.MIN)
+                record_metric(
+                    "episode/avg_response_tokens", response_tokens, Reduce.MEAN
+                )
+                record_metric(
+                    "episode/max_response_tokens", response_tokens, Reduce.MAX
+                )
+                record_metric(
+                    "episode/min_response_tokens", response_tokens, Reduce.MIN
+                )
+
             # drop episodes if
             # 1> reward std-dev is very small (including all 0s and all 1s)
-            # 2> response is potentially truncated (response_len >= max_res_tokens)
+            # 2> any response was truncated (didn't end with EOS)
+            # TODO: change it to filter only truncated episodes instead of dropping entire group
             rewards = [e.reward for e in episodes]
             rewards_std = torch.std(torch.tensor(rewards))
-            max_response_len = max(e.completion.token_ids.shape[0] for e in episodes)
-            drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+            is_low_variance = rewards_std < 1e-3
+            num_truncated = sum(
+                1 for e in episodes if e.completion.stop_reason == "length"
+            )
+            is_truncated = num_truncated > 0
+            drop = is_low_variance or is_truncated
+
+            n = len(episodes)
             record_metric(
-                "main/continuous_rollouts/dropped_episodes",
-                1 if drop else 0,
+                "main/continuous_rollouts/episodes_dropped/low_variance",
+                n if is_low_variance else 0,
                 Reduce.SUM,
             )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/truncated",
+                num_truncated,
+                Reduce.SUM,
+            )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/total",
+                n if drop else 0,
+                Reduce.SUM,
+            )
+
             if drop:
                 del input_ids, episodes
                 continue

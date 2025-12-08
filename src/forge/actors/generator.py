@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
@@ -258,8 +259,6 @@ class Generator(ForgeActor):
         version: int,
     ) -> dict[str, SharedTensorHandle]:
         """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}."""
-        t = Tracer("generator_perf/_fetch_weights")
-        t.start()
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         hf_param_names = [extract_param_name(key) for key in matching_keys]
@@ -281,8 +280,6 @@ class Generator(ForgeActor):
         state_dict = {}
         for sd in sub_state_dicts:
             state_dict.update(sd)
-
-        t.stop()
 
         return state_dict
 
@@ -336,8 +333,6 @@ class Generator(ForgeActor):
             priority=priority,
             data_parallel_rank=None,  # We do not support DP
         )
-        t.step("process_inputs")
-
         # Wait until we're accepting requests (releases lock while waiting)
         # If accepting_requests is True, continue immediately (holding the lock)
         # If False, release lock, wait for notification, re-acquire and recheck
@@ -369,7 +364,6 @@ class Generator(ForgeActor):
                 self.requests[request_id] = (parent_req, request_fut)
 
         completions = await request_fut
-        t.step("generate")
 
         # Log some metrics
         record_metric(
@@ -378,19 +372,6 @@ class Generator(ForgeActor):
             Reduce.SUM,
         )
 
-        for completion in completions:
-            num_generated_tokens = len(completion.token_ids)
-            record_metric(
-                "generator/generate/sum_tokens_generated",
-                num_generated_tokens,
-                Reduce.SUM,
-            )
-
-            record_metric(
-                "generator/generate/avg_tokens_generated",
-                num_generated_tokens,
-                Reduce.MEAN,
-            )
         t.stop()
         return completions
 
@@ -465,37 +446,36 @@ class Generator(ForgeActor):
             async with self.request_lock:
                 self.accepting_requests = False
                 curr_requests = [fut for _, fut in self.requests.values()]
+
                 if curr_requests:
-                    # Record pending requests metrics
+                    # Record pending requests count
                     record_metric(
-                        "generator_perf/update_weights/avg_pending_requests",
+                        "generator_perf/update_weights/sum_pending_gen_requests",
                         len(curr_requests),
-                        Reduce.MEAN,
-                    )
-                    record_metric(
-                        "generator_perf/update_weights/max_pending_requests",
-                        len(curr_requests),
-                        Reduce.MAX,
+                        Reduce.SUM,
                     )
                     logger.debug(f"Waiting for {len(curr_requests)} pending requests")
+
+                    # Start timing the wait
+                    wait_start = time.perf_counter()
 
                 # Wait until all pending requests have been processed
                 # TODO: If generating long sequences, this might be long and will block
                 # generator weight updates
                 await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
-            # Record weight update metrics
-            record_metric(
-                "generator/update_weights/count_weight_updates", 1, Reduce.SUM
-            )
+                if curr_requests:
+                    wait_duration = time.perf_counter() - wait_start
+                    record_metric(
+                        "generator_perf/update_weights/avg_waiting_for_generation_duration_s",
+                        wait_duration,
+                        Reduce.MEAN,
+                    )
 
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
 
             if fetch_fut is not None:
-                t = Tracer("generator_perf/waiting_for_fetch_weights")
-                t.start()
                 fetched_weights = await fetch_fut
-                t.stop()
                 # Call update_weights on every policy_worker
                 await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
@@ -672,10 +652,6 @@ class GeneratorWorker(ForgeActor):
         model = self.worker.model_runner.model
         if shared_memory_state_dict is not None:
             logger.info("[PolicyWorker] update weights from shared memory.")
-            t = Tracer(
-                "generator_worker_perf/update_weights_from_shared_memory", timer="gpu"
-            )
-            t.start()
             loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
                 # Use context manager for automatic cleanup
@@ -685,7 +661,6 @@ class GeneratorWorker(ForgeActor):
                     del param
                     loaded_weights.update(loaded)
             logger.info(f"[PolicyWorker] updated {len(loaded_weights)} parameters")
-            t.stop()
             return
         # normal update_weights without shared memory prefetching
         if version is None:
@@ -698,8 +673,6 @@ class GeneratorWorker(ForgeActor):
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
         use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
         loaded_weights = set()
-        t = Tracer("generator_worker_perf/update_weights_from_torchstore", timer="gpu")
-        t.start()
 
         if use_dcp_for_weight_sync:
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
@@ -719,8 +692,6 @@ class GeneratorWorker(ForgeActor):
                 loaded = model.load_weights([(name, param)])
                 del param
                 loaded_weights.update(loaded)
-
-        t.stop()
 
     @endpoint
     async def save_model_params(self):
