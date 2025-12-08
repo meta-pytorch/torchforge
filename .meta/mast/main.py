@@ -88,6 +88,7 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
 
     if wandb_api_key is not None:
         os.environ["WANDB_API_KEY"] = wandb_api_key
+        os.environ["WANDB_BASE_URL"] = WANDB_HOST
 
     if mode == "detached":
         # In detached mode, just launch the MAST job with client role included
