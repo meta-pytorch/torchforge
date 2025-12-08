@@ -214,7 +214,8 @@ class RewardActor(ForgeActor):
                 reward_fn, "__name__", reward_fn.__class__.__name__
             )
             reward_breakdown[reward_fn_name] = reward
-            # per function reward
+
+            # log per fn reward and avg total
             record_metric(
                 f"reward/evaluate_response/avg_{reward_fn_name}_reward",
                 reward,
@@ -226,7 +227,6 @@ class RewardActor(ForgeActor):
                 Reduce.STD,
             )
 
-            # avg total reward
             record_metric(
                 "reward/evaluate_response/avg_total_reward",
                 reward,
@@ -478,16 +478,34 @@ async def main(cfg: DictConfig):
 
             # drop episodes if
             # 1> reward std-dev is very small (including all 0s and all 1s)
-            # 2> response is potentially truncated (response_len >= max_res_tokens)
+            # 2> any response was truncated (didn't end with EOS)
+            # TODO: change it to filter only truncated episodes instead of dropping entire group
             rewards = [e.reward for e in episodes]
             rewards_std = torch.std(torch.tensor(rewards))
-            max_response_len = max(e.completion.token_ids.shape[0] for e in episodes)
-            drop = rewards_std < 1e-3 or max_response_len >= max_res_tokens
+            is_low_variance = rewards_std < 1e-3
+            num_truncated = sum(
+                1 for e in episodes if e.completion.stop_reason == "length"
+            )
+            is_truncated = num_truncated > 0
+            drop = is_low_variance or is_truncated
+
+            n = len(episodes)
             record_metric(
-                "main/continuous_rollouts/unfit_for_training_dropped_episodes",
-                1 if drop else 0,
+                "main/continuous_rollouts/episodes_dropped/low_variance",
+                n if is_low_variance else 0,
                 Reduce.SUM,
             )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/truncated",
+                num_truncated,
+                Reduce.SUM,
+            )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/total",
+                n if drop else 0,
+                Reduce.SUM,
+            )
+
             if drop:
                 del input_ids, episodes
                 continue
