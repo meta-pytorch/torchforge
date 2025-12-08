@@ -16,15 +16,13 @@ import logging
 import math
 import os
 import sys
-from functools import partial
 from typing import Any
 
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
-from forge.data.collate import collate_packed
-from forge.data.datasets.packed import PackedDataset, TextPacker
+from forge.data.collate import collate_padded
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
@@ -97,6 +95,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
+        # Validate that compile is only used with flex attention
+        if self.job_config.training.compile:
+            raise ValueError(
+                "training.compile=True is not currently supported. "
+                "Compile is only supported with flex attention enabled, which requires PyTorch nightly. "
+                "Please set training.compile=false in your config."
+            )
 
         # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
         self.rank_should_record_loss = True
@@ -152,6 +157,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         Raises:
             ValueError: If multiple datasets provided (not yet supported)
         """
+
         # TODO felipemello: Currently only support single dataset
         if len(dataset_configs) > 1:
             raise ValueError(
@@ -197,25 +203,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             **dataset_config,
         )
 
-        packer = TextPacker(padding_idx=0)
-        dataset = PackedDataset(
-            dataset=dataset,
-            packer=packer,
-            target_tokens_per_pack=self.job_config.training.seq_len,  # TODO: get this from model
-        )
-
         dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
-            collate_fn=partial(
-                collate_packed, mask_fn=packer.create_block_mask, device=self.device
-            ),
+            collate_fn=collate_padded,
         )
 
-        # Ultimately we probably want something like this
-        # packer = build_packing_strategy(packing_config)
-        # dataset = build_dataset(dataset_config)
-        # dataloader = build_dataloader(dataloader_config, dataset, packer)
         return dataloader
 
     def forward_backward(

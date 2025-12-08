@@ -39,7 +39,7 @@ if [ -z "$WORKSPACE_DIR" ] || [ ! -d "$WORKSPACE_DIR" ]; then
     WORKSPACE_DIR="$CONDA_PREFIX"
 fi
 
-cd "$WORKSPACE_DIR/forge"
+cd "$WORKSPACE_DIR/torchforge"
 
 # Execute the client training script with all passed arguments
 exec python -X faulthandler .meta/mast/main.py "$@"

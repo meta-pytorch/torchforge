@@ -169,22 +169,27 @@ class LocalFetcherActor(ForgeActor):
     async def init_backends(
         self,
         metadata_per_controller_backend: dict[str, dict[str, Any]],
-        config: dict[str, Any],
+        backend_config: dict[str, Any],
+        run_config: dict[str, Any] | None = None,
         global_step: int = 0,
     ) -> None:
         """Init per-rank logger backends and MetricCollector.
 
         Args:
             metadata_per_controller_backend (dict[str, dict[str, Any]]): Metadata from controller backends for shared state.
-            config (dict[str, Any]): Backend configurations with logging modes and settings.
+            backend_config (dict[str, Any]): Backend configurations with logging modes and settings.
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
             global_step (int): Initial step for metrics.
         """
         collector = MetricCollector()
         await collector.init_backends(
             metadata_per_controller_backend,
-            config,
+            backend_config,
             global_step,
             process_name=self.process_name,
+            run_config=run_config,
         )
 
     @endpoint
@@ -211,6 +216,7 @@ class GlobalLoggingActor(ForgeActor):
     def __init__(self):
         self.fetchers: dict[str, LocalFetcherActor] = {}
         self.config: dict[str, Any] | None = None
+        self.run_config: dict[str, Any] | None = None
         self.global_logger_backends: dict[str, LoggerBackend] = {}
         self.metadata_per_controller_backend: dict[str, dict[str, Any]] = {}
 
@@ -267,7 +273,9 @@ class GlobalLoggingActor(ForgeActor):
         }
 
     @endpoint
-    async def init_backends(self, config: dict[str, Any]) -> None:
+    async def init_backends(
+        self, backend_config: dict[str, Any], run_config: dict[str, Any] | None = None
+    ) -> None:
         """Sets config in global actor and initializes existing backends and collectors. Later spawned actors
         are initialized in `register_fetcher` endpoint.
 
@@ -275,7 +283,7 @@ class GlobalLoggingActor(ForgeActor):
         e.g. shared run IDs for WandB. For details on logging modes, see `forge.observability.metrics.LoggingMode`.
 
         Args:
-            config (dict[str, Any]): Config for metric logging where keys are backend names.
+            backend_config (dict[str, Any]): Config for metric logging where keys are backend names.
                 Each backend config supports:
                 - logging_mode (str | LoggingMode): Check LoggingMode for options. Defaults to "global_reduce".
                 - per_rank_share_run (bool, default False): For per-rank modes only. Whether ranks
@@ -291,21 +299,23 @@ class GlobalLoggingActor(ForgeActor):
                         "project": "my_project",
                     }
                 }
+            run_config (dict[str, Any] | None): Your application's configuration
+                (hyperparameters, dataset, model settings) to log to backends for
+                experiment tracking.
 
         Raises:
             ValueError: If backend config is invalid or missing required fields.
         """
         self.config = {}
+        self.run_config = run_config
 
         # Skip initialization if disabled by environment flag
         if FORGE_DISABLE_METRICS.get_value():
             return
 
         # Validate and normalize each backend config
-        for backend_name, backend_config in config.items():
-            self.config[backend_name] = self._validate_backend_config(
-                backend_name, backend_config
-            )
+        for backend_name, cfg in backend_config.items():
+            self.config[backend_name] = self._validate_backend_config(backend_name, cfg)
 
         # Initialize backends based on logging mode
         for backend_name, backend_config in self.config.items():
@@ -314,7 +324,11 @@ class GlobalLoggingActor(ForgeActor):
             backend: LoggerBackend = get_logger_backend_class(backend_name)(
                 **backend_config
             )
-            await backend.init(role=BackendRole.GLOBAL, process_name="global_reduce")
+            await backend.init(
+                role=BackendRole.GLOBAL,
+                process_name="global_reduce",
+                run_config=self.run_config,
+            )
 
             # Extract metadata from controller logger to be shared with per-rank loggers
             if mode != LoggingMode.GLOBAL_REDUCE:
@@ -331,7 +345,7 @@ class GlobalLoggingActor(ForgeActor):
         if self.fetchers:
             tasks = [
                 fetcher.init_backends.call(
-                    self.metadata_per_controller_backend, self.config
+                    self.metadata_per_controller_backend, self.config, self.run_config
                 )
                 for fetcher in self.fetchers.values()
             ]
@@ -351,7 +365,7 @@ class GlobalLoggingActor(ForgeActor):
         if self.config:
             logger.debug(f"Initializing new LocalFetcherActor for proc_id={proc_id}")
             await fetcher.init_backends.call(
-                self.metadata_per_controller_backend, self.config
+                self.metadata_per_controller_backend, self.config, self.run_config
             )
 
     @endpoint

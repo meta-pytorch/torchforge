@@ -15,6 +15,7 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 import torchstore as ts
+import yaml
 from datasets import load_dataset
 from forge.actors._torchstore_utils import (
     get_dcp_whole_state_dict_key,
@@ -26,17 +27,20 @@ from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
-from forge.data.rewards import LanguageReward, MathReward, ThinkingReward
+from forge.data.rewards import MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
+from forge.util.logging import get_logger
 from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from vllm.transformers_utils.tokenizer import get_tokenizer
+
+logger = get_logger("INFO")
 
 
 @dataclass
@@ -265,15 +269,10 @@ class DatasetActor(ForgeActor):
         self._epoch = 0
 
         def gsm8k_transform(sample):
-            system_prompt = """You are a helpful AI assistant that solves math problems.
-
-Please show your reasoning inside <思考></思考> tags, then provide your final numerical answer inside <answer></answer> tags.
-
-Example:
-Question: What is 12 + 5?
-<思考>12と5を足します。12 + 5 = 17です。</思考>
-<answer>17</answer>
-"""
+            system_prompt = """
+            Put all your scratchpad work between <think> and </think> tags.
+            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
+            """
             request: str = sample["question"]
             as_chat = [
                 {"role": "system", "content": system_prompt},
@@ -342,9 +341,14 @@ async def drop_weights(version: int):
 
 async def main(cfg: DictConfig):
     """Main GRPO training loop with rollout and training processes."""
-    group_size = cfg.group_size
-    max_req_tokens = cfg.max_req_tokens
-    max_res_tokens = cfg.max_res_tokens
+    # Convert OmegaConf config to plain dict
+    run_config_for_logging = OmegaConf.to_container(cfg, resolve=True)
+
+    # Log config
+    logger.info("=" * 30 + " CONFIGURATION " + "=" * 30)
+    logger.info(
+        yaml.dump(run_config_for_logging, default_flow_style=False, sort_keys=False)
+    )
 
     # ---- Global setups ---- #
     provisioner = None
@@ -356,8 +360,11 @@ async def main(cfg: DictConfig):
         provisioner = await init_provisioner()
 
     metric_logging_cfg = cfg.get("metric_logging", {})
+
     mlogger = await get_or_create_metric_logger(process_name="Controller")
-    await mlogger.init_backends.call_one(metric_logging_cfg)
+    await mlogger.init_backends.call_one(
+        backend_config=metric_logging_cfg, run_config=run_config_for_logging
+    )
 
     # ---- Setup services ---- #
 
@@ -381,19 +388,13 @@ async def main(cfg: DictConfig):
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
         ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
         RewardActor.options(**cfg.services.reward_actor).as_service(
-            reward_functions=[
-                MathReward(),
-                ThinkingReward(tag="思考"),  # Use Japanese tag
-                LanguageReward(
-                    target_language="ja",
-                    tag="思考",
-                    match_reward=2.0,
-                    debug=True,
-                    debug_sample_rate=0.1,
-                ),  # Japanese language reward with debug
-            ]
+            reward_functions=[MathReward(), ThinkingReward()]
         ),
     )
+
+    group_size = cfg.group_size
+    max_req_tokens = cfg.max_req_tokens
+    max_res_tokens = cfg.max_res_tokens
 
     # Set max_steps to the configured value, or -1 if not specified or Null
     max_steps = cfg.trainer.training.steps or -1

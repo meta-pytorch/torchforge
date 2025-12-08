@@ -13,7 +13,8 @@ from typing import Any
 import pytest
 import torch
 
-from forge.data.collate import collate_packed
+from forge.data import CROSS_ENTROPY_IGNORE_IDX
+from forge.data.collate import collate_packed, collate_padded
 from forge.data.datasets import HfIterableDataset
 from forge.data.datasets.packed import (
     _SUPPORTS_FLEX_ATTENTION,
@@ -995,3 +996,182 @@ class TestPackedDataset:
                 pack2["document_ids"],
                 msg=f"Pack {i}: document_ids mismatch between iterations",
             )
+
+
+class TestCollatePadded:
+    """Test collate_padded function"""
+
+    def test_empty_batch(self):
+        """Test collating an empty batch"""
+        result = collate_padded([])
+        assert result == {}
+
+    def test_single_sample(self):
+        """Test collating a single sample"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2, 3]),
+                "labels": torch.tensor([4, 5, 6]),
+            }
+        ]
+        result = collate_padded(batch)
+
+        assert result["tokens"].shape == (1, 3)
+        assert result["labels"].shape == (1, 3)
+        torch.testing.assert_close(result["tokens"], torch.tensor([[1, 2, 3]]))
+        torch.testing.assert_close(result["labels"], torch.tensor([[4, 5, 6]]))
+
+    def test_equal_length_samples(self):
+        """Test collating samples with equal lengths"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2, 3]),
+                "labels": torch.tensor([4, 5, 6]),
+            },
+            {
+                "tokens": torch.tensor([7, 8, 9]),
+                "labels": torch.tensor([10, 11, 12]),
+            },
+        ]
+        result = collate_padded(batch)
+
+        assert result["tokens"].shape == (2, 3)
+        assert result["labels"].shape == (2, 3)
+        torch.testing.assert_close(
+            result["tokens"], torch.tensor([[1, 2, 3], [7, 8, 9]])
+        )
+        torch.testing.assert_close(
+            result["labels"], torch.tensor([[4, 5, 6], [10, 11, 12]])
+        )
+
+    def test_padding_to_longest(self):
+        """Test padding shorter sequences to the longest in batch"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7, 8]),
+                "labels": torch.tensor([9, 10, 11, 12]),
+            },
+            {
+                "tokens": torch.tensor([13, 14, 15]),
+                "labels": torch.tensor([16, 17, 18]),
+            },
+        ]
+        result = collate_padded(batch)
+
+        # All should be padded to length 4 (longest)
+        assert result["tokens"].shape == (3, 4)
+        assert result["labels"].shape == (3, 4)
+
+        # Check tokens padding (padded with 0)
+        torch.testing.assert_close(
+            result["tokens"],
+            torch.tensor([[1, 2, 0, 0], [5, 6, 7, 8], [13, 14, 15, 0]]),
+        )
+
+        # Check labels padding (padded with CROSS_ENTROPY_IGNORE_IDX)
+        torch.testing.assert_close(
+            result["labels"],
+            torch.tensor(
+                [
+                    [3, 4, CROSS_ENTROPY_IGNORE_IDX, CROSS_ENTROPY_IGNORE_IDX],
+                    [9, 10, 11, 12],
+                    [16, 17, 18, CROSS_ENTROPY_IGNORE_IDX],
+                ]
+            ),
+        )
+
+    def test_non_tensor_fields_preserved(self):
+        """Test that non-tensor fields are collected correctly"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+                "metadata": "sample1",
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7]),
+                "labels": torch.tensor([8, 9, 10]),
+                "metadata": "sample2",
+            },
+        ]
+        result = collate_padded(batch)
+
+        assert "metadata" in result
+        assert result["metadata"] == ["sample1", "sample2"]
+
+    def test_metrics_flattened(self):
+        """Test that metrics lists are flattened"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+                "metrics": [
+                    type("Metric", (), {"key": "loss", "value": 1.0})(),
+                    type("Metric", (), {"key": "acc", "value": 0.9})(),
+                ],
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7]),
+                "labels": torch.tensor([8, 9, 10]),
+                "metrics": [type("Metric", (), {"key": "loss", "value": 2.0})()],
+            },
+        ]
+        result = collate_padded(batch)
+
+        assert "metrics" in result
+        # Should be flattened from [[metric1, metric2], [metric3]] to [metric1, metric2, metric3]
+        assert len(result["metrics"]) == 3
+
+    def test_different_keys_error(self):
+        """Test that different keys across samples raises ValueError"""
+        batch = [
+            {"tokens": torch.tensor([1, 2]), "labels": torch.tensor([3, 4])},
+            {"tokens": torch.tensor([5, 6]), "other_key": torch.tensor([7, 8])},
+        ]
+
+        with pytest.raises(ValueError, match="All samples must have the same keys"):
+            collate_padded(batch)
+
+    def test_generic_tensor_handling(self):
+        """Test that any tensor field gets padded correctly"""
+        batch = [
+            {
+                "tokens": torch.tensor([1, 2]),
+                "labels": torch.tensor([3, 4]),
+                "custom_tensor": torch.tensor([100, 200, 300]),
+            },
+            {
+                "tokens": torch.tensor([5, 6, 7, 8]),
+                "labels": torch.tensor([9, 10, 11, 12]),
+                "custom_tensor": torch.tensor([400]),
+            },
+        ]
+        result = collate_padded(batch)
+
+        # Tokens padded to length 4
+        assert result["tokens"].shape == (2, 4)
+        torch.testing.assert_close(
+            result["tokens"], torch.tensor([[1, 2, 0, 0], [5, 6, 7, 8]])
+        )
+
+        # Labels padded to length 4 with CROSS_ENTROPY_IGNORE_IDX
+        assert result["labels"].shape == (2, 4)
+        torch.testing.assert_close(
+            result["labels"],
+            torch.tensor(
+                [
+                    [3, 4, CROSS_ENTROPY_IGNORE_IDX, CROSS_ENTROPY_IGNORE_IDX],
+                    [9, 10, 11, 12],
+                ]
+            ),
+        )
+
+        # Custom tensor padded to length 3 with 0
+        assert result["custom_tensor"].shape == (2, 3)
+        torch.testing.assert_close(
+            result["custom_tensor"], torch.tensor([[100, 200, 300], [400, 0, 0]])
+        )
