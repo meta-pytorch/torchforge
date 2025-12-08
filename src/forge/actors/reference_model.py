@@ -179,7 +179,6 @@ class ReferenceModel(ForgeActor):
                     with torch.inference_mode():
                         logits = self.model(input_ids)
         self.step += 1
-        t.step("forward")
 
         if not return_logprobs:
             if isinstance(logits, DTensor):
@@ -196,6 +195,5 @@ class ReferenceModel(ForgeActor):
                 logprobs = logprobs.to_local()
             else:
                 logprobs = self.compute_log_probs(logits, response_tokens)
-            t.step("compute_logprobs")
             t.stop()
             return logprobs
