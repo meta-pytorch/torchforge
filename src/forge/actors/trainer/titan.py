@@ -176,7 +176,7 @@ class TitanTrainer(ForgeActor):
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
-        record_metric("rl_trainer/avg_loss", loss, Reduce.MEAN)
+        record_metric("rl_trainer/loss", loss, Reduce.MEAN)
 
         # These are placeholder values until the loss function exposes these metrics
         # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
@@ -195,8 +195,6 @@ class TitanTrainer(ForgeActor):
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
         """Push weights to torchstore in HF format."""
-        t = Tracer("rl_trainer_perf/push_weights", timer="gpu", track_memory=True)
-        t.start()
         logger.info(f"Pushing weights for policy version {policy_version}")
 
         start_time = time.perf_counter()
@@ -205,13 +203,11 @@ class TitanTrainer(ForgeActor):
 
         sd = self.engine.checkpointer.states["model"].state_dict()
         flattened_state_dict, _ = flatten_state_dict(sd)
-        t.step("flatten_state_dict")
         if self.engine.checkpointer.sd_adapter is None:
             raise RuntimeError(
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        t.step("to_hf")
         if self.use_dcp:
             key = get_dcp_whole_state_dict_key(policy_version)
             dcp_id = f"{self.dcp_path}/{key}"
@@ -225,13 +221,10 @@ class TitanTrainer(ForgeActor):
                 param_names=hf_state_dict.keys(),
             )
             await ts.put(key, dcp_handle)
-            t.step("dcp_save")
         else:
             for name, param in hf_state_dict.items():
                 key = get_param_key(policy_version, name)
                 await ts.put(key, param)
-            t.step("ts_save")
-        t.stop()
         end_time = time.perf_counter()
         logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 

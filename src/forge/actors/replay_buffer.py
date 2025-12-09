@@ -13,7 +13,6 @@ from typing import Any, Callable
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import trace
 
 from monarch.actor import endpoint
 
@@ -75,7 +74,6 @@ class ReplayBuffer(ForgeActor):
         record_metric("buffer/add/count_episodes_added", 1, Reduce.SUM)
 
     @endpoint
-    @trace("buffer_perf/sample", track_memory=False)
     async def sample(
         self, curr_policy_version: int
     ) -> tuple[tuple[Any, ...], ...] | None:
@@ -87,8 +85,6 @@ class ReplayBuffer(ForgeActor):
         Returns:
             A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
         """
-        # Record sample request metric
-        record_metric("buffer/sample/count_sample_requests", 1, Reduce.SUM)
 
         total_samples = self.dp_size * self.batch_size
 
@@ -98,7 +94,7 @@ class ReplayBuffer(ForgeActor):
         # Calculate metrics
         if len(self.buffer) > 0:
             record_metric(
-                "buffer/sample/avg_data_utilization",
+                "buffer/sample/demand_to_size_ratio",
                 total_samples / len(self.buffer),
                 Reduce.MEAN,
             )
@@ -135,12 +131,6 @@ class ReplayBuffer(ForgeActor):
                 max(sampled_policy_ages),
                 Reduce.MAX,
             )
-            record_metric(
-                "buffer/sample/min_sampled_policy_age",
-                min(sampled_policy_ages),
-                Reduce.MIN,
-            )
-
         # Reshape into (dp_size, bsz, ...)
         reshaped_episodes = [
             sampled_episodes[dp_idx * self.batch_size : (dp_idx + 1) * self.batch_size]
