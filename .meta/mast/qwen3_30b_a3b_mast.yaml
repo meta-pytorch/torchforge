@@ -88,7 +88,7 @@ trainer:
   activation_checkpoint:
     mode: full
   comm:
-    # 30B MoE model can require more time than 1.7B's 1200s
+    # 30B MoE model can require more time to load checkpoint than 1.7B's 1200s
     init_timeout_seconds: 1800
   dcp_path: ${checkpoint_folder}
 
@@ -122,6 +122,7 @@ ref_model:
     initial_load_path: /mnt/wsfuse/teamforge/hf/qwen3_30b_a3b_2
     initial_load_in_hf: true
   comm:
+    # Reference model also loads from checkpoint; so setting a higher timeout
     init_timeout_seconds: 1800
 
 # All resource allocations
