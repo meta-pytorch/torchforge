@@ -6,7 +6,7 @@ group_size: 8
 local_batch_size: 16 # per-device batch size
 max_req_tokens: 512
 max_res_tokens: 512
-model: "Qwen/Qwen3-32B"
+model: "/mnt/wsfuse/teamforge/hf/qwen3_32b"
 off_by_n: 1 # Off by one by default
 launcher: mast
 
