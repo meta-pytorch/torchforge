@@ -219,8 +219,11 @@ class TestComputeLogprobsWithLossParallel(FSDPTest):
         with loss_parallel():
             result = compute_logprobs(dtensor_logits, target_ids, align=True)
 
-        # Convert DTensor result to regular tensor for comparison
-        if isinstance(result, DTensor):
-            result = result.full_tensor()
+        # Verify output is Replicated as expected from loss_parallel
+        assert isinstance(result, DTensor)
+        assert result.placements[
+            0
+        ].is_replicate(), f"Expected Replicated placement, got {result.placements}"
+        result = result.to_local()
 
         torch.testing.assert_close(result, expected, atol=1e-5, rtol=1e-5)

@@ -191,6 +191,7 @@ class ReferenceModel(ForgeActor):
                 with loss_parallel():
                     logprobs = self.compute_log_probs(logits, response_tokens)
 
+                # loss_parallel produces Replicated output - to_local() returns the full tensor
                 logprobs = logprobs.to_local()
             else:
                 if isinstance(logits, DTensor):
