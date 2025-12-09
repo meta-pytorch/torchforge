@@ -119,3 +119,7 @@ This ensures that when MAST runs with `HF_HUB_OFFLINE=1`, the transformers libra
 Both cache and model files are stored under:
 - **Cache**: `/mnt/wsfuse/teamforge/hf` (set via `HF_HOME`)
 - **Model weights**: `/mnt/wsfuse/teamforge/hf/<model_name>`
+
+
+#### Weights & Biases
+If you are part of the torchforge team on WandB, then WandB will work out of the box; the link can be found in the MAST logs. If you are not part of the torchforge team on WandB, then you will need to set the "WANDB_API_KEY" environment variable to your WandB API key.

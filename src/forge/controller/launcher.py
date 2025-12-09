@@ -271,20 +271,19 @@ class MastLauncher(BaseLauncher):
 
     def build_appdef(self) -> specs.AppDef:
         # create the app definition for the worker
-        remote_end_python_path = ":".join(
-            [
-                f"{self.remote_work_dir}{workspace}"
-                for workspace in self.editable_workspace_paths
-            ]
-        )
+        additional_python_paths = [
+            f"{self.remote_work_dir}{workspace}"
+            for workspace in self.editable_workspace_paths
+        ]
+        additional_python_paths.append(self.remote_work_dir)
 
+        # needed for wandb api key extraction from secret
+        additional_python_paths.append("/packages/cif")
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
             **meta_hyperactor.DEFAULT_NCCL_ENVS,
             **meta_hyperactor.DEFAULT_TORCH_ENVS,
-            **{
-                "TORCHX_RUN_PYTHONPATH": f"{remote_end_python_path}:{self.remote_work_dir}"
-            },
+            **{"TORCHX_RUN_PYTHONPATH": ":".join(additional_python_paths)},
             **{
                 "HYPERACTOR_MESSAGE_DELIVERY_TIMEOUT_SECS": "600",
                 "HYPERACTOR_CODE_MAX_FRAME_LENGTH": "1073741824",
@@ -293,7 +292,6 @@ class MastLauncher(BaseLauncher):
                 "TORCHDYNAMO_VERBOSE": "1",
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
-                "WANDB_MODE": "offline",
                 "HF_HUB_OFFLINE": "1",
                 "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
