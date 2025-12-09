@@ -12,6 +12,7 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 
 import asyncio
 import contextlib
+import json
 import logging
 import math
 import os
@@ -95,6 +96,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
+        # print config
+        if self.job_config.get("job", {}).get("print_config", False):
+            dict_config = OmegaConf.to_container(self.job_config, resolve=True)
+            formatted_config = json.dumps(dict_config, indent=2, ensure_ascii=False)
+            logger.info(f"Running with configs: {formatted_config}")
+
         # Validate that compile is only used with flex attention
         if self.job_config.training.compile:
             raise ValueError(
@@ -116,7 +123,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         train_datasets_config = self.job_config.training.datasets
         self.train_dataloader = self.setup_data(train_datasets_config)
 
-        # Load eval datasets
+        # Load eval datasetsf
         eval_config = self.job_config["eval"]
         self.val_dataloaders = {}
         self.eval_every_n_steps = eval_config["eval_every_n_steps"]
