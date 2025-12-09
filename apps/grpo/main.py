@@ -303,7 +303,7 @@ Question: What is 12 + 5?
         )
         self._base_dataset = self._base_dataset.map(gsm8k_transform)
         self._base_dataset = self._base_dataset.shuffle(seed=self.seed)
-        self._base_dataset.set_epoch(self._epoch)  # for determinism
+        self._base_dataset.set_epoch(self._epoch)
         self._iterator = iter(self._base_dataset)
 
     @endpoint
