@@ -65,7 +65,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     tokenizer: Tokenizer
     train_dataloader: Dataloader
     # val_dataloader: Dataloader
-    metric_logger: MetricLogger
+    mlogger: MetricLogger
     profiler: Profiler
     device: torch.device
     step: int
@@ -140,7 +140,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
-        self.checkpointer.load(step=self.current_step)
+        if self.current_step != 0:
+            # should skip load if current_step is 0
+            self.checkpointer.load(step=self.current_step)
 
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
@@ -478,6 +480,7 @@ async def run(cfg: DictConfig) -> None:
 
     # Initialize metric logger in main process
     metric_logging_cfg = cfg.get("metric_logging", {})
+    metric_logging_cfg["dump_folder"] = cfg.get("job").get("dump_folder", "./")
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 

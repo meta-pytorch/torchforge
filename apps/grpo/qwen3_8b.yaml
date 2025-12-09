@@ -1,6 +1,8 @@
 # Grouped Relative Policy Optimization (GRPO)
 # >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
-
+job:
+  dump_folder: ./
+  print_config: true
 # Global configuration
 group_size: 16
 local_batch_size: 4 # per-device batch size

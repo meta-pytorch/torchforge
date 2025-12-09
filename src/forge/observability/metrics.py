@@ -769,10 +769,16 @@ class LoggerBackend(ABC):
     """
 
     def __init__(
-        self, *, logging_mode: LoggingMode, per_rank_share_run: bool = False, **kwargs
+        self,
+        *,
+        logging_mode: LoggingMode,
+        per_rank_share_run: bool = False,
+        base_folder: str = "./",
+        **kwargs,
     ) -> None:
         self.logging_mode = logging_mode
         self.per_rank_share_run = per_rank_share_run
+        self.base_folder = base_folder
         self.backend_kwargs = kwargs
 
     @abstractmethod
@@ -933,6 +939,7 @@ class WandbBackend(LoggerBackend):
         controller_logger_metadata: dict[str, Any] | None = None,
         process_name: str | None = None,
         run_config: dict[str, Any] | None = None,
+        base_folder: str | None = None,
     ) -> None:
         if controller_logger_metadata is None:
             controller_logger_metadata = {}
@@ -972,14 +979,20 @@ class WandbBackend(LoggerBackend):
         import wandb
 
         self.run = wandb.init(
-            name=run_name, config=self.run_config, **self.backend_kwargs
+            name=run_name,
+            config=self.run_config,
+            dir=self.base_folder,
+            **self.backend_kwargs,
         )
 
     async def _init_per_rank(self, run_name: str):
         import wandb
 
         self.run = wandb.init(
-            name=run_name, config=self.run_config, **self.backend_kwargs
+            name=run_name,
+            config=self.run_config,
+            dir=self.base_folder,
+            **self.backend_kwargs,
         )
 
     async def _init_shared_global(self, run_name: str | None):
@@ -991,6 +1004,7 @@ class WandbBackend(LoggerBackend):
         self.run = wandb.init(
             name=run_name,
             config=self.run_config,
+            dir=self.base_folder,
             settings=settings,
             **self.backend_kwargs,
         )
@@ -1014,6 +1028,7 @@ class WandbBackend(LoggerBackend):
             id=shared_id,
             config=self.run_config,
             settings=settings,
+            dir=self.base_folder,
             **self.backend_kwargs,
         )
 
