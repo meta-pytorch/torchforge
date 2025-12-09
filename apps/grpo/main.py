@@ -7,21 +7,13 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
-import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable
 
 import torch
-import torch.nn.functional as F
 import torchstore as ts
 import yaml
 from datasets import load_dataset
-from forge.actors._torchstore_utils import (
-    get_dcp_whole_state_dict_key,
-    get_param_prefix,
-)
-from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
@@ -32,7 +24,9 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
+from forge.rl import collate, ComputeAdvantages, Episode, Policy, RewardActor
 from forge.types import LauncherConfig, ProvisionerConfig
+from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
 from forge.util.logging import get_logger
 from forge.util.ops import compute_logprobs
@@ -41,113 +35,6 @@ from omegaconf import DictConfig, OmegaConf
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 logger = get_logger("INFO")
-
-
-@dataclass
-class Episode:
-    episode_id: str
-    pad_id: int
-    request_len: int
-    response_len: int
-    target: Any | None = None
-    request: str | None = None
-    response: str | None = None
-    # Processed data
-    completion: Completion | None = None
-    ref_logprobs: torch.Tensor | None = None
-    reward: float | None = None
-    reward_breakdown: dict[str, float] | None = None
-    advantage: float | None = None
-
-    @property
-    def policy_version(self) -> int | None:
-        return self.completion.generator_version
-
-    @property
-    def request_tensor(self) -> torch.Tensor:
-        tensor: torch.Tensor = self.completion.prompt_ids.to(torch.long)
-        if tensor.shape[0] < self.request_len:  # left pad
-            diff = self.request_len - tensor.shape[0]
-            tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
-        return tensor
-
-    @property
-    def response_tensor(self) -> torch.Tensor:
-        tensor: torch.Tensor = self.completion.token_ids.to(torch.long)
-        if tensor.shape[0] < self.response_len:  # right pad
-            diff = self.response_len - tensor.shape[0]
-            tensor = F.pad(tensor, (0, diff), value=self.pad_id)
-        return tensor
-
-    def to_dict(self, exclude: list[str] | None = None) -> dict[str, Any]:
-        """Convert episode to dict, optionally excluding specified fields."""
-        result = {
-            "episode_id": self.episode_id,
-            "policy_version": self.policy_version,
-            "prompt": self.request,
-            "response": self.response,
-            "target": str(self.target),
-            "reward": self.reward,
-            "advantage": self.advantage,
-            "request_len": self.request_len,
-            "response_len": self.response_len,
-            "pad_id": self.pad_id,
-            "ref_logprobs": self.ref_logprobs,
-            "completion": self.completion,
-        }
-
-        if self.reward_breakdown is not None and "reward_breakdown" not in exclude:
-            result.update(self.reward_breakdown)
-
-        if exclude:
-            for key in exclude:
-                result.pop(key, None)
-
-        return result
-
-
-# Represents the group (G) of episodes in GRPO
-Group = list[Episode]
-
-# Represents the Policy Model to collect data from
-Policy = Generator
-
-
-def collate(
-    batches: list[Group],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """
-    Collates a list of batches into a single batch of inputs and targets.
-    Each batch is a list of episodes, and each episode is a dict of tensors.
-    """
-    inputs = []
-    targets = []
-    for batch in batches:
-        request = [e.request_tensor for e in batch]
-        request = torch.stack(request)  # [b x s]
-
-        response = [e.response_tensor for e in batch]
-        response = torch.stack(response)  # [b x s]
-
-        ref_logprobs = [e.ref_logprobs for e in batch]
-        ref_logprobs = torch.stack(ref_logprobs).squeeze()  # [b x s]
-
-        advantages = [e.advantage for e in batch]
-        advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
-
-        pad_id = batch[0].pad_id
-        mask = response != pad_id
-
-        input = {"tokens": torch.cat([request, response], dim=1)}
-        target = {
-            "response": response,
-            "ref_logprobs": ref_logprobs,
-            "advantages": advantages,
-            "padding_mask": mask,
-        }
-        inputs.append(input)
-        targets.append(target)
-    return inputs, targets
 
 
 # TODO (T245547773): Consolidate with SimpleGRPOLoss in losses/grpo_loss.py
@@ -197,60 +84,6 @@ def simple_grpo_loss(
     record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
     return loss
-
-
-@dataclass
-class RewardActor(ForgeActor):
-    reward_functions: list[Callable]
-
-    @endpoint
-    async def evaluate_response(
-        self, prompt: str, response: str, target: str
-    ) -> (dict[str, float], float):
-        total_rewards = 0.0
-        reward_breakdown = {}  # reward breakdown by function
-        for reward_fn in self.reward_functions:
-            reward = reward_fn(prompt, response, target)
-            total_rewards += reward
-
-            # Get a name for the reward function (works for classes, functions, lambdas)
-            reward_fn_name = getattr(
-                reward_fn, "__name__", reward_fn.__class__.__name__
-            )
-            reward_breakdown[reward_fn_name] = reward
-
-            # log per fn reward and avg total
-            record_metric(
-                f"reward/evaluate_response/avg_{reward_fn_name}_reward",
-                reward,
-                Reduce.MEAN,
-            )
-            record_metric(
-                f"reward/evaluate_response/std_{reward_fn_name}_reward",
-                reward,
-                Reduce.STD,
-            )
-
-            record_metric(
-                "reward/evaluate_response/avg_total_reward",
-                reward,
-                Reduce.MEAN,
-            )
-
-        avg_reward: float = total_rewards / len(self.reward_functions)
-        return reward_breakdown, avg_reward
-
-
-@dataclass
-class ComputeAdvantages(ForgeActor):
-    @endpoint
-    async def compute(self, group: Group) -> list[float]:
-        # TODO: add batch processing
-        rewards = torch.tensor([[e.reward for e in group]])
-        mean = rewards.mean(1, keepdim=True)
-        std = rewards.std(1, keepdim=True)
-        advantages = (rewards - mean) / (std + 1e-4)
-        return advantages.squeeze(0).tolist()
 
 
 @dataclass
@@ -320,23 +153,6 @@ class DatasetActor(ForgeActor):
             return self._tokenizer.pad_token_id
         else:
             return self._tokenizer.eos_token_id
-
-
-async def drop_weights(version: int):
-    print(f"Dropping weights @ version {version}")
-    start_time = time.perf_counter()
-    prefix = get_param_prefix(version)
-    matching_keys = await ts.keys(prefix)
-    # TODO: once we have something like `get_meta()` in torchstore, we can just
-    # query the type of the object instead of relying on keys.
-    dcp_key = get_dcp_whole_state_dict_key(version)
-    if dcp_key in matching_keys:
-        dcp_handle = await ts.get(dcp_key)
-        dcp_handle.drop()
-    for key in matching_keys:
-        await ts.delete(key)
-    elapsed = time.perf_counter() - start_time
-    print(f"Dropped weights @ version {version}, took {elapsed:.2f} seconds")
 
 
 async def main(cfg: DictConfig):
