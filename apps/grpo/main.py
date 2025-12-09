@@ -331,7 +331,7 @@ Question: What is 12 + 5?
             print(
                 f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
             )
-            self._base_dataset.set_epoch(self._epoch)  # for determinism
+            self._base_dataset.set_epoch(self._epoch)
             self._iterator = iter(self._base_dataset)
             return next(self._iterator)
 
