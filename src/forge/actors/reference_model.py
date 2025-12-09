@@ -186,7 +186,6 @@ class ReferenceModel(ForgeActor):
             t.stop()
             return logits
         else:
-            # When TP is enabled, use loss_parallel context for vocab-sharded DTensors
             response_tokens = input_ids[:, max_req_tokens:]
             if parallel_dims.tp_enabled and isinstance(logits, DTensor):
                 with loss_parallel():
@@ -194,6 +193,8 @@ class ReferenceModel(ForgeActor):
 
                 logprobs = logprobs.to_local()
             else:
+                if isinstance(logits, DTensor):
+                    logits = logits.full_tensor()
                 logprobs = self.compute_log_probs(logits, response_tokens)
             t.stop()
             return logprobs
