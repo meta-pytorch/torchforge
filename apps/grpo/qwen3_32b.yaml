@@ -3,7 +3,7 @@
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 job:
   dump_folder: ./
-  print_config: true
+  print_config: false
 # Global configuration
 group_size: 16
 local_batch_size: 32 # per-device batch size

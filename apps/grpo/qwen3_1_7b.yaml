@@ -3,7 +3,7 @@
 
 job:
   dump_folder: ./
-  print_config: true
+  print_config: false
 
 # Global configuration
 group_size: 8
