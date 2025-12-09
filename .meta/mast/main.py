@@ -32,6 +32,39 @@ DEFAULT_CHECKPOINT_FOLDER_KEY = "checkpoint_folder"
 DEFAULT_CHECKPOINT_FOLDER = "/mnt/wsfuse/teamforge/forge_runs/"
 
 
+def setup_wandb_api_key() -> None:
+    # add wandb API key to the environment
+    secret_name = "TORCHFORGE_WANDB_API_KEY"
+    print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
+    try:
+        import base64
+
+        from cif import client
+
+        response = client.request(
+            "keychain.service",
+            "getSecretV2",
+            {
+                "request": {
+                    "name": secret_name,
+                }
+            },
+        )
+        # decode base64 encoded string
+        wandb_api_key = base64.b64decode(
+            # pyrefly: ignore [bad-index]
+            response["result"]["secret"]["value"]
+        ).decode("utf-8")
+        print("[wandb] Successfully retrieved API key from keychain.")
+        os.environ["WANDB_API_KEY"] = wandb_api_key
+        os.environ["WANDB_BASE_URL"] = "https://meta.wandb.io/"
+    except Exception as keychain_exception:
+        print(
+            f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
+        )
+        raise ValueError("Failed to retrieve wandb API key. Cannot launch job")
+
+
 async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None):
     """Main module for launching mast jobs for GRPO training.
 
@@ -56,40 +89,6 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
         actors={k: ProcessConfig(**v) for k, v in cfg.actors.items()},
     )
 
-    # add wandb API key to the environment
-    WANDB_HOST = "https://meta.wandb.io/"
-    wandb_api_key = None
-    secret_name = "TORCHFORGE_WANDB_API_KEY"
-    print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
-    try:
-        import base64
-
-        from cif import client  # type: ignore
-
-        response = client.request(
-            "keychain.service",
-            "getSecretV2",
-            {
-                "request": {
-                    "name": secret_name,
-                }
-            },
-        )
-        # decode base64 encoded string
-        wandb_api_key = base64.b64decode(
-            # pyrefly: ignore [bad-index]
-            response["result"]["secret"]["value"]
-        ).decode("utf-8")
-        print("[wandb] Successfully retrieved API key from keychain.")
-    except Exception as keychain_exception:
-        print(
-            f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
-        )
-
-    if wandb_api_key is not None:
-        os.environ["WANDB_API_KEY"] = wandb_api_key
-        os.environ["WANDB_BASE_URL"] = WANDB_HOST
-
     if mode == "detached":
         # In detached mode, just launch the MAST job with client role included
         launcher = MastLauncher(
@@ -99,7 +98,9 @@ async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None)
         )
         await launcher.launch_mast_job()
     else:
-        # In remote mode, we're already running inside MAST, so mount directory, init provisioner and run training
+        # In remote mode, we're already running inside MAST, so set up wandb api key, mount directory,
+        # init provisioner and run training
+        setup_wandb_api_key()
         mount_mnt_directory("/mnt/wsfuse")
         await init_provisioner(ProvisionerConfig(launcher_config=launcher_config))
         await grpo_main(cfg)
