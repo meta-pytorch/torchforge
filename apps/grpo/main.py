@@ -95,6 +95,7 @@ class DatasetActor(ForgeActor):
     data_split: str = "train"
     streaming: bool = True
     model: str = "Qwen/Qwen3-1.7B"
+    seed: int = 36
 
     @endpoint
     async def setup(self):
@@ -124,7 +125,8 @@ class DatasetActor(ForgeActor):
             self.path, self.revision, split=self.data_split, streaming=self.streaming
         )
         self._base_dataset = self._base_dataset.map(gsm8k_transform)
-        self._base_dataset = self._base_dataset.shuffle()
+        self._base_dataset = self._base_dataset.shuffle(seed=self.seed)
+        self._base_dataset.set_epoch(self._epoch)
         self._iterator = iter(self._base_dataset)
 
     @endpoint
