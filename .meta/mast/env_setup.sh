@@ -9,7 +9,7 @@
 # Set up conda environment and install forge with mounting
 
 # Configuration
-CONDA_ENV_NAME="forge:314c3548ae691f4aa2e49f1b1fad06b3"
+CONDA_ENV_NAME="forge:19456bd7c40eb85bc022d4291822a5bc"
 
 # Colors for output
 RED='\033[0;31m'
