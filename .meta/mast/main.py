@@ -62,7 +62,9 @@ def setup_wandb_api_key() -> None:
         print(
             f"[wandb] Failed to retrieve API key from keychain. {keychain_exception=}"
         )
-        raise ValueError("Failed to retrieve wandb API key. Cannot launch job")
+        raise RuntimeError(
+            "Failed to retrieve wandb API key. Cannot launch job"
+        ) from keychain_exception
 
 
 async def main(cfg: DictConfig, mode: str = "detached", extra_args: list = None):
