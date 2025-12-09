@@ -34,6 +34,9 @@ DEFAULT_CHECKPOINT_FOLDER = "/mnt/wsfuse/teamforge/forge_runs/"
 
 def setup_wandb_api_key() -> None:
     # add wandb API key to the environment
+    if "WANDB_API_KEY" in os.environ:
+        print("[wandb] WANDB_API_KEY already set in environment.")
+        return
     secret_name = "TORCHFORGE_WANDB_API_KEY"
     print(f"[wandb] Attempting to retrieve API key from keychain {secret_name=}")
     try:
