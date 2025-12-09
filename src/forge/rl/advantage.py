@@ -13,6 +13,7 @@ from forge.rl.types import Group
 from monarch.actor import endpoint
 
 
+# TODO: this doesn't need to be an actor
 @dataclass
 class ComputeAdvantages(ForgeActor):
     @endpoint
