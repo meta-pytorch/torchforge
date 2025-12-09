@@ -297,8 +297,6 @@ class MastLauncher(BaseLauncher):
                 "TORCHSTORE_RDMA_ENABLED": "1",
                 "HF_HOME": "/mnt/wsfuse/teamforge/hf",
                 "TRANSFORMERS_OFFLINE": "1",
-                "FUSE_SRC": "ws://ws.ai.pci0ai/genai_fair_llm",
-                "FUSE_DST": "/mnt/wsfuse",
             },
         }
 
