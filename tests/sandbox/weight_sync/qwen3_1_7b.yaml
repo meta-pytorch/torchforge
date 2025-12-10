@@ -5,6 +5,7 @@ model: "Qwen/Qwen3-1.7B"
 local_batch_size: 4
 max_req_tokens: 64
 max_res_tokens: 64
+compile: true # Enable torch.compile for trainer, and CUDA graphs for vLLM
 
 metric_logging:
   console:
@@ -16,7 +17,7 @@ policy:
     model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
-    enforce_eager: true
+    enforce_eager: ${not:${compile}}
   sampling_params:
     n: 1
     max_tokens: 32  # Just for verification forward pass
@@ -42,7 +43,7 @@ trainer:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1  # Single GPU, no FSDP

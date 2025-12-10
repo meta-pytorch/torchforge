@@ -9,6 +9,7 @@ max_res_tokens: 512
 model: "/mnt/wsfuse/teamforge/hf/qwen3_32b"
 off_by_n: 1 # Off by one by default
 launcher: mast
+compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
 
 # Main loop configuration
 rollout_threads: ${services.policy.num_replicas}   # Recommended to set equal to policy.num_replicas
@@ -37,7 +38,7 @@ policy:
     model: /mnt/wsfuse/teamforge/hf/qwen3_32b
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
-    enforce_eager: false
+    enforce_eager: ${not:${compile}}
     # TODO: Had to disable this becasue vLLm wouldn't like
     # needs to revisited.
     disable_custom_all_reduce: true
@@ -67,7 +68,7 @@ trainer:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 8
@@ -110,7 +111,7 @@ ref_model:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
