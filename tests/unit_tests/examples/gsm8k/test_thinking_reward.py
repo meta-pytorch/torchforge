@@ -6,7 +6,7 @@
 
 import unittest
 
-from forge.data.rewards import ThinkingReward
+from apps.grpo.grading import ThinkingReward
 
 
 class TestThinkingReward(unittest.TestCase):
