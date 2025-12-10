@@ -277,8 +277,6 @@ class MastLauncher(BaseLauncher):
         ]
         additional_python_paths.append(self.remote_work_dir)
 
-        # needed for wandb api key extraction from secret
-        additional_python_paths.append("/packages/cif")
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
             **meta_hyperactor.DEFAULT_NCCL_ENVS,
