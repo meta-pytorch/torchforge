@@ -1,4 +1,5 @@
 # Grouped Relative Policy Optimization (GRPO)
+# ./apps/grpo/slurm/submit.sh qwen3_8b
 
 # Global configuration
 group_size: 16
