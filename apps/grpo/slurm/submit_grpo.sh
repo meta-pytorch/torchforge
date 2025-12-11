@@ -1,5 +1,4 @@
 #!/bin/bash
-#SBATCH --job-name=grpo-qwen3-32b
 #SBATCH --qos=h200_agentic-models_high
 #SBATCH --account=agentic-models
 #SBATCH --nodes=1
@@ -21,4 +20,4 @@ export TORCHSTORE_RDMA_ENABLED=0
 
 cd /storage/home/daniellepintz/torchforge
 
-python -m apps.grpo.main --config apps/grpo/qwen3_32b.yaml
+srun python -m apps.grpo.main --config apps/grpo/slurm/${CONFIG_NAME}.yaml

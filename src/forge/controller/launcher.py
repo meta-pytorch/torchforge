@@ -146,7 +146,7 @@ class Slurmlauncher(BaseLauncher):
             scheduler="slurm",
             scheduler_args={
                 "account": "agentic-models",
-                "qos": "h100_lowest",
+                "qos": "h200_agentic-models_high",
                 "time": "72:00:00"
             },
             appdef=appdef,

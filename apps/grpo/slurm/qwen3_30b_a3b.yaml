@@ -1,18 +1,24 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
+# NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
 
 # Global configuration
-group_size: 16
-local_batch_size: 4 # per-device batch size
+group_size: 4
+local_batch_size: 1 # per-device batch size
 max_req_tokens: 1024
-max_res_tokens: 2048
-model: "Qwen/Qwen3-8B"
+max_res_tokens: 1024
+model: "Qwen/Qwen3-30B-A3B"
 off_by_n: 1 # Off by one by default
-compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
+
+provisioner:
+  launcher: slurm
+
+# Main loop configuration
+rollout_threads: 32 # make this 4x the number of policy replicas seems to work well
 
 # Observability configuration
 metric_logging:
   wandb:
+    entity: agentic-models
     project: grpo-training
     group: grpo_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
@@ -31,9 +37,9 @@ dataset:
 policy:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
-    tensor_parallel_size: 2
+    tensor_parallel_size: 4
     pipeline_parallel_size: 1
-    enforce_eager: ${not:${compile}}
+    enforce_eager: false
   sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -44,7 +50,7 @@ policy:
 trainer:
   model:
     name: qwen3
-    flavor: 8B
+    flavor: 30B-A3B
     hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
@@ -60,7 +66,7 @@ trainer:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: ${compile}
+    enable: false
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: -1
@@ -68,6 +74,7 @@ trainer:
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
+    expert_tensor_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
     enable: true
@@ -78,38 +85,36 @@ trainer:
     interval: 500
     async_mode: "disabled"
   activation_checkpoint:
-    mode: selective
-    selective_ac_option: op
+    mode: full
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
-  # This should match the dp_size of TorchTitan
-  # Here it's set explicitly to 2, because we've set
-  # 2 GPUs for the trainer and we're using full FSDP.
-  dp_size: 2
+  # dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
+  dp_size: 4
 
 # Reference model configuration
 ref_model:
   model:
     name: qwen3
-    flavor: 8B
+    flavor: 30B-A3B
     hf_assets_path: hf://${model}
   training:
     seq_len: ${trainer.training.seq_len}
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: ${compile}
+    enable: false
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
+    data_parallel_shard_degree: -1
     tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
+    enable: true
     initial_load_path: hf://${model}
     initial_load_in_hf: true
 
@@ -118,10 +123,11 @@ services:
   policy:
     procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
+    hosts: 1
     with_gpus: true
     mesh_name: policy
   ref_model:
-    procs: 1
+    procs: 4
     num_replicas: 1
     with_gpus: true
     mesh_name: ref_model
@@ -137,7 +143,8 @@ actors:
     with_gpus: false
     mesh_name: dataset
   trainer:
-    procs: 2
+    procs: 4
+    hosts: 1
     with_gpus: true
     mesh_name: trainer
   replay_buffer:

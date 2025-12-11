@@ -1,5 +1,4 @@
 # Grouped Relative Policy Optimization (GRPO)
-# >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
 
 # Global configuration
 group_size: 16
@@ -13,6 +12,7 @@ compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for 
 # Observability configuration
 metric_logging:
   wandb:
+    entity: agentic-models
     project: grpo-training
     group: grpo_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
