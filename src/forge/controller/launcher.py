@@ -277,8 +277,6 @@ class MastLauncher(BaseLauncher):
         ]
         additional_python_paths.append(self.remote_work_dir)
 
-        # needed for wandb api key extraction from secret
-        additional_python_paths.append("/packages/cif")
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
             **meta_hyperactor.DEFAULT_NCCL_ENVS,
@@ -293,7 +291,6 @@ class MastLauncher(BaseLauncher):
                 "VLLM_TORCH_COMPILE_LEVEL": "0",
                 "VLLM_USE_TRITON_FLASH_ATTN": "0",
                 "HF_HUB_OFFLINE": "1",
-                "MONARCH_HOST_MESH_V1_REMOVE_ME_BEFORE_RELEASE": "1",
                 "TORCHSTORE_RDMA_ENABLED": "1",
                 "HF_HOME": "/mnt/wsfuse/teamforge/hf",
                 "TRANSFORMERS_OFFLINE": "1",

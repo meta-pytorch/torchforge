@@ -8,18 +8,16 @@
 
 import asyncio
 import uuid
-from dataclasses import dataclass
 
 import torch
 import torchstore as ts
 import yaml
-from datasets import load_dataset
+from apps.grpo.data import DatasetActor
+from apps.grpo.grading import MathReward, ThinkingReward
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
-from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import init_provisioner, shutdown
-from forge.data.rewards import MathReward, ThinkingReward
 from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
@@ -30,9 +28,7 @@ from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
 from forge.util.logging import get_logger
 from forge.util.ops import compute_logprobs
-from monarch.actor import endpoint
 from omegaconf import DictConfig, OmegaConf
-from vllm.transformers_utils.tokenizer import get_tokenizer
 
 logger = get_logger("INFO")
 
@@ -84,77 +80,6 @@ def simple_grpo_loss(
     record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
     record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
     return loss
-
-
-@dataclass
-class DatasetActor(ForgeActor):
-    """Actor wrapper for HuggingFace dataset to provide async interface."""
-
-    path: str = "openai/gsm8k"
-    revision: str = "main"
-    data_split: str = "train"
-    streaming: bool = True
-    model: str = "Qwen/Qwen3-1.7B"
-    seed: int = 36
-
-    @endpoint
-    async def setup(self):
-        self._tokenizer = get_tokenizer(self.model)
-        self._epoch = 0
-
-        def gsm8k_transform(sample):
-            system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
-            """
-            request: str = sample["question"]
-            as_chat = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request},
-            ]
-            formatted_request = self._tokenizer.apply_chat_template(
-                as_chat,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            target: str = sample["answer"]
-            formatted_target = target.split("#### ")[1]
-            return {"request": formatted_request, "target": formatted_target}
-
-        self._base_dataset = load_dataset(
-            self.path, self.revision, split=self.data_split, streaming=self.streaming
-        )
-        self._base_dataset = self._base_dataset.map(gsm8k_transform)
-        self._base_dataset = self._base_dataset.shuffle(seed=self.seed)
-        self._base_dataset.set_epoch(self._epoch)
-        self._iterator = iter(self._base_dataset)
-
-    @endpoint
-    async def sample(self) -> dict[str, str] | None:
-        try:
-            sample = next(self._iterator)
-
-            record_metric("dataset/sample/current_epoch", self._epoch, Reduce.MAX)
-
-            return sample
-        except StopIteration:
-            # Restart iterator for next epoch with reshuffling
-            self._epoch += 1
-            print(
-                f"Dataset epoch {self._epoch - 1} completed. Starting epoch {self._epoch}"
-            )
-            self._base_dataset.set_epoch(self._epoch)
-            self._iterator = iter(self._base_dataset)
-            return next(self._iterator)
-
-    @endpoint
-    async def pad_token(self):
-        # Use pad_token_id if available, otherwise use eos_token_id
-        # Llama models don't have a pad token by default
-        if self._tokenizer.pad_token_id is not None:
-            return self._tokenizer.pad_token_id
-        else:
-            return self._tokenizer.eos_token_id
 
 
 async def main(cfg: DictConfig):

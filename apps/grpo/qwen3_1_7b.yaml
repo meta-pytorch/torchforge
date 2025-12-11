@@ -8,6 +8,7 @@ max_req_tokens: 1024
 max_res_tokens: 2048
 model: "Qwen/Qwen3-1.7B"
 off_by_n: 1 # Off by one by default
+compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
 
 # Main loop configuration
 rollout_threads: 1   # Recommended to set equal to policy.num_replicas
@@ -36,7 +37,7 @@ policy:
     model: ${model}
     tensor_parallel_size: 1
     pipeline_parallel_size: 1
-    enforce_eager: false
+    enforce_eager: ${not:${compile}}
   sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -63,7 +64,7 @@ trainer:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
@@ -101,7 +102,7 @@ ref_model:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1
