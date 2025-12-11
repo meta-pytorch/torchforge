@@ -57,15 +57,28 @@ class MathReward:
 
 
 class ThinkingReward:
-    """Reward class for evaluating use of <think> tags in reasoning."""
+    """Reward class for evaluating use of thinking tags in reasoning.
 
-    def __init__(self, partial_reward: float = 0.2, full_reward: float = 1.0):
+    Args:
+        partial_reward: Reward for partial tag usage (incomplete/malformed)
+        full_reward: Reward for well-formed thinking blocks with content
+        tag: Tag name to use (default "think", can use "思考" for Japanese, etc.)
+    """
+
+    def __init__(
+        self, partial_reward: float = 0.2, full_reward: float = 1.0, tag: str = "think"
+    ):
         self.partial_reward = partial_reward
         self.full_reward = full_reward
+        self.tag = tag
+        # Build regex patterns for the specified tag
         self._THINK_BLOCK_RE = re.compile(
-            r"<\s*think\s*>(.*?)<\s*/\s*think\s*>", re.IGNORECASE | re.DOTALL
+            rf"<\s*{re.escape(tag)}\s*>(.*?)<\s*/\s*{re.escape(tag)}\s*>",
+            re.IGNORECASE | re.DOTALL,
         )
-        self._THINK_TAG_ATTEMPT_RE = re.compile(r"<\s*/?\s*think\s*>", re.IGNORECASE)
+        self._THINK_TAG_ATTEMPT_RE = re.compile(
+            rf"<\s*/?\s*{re.escape(tag)}\s*>", re.IGNORECASE
+        )
 
     def __call__(self, prompt: str, response: str, target: str | None = None) -> float:
         """Compute thinking reward."""

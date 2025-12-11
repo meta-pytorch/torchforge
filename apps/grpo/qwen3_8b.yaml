@@ -2,12 +2,13 @@
 # >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
 
 # Global configuration
-group_size: 8
-local_batch_size: 12 # per-device batch size
+group_size: 16
+local_batch_size: 4 # per-device batch size
 max_req_tokens: 1024
-max_res_tokens: 1024
+max_res_tokens: 2048
 model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
+compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
 
 # Observability configuration
 metric_logging:
@@ -33,7 +34,7 @@ policy:
     model: ${model}
     tensor_parallel_size: 2
     pipeline_parallel_size: 1
-    enforce_eager: false
+    enforce_eager: ${not:${compile}}
   sampling_params:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/sampling_params.html#vllm.sampling_params.SamplingParams
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -60,7 +61,7 @@ trainer:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: -1
@@ -101,7 +102,7 @@ ref_model:
     dtype: bfloat16
     gc_freq: 1
   compile:
-    enable: false
+    enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
     data_parallel_shard_degree: 1

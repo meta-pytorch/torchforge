@@ -1,0 +1,27 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for this project
+
+body:
+- type: markdown
+  attributes:
+    value: >
+      #### Before submitting a feature request, please search through [existing issues](https://github.com/meta-pytorch/forge/issues?q=is%3Aissue+sort%3Acreated-desc+) to see if something similar has already been proposed.
+- type: textarea
+  attributes:
+    label: Context/Motivation
+    description: |
+      Describe the problem you're trying to solve or the use case for this feature. Include any relevant links and context.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Pseudo-code + acceptance criteria [Optional]
+    description: |
+      Provide a rough sketch of what the API or implementation might look like. This helps us understand your vision for how the feature would work.
+      Also, if possible, include what would need to be true for this feature to be considered complete.
+  validations:
+    required: false
+- type: markdown
+  attributes:
+    value: >
+      Thanks for contributing 🎉!

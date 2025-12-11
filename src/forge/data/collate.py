@@ -7,6 +7,72 @@
 from typing import Any, Callable
 
 import torch
+import torch.nn.functional as F
+
+from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
+
+
+def collate_padded(batch: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Collate function that pads sequences to the longest sample in the batch.
+
+    Handles any tensor keys by padding to the longest
+    sequence for that key. Uses 0 as default padding value, and
+    CROSS_ENTROPY_IGNORE_IDX (-100) for 'labels' keys.
+
+    Non-tensor fields are collected into lists. The 'metrics' field is
+    special-cased to be flattened (extended) rather than nested.
+
+    Args:
+        batch: List of samples, each containing tensor and non-tensor fields
+
+    Returns:
+        Batched dict with padded tensors and collected non-tensor fields
+
+    Raises:
+        ValueError: If all samples do not have the same keys
+    """
+    if not batch:
+        return {}
+
+    # Verify all samples have the same keys
+    first_sample_keys = batch[0].keys()
+    for sample in batch:
+        if sample.keys() != first_sample_keys:
+            raise ValueError(
+                f"All samples must have the same keys. Expected {first_sample_keys}, got {sample.keys()}"
+            )
+
+    collated = {}
+
+    for key in first_sample_keys:
+        if isinstance(batch[0][key], torch.Tensor):
+            # Find max length for this tensor key
+            max_len = max(sample[key].size(0) for sample in batch)
+
+            # Determine padding value
+            pad_value = CROSS_ENTROPY_IGNORE_IDX if key == "labels" else 0
+
+            # Pad each sample to max_len
+            padded_tensors = []
+            for sample in batch:
+                seq_len = sample[key].size(0)
+                pad_len = max_len - seq_len
+                padded = F.pad(sample[key], (0, pad_len), value=pad_value)
+                padded_tensors.append(padded)
+
+            # Stack into batch
+            collated[key] = torch.stack(padded_tensors)
+        elif key == "metrics":
+            # Flatten metrics lists
+            collated[key] = []
+            for sample in batch:
+                collated[key].extend(sample[key])
+        else:
+            # Collect other non-tensor fields as lists
+            collated[key] = [sample[key] for sample in batch]
+
+    return collated
 
 
 def collate_packed(

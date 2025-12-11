@@ -6,10 +6,11 @@
 
 import torch
 import torch.nn.functional as F
+from torch.distributed.tensor import DTensor
 
 
 def compute_logprobs(
-    logits: torch.Tensor,
+    logits: torch.Tensor | DTensor,
     input_ids: torch.Tensor,
     temperature: float = 1.0,
     align: bool = True,
@@ -52,9 +53,21 @@ def compute_logprobs(
     probabilities for the response portion, you don't need to re-run the model. This
     is a key optimization in RL training where the prompt remains constant.
 
+    **Tensor Parallelism Support:**
+    When logits is a DTensor sharded on the vocab dimension (e.g., from tensor parallel
+    training), wrap calls to this function with `loss_parallel()` context:
+
+        >>> from torch.distributed.tensor.parallel import loss_parallel
+        >>> with loss_parallel():
+        ...     logprobs = compute_logprobs(logits, input_ids)
+
+    The `loss_parallel` context ensures F.cross_entropy works correctly with
+    vocab-sharded DTensors without needing to gather the full tensor.
+
     Args:
         logits (`torch.Tensor`):
             The model output logits of shape `(batch_size, sequence_length, vocab_size)`.
+            Can be a regular Tensor or a DTensor (when using with loss_parallel context).
         input_ids (`torch.Tensor`):
             The target token ids of shape `(batch_size, target_sequence_length)`.
             These are the tokens for which you want to compute log probabilities.

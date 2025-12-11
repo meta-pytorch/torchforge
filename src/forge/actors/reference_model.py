@@ -20,6 +20,7 @@ from forge.observability.perf_tracker import Tracer
 from forge.util.ops import compute_logprobs
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
+from torch.distributed.tensor.parallel import loss_parallel
 
 from torchtitan.config.job_config import (
     Checkpoint,
@@ -98,6 +99,10 @@ class ReferenceModel(ForgeActor):
         self.rank = current_rank().rank
         self.size = math.prod(current_size().values())
 
+        self.compute_log_probs = compute_logprobs
+        if self.compile.enable:
+            self.compute_log_probs = torch.compile(self.compute_log_probs)
+
         env = {
             "RANK": str(self.rank),
             "LOCAL_RANK": str(self.rank),
@@ -144,21 +149,15 @@ class ReferenceModel(ForgeActor):
         """
         # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
-        record_metric(
-            "reference_perf/forward/avg_sequence_length",
-            input_ids.shape[1],
-            Reduce.MEAN,
-        )
 
         t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
         t.start()
         self.engine.gc_handler.run(self.step)
-        t.step("garbage_collection")
 
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         input_ids = input_ids.to("cuda")
-        t.step("to_device")
+
         # optional_context_parallel_ctx = (
         #     dist_utils.create_context_parallel_ctx(
         #         cp_mesh=parallel_dims.world_mesh["cp"],
@@ -180,15 +179,23 @@ class ReferenceModel(ForgeActor):
                     with torch.inference_mode():
                         logits = self.model(input_ids)
         self.step += 1
-        if isinstance(logits, DTensor):
-            logits = logits.full_tensor()
-        t.step("forward")
 
         if not return_logprobs:
+            if isinstance(logits, DTensor):
+                logits = logits.full_tensor()
             t.stop()
             return logits
         else:
-            logprobs = compute_logprobs(logits, input_ids[:, max_req_tokens:])
-            t.step("compute_logprobs")
+            response_tokens = input_ids[:, max_req_tokens:]
+            if parallel_dims.tp_enabled and isinstance(logits, DTensor):
+                with loss_parallel():
+                    logprobs = self.compute_log_probs(logits, response_tokens)
+
+                # loss_parallel produces Replicated output - to_local() returns the full tensor
+                logprobs = logprobs.to_local()
+            else:
+                if isinstance(logits, DTensor):
+                    logits = logits.full_tensor()
+                logprobs = self.compute_log_probs(logits, response_tokens)
             t.stop()
             return logprobs

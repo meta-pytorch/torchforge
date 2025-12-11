@@ -6,7 +6,7 @@
 
 import unittest
 
-from forge.data.rewards import MathReward
+from apps.grpo.grading import MathReward
 
 
 class TestMathReward(unittest.TestCase):
