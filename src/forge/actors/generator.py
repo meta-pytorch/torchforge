@@ -81,6 +81,12 @@ class Generator(ForgeActor):
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
         use_dcp_for_weight_sync (bool): Whether to use DCP for NFS-based weight sync. Default depends on
             whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled.
+        enable_in_flight_weight_updates (bool): Whether to enable PipelineRL-style in-flight weight updates.
+            When enabled, weight updates are applied at token boundaries without waiting for in-progress
+            requests to complete. This creates "mixed-policy" sequences where earlier tokens may use older
+            weights and later tokens use newer weights. This is acceptable for RL training and significantly
+            reduces blocking during weight synchronization. Mixed-policy completions will have
+            `metadata["mixed_policy"] = True` for observability. Default is False (opt-in).
 
     Example:
     >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
@@ -98,6 +104,7 @@ class Generator(ForgeActor):
     use_dcp_for_weight_sync: bool | None = None
     prefetch_weights_to_shm: bool = True
     n_fetcher_procs: int = 8
+    enable_in_flight_weight_updates: bool = False  # Opt-in to avoid breaking changes
 
     def __post_init__(self):
         super().__init__()
@@ -107,6 +114,14 @@ class Generator(ForgeActor):
         self.worker: GeneratorWorker | None = None
         self.running = False
         self.generator_version: int = 0
+
+        # In-flight weight update state (PipelineRL-style)
+        # Tuple of (version, prefetched_weights_or_None, completion_future)
+        self._pending_weight_update: tuple[
+            int, dict[str, SharedTensorHandle] | None, asyncio.Future
+        ] | None = None
+        # Track request IDs that became mixed-policy (for observability)
+        self._mixed_policy_request_ids: set[str] = set()
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
@@ -120,6 +135,7 @@ class Generator(ForgeActor):
         if self.use_dcp_for_weight_sync is None:
             self.use_dcp_for_weight_sync = not rdma_available()
         logger.debug(f"{self.use_dcp_for_weight_sync=}")
+        logger.debug(f"{self.enable_in_flight_weight_updates=}")
 
     @endpoint
     async def get_vllm_config(self) -> VllmConfig:
@@ -391,10 +407,22 @@ class Generator(ForgeActor):
     async def run(self) -> None:
         """Schedule, execute, and make output.
         https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276
+
+        This loop implements PipelineRL-style in-flight weight updates when enabled.
+        Weight updates are applied at token boundaries (between execute_model calls)
+        without waiting for in-progress requests to complete.
         """
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
+            # === IN-FLIGHT WEIGHT UPDATE (PipelineRL-style) ===
+            # Apply pending weight update at token boundary if enabled
+            if (
+                self.enable_in_flight_weight_updates
+                and self._pending_weight_update is not None
+            ):
+                await self._apply_in_flight_weight_update()
+
             scheduler_output = self.scheduler.schedule()
             worker_outputs = await self.worker.execute_model.call(scheduler_output)
 
@@ -420,19 +448,166 @@ class Generator(ForgeActor):
                 if len(self.requests) == 0:
                     self.request_lock.notify_all()
 
+    async def _apply_in_flight_weight_update(self) -> None:
+        """Apply a pending weight update at a token boundary.
+
+        This implements the PipelineRL-style in-flight weight update mechanism.
+        Called from the run() loop between execute_model calls.
+
+        Key insight: We only reset the prefix cache (shared across requests),
+        not the per-request KV cache. In-progress requests continue with their
+        existing KV states, creating "mixed-policy" sequences where earlier
+        tokens used old weights and later tokens use new weights. This is
+        acceptable for RL training since logprobs are recorded per-token.
+
+        Note: Completions from mixed-policy sequences will have
+        `metadata["mixed_policy"] = True` set for observability.
+        """
+        version, prefetched_weights, completion_fut = self._pending_weight_update
+        self._pending_weight_update = None
+
+        update_start = time.perf_counter()
+        logger.debug(f"[Generator] Applying in-flight weight update to v{version}")
+
+        in_flight_requests = len(self.requests)
+        if in_flight_requests > 0:
+            record_metric(
+                "generator_perf/in_flight_update/mixed_policy_requests",
+                in_flight_requests,
+                Reduce.SUM,
+            )
+            logger.debug(
+                f"In-flight update with {in_flight_requests} active requests "
+                "(will create mixed-policy sequences)"
+            )
+            # Mark current requests as mixed-policy for observability
+            self._mixed_policy_request_ids = set(self.requests.keys())
+        else:
+            self._mixed_policy_request_ids = set()
+
+        try:
+            if prefetched_weights is not None:
+                await self.worker.update_weights.call(
+                    shared_memory_state_dict=prefetched_weights
+                )
+            else:
+                await self.worker.update_weights.call(version=version)
+
+            self.generator_version = version
+
+            # Reset ONLY the prefix cache (shared prompt prefixes).
+            # Per-request KV cache stays intact - this creates mixed-policy sequences
+            # which is acceptable for RL training.
+            self.scheduler.reset_prefix_cache()
+
+            update_duration = time.perf_counter() - update_start
+            record_metric(
+                "generator_perf/in_flight_update/duration_s",
+                update_duration,
+                Reduce.MEAN,
+            )
+            record_metric(
+                "generator_perf/in_flight_update/count",
+                1,
+                Reduce.SUM,
+            )
+
+            logger.info(
+                f"[Generator] In-flight weight update to v{version} completed "
+                f"in {update_duration:.3f}s"
+            )
+
+            # Signal completion to the waiting update_weights() call
+            completion_fut.set_result(None)
+
+        except Exception as e:
+            logger.error(f"[Generator] In-flight weight update failed: {e}")
+            completion_fut.set_exception(e)
+            # Don't re-raise - that would crash the run() loop
+            # The caller will get the exception via the future
+
+        finally:
+            # Always clean up shared memory, even on failure
+            if prefetched_weights is not None:
+                try:
+                    await self._drop_shared_memory(prefetched_weights)
+                except Exception as cleanup_err:
+                    logger.warning(
+                        f"[Generator] Failed to cleanup shared memory: {cleanup_err}"
+                    )
+
     @endpoint
     async def update_weights(self, version: int) -> None:
         """Update weights on base model from a generator version to be found in a torchstore volume.
 
+        When `enable_in_flight_weight_updates` is True, this uses PipelineRL-style
+        in-flight updates that apply at token boundaries without waiting for in-progress
+        requests to complete. This significantly reduces blocking during weight synchronization.
+
+        When disabled (default), uses the blocking approach that waits for all pending
+        requests to complete before updating weights.
+
         Args:
-            generator_version (int): Generator version from which to update. This will correspond to a key in a
-                torchstore volume.
+            version (int): Generator version from which to update. This will correspond
+                to a key in a torchstore volume.
 
         Example:
             >>> trainer.train_step(...)
             >>> version += 1
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
+        """
+        if self.enable_in_flight_weight_updates:
+            await self._update_weights_in_flight(version)
+        else:
+            await self._update_weights_blocking(version)
+
+    async def _update_weights_in_flight(self, version: int) -> None:
+        """PipelineRL-style in-flight weight update.
+
+        Prefetches weights (if enabled), then queues the update to be applied
+        at the next token boundary in the run() loop. Does NOT wait for in-progress
+        requests to complete.
+
+        Raises:
+            RuntimeError: If the run() loop is not running (would cause deadlock).
+        """
+        # Guard against deadlock: if run() loop isn't running, the update will never
+        # be applied and we'd wait forever on completion_fut
+        if not self.running:
+            raise RuntimeError(
+                "Cannot perform in-flight weight update: generator run() loop is not "
+                "running. Either start the generator or use blocking mode "
+                "(enable_in_flight_weight_updates=False)."
+            )
+
+        # Serialize weight update requests (only one can be pending at a time)
+        # Reuse update_lock to ensure only one update is in-flight
+        async with self.update_lock:
+            logger.debug(
+                f"[Generator] Scheduling in-flight weight update to v{version}"
+            )
+
+            # Prefetch weights to shared memory if enabled
+            prefetched_weights = None
+            if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
+                logger.debug(
+                    f"[Generator] Prefetching weights for v{version} to shared memory"
+                )
+                prefetched_weights = await self._fetch_weights(version)
+
+            # Create completion future and queue the update
+            completion_fut: asyncio.Future = asyncio.Future()
+            self._pending_weight_update = (version, prefetched_weights, completion_fut)
+
+            # Wait for the update to be applied in the run() loop
+            # This happens at the next token boundary (between execute_model calls)
+            await completion_fut
+
+    async def _update_weights_blocking(self, version: int) -> None:
+        """Original blocking weight update (waits for all requests to complete).
+
+        This is the fallback when `enable_in_flight_weight_updates` is False.
         """
         # TODO: enable shared memory prefetch for DCP-based weight sync
         if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
@@ -460,8 +635,6 @@ class Generator(ForgeActor):
                     wait_start = time.perf_counter()
 
                 # Wait until all pending requests have been processed
-                # TODO: If generating long sequences, this might be long and will block
-                # generator weight updates
                 await self.request_lock.wait_for(lambda: len(self.requests) == 0)
 
                 if curr_requests:
@@ -513,7 +686,18 @@ class Generator(ForgeActor):
         completions = []
         original_prompt = request_output.prompt
         prompt_token_ids = request_output.prompt_token_ids
+
+        is_mixed_policy = request_output.request_id in self._mixed_policy_request_ids
+        if is_mixed_policy:
+            self._mixed_policy_request_ids.discard(request_output.request_id)
+
         for output in request_output.outputs:
+            metadata = {
+                "num_cached_tokens": request_output.num_cached_tokens,
+            }
+            if is_mixed_policy:
+                metadata["mixed_policy"] = True
+
             completions.append(
                 Completion(
                     # TODO: the to_prompt encoding will be different from the original.
@@ -525,7 +709,7 @@ class Generator(ForgeActor):
                     token_ids=torch.tensor(output.token_ids),
                     logprobs=self._extract_logprobs(output),
                     generator_version=self.generator_version,
-                    metadata={"num_cached_tokens": request_output.num_cached_tokens},
+                    metadata=metadata,
                 )
             )
         return completions
