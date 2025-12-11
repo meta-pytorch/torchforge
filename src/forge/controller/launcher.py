@@ -147,7 +147,7 @@ class Slurmlauncher(BaseLauncher):
             scheduler_args={
                 "account": "agentic-models",
                 "qos": "h200_agentic-models_high",
-                "time": "72:00:00"
+                "time": "72:00:00",
             },
             appdef=appdef,
             workspace=monarch.tools.config.workspace.Workspace(dirs=[temp_workspace]),
