@@ -676,6 +676,7 @@ document.write(`
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
  | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
  | <a href="#W"><strong>W</strong></a>
  
 </div>
@@ -794,13 +795,17 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.enable_first_step_checkpoint">enable_first_step_checkpoint (torchtitan.config.job_config.Checkpoint attribute)</a>
 </li>
+      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.enable_ft_dataloader_checkpoints">enable_ft_dataloader_checkpoints (torchtitan.config.job_config.Checkpoint attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.enable_ft_dataloader_checkpoints">enable_ft_dataloader_checkpoints (torchtitan.config.job_config.Checkpoint attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.engine_args">engine_args (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Optimizer.eps">eps (torchtitan.config.job_config.Optimizer attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Checkpoint.exclude_from_loading">exclude_from_loading (torchtitan.config.job_config.Checkpoint attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.execute_model">execute_model (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.expert_parallel_degree">expert_parallel_degree (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
@@ -838,11 +843,21 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.gc_freq">gc_freq (torchtitan.config.job_config.Training attribute)</a>
 </li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.generate">generate (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator">Generator (class in forge.actors.generator)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker">GeneratorWorker (class in forge.actors.generator)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics">get_metrics() (forge.controller.service.service.Service method)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.get_metrics_summary">get_metrics_summary() (forge.controller.service.service.Service method)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.get_version">get_version (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.get_vllm_config">get_vllm_config (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.global_batch_size">global_batch_size (torchtitan.config.job_config.Training attribute)</a>
 </li>
@@ -958,6 +973,8 @@ document.write(`
 <h2 id="N">N</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.n_fetcher_procs">n_fetcher_procs (forge.actors.generator.Generator attribute)</a>
+</li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.name">name (torchtitan.config.job_config.Model attribute)</a>
 
       <ul>
@@ -1012,6 +1029,8 @@ document.write(`
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Parallelism.pipeline_parallel_schedule_csv">pipeline_parallel_schedule_csv (torchtitan.config.job_config.Parallelism attribute)</a>
 </li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.prefetch_weights_to_shm">prefetch_weights_to_shm (forge.actors.generator.Generator attribute)</a>
+</li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Model.print_after_conversion">print_after_conversion (torchtitan.config.job_config.Model attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Job.print_config">print_config (torchtitan.config.job_config.Job attribute)</a>
@@ -1037,32 +1056,58 @@ document.write(`
       <li><a href="api_model.html#forge.actors.reference_model.ReferenceModel">ReferenceModel (class in forge.actors.reference_model)</a>
 </li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.register_worker">register_worker (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.run">run() (forge.actors.generator.Generator method)</a>
+</li>
+  </ul></td>
 </tr></table>
 
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.sampling_params">sampling_params (forge.actors.generator.Generator attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.save_model_params">save_model_params (forge.actors.generator.Generator attribute)</a>
+
+      <ul>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.save_model_params">(forge.actors.generator.GeneratorWorker attribute)</a>
+</li>
+      </ul></li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.seed">seed (torchtitan.config.job_config.Training attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.seq_len">seq_len (torchtitan.config.job_config.Training attribute)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service">Service (class in forge.controller.service.service)</a>
 </li>
-      <li><a href="api_model.html#forge.actors.reference_model.ReferenceModel.setup">setup (forge.actors.reference_model.ReferenceModel attribute)</a>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.setup">setup (forge.actors.generator.Generator attribute)</a>
 
       <ul>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.setup">(forge.actors.generator.GeneratorWorker attribute)</a>
+</li>
+        <li><a href="api_model.html#forge.actors.reference_model.ReferenceModel.setup">(forge.actors.reference_model.ReferenceModel attribute)</a>
+</li>
         <li><a href="api_trainer.html#forge.actors.trainer.TitanTrainer.setup">(forge.actors.trainer.TitanTrainer attribute)</a>
 </li>
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api_actors.html#forge.controller.actor.ForgeActor.shutdown">shutdown() (forge.controller.actor.ForgeActor class method)</a>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.setup_kv_cache">setup_kv_cache (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.shutdown">shutdown() (forge.actors.generator.Generator class method)</a>
+
+      <ul>
+        <li><a href="api_actors.html#forge.controller.actor.ForgeActor.shutdown">(forge.controller.actor.ForgeActor class method)</a>
+</li>
+      </ul></li>
       <li><a href="api_service.html#forge.controller.service.service.Service.start_session">start_session() (forge.controller.service.service.Service method)</a>
 </li>
       <li><a href="api_trainer.html#forge.actors.trainer.TitanTrainer.state_dict_key">state_dict_key (forge.actors.trainer.TitanTrainer attribute)</a>
 </li>
       <li><a href="api_trainer.html#torchtitan.config.job_config.Training.steps">steps (torchtitan.config.job_config.Training attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.stop">stop (forge.actors.generator.Generator attribute)</a>
 </li>
       <li><a href="api_service.html#forge.controller.service.service.Service.stop">stop() (forge.controller.service.service.Service method)</a>
 </li>
@@ -1098,7 +1143,33 @@ document.write(`
 <h2 id="U">U</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.update_weights">update_weights (forge.actors.generator.Generator attribute)</a>
+
+      <ul>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.update_weights">(forge.actors.generator.GeneratorWorker attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api_trainer.html#forge.actors.trainer.TitanTrainer.use_dcp">use_dcp (forge.actors.trainer.TitanTrainer attribute)</a>
+</li>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.use_dcp_for_weight_sync">use_dcp_for_weight_sync (forge.actors.generator.Generator attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.Generator.validate_model_params">validate_model_params (forge.actors.generator.Generator attribute)</a>
+
+      <ul>
+        <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.validate_model_params">(forge.actors.generator.GeneratorWorker attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api_generator.html#forge.actors.generator.GeneratorWorker.vllm_config">vllm_config (forge.actors.generator.GeneratorWorker attribute)</a>
 </li>
   </ul></td>
 </tr></table>
