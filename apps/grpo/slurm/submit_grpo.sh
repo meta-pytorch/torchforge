@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-#SBATCH --qos=h200_agentic-models_high
+#SBATCH --qos=h200_capabilities_shared
 #SBATCH --account=agentic-models
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

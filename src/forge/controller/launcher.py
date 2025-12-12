@@ -123,6 +123,12 @@ class BaseLauncher:
 
 
 class Slurmlauncher(BaseLauncher):
+    def __init__(
+        self,
+        cfg: LauncherConfig,
+    ):
+        self.cfg = cfg
+
     async def initialize(self) -> None:
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
@@ -134,19 +140,17 @@ class Slurmlauncher(BaseLauncher):
             image="test", meshes=[f"{name}:{num_hosts}:gpu.small"]
         )
         for role in appdef.roles:
-            # Note - this is hardcoded to SLURM
-            # We got this with sinfo
-            role.resource.memMB = 2047962
-            role.resource.cpu = 192
-            role.resource.gpu = 8
+            role.resource.memMB = self.cfg.memMB
+            role.resource.cpu = self.cfg.cpu
+            role.resource.gpu = self.cfg.gpu
 
         # Note - we cannot add in an empty workspace, so we create a fake temporary one
         temp_workspace = tempfile.mkdtemp(prefix="forge_workspace_")
         server_config = Config(
             scheduler="slurm",
             scheduler_args={
-                "account": "agentic-models",
-                "qos": "h200_agentic-models_high",
+                "account": self.cfg.account,
+                "qos": self.cfg.qos,
                 "time": "72:00:00",
             },
             appdef=appdef,
@@ -399,7 +403,7 @@ def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if not cfg:
         return None
     if cfg.launcher == Launcher.SLURM:
-        return Slurmlauncher()
+        return Slurmlauncher(cfg)
     elif cfg.launcher == Launcher.MAST:
         if not _MAST_AVAILABLE:
             raise ValueError(

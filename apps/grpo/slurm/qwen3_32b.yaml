@@ -13,6 +13,10 @@ compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for 
 
 provisioner:
   launcher: slurm
+  memMB: 2047962
+  cpu: 192
+  account: agentic-models
+  qos: h200_capabilities_shared
 
 # Main loop configuration
 rollout_threads: 32 # make this 4x the number of policy replicas seems to work well

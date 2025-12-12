@@ -10,6 +10,14 @@ model: "Qwen/Qwen3-8B"
 off_by_n: 1 # Off by one by default
 compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
 
+
+provisioner:
+  launcher: slurm
+  memMB: 2047962
+  cpu: 192
+  account: agentic-models
+  qos: h200_capabilities_shared
+
 # Observability configuration
 metric_logging:
   wandb:
@@ -119,6 +127,7 @@ services:
   policy:
     procs: ${policy.engine_args.tensor_parallel_size}
     num_replicas: 1
+    hosts: 1
     with_gpus: true
     mesh_name: policy
   ref_model:
