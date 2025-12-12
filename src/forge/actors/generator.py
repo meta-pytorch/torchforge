@@ -104,7 +104,9 @@ class Generator(ForgeActor):
     use_dcp_for_weight_sync: bool | None = None
     prefetch_weights_to_shm: bool = True
     n_fetcher_procs: int = 8
-    enable_in_flight_weight_updates: bool = False  # Opt-in to avoid breaking changes
+    enable_in_flight_weight_updates: bool = (
+        False  # TODO: set to false -> to not break current behavior. switch to True soon
+    )
 
     def __post_init__(self):
         super().__init__()
