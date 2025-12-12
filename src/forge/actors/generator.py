@@ -115,12 +115,12 @@ class Generator(ForgeActor):
         self.running = False
         self.generator_version: int = 0
 
-        # In-flight weight update state (PipelineRL-style)
-        # Tuple of (version, prefetched_weights_or_None, completion_future)
-        self._pending_weight_update: tuple[
-            int, dict[str, SharedTensorHandle] | None, asyncio.Future
-        ] | None = None
-        # Track request IDs that became mixed-policy (for observability)
+        # In-flight weight update state: (version, prefetched_weights, completion_future)
+        self._pending_weight_update: (
+            tuple[int, dict[str, SharedTensorHandle] | None, asyncio.Future[None]]
+            | None
+        ) = None
+        # Track request IDs that started before a weight update (mixed-policy)
         self._mixed_policy_request_ids: set[str] = set()
 
         if isinstance(self.engine_args, Mapping):
@@ -407,20 +407,12 @@ class Generator(ForgeActor):
     async def run(self) -> None:
         """Schedule, execute, and make output.
         https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276
-
-        This loop implements PipelineRL-style in-flight weight updates when enabled.
-        Weight updates are applied at token boundaries (between execute_model calls)
-        without waiting for in-progress requests to complete.
         """
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
-            # === IN-FLIGHT WEIGHT UPDATE (PipelineRL-style) ===
-            # Apply pending weight update at token boundary if enabled
-            if (
-                self.enable_in_flight_weight_updates
-                and self._pending_weight_update is not None
-            ):
+            # [In-flight weight update] Apply pending weight update at token boundary
+            if self.enable_in_flight_weight_updates and self._pending_weight_update:
                 await self._apply_in_flight_weight_update()
 
             scheduler_output = self.scheduler.schedule()
@@ -451,39 +443,23 @@ class Generator(ForgeActor):
     async def _apply_in_flight_weight_update(self) -> None:
         """Apply a pending weight update at a token boundary.
 
-        This implements the PipelineRL-style in-flight weight update mechanism.
-        Called from the run() loop between execute_model calls.
-
-        Key insight: We only reset the prefix cache (shared across requests),
-        not the per-request KV cache. In-progress requests continue with their
-        existing KV states, creating "mixed-policy" sequences where earlier
-        tokens used old weights and later tokens use new weights. This is
-        acceptable for RL training since logprobs are recorded per-token.
-
-        Note: Completions from mixed-policy sequences will have
-        `metadata["mixed_policy"] = True` set for observability.
+        Called from the run() loop between execute_model calls. We reset only the
+        prefix cache (shared across requests), not per-request KV cache. In-progress
+        requests continue with existing KV states, creating "mixed-policy" sequences.
         """
         version, prefetched_weights, completion_fut = self._pending_weight_update
         self._pending_weight_update = None
 
         update_start = time.perf_counter()
-        logger.debug(f"[Generator] Applying in-flight weight update to v{version}")
 
-        in_flight_requests = len(self.requests)
-        if in_flight_requests > 0:
+        # Mark in-flight requests as mixed-policy for observability
+        if self.requests:
             record_metric(
                 "generator_perf/in_flight_update/mixed_policy_requests",
-                in_flight_requests,
+                len(self.requests),
                 Reduce.SUM,
             )
-            logger.debug(
-                f"In-flight update with {in_flight_requests} active requests "
-                "(will create mixed-policy sequences)"
-            )
-            # Mark current requests as mixed-policy for observability
             self._mixed_policy_request_ids = set(self.requests.keys())
-        else:
-            self._mixed_policy_request_ids = set()
 
         try:
             if prefetched_weights is not None:
@@ -494,10 +470,6 @@ class Generator(ForgeActor):
                 await self.worker.update_weights.call(version=version)
 
             self.generator_version = version
-
-            # Reset ONLY the prefix cache (shared prompt prefixes).
-            # Per-request KV cache stays intact - this creates mixed-policy sequences
-            # which is acceptable for RL training.
             self.scheduler.reset_prefix_cache()
 
             update_duration = time.perf_counter() - update_start
@@ -511,30 +483,22 @@ class Generator(ForgeActor):
                 1,
                 Reduce.SUM,
             )
-
-            logger.info(
-                f"[Generator] In-flight weight update to v{version} completed "
+            logger.debug(
+                f"[Generator] In-flight weight update to v{version} "
                 f"in {update_duration:.3f}s"
             )
-
-            # Signal completion to the waiting update_weights() call
             completion_fut.set_result(None)
 
         except Exception as e:
             logger.error(f"[Generator] In-flight weight update failed: {e}")
             completion_fut.set_exception(e)
-            # Don't re-raise - that would crash the run() loop
-            # The caller will get the exception via the future
 
         finally:
-            # Always clean up shared memory, even on failure
             if prefetched_weights is not None:
                 try:
                     await self._drop_shared_memory(prefetched_weights)
                 except Exception as cleanup_err:
-                    logger.warning(
-                        f"[Generator] Failed to cleanup shared memory: {cleanup_err}"
-                    )
+                    logger.warning(f"Failed to cleanup shared memory: {cleanup_err}")
 
     @endpoint
     async def update_weights(self, version: int) -> None:
@@ -563,52 +527,23 @@ class Generator(ForgeActor):
             await self._update_weights_blocking(version)
 
     async def _update_weights_in_flight(self, version: int) -> None:
-        """PipelineRL-style in-flight weight update.
-
-        Prefetches weights (if enabled), then queues the update to be applied
-        at the next token boundary in the run() loop. Does NOT wait for in-progress
-        requests to complete.
-
-        Raises:
-            RuntimeError: If the run() loop is not running (would cause deadlock).
-        """
-        # Guard against deadlock: if run() loop isn't running, the update will never
-        # be applied and we'd wait forever on completion_fut
+        """Queue weight update to be applied at next token boundary in run() loop."""
         if not self.running:
             raise RuntimeError(
-                "Cannot perform in-flight weight update: generator run() loop is not "
-                "running. Either start the generator or use blocking mode "
-                "(enable_in_flight_weight_updates=False)."
+                "Cannot perform in-flight weight update: run() loop is not running."
             )
 
-        # Serialize weight update requests (only one can be pending at a time)
-        # Reuse update_lock to ensure only one update is in-flight
         async with self.update_lock:
-            logger.debug(
-                f"[Generator] Scheduling in-flight weight update to v{version}"
-            )
-
-            # Prefetch weights to shared memory if enabled
             prefetched_weights = None
             if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
-                logger.debug(
-                    f"[Generator] Prefetching weights for v{version} to shared memory"
-                )
                 prefetched_weights = await self._fetch_weights(version)
 
-            # Create completion future and queue the update
-            completion_fut: asyncio.Future = asyncio.Future()
+            completion_fut: asyncio.Future[None] = asyncio.Future()
             self._pending_weight_update = (version, prefetched_weights, completion_fut)
-
-            # Wait for the update to be applied in the run() loop
-            # This happens at the next token boundary (between execute_model calls)
             await completion_fut
 
     async def _update_weights_blocking(self, version: int) -> None:
-        """Original blocking weight update (waits for all requests to complete).
-
-        This is the fallback when `enable_in_flight_weight_updates` is False.
-        """
+        """Blocking weight update - waits for all requests to complete first."""
         # TODO: enable shared memory prefetch for DCP-based weight sync
         if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
             logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
