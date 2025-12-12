@@ -309,6 +309,8 @@ class GlobalLoggingActor(ForgeActor):
         self.config = {}
         self.run_config = run_config
 
+        base_folder = backend_config.pop("dump_folder", "./")
+
         # Skip initialization if disabled by environment flag
         if FORGE_DISABLE_METRICS.get_value():
             return
@@ -322,7 +324,8 @@ class GlobalLoggingActor(ForgeActor):
             mode = backend_config["logging_mode"]
 
             backend: LoggerBackend = get_logger_backend_class(backend_name)(
-                **backend_config
+                **backend_config,
+                base_folder=base_folder,
             )
             await backend.init(
                 role=BackendRole.GLOBAL,

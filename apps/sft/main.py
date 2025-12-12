@@ -12,6 +12,7 @@ python -m apps.sft.main --config apps/sft/llama3_8b.yaml
 
 import asyncio
 import contextlib
+import json
 import logging
 import math
 import os
@@ -65,7 +66,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     tokenizer: Tokenizer
     train_dataloader: Dataloader
     # val_dataloader: Dataloader
-    metric_logger: MetricLogger
+    mlogger: MetricLogger
     profiler: Profiler
     device: torch.device
     step: int
@@ -95,6 +96,12 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     @endpoint
     async def setup(self):
+        # print config
+        if self.job_config.get("job", {}).get("print_config", False):
+            dict_config = OmegaConf.to_container(self.job_config, resolve=True)
+            formatted_config = json.dumps(dict_config, indent=2, ensure_ascii=False)
+            logger.info(f"Running with configs: {formatted_config}")
+
         # Validate that compile is only used with flex attention
         if self.job_config.training.compile:
             raise ValueError(
@@ -116,7 +123,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         train_datasets_config = self.job_config.training.datasets
         self.train_dataloader = self.setup_data(train_datasets_config)
 
-        # Load eval datasets
+        # Load eval datasetsf
         eval_config = self.job_config["eval"]
         self.val_dataloaders = {}
         self.eval_every_n_steps = eval_config["eval_every_n_steps"]
@@ -140,7 +147,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
-        self.checkpointer.load(step=self.current_step)
+        if self.current_step != 0:
+            # should skip load if current_step is 0
+            self.checkpointer.load(step=self.current_step)
 
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
@@ -478,6 +487,7 @@ async def run(cfg: DictConfig) -> None:
 
     # Initialize metric logger in main process
     metric_logging_cfg = cfg.get("metric_logging", {})
+    metric_logging_cfg["dump_folder"] = cfg.get("job").get("dump_folder", "./")
     mlogger = await get_or_create_metric_logger(process_name="Controller")
     await mlogger.init_backends.call_one(metric_logging_cfg)
 

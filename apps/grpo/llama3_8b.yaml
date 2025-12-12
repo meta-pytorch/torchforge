@@ -1,5 +1,8 @@
 # Grouped Relative Policy Optimization (GRPO)
 # >>> python -m apps.grpo.main --config apps/grpo/llama3_8b.yaml
+job:
+  dump_folder: ./
+  print_config: false
 
 # Global configuration
 group_size: 4
