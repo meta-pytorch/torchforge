@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 
 class Message(TypedDict):
@@ -157,3 +157,10 @@ class TrainBatch:
     model_inputs: dict[str, Any]
     loss_inputs: dict[str, Any]
     meta: dict[str, Any] = field(default_factory=dict)
+
+
+class ToolDefinition(TypedDict, total=False):
+    """Schema for defining a tool that can be called by the model."""
+
+    type: Literal["function"]
+    function: dict[str, Any]  # Contains name, description, parameters

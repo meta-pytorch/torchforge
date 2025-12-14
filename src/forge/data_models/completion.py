@@ -4,11 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
 from forge.data_models.prompt import Prompt
+from forge.types import ToolCall
 
 
 @dataclass
@@ -38,3 +39,21 @@ class Completion:
 
     # extra information that might be useful for debugging
     metadata: dict[str, Any] | None = None
+
+    tool_calls: list[ToolCall] = field(default_factory=list)
+
+    # Non-tool content from the response (e.g., thinking block before tool call)
+    # When tool parsing is enabled, this contains content outside of tool tags
+    content: str | None = None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        """Returns True if the completion contains tool calls."""
+        return len(self.tool_calls) > 0
+
+    def get_tool_call_by_name(self, name: str) -> ToolCall | None:
+        """Get the first tool call with the given function name."""
+        for tc in self.tool_calls:
+            if tc.function.name == name:
+                return tc
+        return None
