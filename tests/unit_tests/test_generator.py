@@ -44,7 +44,7 @@ async def test_generator_without_tool_parsing():
         with_gpus=True,
     ).as_service(
         engine_args={"model": model_name},
-        sampling_params={"n": 1, "max_tokens": 2048},
+        sampling_params={"n": 1, "max_tokens": 64},
     )
 
     tokenizer = get_tokenizer(model_name)
@@ -79,7 +79,7 @@ async def test_generator_with_tool_parsing():
         with_gpus=True,
     ).as_service(
         engine_args={"model": model_name},
-        sampling_params={"n": 1, "max_tokens": 2048},
+        sampling_params={"n": 1, "max_tokens": 256},
         tool_call_parser="hermes",
     )
 
@@ -87,7 +87,7 @@ async def test_generator_with_tool_parsing():
     as_chat = [
         {
             "role": "system",
-            "content": "You are a helpful assistant that can evaluate mathematical equations.",
+            "content": "/no_think You are a helpful assistant that can evaluate mathematical equations.",
         },
         {"role": "user", "content": "What is 2 + 2?"},
     ]
@@ -120,5 +120,30 @@ async def test_generator_with_tool_parsing():
         if calc_calls:
             args = json.loads(calc_calls[0].function.arguments)
             assert "equation" in args, "Calculator should have equation argument"
+
+    # Test request with no tools
+    as_chat_no_tools = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant.",
+        },
+        {"role": "user", "content": "/no_think What is the capital of France?"},
+    ]
+    formatted_request_no_tools = tokenizer.apply_chat_template(
+        as_chat_no_tools,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+    response_no_tools = await policy.generate.route(formatted_request_no_tools)
+    completion_no_tools = response_no_tools[0]
+
+    assert completion_no_tools.tool_calls == [], "Should have no tool calls"
+    assert (
+        completion_no_tools.content is not None
+    ), "Should have content when no tools called"
+    assert (
+        completion_no_tools.content == completion_no_tools.text
+    ), "Content should equal text when no tools"
 
     return policy
