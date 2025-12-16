@@ -28,10 +28,6 @@ jobs:
       wheel-nightly-policy: gha_workflow_nightly_build_wheels
       wheel-upload-path: whl/nightly/forge/
       package-name: forge
-      # Channel = PyPI index URL for PyTorch installation
-      # nightly → https://download.pytorch.org/whl/nightly/cu128 (latest daily builds)
-      # test → https://download.pytorch.org/whl/test/cu128 (stable releases like 2.9.0)
-      channel: nightly
       build-matrix: |
         {
           "include": [
