@@ -46,11 +46,25 @@ Optional: By default, the packages installation uses conda. If you want to insta
 
 > **Note:** We are actively working on enabling pure `uv` installation. Currently, Conda is the recommended approach. `uv` support is not fully working at the moment but is being tracked in [issue #494](https://github.com/meta-pytorch/torchforge/issues/494).
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
+### Nightly Installation
 
+To install the latest nightly build of torchforge with the newest features and fixes:
+
+```bash
+# Install PyTorch nightly
+pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+
+# Install torchforge nightly
+pip install forge --index-url https://download.pytorch.org/whl/nightly/forge/
 ```
-python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
-```
+
+Nightly builds are updated daily and include the latest features and fixes from the main branch.
+Here is the list of key dependencies:
+1. torchmonarch: download torchmonarch-nightly from PyPI.
+2. vllm: build v0.10.0 from source with torch nightly. TODO: additional refactoring to upgrade to use vLLM nightly.
+3. torchtitan: download the nightly build
+4. torchstore: install from the github main branch since torchstore does not have a nightly build yet.
+
 
 ## Quick Start
 
