@@ -14,8 +14,9 @@ dependencies = [
     "torch==2.9.0",
     "torchdata>=0.8.0",
     "torchtitan==0.2.0",
-    "torchmonarch==0.1.2",
-    "torchstore==0.1.2",
+    "torchmonarch-nightly==2025.12.16",
+    # torchstore installed from git in install.sh with --no-deps to avoid monarch conflict
+    "pygtrie",  # torchstore dependency
     # vLLM
     "vllm",
     # Hugging Face integrations
