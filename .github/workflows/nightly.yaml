@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - nightly
+      - add-nightly-build  # TODO: remove this line after PR is accepted. This is for testing.
   workflow_dispatch:
 
 permissions:
