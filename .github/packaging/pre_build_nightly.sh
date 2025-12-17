@@ -15,7 +15,7 @@ python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 # 2. Install torchtitan nightly
 echo "Installing torchtitan nightly..."
 pip install --pre torchtitan \
-  --index-url https://download.pytorch.org/whl/nightly/cu128
+  --extra-index-url https://download.pytorch.org/whl/nightly/cu128
 
 # 3. Install torchmonarch-nightly
 echo "Installing torchmonarch-nightly..."
