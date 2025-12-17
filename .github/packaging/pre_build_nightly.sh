@@ -68,8 +68,7 @@ cd -
 # 6. Set nightly version in __init__.py
 echo "Setting nightly version..."
 NIGHTLY_VERSION="${BUILD_VERSION:-$(date +%Y.%m.%d)}"
-sed -i "s/__version__ = \".*\"/__version__ = \"${NIGHTLY_VERSION}\"/"
-"$FORGE_ROOT/src/forge/__init__.py"
+sed -i "s/__version__ = \".*\"/__version__ = \"${NIGHTLY_VERSION}\"/" "$FORGE_ROOT/src/forge/__init__.py"
 
 echo "Nightly dependency installation complete!"
 echo "Installed package versions:"
