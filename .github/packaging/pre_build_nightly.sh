@@ -3,7 +3,8 @@ set -uo pipefail # TODO revert back to set -euo
 
 # Script runs relative to forge root
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSIONS_FILE="$CURRENT_DIR/../../assets/versions.sh"
+FORGE_ROOT="$(cd "$CURRENT_DIR/../.." && pwd)"
+VERSIONS_FILE="$FORGE_ROOT/assets/versions.sh"
 source "$VERSIONS_FILE"
 
 echo "Installing nightly dependencies for forge build"
@@ -29,18 +30,15 @@ pip install pygtrie
 echo "Installing torchstore from main branch..."
 TORCHSTORE_DIR="/tmp/torchstore-build"
 mkdir -p "$TORCHSTORE_DIR"
-echo "DEBUG: mkdir succeeded, directory created at $TORCHSTORE_DIR"
-
 cd "$TORCHSTORE_DIR"
-echo "DEBUG: cd succeeded, now in: $(pwd)"
-
-git clone https://github.com/pytorch/torchstore.git
+git clone https://github.com/meta-pytorch/torchstore.git
 echo "DEBUG: git clone succeeded"
 
 cd torchstore
 echo "DEBUG: Changed into torchstore subdirectory"
 git checkout main
 pip install --no-deps .
+echo "DEBUG: torchstore installation succeeded"
 cd -
 
 # 5. Build vLLM from source (following internal pt2.sh:561-578 pattern)
@@ -69,9 +67,10 @@ cd -
 
 # 6. Set nightly version in __init__.py
 echo "Setting nightly version..."
-NIGHTLY_VERSION=$(date +%Y.%m.%d)
-echo "__version__ = \"${NIGHTLY_VERSION}\"" > src/forge/__init__.py
+NIGHTLY_VERSION="${BUILD_VERSION:-$(date +%Y.%m.%d)}"
+sed -i "s/__version__ = \".*\"/__version__ = \"${NIGHTLY_VERSION}\"/"
+"$FORGE_ROOT/src/forge/__init__.py"
 
 echo "Nightly dependency installation complete!"
-echo "Dependency versions:"
-python -c "import torch, torchtitan, vllm; print(f'torch: {torch.__version__}, torchtitan: {torchtitan.__version__}, vllm: {vllm.__version__}')"
+echo "Installed package versions:"
+pip list | grep -E "torch|torchtitan|vllm|monarch"
