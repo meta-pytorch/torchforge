@@ -27,6 +27,7 @@ echo "Installing torchstore dependencies..."
 pip install pygtrie
 
 echo "Installing torchstore from main branch..."
+rm -rf /tmp/torchstore  # Remove if exists from previous run
 git clone https://github.com/pytorch/torchstore.git /tmp/torchstore
 cd /tmp/torchstore
 git checkout main
