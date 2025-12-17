@@ -21,7 +21,9 @@ jobs:
       fail-fast: false
     with:
       repository: meta-pytorch/forge
-      ref: ""
+      # TODO: reset to "" after PR is accepted. This is to make sure during testing, the workflow
+      # checkout the current branch.
+      ref: ${{ github.sha }}
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       run-smoke-test: false
