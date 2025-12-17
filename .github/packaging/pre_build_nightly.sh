@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail # TODO revert back to set -euo
 
 # Script runs relative to forge root
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,9 +29,16 @@ pip install pygtrie
 echo "Installing torchstore from main branch..."
 TORCHSTORE_DIR="/tmp/torchstore-build"
 mkdir -p "$TORCHSTORE_DIR"
+echo "DEBUG: mkdir succeeded, directory created at $TORCHSTORE_DIR"
+
 cd "$TORCHSTORE_DIR"
+echo "DEBUG: cd succeeded, now in: $(pwd)"
+
 git clone https://github.com/pytorch/torchstore.git
+echo "DEBUG: git clone succeeded"
+
 cd torchstore
+echo "DEBUG: Changed into torchstore subdirectory"
 git checkout main
 pip install --no-deps .
 cd -
