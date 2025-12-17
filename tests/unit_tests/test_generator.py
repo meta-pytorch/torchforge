@@ -4,146 +4,345 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""Unit tests for Generator's _to_completions and _extract_tool_calls logic."""
+
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
-from forge.rl import Policy
-from vllm.transformers_utils.tokenizer import get_tokenizer
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "calculator",
-            "description": "Evaluate a mathematical equation. Uses Python's eval() to compute the result.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "equation": {
-                        "type": "string",
-                        "description": "The mathematical equation to evaluate, e.g. '2 + 2' or '(3 * 4) / 2'",
-                    },
-                },
-                "required": ["equation"],
-                "additionalProperties": False,
-            },
-        },
-    },
-]
-
-model_name = "Qwen/Qwen3-1.7B"
+from vllm.outputs import CompletionOutput, RequestOutput
 
 
-@pytest.mark.asyncio
-async def test_generator_without_tool_parsing():
-    """Test generator without tool parsing - raw output includes tool tags."""
-    policy = await Policy.options(
-        procs=1,
-        num_replicas=1,
-        with_gpus=True,
-    ).as_service(
-        engine_args={"model": model_name},
-        sampling_params={"n": 1, "max_tokens": 64},
-    )
+def _import_error():
+    """Check if there are import errors that would cause CI failures."""
+    try:
+        import forge.actors.generator  # noqa: F401
 
-    tokenizer = get_tokenizer(model_name)
-    as_chat = [
-        {
-            "role": "system",
-            "content": "You are a helpful assistant that can evaluate mathematical equations.",
-        },
-        {"role": "user", "content": "What is 2 + 2?"},
-    ]
-    formatted_request = tokenizer.apply_chat_template(
-        as_chat,
-        tools=tools,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-
-    response = await policy.generate.route(formatted_request)
-
-    assert response[0].tool_calls == []
-    assert response[0].content is None
-
-    return policy
+        return False
+    except ImportError:
+        return True
 
 
-@pytest.mark.asyncio
-async def test_generator_with_tool_parsing():
-    """Test generator with tool parsing - tool calls are extracted into structured format."""
-    policy = await Policy.options(
-        procs=1,
-        num_replicas=1,
-        with_gpus=True,
-    ).as_service(
-        engine_args={"model": model_name},
-        sampling_params={"n": 1, "max_tokens": 256},
+class TokenizerWrapper:
+    """Wrapper to mimic vLLM's tokenizer structure (has .tokenizer attr)."""
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+class _StubTokenizer:
+    """Minimal stub tokenizer for initializing the Hermes tool parser in tests.
+    
+    The Hermes tool parser from vLLM requires:
+    - get_vocab(): Returns vocab dict mapping tokens to ids
+    - vocab: Direct vocab attribute  
+    - eos_token_id: End of sequence token id
+    - <tool_call> and </tool_call> tokens in vocab (for streaming support)
+    """
+
+    def __init__(self):
+        # Include tool call tokens that Hermes parser validates in __init__
+        # (needed for streaming, but validated even for non-streaming use)
+        self.vocab = {
+            "<tool_call>": 1,
+            "</tool_call>": 2,
+        }
+        self.eos_token_id = 0
+
+    def get_vocab(self) -> dict[str, int]:
+        """Return vocabulary dict (required by Hermes tool parser)."""
+        return self.vocab
+
+
+@pytest.fixture(scope="module")
+def tokenizer_wrapper():
+    """Create a tokenizer wrapper with Hermes-compatible tokenizer (has tool_call tokens)."""
+
+    return TokenizerWrapper(_StubTokenizer())
+
+
+@pytest.fixture
+def generator_with_hermes(tokenizer_wrapper):
+    """Create Generator with hermes parser properly initialized."""
+    from forge.actors.generator import Generator
+
+    generator = Generator(
+        engine_args={"model": "Qwen/Qwen3-0.6B"},
+        sampling_params={"max_tokens": 64},
         tool_call_parser="hermes",
     )
+    generator._tool_parser = generator._init_tool_parser(tokenizer_wrapper)
+    generator.generator_version = 1
 
-    tokenizer = get_tokenizer(model_name)
-    as_chat = [
-        {
-            "role": "system",
-            "content": "/no_think You are a helpful assistant that can evaluate mathematical equations.",
-        },
-        {"role": "user", "content": "What is 2 + 2?"},
-    ]
-    formatted_request = tokenizer.apply_chat_template(
-        as_chat,
-        tools=tools,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    return generator
 
-    response = await policy.generate.route(formatted_request)
-    completion = response[0]
 
-    if completion.has_tool_calls:
-        for i, tool_call in enumerate(completion.tool_calls):
-            print(f"Tool Call {i + 1}:")
-            print(f"  ID: {tool_call.id}")
-            print(f"  Type: {tool_call.type}")
-            print(f"  Function: {tool_call.function.name}")
-            print(f"  Arguments: {tool_call.function.arguments}")
+def make_mock_request_output(
+    prompt: str = "test prompt",
+    outputs: list[dict] | None = None,
+) -> RequestOutput:
+    """Create a mock vLLM RequestOutput for testing _to_completions."""
+    if outputs is None:
+        outputs = [{"text": "test response", "token_ids": [1, 2, 3], "finish_reason": "stop"}]
 
-            args = json.loads(tool_call.function.arguments)
-            print(f"  Parsed args: {args}")
+    mock_outputs = []
+    for out in outputs:
+        mock_output = MagicMock(spec=CompletionOutput)
+        mock_output.text = out.get("text", "")
+        mock_output.token_ids = out.get("token_ids", [1, 2, 3])
+        mock_output.finish_reason = out.get("finish_reason", "stop")
+        mock_output.logprobs = out.get("logprobs", None)
+        mock_outputs.append(mock_output)
 
-    if "<tool_call>" in completion.text:
-        assert completion.has_tool_calls, "Tool calls should be parsed"
-        calc_calls = [
-            tc for tc in completion.tool_calls if tc.function.name == "calculator"
+    mock_request_output = MagicMock(spec=RequestOutput)
+    mock_request_output.prompt = prompt
+    mock_request_output.prompt_token_ids = [100, 101, 102]
+    mock_request_output.outputs = mock_outputs
+    mock_request_output.num_cached_tokens = 0
+
+    return mock_request_output
+
+
+@pytest.mark.skipif(
+    _import_error(),
+    reason="Import error, likely due to missing dependencies on CI.",
+)
+class TestInitToolParser:
+    """Test the _init_tool_parser method of Generator."""
+
+    def test_init_hermes_parser(self, tokenizer_wrapper):
+        """Test that passing tool_call_parser='hermes' initializes the parser."""
+        from forge.actors.generator import Generator
+
+        generator = Generator(
+            engine_args={"model": "Qwen/Qwen3-0.6B"},
+            sampling_params={"max_tokens": 64},
+            tool_call_parser="hermes",
+        )
+
+        parser = generator._init_tool_parser(tokenizer_wrapper)
+
+        assert parser is not None
+        assert hasattr(parser, "extract_tool_calls")
+
+    def test_init_parser_none_when_not_configured(self):
+        """Test that no parser is created when tool_call_parser is None."""
+        from forge.actors.generator import Generator
+
+        generator = Generator(
+            engine_args={"model": "Qwen/Qwen3-0.6B"},
+            sampling_params={"max_tokens": 64},
+            tool_call_parser=None,
+        )
+
+        assert generator.tool_call_parser is None
+
+    def test_init_parser_invalid_parser_name(self, tokenizer_wrapper):
+        """Test that invalid parser name returns None."""
+        from forge.actors.generator import Generator
+
+        generator = Generator(
+            engine_args={"model": "Qwen/Qwen3-0.6B"},
+            sampling_params={"max_tokens": 64},
+            tool_call_parser="nonexistent_parser",
+        )
+
+        parser = generator._init_tool_parser(tokenizer_wrapper)
+        assert parser is None
+
+
+@pytest.mark.skipif(
+    _import_error(),
+    reason="Import error, likely due to missing dependencies on CI.",
+)
+class TestExtractToolCalls:
+    """Test _extract_tool_calls with real parser initialization."""
+
+    def test_extract_single_tool_call(self, generator_with_hermes):
+        """Test extracting a single tool call."""
+        generator = generator_with_hermes
+
+        model_output = '''<tool_call>
+{"name": "calculator", "arguments": {"equation": "2 + 2"}}
+</tool_call>'''
+
+        result = generator._extract_tool_calls(model_output)
+
+        assert result.tools_called is True
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].function.name == "calculator"
+
+        args = json.loads(result.tool_calls[0].function.arguments)
+        assert args["equation"] == "2 + 2"
+
+    def test_extract_tool_call_with_content_prefix(self, generator_with_hermes):
+        """Test extracting tool call when there's content before it."""
+        generator = generator_with_hermes
+
+        model_output = '''Let me calculate that for you.
+<tool_call>
+{"name": "calculator", "arguments": {"equation": "15 * 7"}}
+</tool_call>'''
+
+        result = generator._extract_tool_calls(model_output)
+
+        assert result.tools_called is True
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].function.name == "calculator"
+        assert "Let me calculate" in (result.content or "")
+
+    def test_extract_tool_call_with_think_prefix(self, generator_with_hermes):
+        """Test extracting tool call when there's <think> tags before it."""
+        generator = generator_with_hermes
+
+        model_output = '''<think>
+The user is asking for a math calculation. I should use the calculator tool.
+Let me compute 2 + 2.
+</think>
+<tool_call>
+{"name": "calculator", "arguments": {"equation": "2 + 2"}}
+</tool_call>'''
+
+        result = generator._extract_tool_calls(model_output)
+
+        assert result.tools_called is True
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].function.name == "calculator"
+        # <think> content should be preserved in the content field
+        assert result.content is not None
+        assert """<think>
+The user is asking for a math calculation. I should use the calculator tool.
+Let me compute 2 + 2.
+</think>""" in (result.content)
+
+    def test_extract_multiple_tool_calls(self, generator_with_hermes):
+        """Test extracting multiple tool calls."""
+        generator = generator_with_hermes
+
+        model_output = '''<tool_call>
+{"name": "calculator", "arguments": {"equation": "2 + 2"}}
+</tool_call>
+<tool_call>
+{"name": "calculator", "arguments": {"equation": "3 * 4"}}
+</tool_call>'''
+
+        result = generator._extract_tool_calls(model_output)
+
+        assert result.tools_called is True
+        assert len(result.tool_calls) == 2
+
+        equations = [
+            json.loads(tc.function.arguments)["equation"]
+            for tc in result.tool_calls
         ]
-        if calc_calls:
-            args = json.loads(calc_calls[0].function.arguments)
-            assert "equation" in args, "Calculator should have equation argument"
+        assert "2 + 2" in equations
+        assert "3 * 4" in equations
 
-    # Test request with no tools
-    as_chat_no_tools = [
-        {
-            "role": "system",
-            "content": "You are a helpful assistant.",
-        },
-        {"role": "user", "content": "/no_think What is the capital of France?"},
-    ]
-    formatted_request_no_tools = tokenizer.apply_chat_template(
-        as_chat_no_tools,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    def test_no_tool_call_in_output(self, generator_with_hermes):
+        """Test when model output has no tool calls."""
+        generator = generator_with_hermes
 
-    response_no_tools = await policy.generate.route(formatted_request_no_tools)
-    completion_no_tools = response_no_tools[0]
+        model_output = "The capital of France is Paris."
 
-    assert completion_no_tools.tool_calls == [], "Should have no tool calls"
-    assert (
-        completion_no_tools.content is not None
-    ), "Should have content when no tools called"
-    assert (
-        completion_no_tools.content == completion_no_tools.text
-    ), "Content should equal text when no tools"
+        result = generator._extract_tool_calls(model_output)
 
-    return policy
+        assert result.tools_called is False
+        assert result.tool_calls == []
+        assert result.content == model_output
+
+    def test_extract_tool_calls_no_parser(self):
+        """Test _extract_tool_calls returns content as-is when no parser."""
+        from forge.actors.generator import Generator
+
+        generator = Generator(
+            engine_args={"model": "Qwen/Qwen3-0.6B"},
+            sampling_params={"max_tokens": 64},
+            tool_call_parser=None,
+        )
+        generator._tool_parser = None
+
+        result = generator._extract_tool_calls("Hello, world!")
+
+        assert result.tools_called is False
+        assert result.tool_calls == []
+        assert result.content == "Hello, world!"
+
+
+@pytest.mark.skipif(
+    _import_error(),
+    reason="Import error, likely due to missing dependencies on CI.",
+)
+class TestToCompletions:
+    """Test _to_completions with real parser initialization."""
+
+    def test_to_completions_without_tool_parser(self):
+        """Test _to_completions when no tool parser is configured."""
+        from forge.actors.generator import Generator
+
+        generator = Generator(
+            engine_args={"model": "Qwen/Qwen3-0.6B"},
+            sampling_params={"max_tokens": 64},
+            tool_call_parser=None,
+        )
+        generator._tool_parser = None
+        generator.generator_version = 1
+
+        request_output = make_mock_request_output(
+            prompt="What is 2 + 2?",
+            outputs=[{"text": "The answer is 4.", "token_ids": [10, 20, 30]}],
+        )
+
+        completions = generator._to_completions(request_output)
+
+        assert len(completions) == 1
+        completion = completions[0]
+
+        assert completion.tool_calls == []
+        assert completion.content is None
+        assert completion.text == "The answer is 4."
+        assert not completion.has_tool_calls
+
+    def test_to_completions_no_tool_call_with_parser(self, generator_with_hermes):
+        """Test _to_completions when parser finds no tool calls."""
+        generator = generator_with_hermes
+
+        request_output = make_mock_request_output(
+            prompt="What is the capital of France?",
+            outputs=[{"text": "Paris is the capital of France.", "token_ids": [10, 20]}],
+        )
+
+        completions = generator._to_completions(request_output)
+
+        assert len(completions) == 1
+        completion = completions[0]
+
+        assert not completion.has_tool_calls
+        assert completion.tool_calls == []
+        assert completion.content == "Paris is the capital of France."
+
+    def test_to_completions_multiple_outputs(self, generator_with_hermes):
+        """Test _to_completions with multiple outputs (n > 1)."""
+        generator = generator_with_hermes
+
+        request_output = make_mock_request_output(
+            prompt="Calculate something",
+            outputs=[
+                {"text": '''<tool_call>
+{"name": "calculator", "arguments": {"equation": "1 + 1"}}
+</tool_call>''', "token_ids": [1, 2]},
+                {"text": "The answer is obviously 2.", "token_ids": [3, 4]},
+            ],
+        )
+
+        completions = generator._to_completions(request_output)
+
+        assert len(completions) == 2
+        # First completion has tool call
+        assert completions[0].has_tool_calls
+        assert completions[0].tool_calls[0].function.name == "calculator"
+        args = json.loads(completions[0].tool_calls[0].function.arguments)
+        assert args["equation"] == "1 + 1"
+        # Second completion has no tool call
+        assert not completions[1].has_tool_calls
+        assert completions[1].content == "The answer is obviously 2."
+
