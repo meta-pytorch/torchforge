@@ -7,6 +7,8 @@
 """Unit tests for Generator's _to_completions and _extract_tool_calls logic."""
 
 import json
+from dataclasses import dataclass
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,18 +26,19 @@ def _import_error():
         return True
 
 
+@dataclass
 class TokenizerWrapper:
     """Wrapper to mimic vLLM's tokenizer structure (has .tokenizer attr)."""
 
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
+    tokenizer: Any
+
 
 class _StubTokenizer:
     """Minimal stub tokenizer for initializing the Hermes tool parser in tests.
-    
+
     The Hermes tool parser from vLLM requires:
     - get_vocab(): Returns vocab dict mapping tokens to ids
-    - vocab: Direct vocab attribute  
+    - vocab: Direct vocab attribute
     - eos_token_id: End of sequence token id
     - <tool_call> and </tool_call> tokens in vocab (for streaming support)
     """
@@ -83,7 +86,9 @@ def make_mock_request_output(
 ) -> RequestOutput:
     """Create a mock vLLM RequestOutput for testing _to_completions."""
     if outputs is None:
-        outputs = [{"text": "test response", "token_ids": [1, 2, 3], "finish_reason": "stop"}]
+        outputs = [
+            {"text": "test response", "token_ids": [1, 2, 3], "finish_reason": "stop"}
+        ]
 
     mock_outputs = []
     for out in outputs:
@@ -162,9 +167,9 @@ class TestExtractToolCalls:
         """Test extracting a single tool call."""
         generator = generator_with_hermes
 
-        model_output = '''<tool_call>
+        model_output = """<tool_call>
 {"name": "calculator", "arguments": {"equation": "2 + 2"}}
-</tool_call>'''
+</tool_call>"""
 
         result = generator._extract_tool_calls(model_output)
 
@@ -179,10 +184,10 @@ class TestExtractToolCalls:
         """Test extracting tool call when there's content before it."""
         generator = generator_with_hermes
 
-        model_output = '''Let me calculate that for you.
+        model_output = """Let me calculate that for you.
 <tool_call>
 {"name": "calculator", "arguments": {"equation": "15 * 7"}}
-</tool_call>'''
+</tool_call>"""
 
         result = generator._extract_tool_calls(model_output)
 
@@ -195,13 +200,13 @@ class TestExtractToolCalls:
         """Test extracting tool call when there's <think> tags before it."""
         generator = generator_with_hermes
 
-        model_output = '''<think>
+        model_output = """<think>
 The user is asking for a math calculation. I should use the calculator tool.
 Let me compute 2 + 2.
 </think>
 <tool_call>
 {"name": "calculator", "arguments": {"equation": "2 + 2"}}
-</tool_call>'''
+</tool_call>"""
 
         result = generator._extract_tool_calls(model_output)
 
@@ -213,18 +218,20 @@ Let me compute 2 + 2.
         assert """<think>
 The user is asking for a math calculation. I should use the calculator tool.
 Let me compute 2 + 2.
-</think>""" in (result.content)
+</think>""" in (
+            result.content
+        )
 
     def test_extract_multiple_tool_calls(self, generator_with_hermes):
         """Test extracting multiple tool calls."""
         generator = generator_with_hermes
 
-        model_output = '''<tool_call>
+        model_output = """<tool_call>
 {"name": "calculator", "arguments": {"equation": "2 + 2"}}
 </tool_call>
 <tool_call>
 {"name": "calculator", "arguments": {"equation": "3 * 4"}}
-</tool_call>'''
+</tool_call>"""
 
         result = generator._extract_tool_calls(model_output)
 
@@ -232,8 +239,7 @@ Let me compute 2 + 2.
         assert len(result.tool_calls) == 2
 
         equations = [
-            json.loads(tc.function.arguments)["equation"]
-            for tc in result.tool_calls
+            json.loads(tc.function.arguments)["equation"] for tc in result.tool_calls
         ]
         assert "2 + 2" in equations
         assert "3 * 4" in equations
@@ -308,7 +314,9 @@ class TestToCompletions:
 
         request_output = make_mock_request_output(
             prompt="What is the capital of France?",
-            outputs=[{"text": "Paris is the capital of France.", "token_ids": [10, 20]}],
+            outputs=[
+                {"text": "Paris is the capital of France.", "token_ids": [10, 20]}
+            ],
         )
 
         completions = generator._to_completions(request_output)
@@ -327,9 +335,12 @@ class TestToCompletions:
         request_output = make_mock_request_output(
             prompt="Calculate something",
             outputs=[
-                {"text": '''<tool_call>
+                {
+                    "text": """<tool_call>
 {"name": "calculator", "arguments": {"equation": "1 + 1"}}
-</tool_call>''', "token_ids": [1, 2]},
+</tool_call>""",
+                    "token_ids": [1, 2],
+                },
                 {"text": "The answer is obviously 2.", "token_ids": [3, 4]},
             ],
         )
@@ -345,4 +356,3 @@ class TestToCompletions:
         # Second completion has no tool call
         assert not completions[1].has_tool_calls
         assert completions[1].content == "The answer is obviously 2."
-
