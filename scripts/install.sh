@@ -198,12 +198,14 @@ main() {
     pip install "setuptools<80"
     python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
 
-    # Install monarch
-    pip install torchmonarch==$MONARCH_VERSION
+    # Install monarch nightly
+    pip install torchmonarch-nightly==$MONARCH_NIGHTLY_VERSION
 
-    # Install torchtitan and torchstore
+    # Install torchtitan
     pip install torchtitan==$TORCHTITAN_VERSION
-    pip install torchstore==$TORCHSTORE_VERSION
+
+    # Install torchstore without monarch or torch dependency
+    pip install "git+https://github.com/meta-pytorch/torchstore.git@${TORCHSTORE_BRANCH}"
 
     log_info "Installing Forge from source..."
     pip install -e ".[dev]"

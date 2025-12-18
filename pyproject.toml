@@ -14,8 +14,9 @@ dependencies = [
     "torch==2.9.0",
     "torchdata>=0.8.0",
     "torchtitan==0.2.0",
-    "torchmonarch==0.1.2",
-    "torchstore==0.1.2",
+    # Issue 656: switch to torchmonarch==0.1.3 when released
+    "torchmonarch-nightly==2025.12.17",
+    "torchstore",
     # vLLM
     "vllm",
     # Hugging Face integrations
@@ -92,6 +93,7 @@ url = "https://download.pytorch.org/whl/preview/forge"
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
 vllm = { index = "vllm-forge" }
+torchstore = { git = "https://github.com/meta-pytorch/torchstore.git", branch = "no-monarch" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy
