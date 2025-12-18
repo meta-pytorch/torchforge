@@ -284,6 +284,14 @@ class Generator(ForgeActor):
         return state_dict
 
     @endpoint
+    async def send_tensor(
+        self,
+        tensor: Tensor,
+    ) -> None:
+        logger.info(f"Received tensor from client: {tensor}")
+
+
+    @endpoint
     async def generate(
         self,
         prompt: str,

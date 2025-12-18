@@ -8,6 +8,7 @@
 
 import asyncio
 import uuid
+import time 
 
 import torch
 import torchstore as ts
@@ -172,6 +173,26 @@ async def main(cfg: DictConfig):
 
             prompt, target = sample["request"], sample["target"]
             responses: list[Completion] = await policy.generate.route(prompt)
+
+            small_tensor = torch.rand(2, 3)
+            start_time = time.time()
+            await policy.send_tensor.route(small_tensor)
+            small_transfer_time = time.time() - start_time
+            record_metric("send_tensor/small_transfer_time", small_transfer_time)
+
+            big_tensor = torch.rand(2048, 3072)
+            start_time = time.time()
+            await policy.send_tensor.route(big_tensor)
+            big_transfer_time = time.time() - start_time
+            record_metric("send_tensor/big_transfer_time", big_transfer_time)
+            
+
+            biggest_tensor = torch.rand(16384, 16384)
+            start_time = time.time()
+            await policy.send_tensor.route(biggest_tensor)
+            biggest_transfer_time = time.time() - start_time
+            record_metric("send_tensor/biggest_transfer_time", biggest_transfer_time)
+
             t.step("policy_generation")
 
             # Construct episodes and calculate rewards
