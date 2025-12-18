@@ -118,7 +118,7 @@ class Generator(ForgeActor):
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
         if self.use_dcp_for_weight_sync is None:
-            self.use_dcp_for_weight_sync = not rdma_available()
+            self.use_dcp_for_weight_sync = False
         logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
@@ -667,7 +667,6 @@ class GeneratorWorker(ForgeActor):
             raise ValueError(
                 "version must be provided if not using shared_memory_state_dict"
             )
-        logger.info("[PolicyWorker] update weights from torchstore.")
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
@@ -675,6 +674,7 @@ class GeneratorWorker(ForgeActor):
         loaded_weights = set()
 
         if use_dcp_for_weight_sync:
+            logger.info("[PolicyWorker] Using DCP to update weights.")
             dcp_handle = await ts.get(dcp_whole_state_dict_key)
             hf_param_names = dcp_handle.param_names
             for name in hf_param_names:
@@ -683,6 +683,7 @@ class GeneratorWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         else:
+            logger.info("[PolicyWorker] update weights from torchstore.")
             hf_param_names = [extract_param_name(key) for key in matching_keys]
             # We can't pass a generator since vllm load_weights is not async.
             # Instead, we just call load_weights with one parameter at a time.

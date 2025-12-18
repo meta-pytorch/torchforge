@@ -91,7 +91,7 @@ class TitanTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = not rdma_available()
+    use_dcp: bool = False
     dcp_path: str = "forge_dcp_tmp"
 
     def __post_init__(self):
