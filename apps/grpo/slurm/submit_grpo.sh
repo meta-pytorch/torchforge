@@ -24,6 +24,6 @@ export TORCH_COMPILE_DISABLE=1
 unset SLURM_MEM_PER_CPU SLURM_MEM_PER_GPU SLURM_MEM_PER_NODE
 export TORCHSTORE_RDMA_ENABLED=0
 
-cd /storage/home/daniellepintz/torchforge
+cd /storage/home/$USER/torchforge
 
 srun python -m apps.grpo.main --config apps/grpo/slurm/${CONFIG_NAME}.yaml
