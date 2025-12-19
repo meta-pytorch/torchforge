@@ -214,11 +214,9 @@ class MastLauncher(BaseLauncher):
         self.sku = "gtt_any"
         self.timeout_sec = 1 * 60 * 60  # Kill the job if idle for 1 hour
         self.user = getpass.getuser()
-        self.work_dir = f"/home/{self.user}"
-        self.edittable_workspaces = ["torchforge"]
         self.remote_work_dir = "/packages/monarch_default_workspace/workspace/"
         self.editable_workspace_paths = [
-            f"{self.work_dir}/{workspace}" for workspace in self.edittable_workspaces
+            f"/data/users/{self.user}/fbsource/fbcode/pytorch/torchforge"
         ]
         self.job_name = self.cfg.job_name or self.create_job_name()
 
@@ -281,10 +279,9 @@ class MastLauncher(BaseLauncher):
     def build_appdef(self) -> specs.AppDef:
         # create the app definition for the worker
         additional_python_paths = [
-            f"{self.remote_work_dir}{workspace}"
-            for workspace in self.editable_workspace_paths
+            f"{self.remote_work_dir}torchforge",
+            self.remote_work_dir,
         ]
-        additional_python_paths.append(self.remote_work_dir)
 
         default_envs = {
             **meta_hyperactor.DEFAULT_NVRT_ENVS,
@@ -373,7 +370,7 @@ class MastLauncher(BaseLauncher):
         # Override with client-specific configuration
         client_role.name = "client"
         # Use the bootstrap script as entrypoint
-        client_role.entrypoint = "workspace/torchforge/.meta/mast/client_bootstrap.sh"
+        client_role.entrypoint = "workspace/torchforge/fb/mast/client_bootstrap.sh"
 
         # Build args for the client role (passed to the bootstrap script)
         # These args will be passed to client_bootstrap.sh which forwards them to main.py
