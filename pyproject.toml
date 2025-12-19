@@ -47,8 +47,8 @@ dev = [
     "tomli>=1.1.0",
     "anyio",
     "pytest-asyncio",
+    "matplotlib",
     "multiprocess",
-    "langid",
 ]
 docs = [
     "sphinx==7.2.6",
