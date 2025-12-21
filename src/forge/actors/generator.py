@@ -461,7 +461,7 @@ class Generator(ForgeActor):
                 len(self.requests),
                 Reduce.SUM,
             )
-            self._mixed_policy_request_ids = set(self.requests.keys())
+            self._mixed_policy_request_ids.update(self.requests.keys())
 
         try:
             if prefetched_weights is not None:
