@@ -37,7 +37,7 @@ from forge.controller import (
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
+from forge.observability.perf_tracker import trace, Tracer
 from forge.types import ProcessConfig
 from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 from monarch.actor import current_rank, endpoint, ProcMesh, this_host
@@ -475,28 +475,23 @@ class Generator(ForgeActor):
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
 
             if fetch_fut is not None:
+                wait_fetch_weights_start = time.perf_counter()
                 fetched_weights = await fetch_fut
+                wait_fetch_weights_duration = (
+                    time.perf_counter() - wait_fetch_weights_start
+                )
+                record_metric(
+                    "generator_perf/update_weights/wait_fetch_weights",
+                    wait_fetch_weights_duration,
+                    Reduce.MEAN,
+                )
                 # Call update_weights on every policy_worker
-                update_weights_start = time.perf_counter()
                 await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
-                update_weights_duration = time.perf_counter() - update_weights_start
-                record_metric(
-                        "generator_perf/update_weights/actual_weight_update",
-                        update_weights_duration,
-                        Reduce.MEAN,
-                    )
                 await self._drop_shared_memory(fetched_weights)
             else:
-                update_weights_start = time.perf_counter()
                 await self.worker.update_weights.call(version=version)
-                update_weights_duration = time.perf_counter() - update_weights_start
-                record_metric(
-                        "generator_perf/update_weights/actual_weight_update",
-                        update_weights_duration,
-                        Reduce.MEAN,
-                    )
             self.generator_version = version
 
             # After updating the weights, we need to reset the KV cache
@@ -657,6 +652,11 @@ class GeneratorWorker(ForgeActor):
         return self.worker.execute_model(schedule)
 
     @endpoint
+    @trace(
+        prefix="generator_perf/update_weights/generator_worker_update",
+        track_memory=False,
+        timer="gpu",
+    )
     async def update_weights(
         self,
         version: Optional[int] = None,
@@ -681,10 +681,11 @@ class GeneratorWorker(ForgeActor):
             raise ValueError(
                 "version must be provided if not using shared_memory_state_dict"
             )
+
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
-        use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
+        use_dcp_for_weight_sync = False
         loaded_weights = set()
 
         if use_dcp_for_weight_sync:
@@ -697,7 +698,7 @@ class GeneratorWorker(ForgeActor):
                 del param
                 loaded_weights.update(loaded)
         else:
-            logger.info("[PolicyWorker] update weights from torchstore.")
+            logger.info("[PolicyWorker] Updating weights from torchstore.")
             hf_param_names = [extract_param_name(key) for key in matching_keys]
             # We can't pass a generator since vllm load_weights is not async.
             # Instead, we just call load_weights with one parameter at a time.
