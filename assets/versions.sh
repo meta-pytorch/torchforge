@@ -9,7 +9,6 @@
 
 # Stable versions of upstream libraries for OSS repo
 PYTORCH_VERSION="2.9.0"
-VLLM_VERSION="v0.10.0"
 TORCHSTORE_BRANCH="no-monarch-2025.12.17"
 
 # Torchtitan commit hash for launching on MAST
