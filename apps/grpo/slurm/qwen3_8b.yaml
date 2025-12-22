@@ -21,7 +21,7 @@ provisioner:
 # Observability configuration
 metric_logging:
   wandb:
-    entity: agentic-models
+    entity: torchforge
     project: grpo-training
     group: grpo_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
@@ -89,6 +89,8 @@ trainer:
   activation_checkpoint:
     mode: selective
     selective_ac_option: op
+  comm:
+    init_timeout_seconds: 1800
 
 # Replay buffer configuration
 replay_buffer:
@@ -121,6 +123,8 @@ ref_model:
   checkpoint:
     initial_load_path: hf://${model}
     initial_load_in_hf: true
+  comm:
+    init_timeout_seconds: 1800
 
 # All resource allocations
 services:

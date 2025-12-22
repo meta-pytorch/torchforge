@@ -23,7 +23,7 @@ rollout_threads: 32 # make this 4x the number of policy replicas seems to work w
 # Observability configuration
 metric_logging:
   wandb:
-    entity: agentic-models
+    entity: torchforge
     project: grpo-training
     group: grpo_exp_${oc.env:USER}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
@@ -83,21 +83,23 @@ trainer:
     disable_loss_parallel: true
   checkpoint:
     enable: true
-    folder: ./checkpoint              # The folder to save checkpoints to.
-    initial_load_path: hf://${model}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
-    initial_load_in_hf: true          # If true, interpret initial_load_path as a HuggingFace model repo
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+    folder: ./checkpoint
     last_save_in_hf: true
     interval: 500
     async_mode: "disabled"
   activation_checkpoint:
     mode: full
+  comm:
+    # 30B MoE model can require more time to load checkpoint than 1.7B's 1200s
+    init_timeout_seconds: 1800
 
 # Replay buffer configuration
 replay_buffer:
   batch_size: ${local_batch_size}
   max_policy_age: ${off_by_n}
-  # dp_size: ${trainer.parallelism.data_parallel_shard_degree} # Must equal trainer DP degree
-  dp_size: 4
+  dp_size: ${actors.trainer.procs}
 
 # Reference model configuration
 ref_model:
@@ -122,6 +124,9 @@ ref_model:
     enable: true
     initial_load_path: hf://${model}
     initial_load_in_hf: true
+  comm:
+    # Reference model also loads from checkpoint; so setting a higher timeout
+    init_timeout_seconds: 1800
 
 # All resource allocations
 services:
@@ -134,6 +139,7 @@ services:
   ref_model:
     procs: 4
     num_replicas: 1
+    hosts: 1
     with_gpus: true
     mesh_name: ref_model
   reward_actor:
@@ -148,7 +154,7 @@ actors:
     with_gpus: false
     mesh_name: dataset
   trainer:
-    procs: 4
+    procs: 8
     hosts: 1
     with_gpus: true
     mesh_name: trainer
