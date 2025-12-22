@@ -118,7 +118,7 @@ class Generator(ForgeActor):
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
 
         if self.use_dcp_for_weight_sync is None:
-            self.use_dcp_for_weight_sync = True
+            self.use_dcp_for_weight_sync = False
         logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
