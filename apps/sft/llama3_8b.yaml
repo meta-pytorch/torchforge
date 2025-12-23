@@ -26,12 +26,14 @@ optimizer:
 lr_scheduler:
   warmup_steps: 200
 
+compile:
+  enable: false
+
 training:
   local_batch_size: 8
   seq_len: 2048
   max_norm: 1.0
   steps: 1000
-  compile: false
   datasets:
     - path: "yahma/alpaca-cleaned"
       split: "train[:95%]"
