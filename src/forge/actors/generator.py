@@ -43,27 +43,34 @@ from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 from monarch.actor import current_rank, endpoint, ProcMesh, this_host
 
 from vllm.config import VllmConfig
+from vllm.distributed.parallel_state import get_distributed_init_method
 
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.utils import _validate_truncation_size
-from vllm.executor.multiproc_worker_utils import set_multiprocessing_worker_envs
 from vllm.outputs import CompletionOutput, RequestOutput
 from vllm.sampling_params import RequestOutputKind, SamplingParams
-from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
+from vllm.tokenizers import cached_tokenizer_from_config
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils import get_distributed_init_method
-from vllm.v1.core.kv_cache_utils import get_kv_cache_config
+from vllm.utils.hashing import get_hash_fn_by_name
+from vllm.v1.core.kv_cache_utils import (
+    get_kv_cache_config_from_groups,
+    get_kv_cache_groups,
+    get_request_block_hasher,
+    init_none_hash,
+)
 from vllm.v1.core.sched.output import SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.engine import EngineCoreOutputs, EngineCoreRequest
+from vllm.v1.engine.input_processor import InputProcessor
 from vllm.v1.engine.output_processor import OutputProcessor
 from vllm.v1.engine.parallel_sampling import ParentRequest
-from vllm.v1.engine.processor import Processor
+from vllm.v1.executor.multiproc_executor import set_multiprocessing_worker_envs
 from vllm.v1.kv_cache_interface import KVCacheConfig
 from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.request import Request
 from vllm.v1.structured_output import StructuredOutputManager
-from vllm.worker.worker_base import WorkerWrapperBase
+from vllm.v1.worker.worker_base import WorkerWrapperBase
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -71,26 +78,53 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class Generator(ForgeActor):
-    """Instance of a vLLM-based generator.
+    """Instance of a vLLM-based generator for TorchForge RL training workflows.
 
-    This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
-    main difference is that all communications are controlled here via Monarch's proc meshes.
+    This class is a **bespoke fork** of vLLM v0.13's EngineCore that integrates with Monarch's
+    distributed process mesh architecture. It manually recreates the EngineCore execution loop
+    while replacing vLLM's multi-process ZMQ communication with Monarch RPC.
+
+    **CRITICAL - REFACTOR REQUIRED:**
+    This engine-level fork is NOT sustainable for future vLLM upgrades. Each new vLLM version
+    introduces breaking changes in EngineCore internals (scheduler, executor, processors) that
+    require manual porting. This approach will become unmaintainable as vLLM v1 stabilizes.
+
+    **What's Implemented (Aligned with vLLM v0.13):**
+    - Scheduler integration (request scheduling, KV cache management)
+    - InputProcessor (tokenization, validation)
+    - OutputProcessor (detokenization, output formatting)
+    - StructuredOutputManager (grammar-based constrained decoding)
+    - Two-phase execution (execute_model → sample_tokens for grammar constraints)
+    - Request block hashing (prefix caching)
+    - KV cache configuration and initialization
+    - Tensor-parallel (TP) model execution
+
+    **What's NOT Implemented (vs. vLLM v0.13 EngineCore):**
+    - Pipeline-parallel (PP) execution - Generator assumes single-rank workers
+    - Multi-modal input processing (mm_receiver_cache integration incomplete)
+    - Async scheduling (overlapping schedule/execute for throughput)
+    - Batch queue for pipeline parallelism (batch_queue_size > 1)
+    - Data-parallel coordination (DPCoordinator for multi-engine deployments)
+    - Abort queue (mid-generation request cancellation)
+    - EngineCoreClient abstraction (direct worker calls instead)
 
     Args:
-        engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
-        sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
-        use_dcp_for_weight_sync (bool): Whether to use DCP for NFS-based weight sync. Default depends on
-            whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled.
+        engine_args (EngineArgs): vLLM engine configuration (model, TP size, cache config, etc.)
+        sampling_params (SamplingParams): Default sampling parameters for generation
+        use_dcp_for_weight_sync (bool): Use DCP for NFS-based weight sync (default: auto-detect RDMA)
+        prefetch_weights_to_shm (bool): Prefetch weights to shared memory during updates (default: True)
+        n_fetcher_procs (int): Number of parallel weight fetcher processes (default: 8)
 
     Example:
-    >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
-    ...     engine_args=EngineArgs(...),
-    ...     sampling_params=SamplingParams(...),
-    ...     )
-    >>> await generator.generate("Tell me a joke")
-    Completion(prompt="Tell me a joke", text="A: Why did the chicken cross the road? B: To get to the other side.",
-    token_ids=[...], logprobs=[...])
-    >>> await generator.shutdown()
+        >>> generator = await Generator.options(procs=4, num_replicas=1, with_gpus=True).as_service(
+        ...     engine_args=EngineArgs(model="facebook/opt-125m", tensor_parallel_size=4),
+        ...     sampling_params=SamplingParams(temperature=0.8, top_p=0.95),
+        ... )
+        >>> completions = await generator.generate("Tell me a joke")
+        >>> print(completions[0].text)
+        >>> await generator.update_weights(version=1)  # Load new weights from torchstore
+        >>> await generator.shutdown()
+
     """
 
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
@@ -204,14 +238,11 @@ class Generator(ForgeActor):
 
         # Setup processors
         # TODO: move all processing to the Environment
-        # TODO: add support for `log_stats` and `mm_registry`
-        tokenizer = init_tokenizer_from_configs(
+        tokenizer = cached_tokenizer_from_config(
             model_config=self.vllm_config.model_config,
-            scheduler_config=self.vllm_config.scheduler_config,
-            lora_config=self.vllm_config.lora_config,
         )
-        self.processor = Processor(
-            vllm_config=self.vllm_config, tokenizer=tokenizer, mm_registry=None
+        self.processor = InputProcessor(
+            vllm_config=self.vllm_config, tokenizer=tokenizer
         )
         self.output_processor = OutputProcessor(tokenizer, log_stats=None)
 
@@ -224,13 +255,41 @@ class Generator(ForgeActor):
         # Setup scheduler
         # TODO: Add support for `log_stats`
         structured_output_manager = StructuredOutputManager(self.vllm_config)
+
+        # Reference: https://github.com/vllm-project/vllm/blob/bb80f69bc98cbf062bf030cb11185f7ba526e28a/vllm/v1/engine/core.py#L131
+        scheduler_block_size = (
+            self.vllm_config.cache_config.block_size
+            * self.vllm_config.parallel_config.decode_context_parallel_size
+            * self.vllm_config.parallel_config.prefill_context_parallel_size
+        )
+
         self.scheduler = Scheduler(
             vllm_config=self.vllm_config,
             kv_cache_config=kv_cache_config,
             structured_output_manager=structured_output_manager,
-            include_finished_set=False,
+            block_size=scheduler_block_size,
+            include_finished_set=self.vllm_config.parallel_config.data_parallel_size
+            > 1,
             log_stats=None,
         )
+
+        # Setup request block hasher for prefix caching
+        # Reference: https://github.com/vllm-project/vllm/blob/bb80f69bc98cbf062bf030cb11185f7ba526e28a/vllm/v1/engine/core.py#L194
+        self.request_block_hasher = None
+        kv_connector = self.scheduler.get_kv_connector()
+        if (
+            self.vllm_config.cache_config.enable_prefix_caching
+            or kv_connector is not None
+        ):
+            caching_hash_fn = get_hash_fn_by_name(
+                self.vllm_config.cache_config.prefix_caching_hash_algo
+            )
+            init_none_hash(caching_hash_fn)
+
+            self.request_block_hasher = get_request_block_hasher(
+                scheduler_block_size, caching_hash_fn
+            )
+
         self._start_processing()
         if self.prefetch_weights_to_shm:
             self._spawn_fetchers()
@@ -323,9 +382,11 @@ class Generator(ForgeActor):
             truncate_prompt_tokens,
             tokenization_kwargs,
         )
-        prompt_str, request = self.processor.process_inputs(
+        prompt_text = prompt
+        prompt_dict = {"prompt": prompt_text}
+        request = self.processor.process_inputs(
             request_id=request_id,
-            prompt={"prompt": prompt},
+            prompt=prompt_dict,
             params=params,
             arrival_time=None,
             tokenization_kwargs=tokenization_kwargs,
@@ -341,8 +402,8 @@ class Generator(ForgeActor):
 
             # Explicitly keeping the redundant logic to make it easier to pick up vLLM changes
             if (num_samples := params.n) == 1:
-                self.output_processor.add_request(request, prompt_str, None, 0)
-                request, _ = self._preprocess_add_request(request)
+                self.output_processor.add_request(request, prompt_text, None, 0)
+                request, _ = self.preprocess_add_request(request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (None, request_fut)
                 self.scheduler.add_request(request)
@@ -356,9 +417,9 @@ class Generator(ForgeActor):
                     child_request.request_id = child_request_id
                     child_request.sampling_params = params_child
                     self.output_processor.add_request(
-                        child_request, prompt_str, parent_req, idx
+                        child_request, prompt_text, parent_req, idx
                     )
-                    child_request, _ = self._preprocess_add_request(child_request)
+                    child_request, _ = self.preprocess_add_request(child_request)
                     self.scheduler.add_request(child_request)
                 request_fut = asyncio.Future()
                 self.requests[request_id] = (parent_req, request_fut)
@@ -375,30 +436,48 @@ class Generator(ForgeActor):
         t.stop()
         return completions
 
-    def _preprocess_add_request(
-        self, request: EngineCoreRequest
-    ) -> tuple[Request, int]:
-        """(forge/issues/332) Will require attention when we bump vllm versions
-        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L419
+    def preprocess_add_request(self, request: EngineCoreRequest) -> tuple[Request, int]:
+        """Preprocess the request.
+
+        Modified from vLLM engine. This function could be directly used in input processing thread to allow
+        request initialization running in parallel with Model forward.
+
+        The delta between the original function is that we don't handle multi-modal requests here.
+
+        Reference:
+        https://github.com/vllm-project/vllm/blob/8f8f469b1b8c4ef44a0a8a5f0bc6ddf86acbc9db/vllm/v1/engine/core.py#L561
         """
-        if request.mm_hashes is not None:
-            raise NotImplementedError("Support for mm_hash is not implemented yet.")
-        req = Request.from_engine_core_request(request)
+        req = Request.from_engine_core_request(request, self.request_block_hasher)
         if req.use_structured_output:
-            self.scheduler.structured_output_manager.grammar_init(request)
-        return req, 0
+            # Note on thread safety: no race condition.
+            # `grammar_init` is only invoked in input processing thread. For
+            # `structured_output_manager`, each request is independent and
+            # grammar compilation is async. Scheduler always checks grammar
+            # compilation status before scheduling request.
+            self.scheduler.structured_output_manager.grammar_init(req)
+        return req, request.current_wave
 
     async def run(self) -> None:
         """Schedule, execute, and make output.
-        https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276
+        Reference: vllm v0.13 EngineCore.step()
+        https://github.com/vllm-project/vllm/blob/v0.13.0/vllm/v1/engine/core.py#L336-362
         """
         # TODO: move postprocessing out of loop to not block
         self.running = True
         while self.running:
-            scheduler_output = self.scheduler.schedule()
-            worker_outputs = await self.worker.execute_model.call(scheduler_output)
+            # Check if scheduler has any requests before calling schedule()
+            if not self.scheduler.has_requests():
+                await asyncio.sleep(0.01)
+                continue
 
-            # The results of `execute_model` are gathered on the driver rank (rank 0)
+            scheduler_output = self.scheduler.schedule()
+
+            # Compute grammar output before execute_model (for CPU overlap)
+            # Reference: core.py line 349
+            grammar_output = self.scheduler.get_grammar_bitmask(scheduler_output)
+            worker_outputs = await self.worker.execute_model_and_sample.call(
+                scheduler_output, grammar_output
+            )
             _, worker_output = next(worker_outputs.items())
             outputs = self.scheduler.update_from_output(scheduler_output, worker_output)
             outputs = outputs.get(0) or EngineCoreOutputs()
@@ -600,10 +679,10 @@ class GeneratorWorker(ForgeActor):
     async def setup(self):
         self.rank = current_rank().rank
         os.environ["RANK"] = str(self.rank)
-        parallel_config = self.vllm_config.parallel_config
-        set_multiprocessing_worker_envs(parallel_config)
+        set_multiprocessing_worker_envs()
         ip, port = os.getenv("MASTER_ADDR"), os.getenv("MASTER_PORT")
         distributed_init_method = get_distributed_init_method(ip, port)
+        parallel_config = self.vllm_config.parallel_config
         all_kwargs = [{}] * parallel_config.world_size
         local_rank = self.rank % torch.accelerator.device_count()
         is_driver_worker = self.rank % parallel_config.tensor_parallel_size == 0
@@ -630,8 +709,9 @@ class GeneratorWorker(ForgeActor):
             available_gpu_memory = 0
 
         # Get the kv cache tensor size
-        kv_cache_config = get_kv_cache_config(
-            self.vllm_config, kv_cache_spec, available_gpu_memory
+        kv_cache_groups = get_kv_cache_groups(self.vllm_config, kv_cache_spec)
+        kv_cache_config = get_kv_cache_config_from_groups(
+            self.vllm_config, kv_cache_groups, available_gpu_memory
         )
         # TODO: unify configs across TorchStore
         # unify_kv_cache_configs(kv_cache_configs)
@@ -648,8 +728,23 @@ class GeneratorWorker(ForgeActor):
         return kv_cache_config
 
     @endpoint
-    async def execute_model(self, schedule: SchedulerOutput) -> ModelRunnerOutput:
-        return self.worker.execute_model(schedule)
+    async def execute_model_and_sample(
+        self, schedule: SchedulerOutput, grammar_output
+    ) -> ModelRunnerOutput:
+        """Execute model and sample tokens in a single call.
+
+        In v0.13, execute_model returns None and stores state internally,
+        then sample_tokens retrieves that state and applies grammar constraints.
+        Since TorchForge doesn't use async scheduling, we combine both phases
+        into a single RPC call to reduce overhead.
+
+        Reference: vllm v0.13 EngineCore.step() lines 348-353
+        """
+        output = self.worker.execute_model(schedule)
+        if output is None:
+            output = self.worker.model_runner.sample_tokens(grammar_output)
+
+        return output
 
     @endpoint
     @trace(
