@@ -1,6 +1,6 @@
 # Grouped Relative Policy Optimization (GRPO)
 # NOTE - This has not been tested for correctness yet! All testing so far has been only for infrastructure stability
-# ./apps/grpo/slurm/submit.sh qwen3_32b
+# ./experimental/slurm/submit.sh qwen3_32b
 
 # Global configuration
 group_size: 16

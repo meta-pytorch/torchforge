@@ -26,4 +26,4 @@ export TORCHSTORE_RDMA_ENABLED=0
 
 cd /storage/home/$USER/torchforge
 
-srun python -m apps.grpo.main --config apps/grpo/slurm/${CONFIG_NAME}.yaml
+srun python -m apps.grpo.main --config experimental/slurm/${CONFIG_NAME}.yaml
