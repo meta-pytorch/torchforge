@@ -198,12 +198,6 @@ main() {
     pip install "setuptools<80"
     python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
 
-    # Install monarch nightly
-    pip install torchmonarch-nightly==$MONARCH_NIGHTLY_VERSION
-
-    # Install torchtitan
-    pip install torchtitan==$TORCHTITAN_VERSION
-
     # Install torchstore without monarch or torch dependency
     pip install "git+https://github.com/meta-pytorch/torchstore.git@${TORCHSTORE_BRANCH}"
 
@@ -236,12 +230,8 @@ export PATH="${CUDA_HOME}/bin:$PATH"
 export CUDA_INCLUDE_DIRS=$CUDA_HOME/include
 export CUDA_CUDART_LIBRARY=$CUDA_HOME/lib64/libcudart.so
 
-# Add only CUDA compat libs to LD_LIBRARY_PATH (safe for system tools)
-if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat:${LD_LIBRARY_PATH}"
-else
-  export LD_LIBRARY_PATH="/usr/local/cuda-${CUDA_VERSION}/compat"
-fi
+# DO NOT set LD_LIBRARY_PATH here - it breaks system tools (hg, etc.)
+# Instead, use the python wrapper functions below to set it only for Python processes
 EOF
 
     # Create deactivation script to clean up
@@ -260,14 +250,15 @@ EOF
     # 2) Python-only LD_LIBRARY_PATH shim(s) #
     ##########################################
     # These shell *functions* ensure that any `python`/`python3` invocation
-    # gets ${CONDA_PREFIX}/lib in its environment, without polluting the shell.
-    # This avoids OpenSSL/libcrypto collisions with system tools like /usr/bin/conda.
-    # TODO: Build Monarch with ABI3 to avoid this hack.
+    # gets the correct CUDA libraries in its environment, without polluting the shell.
+    # This avoids OpenSSL/libcrypto collisions with system tools like /usr/bin/conda or hg.
+    # Priority: system CUDA driver > CUDA toolkit > conda libs
     local py_shim_activate="${conda_env_dir}/etc/conda/activate.d/python_ld_shim.sh"
     cat > "$py_shim_activate" << 'EOF'
-# Define python wrappers that only set LD_LIBRARY_PATH for the launched process
-python()  { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
-python3() { LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
+# Define python wrappers that set LD_LIBRARY_PATH only for the launched process
+# Use system CUDA driver (newer) instead of compat (outdated stub that may be incompatible)
+python()  { LD_LIBRARY_PATH="/usr/lib64:/usr/local/cuda-12.8/lib64:${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
+python3() { LD_LIBRARY_PATH="/usr/lib64:/usr/local/cuda-12.8/lib64:${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
 
 # Export functions to subshells when possible (best-effort, shell-dependent)
 if [ -n "${BASH_VERSION:-}" ]; then
