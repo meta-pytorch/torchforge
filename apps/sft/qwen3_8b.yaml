@@ -25,16 +25,17 @@ optimizer:
 lr_scheduler:
   warmup_steps: 200
 
+compile:
+  enable: false
+
 training:
   local_batch_size: 8
   seq_len: 2048
   max_norm: 1.0
-  steps: 1000
-  compile: false
+  steps: 300
   datasets:
     - path: "yahma/alpaca-cleaned"
       split: "train[:95%]"
-
 eval:
   eval_every_n_steps: 50  # null = disabled
   max_eval_steps: null    # null = run until epoch completes
