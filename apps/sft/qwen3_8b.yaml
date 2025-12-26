@@ -32,12 +32,13 @@ training:
   local_batch_size: 8
   seq_len: 2048
   max_norm: 1.0
-  steps: 300
+  steps: 1000
   datasets:
     - path: "yahma/alpaca-cleaned"
       split: "train[:95%]"
+
 eval:
-  eval_every_n_steps: 50  # null = disabled
+  eval_every_n_steps: 10  # null = disabled
   max_eval_steps: null    # null = run until epoch completes
   datasets:
       - path: "yahma/alpaca-cleaned"
