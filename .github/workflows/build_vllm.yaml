@@ -25,7 +25,7 @@ jobs:
       wheel-nightly-policy: gha_workflow_preview_build_wheels
       wheel-upload-path: whl/preview/forge/
       package-name: forge
-      channel: test # Hack here to make sure stable pytorch is used
+      channel: nightly
       build-matrix: |
         {
           "include": [
@@ -38,10 +38,9 @@ jobs:
               "package_type": "manywheel",
               "build_name": "manywheel-py3_10-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
-              "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128",
               "channel": "test",
               "upload_to_base_bucket": "no",
-              "stable_version": "2.10.0",
               "use_split_build": false
             },
             {
@@ -53,10 +52,9 @@ jobs:
               "package_type": "manywheel",
               "build_name": "manywheel-py3_11-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
-              "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128",
               "channel": "test",
               "upload_to_base_bucket": "no",
-              "stable_version": "2.10.0",
               "use_split_build": false
             },
             {
@@ -68,10 +66,9 @@ jobs:
               "package_type": "manywheel",
               "build_name": "manywheel-py3_12-cuda12_8",
               "validation_runner": "linux.12xlarge.memory",
-              "installation": "pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
+              "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128",
               "channel": "test",
               "upload_to_base_bucket": "no",
-              "stable_version": "2.10.0",
               "use_split_build": false
             },
           ]
