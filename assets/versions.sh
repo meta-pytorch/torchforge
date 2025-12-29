@@ -12,5 +12,5 @@ PYTORCH_VERSION="2.9.0"
 VLLM_VERSION="v0.10.0"
 TORCHSTORE_BRANCH="no-monarch-2025.12.17"
 
-# Torchtitan commit hash for launching on MAST
-TORCHTITAN_COMMIT_MAST="d0e25450bcac2332359b13fbda430dc701f073d4"
+# Torchtitan commit hash for launching on MAST, corresponds to v0.2.1
+TORCHTITAN_COMMIT_MAST="81af8833ddeff9b5f1874dc7e20594aa17da6b86"
