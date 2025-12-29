@@ -7,7 +7,7 @@
 """Type definitions and trainer protocol for the Forge API."""
 
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, TypeAlias, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable, TypeAlias
 
 import torch
 
