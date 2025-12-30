@@ -6,8 +6,6 @@
 
 import asyncio
 import logging
-import shutil
-from pathlib import Path
 
 import monarch
 import pytest
@@ -55,9 +53,6 @@ PYTHONPATH=. pytest -s tests/integration_tests/test_policy_update.py::TestWeight
     --config tests/integration_tests/fixtures/qwen3_1_7b_tp.yaml
 
 """
-
-# Temp directory won't work for multi-node because NFS does not cover the tmp path
-TEST_DCP_DIR = "test_dcp_tmp"
 
 
 class MockTitanTrainer(TitanTrainer):
@@ -149,7 +144,6 @@ async def _setup_and_teardown(request):
             "No config file provided. Use --config <path> to specify a YAML config file"
         )
 
-    use_dcp_override = request.config.getoption("--use_dcp")
     cfg = _load_config(config_path=config_path)
 
     trainer_proc_size = cfg.actors.trainer.procs
@@ -174,17 +168,12 @@ async def _setup_and_teardown(request):
     services_policy_cfg.num_replicas = 1
 
     trainer_cfg = cfg.trainer
-    trainer_cfg.dcp_path = TEST_DCP_DIR
     trainer_cfg.checkpoint = {
         "enable": True,
         "folder": "/tmp/saved_checkpoints",
         "initial_load_path": cached_dir,
         "initial_load_in_hf": True,
     }
-
-    if use_dcp_override is not None:
-        trainer_cfg["use_dcp"] = use_dcp_override
-        logger.info(f"`trainer.use_dcp` is overridden to {use_dcp_override}")
 
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(
@@ -202,7 +191,7 @@ async def _setup_and_teardown(request):
     yield policy, titan_trainer
 
     # ---- teardown ---- #
-    logger.info("Shutting down services and cleaning up DCP directory..")
+    logger.info("Shutting down services..")
 
     # Call cleanup to destroy process group before shutdown
     # This prevents TCPStore connection errors from NCCL heartbeat threads
@@ -212,16 +201,6 @@ async def _setup_and_teardown(request):
     await policy.shutdown()
     await TitanTrainer.shutdown(titan_trainer)
     await ts.shutdown()
-
-    # Cleanup DCP directory
-    path = Path(TEST_DCP_DIR)
-    if not path.exists() or not path.is_dir():
-        return
-    try:
-        shutil.rmtree(path)
-        logger.info(f"Successfully removed {TEST_DCP_DIR}")
-    except Exception as e:
-        logger.error(f"Failed to remove {TEST_DCP_DIR}: {e}")
 
 
 class TestWeightSync:
