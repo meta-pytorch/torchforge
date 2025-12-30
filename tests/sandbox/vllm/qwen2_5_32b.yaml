@@ -2,7 +2,7 @@
 
 policy:
   engine_args:
-    model: "Qwen/Qwen2.5-32B"
+    model: "Qwen/Qwen3-32B"
     tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: true
