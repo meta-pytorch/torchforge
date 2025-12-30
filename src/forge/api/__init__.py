@@ -9,13 +9,13 @@
 This module defines the public interfaces that all Forge implementations conform to.
 """
 
-from forge.api.trainer import Trainer
-from forge.api.types import (
+from forge.api.trainer import (
     ForwardBackwardResult,
     LossFn,
     OptimStepResult,
     ParallelismConfig,
     TextTrainBatch,
+    Trainer,
     TrainerConfig,
     TrainerStatus,
 )
