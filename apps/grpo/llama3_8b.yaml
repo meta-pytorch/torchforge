@@ -27,8 +27,8 @@ dataset:
   streaming: true
   model: ${model}
 
-# Policy configuration
-policy:
+# Generator configuration
+generator:
   engine_args:  # https://docs.vllm.ai/en/v0.10.0/api/vllm/engine/arg_utils.html#vllm.engine.arg_utils.EngineArgs
     model: ${model}
     tensor_parallel_size: 2
@@ -115,11 +115,11 @@ ref_model:
 
 # All resource allocations
 services:
-  policy:
-    procs: ${policy.engine_args.tensor_parallel_size}
+  generator:
+    procs: ${generator.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
-    mesh_name: policy
+    mesh_name: generator
   ref_model:
     procs: 1
     num_replicas: 1
