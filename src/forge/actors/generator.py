@@ -76,6 +76,8 @@ class Generator(ForgeActor):
     Args:
         engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
+        prefetch_weights_to_shm (bool): Whether to prefetch weights to shared memory. Defaults to True.
+        n_fetcher_procs (int): The number of fetcher processes to use. Defaults to 8.
 
     Example:
     >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
@@ -415,7 +417,7 @@ class Generator(ForgeActor):
         """Update weights on base model from a generator version to be found in a torchstore volume.
 
         Args:
-            generator_version (int): Generator version from which to update. This will correspond to a key in a
+            version (int): Generator version from which to update. This will correspond to a key in a
                 torchstore volume.
 
         Example:
