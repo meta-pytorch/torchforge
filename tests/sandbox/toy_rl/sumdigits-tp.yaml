@@ -11,8 +11,8 @@ model: "Qwen/Qwen2.5-0.5B-Instruct"
 dataset:
   model: ${model}
 
-# Policy configuration
-policy:
+# Generator configuration
+generator:
   engine_args:
     model: ${model}
     tensor_parallel_size: 2
@@ -40,7 +40,7 @@ replay_buffer:
   dp_size: 1
 
 services:
-  policy:
+  generator:
     procs: 1
     num_replicas: 1
     with_gpus: true

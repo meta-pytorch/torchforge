@@ -14,6 +14,7 @@ import torchstore as ts
 import yaml
 from apps.grpo.data import DatasetActor
 from apps.grpo.grading import MathReward, ThinkingReward
+from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.actors.trainer import TitanTrainer
@@ -22,7 +23,7 @@ from forge.data_models.completion import Completion
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.rl import collate, ComputeAdvantages, Episode, Policy, RewardActor
+from forge.rl import collate, ComputeAdvantages, Episode, RewardActor
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
@@ -113,7 +114,7 @@ async def main(cfg: DictConfig):
 
     (
         dataloader,
-        policy,
+        generator,
         trainer,
         replay_buffer,
         compute_advantages,
@@ -121,7 +122,7 @@ async def main(cfg: DictConfig):
         reward_actor,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Policy.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.generator).as_service(**cfg.generator),
         TitanTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer, loss=simple_grpo_loss
         ),
@@ -171,7 +172,7 @@ async def main(cfg: DictConfig):
                 return
 
             prompt, target = sample["request"], sample["target"]
-            responses: list[Completion] = await policy.generate.route(prompt)
+            responses: list[Completion] = await generator.generate.route(prompt)
             t.step("policy_generation")
 
             # Construct episodes and calculate rewards
@@ -312,7 +313,7 @@ async def main(cfg: DictConfig):
                 await trainer.push_weights.call(training_step)
                 t.step("push_weights")
 
-                await policy.update_weights.fanout(training_step)
+                await generator.update_weights.fanout(training_step)
                 t.step("update_weights")
 
                 if training_step >= 2:

@@ -11,8 +11,8 @@ model: "Qwen/Qwen2.5-0.5B-Instruct"
 dataset:
   model: ${model}
 
-# Policy configuration
-policy:
+# Generator configuration
+generator:
   use_dcp: false
   engine_args:
     model: ${model}
@@ -42,7 +42,7 @@ replay_buffer:
   dp_size: 1
 
 services:
-  policy:
+  generator:
     procs: 1
     num_replicas: 1
     with_gpus: true

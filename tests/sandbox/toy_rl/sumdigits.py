@@ -430,8 +430,8 @@ async def main(cfg: DictConfig):
     max_res_tokens = cfg.max_res_tokens
 
     # ---- Setup services ---- #
-    print(f"{cfg.policy=}")
-    print(f"{cfg.services.policy=}")
+    print(f"{cfg.generator=}")
+    print(f"{cfg.services.generator=}")
 
     metric_logging_cfg = cfg.get("metric_logging", {"console": {"log_per_rank": False}})
     mlogger = await get_or_create_metric_logger()
@@ -439,14 +439,14 @@ async def main(cfg: DictConfig):
     await ts.initialize()
     (
         dataloader,
-        policy,
+        generator,
         trainer,
         replay_buffer,
         reward_actor,
         ref_model,
     ) = await asyncio.gather(
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
-        Generator.options(**cfg.services.policy).as_service(**cfg.policy),
+        Generator.options(**cfg.services.generator).as_service(**cfg.generator),
         Trainer.options(**cfg.actors.trainer).as_actor(**cfg.trainer),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(**cfg.replay_buffer),
         RewardActor.options(**cfg.services.reward_actor).as_service(),
@@ -466,7 +466,7 @@ async def main(cfg: DictConfig):
                 print("Dataloader is empty, exiting continuous rollout")
                 return
             prompt, target = sample["request"], sample["target"]
-            responses = await policy.generate.route(prompt)
+            responses = await generator.generate.route(prompt)
             assert len(responses) > 0
             version = responses[0].generator_version
             assert version is not None, "Response must indicate a version"
@@ -517,7 +517,7 @@ async def main(cfg: DictConfig):
                 record_metric("loss/training_step", loss, Reduce.MEAN)
                 print(f"loss/training_step: {loss} at training step {training_step}")
                 await trainer.push_weights.call(training_step)
-                await policy.update_weights.fanout(training_step)
+                await generator.update_weights.fanout(training_step)
                 # NOTE: hard-coded to be on-policy for faster convergence
                 await replay_buffer.clear.call()
 

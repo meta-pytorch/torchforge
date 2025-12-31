@@ -10,7 +10,6 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from forge.actors.generator import Generator
 from forge.data_models.completion import Completion
 
 
@@ -79,6 +78,3 @@ class Episode:
 
 # Represents the group (G) of episodes in GRPO
 Group = list[Episode]
-
-# Represents the Policy Model to collect data from
-Policy = Generator

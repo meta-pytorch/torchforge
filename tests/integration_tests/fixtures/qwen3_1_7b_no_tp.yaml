@@ -8,8 +8,8 @@ off_by_n: 1 # Off by one by default
 compile: true # Enable torch.compile for trainer, and CUDA graphs for vLLM
 
 
-# Policy configuration
-policy:
+# Generator configuration
+generator:
   engine_args:
     model: ${model}
     tensor_parallel_size: 1
@@ -63,8 +63,8 @@ trainer:
 
 # All resource allocations
 services:
-  policy:
-    procs: ${policy.engine_args.tensor_parallel_size}
+  generator:
+    procs: ${generator.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
 

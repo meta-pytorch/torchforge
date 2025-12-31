@@ -474,7 +474,7 @@ class Generator(ForgeActor):
                     wait_fetch_weights_duration,
                     Reduce.MEAN,
                 )
-                # Call update_weights on every policy_worker
+                # Call update_weights on every generator_worker
                 await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
@@ -654,7 +654,7 @@ class GeneratorWorker(ForgeActor):
     ) -> None:
         model = self.worker.model_runner.model
         if shared_memory_state_dict is not None:
-            logger.info("[PolicyWorker] Updating weights from shared memory.")
+            logger.info("[GeneratorWorker] Updating weights from shared memory.")
             loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
                 # Use context manager for automatic cleanup
@@ -663,7 +663,7 @@ class GeneratorWorker(ForgeActor):
                     loaded = model.load_weights([(name, param)])
                     del param
                     loaded_weights.update(loaded)
-            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} parameters")
+            logger.info(f"[GeneratorWorker] updated {len(loaded_weights)} parameters")
             return
         # normal update_weights without shared memory prefetching
         if version is None:
@@ -674,7 +674,7 @@ class GeneratorWorker(ForgeActor):
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
         loaded_weights = set()
-        logger.info("[PolicyWorker] Updating weights from torchstore.")
+        logger.info("[GeneratorWorker] Updating weights from torchstore.")
         hf_param_names = [extract_param_name(key) for key in matching_keys]
         # We can't pass a generator since vllm load_weights is not async.
         # Instead, we just call load_weights with one parameter at a time.
