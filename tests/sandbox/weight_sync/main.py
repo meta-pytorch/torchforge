@@ -130,14 +130,14 @@ async def main(cfg: DictConfig):
     print("Initializing trainer and generator...")
     init_start = time.time()
 
-    trainer, policy = await asyncio.gather(
+    trainer, generator = await asyncio.gather(
         RLTrainer.options(**cfg.actors.trainer).as_actor(
             **cfg.trainer,
             loss=lambda *args, **kwargs: torch.tensor(
                 1.0, requires_grad=True, device="cuda"
             ),
         ),
-        Generator.options(**cfg.actors.policy).as_actor(**cfg.policy),
+        Generator.options(**cfg.actors.generator).as_actor(**cfg.generator),
     )
 
     init_time = time.time() - init_start
@@ -172,7 +172,7 @@ async def main(cfg: DictConfig):
     print("Updating generator weights from store...")
     update_start = time.time()
 
-    await policy.update_weights.call(version=1)
+    await generator.update_weights.call(version=1)
 
     update_time = time.time() - update_start
     print(f"Updated generator weights ({update_time:.2f}s)\n")

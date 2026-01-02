@@ -11,7 +11,7 @@ off_by_n: 1 # Off by one by default
 compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
 
 # Main loop configuration
-rollout_threads: 1   # Recommended to set equal to policy.num_replicas
+rollout_threads: 1   # Recommended to set equal to generator.num_replicas
 
 
 # Observability configuration
