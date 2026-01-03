@@ -100,12 +100,12 @@ Before diving in, check out {doc}`getting_started` and ensure your system meets 
 With TorchForge, your RL logic looks like pseudocode:
 
 ```python
-async def generate_episode(dataloader, policy, reward, replay_buffer):
+async def generate_episode(dataloader, generator, reward, replay_buffer):
     # Sample a prompt
     prompt, target = await dataloader.sample.route()
 
     # Generate response
-    response = await policy.generate.route(prompt)
+    response = await generator.generate.route(prompt)
 
     # Score the response
     reward_value = await reward.evaluate_response.route(

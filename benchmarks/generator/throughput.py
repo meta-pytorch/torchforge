@@ -105,10 +105,12 @@ async def run_throughput_benchmark(
         )
 
     print("Spawning Generator service...")
-    generator = await Generator.options(**cfg.services.policy).as_service(**cfg.policy)
+    generator = await Generator.options(**cfg.services.generator).as_service(
+        **cfg.generator
+    )
 
     print(f"Generating {num_requests} benchmark requests...")
-    model_name = cfg.policy.engine_args.get("model", "unknown")
+    model_name = cfg.generator.engine_args.get("model", "unknown")
     tokenizer = get_tokenizer(
         model_name,
         tokenizer_mode="auto",

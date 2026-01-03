@@ -37,7 +37,7 @@ graph TD
 ### RL Components Defined (TorchForge Names)
 
 1. **Dataset**: Provides questions/prompts (like "What is 2+2?")
-2. **Policy**: The AI being trained (generates answers like "The answer is 4")
+2. **Generator**: The policy being trained (generates answers like "The answer is 4")
 3. **Reward Model**: Evaluates answer quality (gives scores like 0.95)
 4. **Reference Model**: Original policy copy (prevents drift from baseline)
 5. **Replay Buffer**: Stores experiences (question + answer + score)
@@ -53,7 +53,7 @@ def conceptual_rl_step():
     question = dataset.sample()  # "What is 2+2?"
 
     # 2. Student generates answer
-    answer = policy.generate(question)  # "The answer is 4"
+    answer = generator.generate(question)  # "The answer is 4"
 
     # 3. Teacher grades it
     score = reward_model.evaluate(question, answer)  # 0.95
@@ -289,7 +289,7 @@ async def real_rl_training_step(services, step):
 
 ### Automatic Resource Management
 ```python
-responses = await policy.generate.route(prompt=question)
+responses = await generator.generate.route(prompt=question)
 answer = responses[0].text  # responses is list[Completion]
 ```
 
@@ -333,7 +333,7 @@ group_size = 1
             model=model,
         ),
         # Policy service with GPU
-        Policy.options(procs=1, with_gpus=True, num_replicas=1).as_service(
+        Generator.options(procs=1, with_gpus=True, num_replicas=1).as_service(
             engine_config={
                 "model": model,
                 "tensor_parallel_size": 1,
@@ -381,15 +381,15 @@ TorchForge has two types of distributed components:
 - **Actors**: Single instances that handle their own internal distribution (like TitanTrainer, ReplayBuffer)
 
 We cover this distinction in detail in Part 2, but for now this explains the scaling patterns:
-- Policy service: num_replicas=8 for high inference demand
+- Generator service: num_replicas=8 for high inference demand
 - RewardActor service: num_replicas=16 for parallel evaluation
 - TitanTrainer actor: Single instance with internal distributed training
 
 
 ### Fault Tolerance
 ```python
-# If a policy replica fails:
-responses = await policy.generate.route(prompt=question)
+# If a generator replica fails:
+responses = await generator.generate.route(prompt=question)
 answer = responses[0].text
 # -> TorchForge automatically routes to healthy replica
 # -> Failed replica respawns in background
