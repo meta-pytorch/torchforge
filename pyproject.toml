@@ -14,8 +14,9 @@ dependencies = [
     "torch==2.9.0",
     "torchdata>=0.8.0",
     "torchtitan==0.2.0",
-    "torchmonarch==0.1.2",
-    "torchstore==0.1.2",
+    "torchmonarch-nightly==2025.12.17",
+    # Issue 656: switch to ping torchstore nightly
+    "torchstore",
     # vLLM
     "vllm",
     # Hugging Face integrations
@@ -47,7 +48,6 @@ dev = [
     "anyio",
     "pytest-asyncio",
     "multiprocess",
-    "langid",
 ]
 docs = [
     "sphinx==7.2.6",
@@ -56,6 +56,7 @@ docs = [
     "sphinx-design==0.6.1",
     "sphinxcontrib-mermaid==1.0.0",
     "sphinx-gallery==0.19.0",
+    "matplotlib",
     "myst-parser",
     "sphinx-sitemap==2.7.1",
     "sphinx-autodoc-typehints==1.25.3",
@@ -92,6 +93,8 @@ url = "https://download.pytorch.org/whl/preview/forge"
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
 vllm = { index = "vllm-forge" }
+# Issue 656: switch to ping torchstore nightly
+torchstore = { git = "https://github.com/meta-pytorch/torchstore.git", branch = "no-monarch-2025.12.17" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy

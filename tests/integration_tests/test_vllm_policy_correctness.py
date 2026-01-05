@@ -6,7 +6,7 @@
 
 import pytest
 
-from forge.actors.generator import Generator as Policy
+from forge.actors.generator import Generator
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.sampling_params import RequestOutputKind
@@ -30,7 +30,7 @@ N_SAMPLES = 1
 
 @pytest.mark.asyncio
 async def test_same_output():
-    """Compare outputs between vLLM and Policy service"""
+    """Compare outputs between vLLM and Generator service"""
     test_prompts = [
         "Hello, how are you?",
         "What is 2+2?",
@@ -38,7 +38,7 @@ async def test_same_output():
         "Explain machine learning briefly.",
         "What color is the sky?",
     ]
-    policy = None
+    generator = None
     try:
         # Setup vLLM directly
         args = AsyncEngineArgs(
@@ -50,8 +50,8 @@ async def test_same_output():
         )
         vllm_model = AsyncLLM.from_engine_args(args)
 
-        # Setup Policy service
-        policy = await Policy.options(
+        # Setup Generator service
+        generator = await Generator.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
             engine_args={
@@ -72,7 +72,7 @@ async def test_same_output():
 
         print("Models ready. Generating outputs...\n")
         vllm_outputs = []
-        policy_outputs = []
+        generator_outputs = []
         sampling_params = SamplingParams(
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
@@ -89,19 +89,19 @@ async def test_same_output():
                 vllm_outputs.append(res.outputs[0].text)
 
             # Policy generation
-            policy_result = await policy.generate.route(prompt)
+            policy_result = await generator.generate.route(prompt)
             policy_text = policy_result[0].text
-            policy_outputs.append(policy_text)
+            generator_outputs.append(policy_text)
 
         # Final check
-        for vllm_output, policy_output in zip(vllm_outputs, policy_outputs):
+        for vllm_output, generator_output in zip(vllm_outputs, generator_outputs):
             assert vllm_output != ""
-            assert policy_output != ""
-            assert vllm_output == policy_output
+            assert generator_output != ""
+            assert vllm_output == generator_output
 
     finally:
-        if policy is not None:
-            await policy.shutdown()
+        if generator is not None:
+            await generator.shutdown()
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_cache_usage():
     via the AsyncLLM interface.
     - We do not test different different block sizes.
     """
-    policy = None
+    generator = None
     try:
         # Setup vLLM directly
         args = AsyncEngineArgs(
@@ -139,8 +139,8 @@ async def test_cache_usage():
         )
         vllm_model = AsyncLLM.from_engine_args(args)
 
-        # Setup Policy service
-        policy = await Policy.options(
+        # Setup Generator service
+        generator = await Generator.options(
             procs=1, num_replicas=1, with_gpus=True
         ).as_service(
             engine_args={
@@ -170,7 +170,7 @@ async def test_cache_usage():
             output_kind=RequestOutputKind.FINAL_ONLY,
         )
         vllm_outputs = []
-        policy_outputs = []
+        generator_outputs = []
 
         # Exactly 16 tokens to fill up 1 block
         first_prompt = (
@@ -182,9 +182,9 @@ async def test_cache_usage():
         ):
             vllm_outputs.append(res.outputs[0].text)
             assert res.num_cached_tokens == expected_cached_tokens
-        res = await policy.generate.route(first_prompt)
+        res = await generator.generate.route(first_prompt)
         assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
-        policy_outputs.append(res[0].text)
+        generator_outputs.append(res[0].text)
 
         # Another 16 tokens to now populate 2 blocks (+ reuse the first block)
         second_prompt = (
@@ -197,9 +197,9 @@ async def test_cache_usage():
         ):
             vllm_outputs.append(res.outputs[0].text)
             assert res.num_cached_tokens == expected_cached_tokens
-        res = await policy.generate.route(second_prompt)
+        res = await generator.generate.route(second_prompt)
         assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
-        policy_outputs.append(res[0].text)
+        generator_outputs.append(res[0].text)
 
         # The first same 32 tokens should now be populated in blocks
         third_prompt = second_prompt
@@ -209,13 +209,13 @@ async def test_cache_usage():
         ):
             vllm_outputs.append(res.outputs[0].text)
             assert res.num_cached_tokens == expected_cached_tokens
-        res = await policy.generate.route(third_prompt)
+        res = await generator.generate.route(third_prompt)
         assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
-        policy_outputs.append(res[0].text)
+        generator_outputs.append(res[0].text)
 
         # Now, let's clear the cache
         await vllm_model.reset_prefix_cache()
-        await policy._reset_prefix_cache.route()
+        await generator._reset_prefix_cache.route()
 
         # And try the third prompt again (should not use any cached tokens)
         expected_cached_tokens = 0
@@ -224,16 +224,16 @@ async def test_cache_usage():
         ):
             vllm_outputs.append(res.outputs[0].text)
             assert res.num_cached_tokens == expected_cached_tokens
-        res = await policy.generate.route(third_prompt)
+        res = await generator.generate.route(third_prompt)
         assert res[0].metadata["num_cached_tokens"] == expected_cached_tokens
-        policy_outputs.append(res[0].text)
+        generator_outputs.append(res[0].text)
 
         # Sanity check that outputs are still the same
-        for vllm_output, policy_output in zip(vllm_outputs, policy_outputs):
+        for vllm_output, generator_output in zip(vllm_outputs, generator_outputs):
             assert vllm_output != ""
-            assert policy_output != ""
-            assert vllm_output == policy_output
+            assert generator_output != ""
+            assert vllm_output == generator_output
 
     finally:
-        if policy is not None:
-            await policy.shutdown()
+        if generator is not None:
+            await generator.shutdown()

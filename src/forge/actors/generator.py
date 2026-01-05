@@ -21,11 +21,8 @@ import torchstore as ts
 
 from forge.actors._torchstore_utils import (
     extract_param_name,
-    get_dcp_whole_state_dict_key,
     get_param_key,
     get_param_prefix,
-    load_tensor_from_dcp,
-    rdma_available,
 )
 
 from forge.controller import (
@@ -37,7 +34,7 @@ from forge.controller import (
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
 from forge.observability.metrics import record_metric, Reduce
-from forge.observability.perf_tracker import Tracer
+from forge.observability.perf_tracker import trace, Tracer
 from forge.types import ProcessConfig
 from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
 from monarch.actor import current_rank, endpoint, ProcMesh, this_host
@@ -79,8 +76,8 @@ class Generator(ForgeActor):
     Args:
         engine_args (EngineArgs): The engine arguments to use for the vLLM engine.
         sampling_params (SamplingParams): The sampling parameters to use for the vLLM engine.
-        use_dcp_for_weight_sync (bool): Whether to use DCP for NFS-based weight sync. Default depends on
-            whether or not RDMA is enabled in torchstore. If it is, then DCP is disabled. Otherwise, DCP is enabled.
+        prefetch_weights_to_shm (bool): Whether to prefetch weights to shared memory. Defaults to True.
+        n_fetcher_procs (int): The number of fetcher processes to use. Defaults to 8.
 
     Example:
     >>> generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
@@ -95,7 +92,6 @@ class Generator(ForgeActor):
 
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
-    use_dcp_for_weight_sync: bool | None = None
     prefetch_weights_to_shm: bool = True
     n_fetcher_procs: int = 8
 
@@ -116,10 +112,6 @@ class Generator(ForgeActor):
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
             self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY
-
-        if self.use_dcp_for_weight_sync is None:
-            self.use_dcp_for_weight_sync = not rdma_available()
-        logger.debug(f"{self.use_dcp_for_weight_sync=}")
 
     @endpoint
     async def get_vllm_config(self) -> VllmConfig:
@@ -425,7 +417,7 @@ class Generator(ForgeActor):
         """Update weights on base model from a generator version to be found in a torchstore volume.
 
         Args:
-            generator_version (int): Generator version from which to update. This will correspond to a key in a
+            version (int): Generator version from which to update. This will correspond to a key in a
                 torchstore volume.
 
         Example:
@@ -434,8 +426,7 @@ class Generator(ForgeActor):
             >>> await trainer.push_weights()
             >>> generator.update_weights(version)
         """
-        # TODO: enable shared memory prefetch for DCP-based weight sync
-        if self.prefetch_weights_to_shm and not self.use_dcp_for_weight_sync:
+        if self.prefetch_weights_to_shm:
             logger.info(f"[Generator] Fetching weights for v{version} to shared memory")
             fetch_fut = asyncio.create_task(self._fetch_weights(version))
         else:
@@ -475,8 +466,17 @@ class Generator(ForgeActor):
             logger.debug(f"Starting weight update on {self.__class__.__name__}")
 
             if fetch_fut is not None:
+                wait_fetch_weights_start = time.perf_counter()
                 fetched_weights = await fetch_fut
-                # Call update_weights on every policy_worker
+                wait_fetch_weights_duration = (
+                    time.perf_counter() - wait_fetch_weights_start
+                )
+                record_metric(
+                    "generator_perf/update_weights/wait_fetch_weights",
+                    wait_fetch_weights_duration,
+                    Reduce.MEAN,
+                )
+                # Call update_weights on every generator_worker
                 await self.worker.update_weights.call(
                     shared_memory_state_dict=fetched_weights
                 )
@@ -643,6 +643,11 @@ class GeneratorWorker(ForgeActor):
         return self.worker.execute_model(schedule)
 
     @endpoint
+    @trace(
+        prefix="generator_perf/update_weights/generator_worker_update",
+        track_memory=False,
+        timer="gpu",
+    )
     async def update_weights(
         self,
         version: Optional[int] = None,
@@ -651,7 +656,7 @@ class GeneratorWorker(ForgeActor):
     ) -> None:
         model = self.worker.model_runner.model
         if shared_memory_state_dict is not None:
-            logger.info("[PolicyWorker] update weights from shared memory.")
+            logger.info("[GeneratorWorker] Updating weights from shared memory.")
             loaded_weights = set()
             for name, param_handle in shared_memory_state_dict.items():
                 # Use context manager for automatic cleanup
@@ -660,38 +665,27 @@ class GeneratorWorker(ForgeActor):
                     loaded = model.load_weights([(name, param)])
                     del param
                     loaded_weights.update(loaded)
-            logger.info(f"[PolicyWorker] updated {len(loaded_weights)} parameters")
+            logger.info(f"[GeneratorWorker] updated {len(loaded_weights)} parameters")
             return
         # normal update_weights without shared memory prefetching
         if version is None:
             raise ValueError(
                 "version must be provided if not using shared_memory_state_dict"
             )
-        logger.info("[PolicyWorker] update weights from torchstore.")
+
         prefix = get_param_prefix(version)
         matching_keys = await ts.keys(prefix)
-        dcp_whole_state_dict_key = get_dcp_whole_state_dict_key(version)
-        use_dcp_for_weight_sync = dcp_whole_state_dict_key in matching_keys
         loaded_weights = set()
-
-        if use_dcp_for_weight_sync:
-            dcp_handle = await ts.get(dcp_whole_state_dict_key)
-            hf_param_names = dcp_handle.param_names
-            for name in hf_param_names:
-                param = load_tensor_from_dcp(dcp_handle, name)
-                loaded = model.load_weights([(name, param)])
-                del param
-                loaded_weights.update(loaded)
-        else:
-            hf_param_names = [extract_param_name(key) for key in matching_keys]
-            # We can't pass a generator since vllm load_weights is not async.
-            # Instead, we just call load_weights with one parameter at a time.
-            for name in hf_param_names:
-                param_key = get_param_key(version, name)
-                param = await ts.get(param_key)
-                loaded = model.load_weights([(name, param)])
-                del param
-                loaded_weights.update(loaded)
+        logger.info("[GeneratorWorker] Updating weights from torchstore.")
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+        # We can't pass a generator since vllm load_weights is not async.
+        # Instead, we just call load_weights with one parameter at a time.
+        for name in hf_param_names:
+            param_key = get_param_key(version, name)
+            param = await ts.get(param_key)
+            loaded = model.load_weights([(name, param)])
+            del param
+            loaded_weights.update(loaded)
 
     @endpoint
     async def save_model_params(self):

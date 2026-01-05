@@ -13,15 +13,9 @@ from dataclasses import dataclass, field, fields
 from typing import Callable
 
 import torch
-import torch.distributed.checkpoint as dcp
 import torchstore as ts
 
-from forge.actors._torchstore_utils import (
-    DcpHandle,
-    get_dcp_whole_state_dict_key,
-    get_param_key,
-    rdma_available,
-)
+from forge.actors._torchstore_utils import get_param_key
 
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
@@ -91,13 +85,9 @@ class TitanTrainer(ForgeActor):
     # Non JobConfig-related fields
     loss: Callable = lambda logits, **targets: logits
     state_dict_key: str = "model_state_dict"
-    use_dcp: bool = not rdma_available()
-    dcp_path: str = "forge_dcp_tmp"
 
     def __post_init__(self):
         super().__init__()
-        if self.use_dcp:
-            torch.serialization.set_crc32_options(False)
 
         for f in fields(self):
             attr = getattr(self, f.name)
@@ -122,8 +112,6 @@ class TitanTrainer(ForgeActor):
         for key in {
             "loss",
             "state_dict_key",
-            "use_dcp",
-            "dcp_path",
         }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
@@ -208,23 +196,9 @@ class TitanTrainer(ForgeActor):
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        if self.use_dcp:
-            key = get_dcp_whole_state_dict_key(policy_version)
-            dcp_id = f"{self.dcp_path}/{key}"
-            storage_writer = torch.distributed.checkpoint.FileSystemWriter(
-                dcp_id, single_file_per_rank=False, thread_count=8
-            )
-            metadata = dcp.save(storage_writer=storage_writer, state_dict=hf_state_dict)
-            dcp_handle = DcpHandle(
-                checkpoint_id=dcp_id,
-                metadata=metadata,
-                param_names=hf_state_dict.keys(),
-            )
-            await ts.put(key, dcp_handle)
-        else:
-            for name, param in hf_state_dict.items():
-                key = get_param_key(policy_version, name)
-                await ts.put(key, param)
+        for name, param in hf_state_dict.items():
+            key = get_param_key(policy_version, name)
+            await ts.put(key, param)
         end_time = time.perf_counter()
         logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 

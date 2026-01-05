@@ -8,10 +8,7 @@ import time
 
 import torchstore as ts
 
-from forge.actors._torchstore_utils import (
-    get_dcp_whole_state_dict_key,
-    get_param_prefix,
-)
+from forge.actors._torchstore_utils import get_param_prefix
 
 
 async def drop_weights(version: int):
@@ -21,10 +18,6 @@ async def drop_weights(version: int):
     matching_keys = await ts.keys(prefix)
     # TODO: once we have something like `get_meta()` in torchstore, we can just
     # query the type of the object instead of relying on keys.
-    dcp_key = get_dcp_whole_state_dict_key(version)
-    if dcp_key in matching_keys:
-        dcp_handle = await ts.get(dcp_key)
-        dcp_handle.drop()
     for key in matching_keys:
         await ts.delete(key)
     elapsed = time.perf_counter() - start_time

@@ -30,10 +30,14 @@ class DatasetActor(ForgeActor):
         self._epoch = 0
 
         def gsm8k_transform(sample):
-            system_prompt = """
-            Put all your scratchpad work between <think> and </think> tags.
-            Your final answer should be between <answer> and </answer> tags otherwise it will not be scored.
-            """
+            system_prompt = (
+                "A conversation between User and Assistant. The user asks a question, "
+                "and the Assistant solves it. The assistant first thinks about the reasoning "
+                "process and then provides the user with the answer. The reasoning "
+                "process and answer are enclosed within <think></think> and <answer></answer> "
+                "tags, respectively, i.e., <think>reasoning process here</think> "
+                "<answer>answer here</answer>."
+            )
             request: str = sample["question"]
             as_chat = [
                 {"role": "system", "content": system_prompt},

@@ -11,7 +11,7 @@ metric_logging:
   console:
     logging_mode: global_reduce
 
-policy:
+generator:
   prefetch_weights_to_shm: false  # Disable to avoid shared memory warnings in test
   engine_args:
     model: ${model}
@@ -65,10 +65,10 @@ trainer:
 
 # Resource allocation - both as actors
 actors:
-  policy:
+  generator:
     procs: 1  # Single process for generator
     with_gpus: true
-    mesh_name: policy
+    mesh_name: generator
   trainer:
     procs: 1  # Single process for trainer
     with_gpus: true

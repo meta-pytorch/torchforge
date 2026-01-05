@@ -22,7 +22,14 @@ from forge.types import ProcessConfig, ProvisionerConfig
 from monarch._src.actor.actor_mesh import ActorMesh
 from monarch._src.actor.shape import Extent
 
-from monarch.actor import Actor, endpoint, HostMesh, ProcMesh, this_host
+from monarch.actor import (
+    Actor,
+    endpoint,
+    HostMesh,
+    ProcMesh,
+    shutdown_context,
+    this_host,
+)
 
 from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
@@ -485,6 +492,21 @@ class Provisioner:
 
         self._registered_actors.clear()
         self._registered_services.clear()
+
+        # -- HostMeshes (including the implicit local host) ---
+        logger.info(f"Shutting down {len(self._host_mesh_map)} HostMesh(es)...")
+        results = await asyncio.gather(
+            *[host_mesh.shutdown() for host_mesh in self._host_mesh_map.values()],
+            return_exceptions=True,
+        )
+        for (name, _), result in zip(self._host_mesh_map.items(), results, strict=True):
+            if isinstance(result, Exception):
+                logger.warning(f"Failed to shutdown HostMesh {name}: {result}")
+        self._host_mesh_map.clear()
+        try:
+            await shutdown_context()
+        except Exception as e:
+            logger.warning(f"Failed to shutdown context: {e}")
 
     async def shutdown(self):
         """Tears down all remaining remote allocations."""

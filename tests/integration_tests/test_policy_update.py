@@ -6,8 +6,6 @@
 
 import asyncio
 import logging
-import shutil
-from pathlib import Path
 
 import monarch
 import pytest
@@ -55,9 +53,6 @@ PYTHONPATH=. pytest -s tests/integration_tests/test_policy_update.py::TestWeight
     --config tests/integration_tests/fixtures/qwen3_1_7b_tp.yaml
 
 """
-
-# Temp directory won't work for multi-node because NFS does not cover the tmp path
-TEST_DCP_DIR = "test_dcp_tmp"
 
 
 class MockTitanTrainer(TitanTrainer):
@@ -149,32 +144,30 @@ async def _setup_and_teardown(request):
             "No config file provided. Use --config <path> to specify a YAML config file"
         )
 
-    use_dcp_override = request.config.getoption("--use_dcp")
     cfg = _load_config(config_path=config_path)
 
     trainer_proc_size = cfg.actors.trainer.procs
-    policy_tp_size = cfg.policy.engine_args.tensor_parallel_size
+    generator_tp_size = cfg.generator.engine_args.tensor_parallel_size
 
-    if policy_tp_size != cfg.services.policy.procs:
+    if generator_tp_size != cfg.services.generator.procs:
         pytest.fail(
-            f"Expect policy proc = {cfg.services.policy.procs} to be equal to tensor parallel size = {policy_tp_size}"
+            f"Expect generator proc = {cfg.services.generator.procs} to be equal to tensor parallel size = {generator_tp_size}"
         )
 
     model_card = cfg.model
     logger.info(f"Running sanity check with config: {config_path}")
     logger.info(f"Model name: {model_card}")
     logger.info(f"Trainer proc size: {trainer_proc_size}")
-    logger.info(f"Policy tensor parallel size: {policy_tp_size}")
+    logger.info(f"Generator tensor parallel size: {generator_tp_size}")
 
     logger.info("Downloading model checkpoint from HuggingFace Hub")
     cached_dir = snapshot_download(repo_id=model_card)
     logger.info("Finished downloading model checkpoint from HuggingFace Hub")
 
-    services_policy_cfg = cfg.services.policy
-    services_policy_cfg.num_replicas = 1
+    services_generator_cfg = cfg.services.generator
+    services_generator_cfg.num_replicas = 1
 
     trainer_cfg = cfg.trainer
-    trainer_cfg.dcp_path = TEST_DCP_DIR
     trainer_cfg.checkpoint = {
         "enable": True,
         "folder": "/tmp/saved_checkpoints",
@@ -182,66 +175,52 @@ async def _setup_and_teardown(request):
         "initial_load_in_hf": True,
     }
 
-    if use_dcp_override is not None:
-        trainer_cfg["use_dcp"] = use_dcp_override
-        logger.info(f"`trainer.use_dcp` is overridden to {use_dcp_override}")
-
     if cfg.get("provisioner", None) is not None:
         await init_provisioner(
             ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
         )
     await ts.initialize(strategy=ts.ControllerStorageVolumes())
 
-    policy, titan_trainer = await asyncio.gather(
+    generator, titan_trainer = await asyncio.gather(
         *[
-            Generator.options(**services_policy_cfg).as_service(**cfg.policy),
+            Generator.options(**services_generator_cfg).as_service(**cfg.generator),
             MockTitanTrainer.options(**cfg.actors.trainer).as_actor(**trainer_cfg),
         ]
     )
 
-    yield policy, titan_trainer
+    yield generator, titan_trainer
 
     # ---- teardown ---- #
-    logger.info("Shutting down services and cleaning up DCP directory..")
+    logger.info("Shutting down services..")
 
     # Call cleanup to destroy process group before shutdown
     # This prevents TCPStore connection errors from NCCL heartbeat threads
     await titan_trainer.cleanup.call()
 
     # Shutdown sequentially to avoid race conditions
-    await policy.shutdown()
+    await generator.shutdown()
     await TitanTrainer.shutdown(titan_trainer)
     await ts.shutdown()
 
-    # Cleanup DCP directory
-    path = Path(TEST_DCP_DIR)
-    if not path.exists() or not path.is_dir():
-        return
-    try:
-        shutil.rmtree(path)
-        logger.info(f"Successfully removed {TEST_DCP_DIR}")
-    except Exception as e:
-        logger.error(f"Failed to remove {TEST_DCP_DIR}: {e}")
-
 
 class TestWeightSync:
-    """Tests for weight sync between trainer and policy."""
+    """Tests for weight sync between trainer and generator."""
 
     @pytest.mark.asyncio
     @requires_cuda
     async def test_sanity_check(self, _setup_and_teardown):
         """
-        Sanity check for weight sync sharding between TitanTrainer and Policy for a given model config.
+        Sanity check for weight sync sharding between TitanTrainer and Generator for a given model config.
 
         The check performs the following steps:
         - Initialize trainer and push weights v0 (original huggingface ckpt)
         - Step the trainer, setting all weights to zero and push weights v1
-        - Load weights v0 and check the policy has all zero weights
-        - Load weights v1 and check the policy has all the weights back
+        - Load weights v0 and check the generator has all zero weights
+        - Load weights v1 and check the generator has all the weights back
 
         """
 
-        policy, titan_trainer = _setup_and_teardown
+        generator, titan_trainer = _setup_and_teardown
 
         v0 = uuid.uuid4().int
         v1 = v0 + 1
@@ -250,18 +229,18 @@ class TestWeightSync:
         # Setting everything to zero
         await titan_trainer.zero_out_model_states.call()
         await titan_trainer.push_weights.call(policy_version=v1)
-        await policy.save_model_params.fanout()
+        await generator.save_model_params.fanout()
 
         # Sanity check that before update all the tests pass
-        all_errs = await policy.validate_model_params.fanout(
+        all_errs = await generator.validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
             for _, e in errs.items():
                 assert not e, f"Validation failed with exception: {e}"
 
-        await policy.update_weights.fanout(version=v1)
-        all_errs = await policy.validate_model_params.fanout(
+        await generator.update_weights.fanout(version=v1)
+        all_errs = await generator.validate_model_params.fanout(
             _test_validate_params_all_zeros
         )
         for errs in all_errs:
@@ -269,8 +248,8 @@ class TestWeightSync:
                 assert not e, f"Validation failed with exception: {e}"
 
         # Reloading v0, getting back original weights
-        await policy.update_weights.fanout(version=v0)
-        all_errs = await policy.validate_model_params.fanout(
+        await generator.update_weights.fanout(version=v0)
+        all_errs = await generator.validate_model_params.fanout(
             _test_validate_params_unchanged
         )
         for errs in all_errs:
