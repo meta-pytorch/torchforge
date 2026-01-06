@@ -387,7 +387,7 @@ class Provisioner:
                     master_port=int(port),
                 )
 
-            if is_remote:
+            if self.launcher is not None:
                 await self.launcher.remote_setup(procs)
 
             # Tag the proc mesh with additional metadata for our own cleanup later
