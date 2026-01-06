@@ -146,7 +146,7 @@ async def generate_logits(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate logits from both models."""
     print("Generating logits from torchtitan model...")
-    titan_logits = await titan_model.forward.route(input_ids)
+    titan_logits = await titan_model.forward.route(input_ids, 64, False)
 
     print("Generating logits from HF model...")
     hf_logits = await hf_model.forward.route(input_ids)
