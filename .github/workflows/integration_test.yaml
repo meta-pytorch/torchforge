@@ -1,0 +1,46 @@
+name: Integration Tests (8 card)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: integration-test-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+defaults:
+  run:
+    shell: bash -l -eo pipefail {0}
+
+jobs:
+  integration_test:
+    if: github.repository_owner == 'meta-pytorch'
+    runs-on: linux.g4dn.metal.nvidia.gpu
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+      - name: Setup conda env
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          miniconda-version: "latest"
+          activate-environment: test
+          python-version: '3.12'
+      - name: Update pip
+        run: python -m pip install --upgrade pip
+      - name: Install vLLM requirements
+        run: |
+          pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/cu128
+          pip install -r .github/packaging/vllm_reqs_12_8.txt
+          pip install six
+          pip install "setuptools<80"
+          python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+      - name: Install torchforge
+        run: pip install uv && uv pip install . && uv pip install .[dev]
+      - name: Run weight sync integration test
+        run: pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check --config tests/integration_tests/fixtures/qwen3_1_7b_tp.yaml
