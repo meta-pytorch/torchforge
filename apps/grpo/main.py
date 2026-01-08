@@ -24,63 +24,14 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl import collate, ComputeAdvantages, Episode, RewardActor
+from forge.rl.losses import GRPOLoss
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
 from forge.util.logging import get_logger
-from forge.util.ops import compute_logprobs
 from omegaconf import DictConfig, OmegaConf
 
 logger = get_logger("INFO")
-
-
-# TODO (T245547773): Consolidate with SimpleGRPOLoss in losses/grpo_loss.py
-# Currently duplicated because of function signature differences:
-# - This function takes logits + response, computes logprobs internally
-# - SimpleGRPOLoss takes pre-computed logprobs
-# - TitanTrainer passes logits, so would need wrapper or signature change
-# Consider refactoring TitanTrainer's loss interface to standardize this.
-def simple_grpo_loss(
-    logits: torch.Tensor,
-    response: torch.Tensor,
-    ref_logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-    padding_mask: torch.Tensor,
-    beta: float = 1e-6,
-) -> torch.Tensor:
-    logprobs: torch.Tensor = compute_logprobs(logits, response)
-    kl = torch.exp(ref_logprobs - logprobs) - (ref_logprobs - logprobs) - 1
-    per_token_policy_loss = torch.exp(logprobs - logprobs.detach()) * advantages
-
-    # Compute mean KL per valid token
-    mean_kl = (
-        ((kl * padding_mask).sum(dim=1)) / (padding_mask.sum(dim=1).clamp(min=1.0))
-    ).mean()
-
-    # Compute mean policy loss per valid token
-    mean_policy_loss = (
-        ((per_token_policy_loss * padding_mask).sum(dim=1))
-        / (padding_mask.sum(dim=1).clamp(min=1.0))
-    ).mean()
-
-    # Compute loss using the means (mathematically equivalent)
-    loss = -(mean_policy_loss - beta * mean_kl)
-
-    # Log metrics
-    # TODO: Better design - have loss function return all metrics as a dict,
-    # then record them in rl_trainer so all training metrics are in one namespace
-    # and we avoid doing .item here, which is not compile friendly
-    record_metric("grpo_loss/kl_divergence_mean", mean_kl.item(), Reduce.MEAN)
-    record_metric(
-        "grpo_loss/kl_divergence_max", (kl * padding_mask).max().item(), Reduce.MAX
-    )
-    record_metric(
-        "grpo_loss/policy_gradient_loss", mean_policy_loss.item(), Reduce.MEAN
-    )
-    record_metric("grpo_loss/total_loss", loss.item(), Reduce.MEAN)
-    record_metric("grpo_loss/advantage_mean", advantages.mean().item(), Reduce.MEAN)
-    record_metric("grpo_loss/advantage_std", advantages.std().item(), Reduce.MEAN)
-    return loss
 
 
 async def main(cfg: DictConfig):
@@ -110,6 +61,14 @@ async def main(cfg: DictConfig):
         backend_config=metric_logging_cfg, run_config=run_config_for_logging
     )
 
+    # ---- Setup loss function ---- #
+    loss_fn = GRPOLoss(
+        clip_low=0.2,
+        clip_high=0.28,
+        beta=0.1,
+        agg_type="fixed_horizon",
+    )
+
     # ---- Setup services ---- #
 
     (
@@ -124,7 +83,7 @@ async def main(cfg: DictConfig):
         DatasetActor.options(**cfg.actors.dataset).as_actor(**cfg.dataset),
         Generator.options(**cfg.services.generator).as_service(**cfg.generator),
         TitanTrainer.options(**cfg.actors.trainer).as_actor(
-            **cfg.trainer, loss=simple_grpo_loss
+            **cfg.trainer, loss=loss_fn
         ),
         ReplayBuffer.options(**cfg.actors.replay_buffer).as_actor(
             **cfg.replay_buffer, collate=collate
@@ -181,7 +140,31 @@ async def main(cfg: DictConfig):
                 (group_size, max_req_tokens + max_res_tokens),
                 dtype=torch.long,
             )
+            seq_len = max_req_tokens + max_res_tokens
+
             for i, response in enumerate(responses):
+                # Validate logprobs exist
+                if response.logprobs is None:
+                    raise ValueError(
+                        "Completion.logprobs is None. "
+                        "Ensure Generator returns logprobs by setting 'logprobs: 1' in sampling_params config."
+                    )
+
+                # Compute old_logprobs (pad generator logprobs to seq_len)
+                actual_response_len = response.token_ids.shape[0]
+                old_logprobs = torch.zeros(seq_len, dtype=response.logprobs.dtype)
+                old_logprobs[max_req_tokens : max_req_tokens + actual_response_len] = (
+                    response.logprobs
+                )
+
+                # Compute loss_mask (shift response_mask by -1)
+                response_mask = torch.zeros(seq_len, dtype=torch.float32)
+                response_mask[max_req_tokens : max_req_tokens + actual_response_len] = (
+                    1.0
+                )
+                loss_mask = torch.roll(response_mask, shifts=-1, dims=0)
+                loss_mask[-1] = 0.0
+
                 episode = Episode(
                     episode_id=str(uuid.uuid4()),
                     pad_id=pad_id,
@@ -191,7 +174,10 @@ async def main(cfg: DictConfig):
                     request=prompt,
                     response=response.text,
                     completion=response,
+                    old_logprobs=old_logprobs,
+                    loss_mask=loss_mask,
                 )
+
                 (
                     episode.reward_breakdown,
                     episode.reward,
@@ -258,12 +244,13 @@ async def main(cfg: DictConfig):
             t.step("reward_evaluation")
 
             ref_logprobs = await ref_model.forward.route(
-                input_ids, max_req_tokens, return_logprobs=True
+                input_ids, return_logprobs=True
             )
             t.step("reference_model_calculate_logprobs")
 
             for i, episode in enumerate(episodes):
-                episode.ref_logprobs = ref_logprobs[i]
+                episode.ref_logprobs = ref_logprobs[i]  # [seq_len]
+
             del ref_logprobs, input_ids
 
             advantages = await compute_advantages.compute.call_one(episodes)
@@ -271,7 +258,14 @@ async def main(cfg: DictConfig):
                 episode.advantage = advantage
                 await replay_buffer.add.call_one(episode)
 
-                sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
+                sample = episode.to_dict(
+                    exclude=[
+                        "completion",
+                        "loss_mask",
+                        "old_logprobs",
+                        "ref_logprobs",
+                    ]
+                )
                 sample["score"] = sample["reward"]
                 record_metric(
                     "main_samples/continuous_rollouts/sample_table",

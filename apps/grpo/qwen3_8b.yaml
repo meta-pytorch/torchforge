@@ -39,6 +39,7 @@ generator:
     max_tokens: ${max_res_tokens}
     temperature: 1.0
     top_p: 1.0
+    logprobs: 1  # returns log probabilities for sampled tokens
 
 # Trainer configuration
 trainer:

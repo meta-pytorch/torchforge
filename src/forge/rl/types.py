@@ -13,6 +13,12 @@ import torch.nn.functional as F
 from forge.data_models.completion import Completion
 
 
+# TODO: Deprecated fields - will be removed in Episode refactor PR
+# - request_len, response_len: Use loss_mask instead
+# - request_tensor, response_tensor: Use unified token sequence + response_mask
+# - pad_id: Should come from tokenizer config, not per-episode
+
+
 @dataclass
 class Episode:
     episode_id: str
@@ -24,10 +30,12 @@ class Episode:
     response: str | None = None
     # Processed data
     completion: Completion | None = None
-    ref_logprobs: torch.Tensor | None = None
+    old_logprobs: torch.Tensor | None = None  # [seq_len]
+    ref_logprobs: torch.Tensor | None = None  # [seq_len]
     reward: float | None = None
     reward_breakdown: dict[str, float] | None = None
     advantage: float | None = None
+    loss_mask: torch.Tensor | None = None
 
     @property
     def policy_version(self) -> int | None:
