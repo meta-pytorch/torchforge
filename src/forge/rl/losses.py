@@ -103,11 +103,6 @@ class PolicyGradientLoss(ABC):
         """
         pass
 
-    @property
-    def name(self) -> str:
-        """Return the loss name (class name without 'Loss' suffix)."""
-        return self.__class__.__name__.replace("Loss", "")
-
 
 # =============================================================================
 # PRIMITIVES: Core Computation Functions
