@@ -100,6 +100,7 @@ class Generator(ForgeActor):
         self._run_task: asyncio.Task | None = None
         self._generator_proc: ProcMesh | None = None
         self._worker_procs: ProcMesh | None = None
+        self._fetcher_procs: ProcMesh | None = None
         self.worker: GeneratorWorker | None = None
         self.running = False
         self.generator_version: int = 0
@@ -507,6 +508,9 @@ class Generator(ForgeActor):
     @endpoint
     async def stop(self):
         self.running = False
+        # Stop the fetcher procs from within the actor where they were created
+        if self._fetcher_procs is not None:
+            await self._fetcher_procs.stop()
 
     def _to_completions(self, request_output: RequestOutput) -> list[Completion]:
         """Convert a vLLM RequestOutput to a list of Completion objects."""
@@ -544,19 +548,24 @@ class Generator(ForgeActor):
     async def shutdown(  # pyright: ignore[reportIncompatibleMethodOverride]
         cls: type["Generator"], actor: "Generator"
     ):
-        assert (
-            actor._generator_proc is not None
-        ), "Tried to shutdown a generator that was not initialized correctly"
-        assert (
-            actor._worker_procs is not None
-        ), "Tried to shutdown a generator that was not initialized correctly"
+        if actor._generator_proc is None and actor._worker_procs is None:
+            logger.info("Generator already shutdown.")
+            return
+
+        if actor._generator_proc is None or actor._worker_procs is None:
+            logger.warning(
+                "Either initializaton is incomplete or previous shutdown does complete cleanly. Proceeding with shutdown."
+            )
 
         # TODO - may want to expand stop to gracefully respond to
         # ongoing requests.
         await actor.stop.call()
         await stop_proc_mesh(actor._worker_procs)
         await stop_proc_mesh(actor._generator_proc)
-        await stop_proc_mesh(actor._fetcher_procs)
+
+        # Mark as shutdown to make the function idempotent
+        actor._generator_proc = None
+        actor._worker_procs = None
 
     @endpoint
     async def save_model_params(self):
