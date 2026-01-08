@@ -288,7 +288,7 @@ def compute_ratio(
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/ratio/approx_kl",
+                key="loss/kl_policy/mean",
                 value=masked_mean(-log_ratio, mask),
                 reduction=Reduce.MEAN,
             ),
@@ -347,12 +347,12 @@ def pg_ppo_clip(
         neg_adv = advantages < 0
         metrics = [
             Metric(
-                key="loss/ppo_clip/high_fraction",
+                key="loss/ppo_clip/clip_high_fraction",
                 value=masked_mean((clipped_high & pos_adv).float(), mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/ppo_clip/low_fraction",
+                key="loss/ppo_clip/clip_low_fraction",
                 value=masked_mean((clipped_low & neg_adv).float(), mask),
                 reduction=Reduce.MEAN,
             ),
@@ -400,7 +400,7 @@ def pg_dual_clip(
         was_dual_clipped = (pg_loss > dual_clip_bound) & neg_mask
         metrics = [
             Metric(
-                key="loss/dual_clip/fraction",
+                key="loss/dual_clip/clip_fraction",
                 value=masked_mean(was_dual_clipped.float(), mask),
                 reduction=Reduce.MEAN,
             ),
@@ -572,7 +572,7 @@ def compute_kl(
     with torch.no_grad():
         metrics = [
             Metric(
-                key="loss/kl/mean",
+                key="loss/kl_ref/mean",
                 value=masked_mean(kl, mask),
                 reduction=Reduce.MEAN,
             ),
