@@ -26,13 +26,10 @@ from forge.rl.losses import (
     masked_mean,
     pg_cispo,
     pg_dual_clip,
-    # PG strategies (advanced)
     pg_ppo_clip,
-    pg_reinforce,
     pg_soft_gate,
     PolicyGradientLoss,
     RatioType,
-    REINFORCELoss,
     SAPOLoss,
 )
 from forge.rl.types import Episode, Group
@@ -59,7 +56,6 @@ __all__ = [
     "GSPOLoss",
     "CISPOLoss",
     "SAPOLoss",
-    "REINFORCELoss",
     # Primitives
     "compute_logprobs",
     "compute_entropy",
@@ -73,5 +69,4 @@ __all__ = [
     "pg_dual_clip",
     "pg_soft_gate",
     "pg_cispo",
-    "pg_reinforce",
 ]

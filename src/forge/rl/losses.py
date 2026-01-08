@@ -524,29 +524,6 @@ def pg_cispo(
     return pg_loss, metrics
 
 
-def pg_reinforce(
-    logprobs: torch.Tensor,
-    advantages: torch.Tensor,
-) -> tuple[torch.Tensor, list[Metric]]:
-    """Basic REINFORCE policy gradient.
-
-    Reference: Williams, "Simple Statistical Gradient-Following Algorithms
-    for Connectionist Reinforcement Learning" (1992).
-
-    Formula: L = -A * log π_θ(a|s)
-
-    Args:
-        logprobs (torch.Tensor): Log probs from current policy (B, S).
-        advantages (torch.Tensor): Advantage estimates (B, S). Should be baseline-subtracted
-            for variance reduction.
-
-    Returns:
-        tuple[torch.Tensor, list[Metric]]: Per-token loss (B, S).
-    """
-    pg_loss = -advantages * logprobs
-    return pg_loss, []
-
-
 # -----------------------------------------------------------------------------
 # KL Divergence
 # -----------------------------------------------------------------------------
@@ -1008,42 +985,3 @@ class SAPOLoss(PolicyGradientLoss, BaseLossConfig):
         loss, agg_m = aggregate(pg_loss, loss_mask, self.agg_type, loss_scale)
 
         return LossOutput(loss, lp_m + ent_m + ratio_m + gate_m + agg_m)
-
-
-class REINFORCELoss(PolicyGradientLoss, BaseLossConfig):
-    """Basic REINFORCE policy gradient.
-
-    Reference: Williams, "Simple Statistical Gradient-Following Algorithms
-    for Connectionist Reinforcement Learning" (1992).
-
-    Per-token: L_t = -A * log π_θ(y_t|q,y_<t)
-    Aggregated: L = sum(L_t * mask) / sum(mask)
-
-    where:
-        A = R - mean(R)
-
-    The simplest policy gradient method. No importance ratio, no clipping, no
-    KL penalty.
-
-    Args:
-        agg_type (AggType): Aggregation method (default "token_mean").
-    """
-
-    agg_type: AggType = "token_mean"
-
-    def __call__(
-        self,
-        logits: torch.Tensor,  # (B, S, V)
-        target_ids: torch.Tensor,  # (B, S)
-        advantages: torch.Tensor,  # (B, S)
-        loss_mask: torch.Tensor,  # (B, S)
-        loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
-    ) -> LossOutput:
-        logprobs, lp_m = compute_logprobs(logits, target_ids)
-        entropy, ent_m = compute_entropy(logits, loss_mask)
-        pg_loss, rf_m = pg_reinforce(logprobs, advantages)
-        loss, agg_m = aggregate(pg_loss, loss_mask, self.agg_type, loss_scale)
-
-        return LossOutput(loss, lp_m + ent_m + rf_m + agg_m)
