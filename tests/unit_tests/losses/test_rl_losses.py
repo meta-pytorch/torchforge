@@ -4,12 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Unit tests for forge.rl.losses
-
-Expected values validated against VERL, TRL, SkyRL, NemoRL (see generate_ground_truth_from_references.py).
-To regenerate: python tests/unit_tests/losses/generate_ground_truth.py
-"""
+"""Expected values generated using P2120280632"""
 
 import pytest
 import torch
@@ -422,13 +417,11 @@ class TestLosses:
     @pytest.mark.parametrize(
         "loss_cls,kwargs",
         [
-            pytest.param(
-                GRPOLoss, {"clip_low": 0.2, "clip_high": 0.2, "beta": 0.0}, id="GRPO"
-            ),
-            pytest.param(DAPOLoss, {"clip_low": 0.2, "clip_high": 0.28}, id="DAPO"),
-            pytest.param(GSPOLoss, {"clip_high": 0.2}, id="GSPO"),
-            pytest.param(CISPOLoss, {"clip_high": 4.0}, id="CISPO"),
-            pytest.param(SAPOLoss, {"tau_pos": 5.0, "tau_neg": 5.0}, id="SAPO"),
+            pytest.param(GRPOLoss, {"beta": 0.0}, id="GRPO"),
+            pytest.param(DAPOLoss, {}, id="DAPO"),
+            pytest.param(GSPOLoss, {}, id="GSPO"),
+            pytest.param(CISPOLoss, {}, id="CISPO"),
+            pytest.param(SAPOLoss, {}, id="SAPO"),
         ],
     )
     def test_zero_advantages(self, inputs, loss_cls, kwargs):
@@ -445,3 +438,30 @@ class TestLosses:
         )
 
         assert output.loss.isfinite()
+
+    @pytest.mark.parametrize(
+        "loss_cls,kwargs",
+        [
+            pytest.param(GRPOLoss, {"beta": 0.0}, id="GRPO"),
+            pytest.param(DAPOLoss, {}, id="DAPO"),
+            pytest.param(GSPOLoss, {}, id="GSPO"),
+            pytest.param(CISPOLoss, {}, id="CISPO"),
+            pytest.param(SAPOLoss, {}, id="SAPO"),
+        ],
+    )
+    def test_empty_mask(self, inputs, loss_cls, kwargs):
+        """Loss should be finite (zero) when mask is all zeros (no trainable tokens)."""
+        d = inputs
+        empty_mask = torch.zeros_like(d["loss_mask"])
+
+        loss_fn = loss_cls(**kwargs)
+        output = loss_fn(
+            logits=d["logits"],
+            target_ids=d["target_ids"],
+            advantages=d["advantages"],
+            old_logprobs=d["old_logprobs"],
+            loss_mask=empty_mask,
+        )
+
+        assert output.loss.isfinite()
+        assert output.loss == 0.0
