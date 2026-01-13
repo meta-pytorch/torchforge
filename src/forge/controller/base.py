@@ -27,15 +27,6 @@ class BaseLauncher:
     async def remote_setup(self, procs: ProcMesh) -> None:
         pass
 
-    async def cleanup_allocation(self, allocation_handle: Any) -> None:
-        """Clean up a specific allocation.
-
-        Args:
-            allocation_handle: The handle returned from get_allocator
-        """
-        pass
-
     async def cleanup_all(self) -> None:
         """Clean up all allocations managed by this launcher."""
         pass
-

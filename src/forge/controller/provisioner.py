@@ -270,9 +270,6 @@ class Provisioner:
             )
         logger.debug(f"Creating remote host mesh for {name}")
 
-        # get_allocator returns (allocation_resource, allocation_handle, allocation_name)
-        # For SlurmLauncher: (HostMesh, SlurmJob, job_name)
-        # The allocation_handle is opaque to the provisioner
         host_mesh, allocation_handle, job_name = await self.launcher.get_allocator(name, num_hosts)
 
         return host_mesh, allocation_handle
