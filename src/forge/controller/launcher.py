@@ -8,7 +8,6 @@
 
 import atexit
 import logging
-import os
 from typing import Any
 
 from forge.controller.base import BaseLauncher
