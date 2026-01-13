@@ -7,6 +7,7 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+import os
 import uuid
 
 import torch
@@ -97,8 +98,14 @@ async def main(cfg: DictConfig):
     # ---- Global setups ---- #
     provisioner = None
     if cfg.get("provisioner", None) is not None:
+        # Create launcher config with services and actors for pre-allocation
+        launcher_config = LauncherConfig(
+            **cfg.provisioner,
+            services=cfg.get("services", {}),
+            actors=cfg.get("actors", {}),
+        )
         provisioner = await init_provisioner(
-            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
+            ProvisionerConfig(launcher_config=launcher_config)
         )
     else:
         provisioner = await init_provisioner()

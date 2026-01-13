@@ -8,6 +8,7 @@
 
 import asyncio
 import logging
+from typing import Any 
 
 import os
 import socket
@@ -20,7 +21,6 @@ from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 from forge.types import ProcessConfig, ProvisionerConfig
 
 from monarch._src.actor.actor_mesh import ActorMesh
-from monarch._src.actor.shape import Extent
 
 from monarch.actor import (
     Actor,
@@ -31,7 +31,6 @@ from monarch.actor import (
     this_host,
 )
 
-from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
 
 logger = logging.getLogger(__name__)
@@ -197,8 +196,8 @@ class Provisioner:
     """A global resource provisioner."""
 
     def __init__(self, cfg: ProvisionerConfig | None = None):
-        self._server_names = []
-        self._proc_server_map = {}
+        self._allocation_handles = []  # Track allocation handles for cleanup
+        self._proc_allocation_map = {}  # Map proc_mesh to allocation handle
         self._lock = asyncio.Lock()
 
         # HostMeshes are currently not hashable, so
@@ -251,34 +250,32 @@ class Provisioner:
         if self.launcher is not None:
             await self.launcher.initialize()
 
-    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
-        """Creates a remote server and a HostMesh on it."""
+    async def create_host_mesh(self, name: str, num_hosts: int) -> tuple[HostMesh, Any]:
+        """Creates a remote HostMesh using the launcher.
+
+        Args:
+            name: Name for the host mesh
+            num_hosts: Number of hosts to allocate
+
+        Returns:
+            A tuple of (HostMesh, allocation_handle) where:
+            - HostMesh is the allocated resource ready to use
+            - allocation_handle is an opaque handle for cleanup (managed by launcher)
+        """
         # no need to lock here because this is already locked behind `get_proc_mesh`
         if not self.launcher:
             raise RuntimeError(
                 "You tried to create a remote allocation by specifying the number of hosts on an actor or service, "
                 "but no launcher was specified."
             )
-        logger.debug(f"Creating remote server for alloc {name}")
-        alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
-            name, num_hosts
-        )
+        logger.debug(f"Creating remote host mesh for {name}")
 
-        # We are asking Monarch to allocate a single process on
-        # every host, reflected in the Extent we provide below.
+        # get_allocator returns (allocation_resource, allocation_handle, allocation_name)
+        # For SlurmLauncher: (HostMesh, SlurmJob, job_name)
+        # The allocation_handle is opaque to the provisioner
+        host_mesh, allocation_handle, job_name = await self.launcher.get_allocator(name, num_hosts)
 
-        # Technically, this is ["hosts", "procs"] but to reduce
-        # confusion on its relationship with procs elsewhere,
-        # we call it "no_dim".
-
-        # TODO - remove this once Monarch supports HostMesh without it.
-        host_mesh = HostMesh.allocate_nonblocking(
-            name=name,
-            extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
-            allocator=alloc,
-            alloc_constraints=alloc_constraints,
-        )
-        return host_mesh, server_name
+        return host_mesh, allocation_handle
 
     def get_host_mesh(self, name: str) -> HostMesh:
         """Returns the host mesh given its associated name.
@@ -327,13 +324,13 @@ class Provisioner:
         is_remote = num_hosts is not None and num_hosts > 0
 
         async with self._lock:
-            server_name = None
+            allocation_handle = None
             if is_remote:
                 if mesh_name is None:
-                    created_hosts = len(self._server_names)
+                    created_hosts = len(self._allocation_handles)
                     mesh_name = f"alloc_{created_hosts}"
                 if host_mesh is None:
-                    host_mesh, server_name = await self.create_host_mesh(
+                    host_mesh, allocation_handle = await self.create_host_mesh(
                         name=mesh_name,
                         num_hosts=num_hosts,
                     )
@@ -398,10 +395,10 @@ class Provisioner:
             self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
 
-            # If we created a server, track so we can tear it down later.
-            if server_name:
-                self._server_names.append(server_name)
-                self._proc_server_map[procs] = server_name
+            # If we created an allocation, track its handle for cleanup
+            if allocation_handle:
+                self._allocation_handles.append(allocation_handle)
+                self._proc_allocation_map[procs] = allocation_handle
 
             self._proc_host_map[procs] = host_mesh
 
@@ -442,9 +439,14 @@ class Provisioner:
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)
             await proc_mesh.stop()
-            if proc_mesh in self._proc_server_map:
-                server_name = self._proc_server_map[proc_mesh]
-                commands.kill(server_name)
+
+            # Clean up allocation tracking
+            if proc_mesh in self._proc_allocation_map:
+                allocation_handle = self._proc_allocation_map[proc_mesh]
+                del self._proc_allocation_map[proc_mesh]
+                if allocation_handle in self._allocation_handles:
+                    self._allocation_handles.remove(allocation_handle)
+
             del self._proc_host_map[proc_mesh]
 
     def register_service(self, service: "ServiceInterface") -> None:
@@ -512,8 +514,14 @@ class Provisioner:
         """Tears down all remaining remote allocations."""
         await self.shutdown_all_allocations()
         async with self._lock:
-            for server_name in self._server_names:
-                commands.kill(server_name)
+            # Ask the launcher to clean up all its allocations
+            if self.launcher:
+                try:
+                    await self.launcher.cleanup_all()
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup launcher allocations during shutdown: {e}")
+            self._allocation_handles.clear()
+            self._proc_allocation_map.clear()
 
 
 _provisioner: Provisioner | None = None

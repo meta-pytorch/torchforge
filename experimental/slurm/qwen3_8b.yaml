@@ -17,6 +17,7 @@ provisioner:
   cpu: 192
   account: agentic-models
   qos: h200_capabilities_shared
+  job_name: qwen3_8b
 
 # Observability configuration
 metric_logging:
@@ -137,6 +138,7 @@ services:
   ref_model:
     procs: 1
     num_replicas: 1
+    hosts: 1
     with_gpus: true
     mesh_name: ref_model
   reward_actor:
@@ -152,6 +154,7 @@ actors:
     mesh_name: dataset
   trainer:
     procs: 2
+    hosts: 1
     with_gpus: true
     mesh_name: trainer
   replay_buffer:
