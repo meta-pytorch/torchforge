@@ -465,3 +465,34 @@ class TestLosses:
 
         assert output.loss.isfinite()
         assert output.loss == 0.0
+
+    @pytest.mark.parametrize(
+        "loss_cls,kwargs",
+        [
+            pytest.param(GRPOLoss, {"beta": 0.0}, id="GRPO"),
+            pytest.param(DAPOLoss, {}, id="DAPO"),
+            pytest.param(GSPOLoss, {}, id="GSPO"),
+            pytest.param(CISPOLoss, {}, id="CISPO"),
+            pytest.param(SAPOLoss, {}, id="SAPO"),
+        ],
+    )
+    def test_empty_sequence(self, loss_cls, kwargs):
+        """Loss should be zero when sequence length is 0."""
+        B, V = 2, 10
+        logits = torch.empty(B, 0, V)
+        target_ids = torch.empty(B, 0, dtype=torch.long)
+        advantages = torch.empty(B, 0)
+        old_logprobs = torch.empty(B, 0)
+        loss_mask = torch.empty(B, 0)
+
+        loss_fn = loss_cls(**kwargs)
+        output = loss_fn(
+            logits=logits,
+            target_ids=target_ids,
+            advantages=advantages,
+            old_logprobs=old_logprobs,
+            loss_mask=loss_mask,
+        )
+
+        assert output.loss.isfinite()
+        assert output.loss == 0.0

@@ -629,13 +629,14 @@ def aggregate(
         loss = masked_mean(per_token_loss, mask, loss_scale)
 
     elif agg_type == "fixed_horizon":
-        # divide by (B * S)
-        loss = (per_token_loss * mask).sum() / mask.numel()
+        # divide by (B * S), use max to avoid division by zero for empty inputs
+        loss = (per_token_loss * mask).sum() / max(mask.numel(), 1)
 
     elif agg_type == "sequence_mean":
         seq_lengths = mask.sum(dim=-1).clamp(min=1.0)
         seq_means = (per_token_loss * mask).sum(dim=-1) / seq_lengths
-        loss = seq_means.mean()
+        # Handle empty batch: mean of empty tensor returns nan, so use sum instead
+        loss = seq_means.sum() / max(seq_means.numel(), 1)
 
     else:
         raise ValueError(f"Unknown agg_type: {agg_type}")

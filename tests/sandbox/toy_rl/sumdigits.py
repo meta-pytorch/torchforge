@@ -20,11 +20,10 @@ from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
-from forge.rl.losses import compute_logprobs
+from forge.rl.losses import compute_logprobs, GRPOLoss
 from forge.util.config import parse
 from monarch.actor import endpoint
 from omegaconf import DictConfig
@@ -274,7 +273,7 @@ class Trainer(ForgeActor):
         self.optimizer.zero_grad()
 
         # beta = 0.01 for quicker convergence
-        self.loss = SimpleGRPOLoss(0.01)
+        self.loss_fn = GRPOLoss()
         self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
@@ -326,10 +325,16 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        trainer_log_probs, _ = compute_logprobs(logits, target_ids)
-        # Compute loss only on response tokens
-        # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
-        loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
+        # Compute loss using GRPOLoss
+        loss_output = self.loss_fn(
+            logits=logits,
+            target_ids=target_ids,
+            advantages=weights,
+            old_logprobs=sampling_log_probs,
+            loss_mask=loss_masks,
+            ref_logprobs=ref_logprobs,
+        )
+        loss = loss_output.loss
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
