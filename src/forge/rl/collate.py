@@ -45,10 +45,11 @@ def collate(
         input = {"tokens": input_ids}
         target = {
             "inference_logprobs": inference_logprobs,
-            "ref_logprobs": ref_logprobs,
             "loss_mask": loss_mask,
             "advantages": advantages,
         }
+        if ref_logprobs is not None:
+            target["ref_logprobs"] = ref_logprobs
         inputs.append(input)
         targets.append(target)
     return inputs, targets
