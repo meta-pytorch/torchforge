@@ -512,17 +512,6 @@ class Provisioner:
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
         await self.shutdown_all_allocations()
-        async with self._lock:
-            # Ask the launcher to clean up all its allocations
-            if self.launcher:
-                try:
-                    await self.launcher.cleanup_all()
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to cleanup launcher allocations during shutdown: {e}"
-                    )
-            self._allocation_handles.clear()
-            self._proc_allocation_map.clear()
 
 
 _provisioner: Provisioner | None = None

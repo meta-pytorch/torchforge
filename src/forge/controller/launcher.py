@@ -157,17 +157,6 @@ class Slurmlauncher(BaseLauncher):
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
 
-    async def cleanup_all(self) -> None:
-        """Kill the single SlurmJob that contains all meshes."""
-        if self._job:
-            try:
-                self._job.kill()
-            except Exception:
-                # Best effort cleanup
-                pass
-            self._job = None
-            self._host_meshes.clear()
-
 
 def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
     if not cfg:
