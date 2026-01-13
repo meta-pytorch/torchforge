@@ -283,6 +283,11 @@ def compute_ratio(
     with torch.no_grad():
         metrics = [
             Metric(
+                key="loss/ratio/mean",
+                value=masked_mean(ratio, mask),
+                reduction=Reduce.MEAN,
+            ),
+            Metric(
                 key="loss/kl_policy/mean",
                 value=masked_mean(-log_ratio, mask),
                 reduction=Reduce.MEAN,
@@ -342,7 +347,7 @@ def pg_ppo_clip(
         neg_adv = advantages < 0
         metrics = [
             Metric(
-                key="loss/ratio/mean",
+                key="loss/ppo_clip/clipped_ratio/mean",
                 value=masked_mean(clipped_ratio, mask),
                 reduction=Reduce.MEAN,
             ),
@@ -452,7 +457,7 @@ def pg_soft_gate(
     with torch.no_grad():
         metrics = [
             Metric(
-                key="loss/ratio/mean",
+                key="loss/soft_gate/gate/mean",
                 value=masked_mean(gate, mask),
                 reduction=Reduce.MEAN,
             ),
@@ -505,7 +510,7 @@ def pg_cispo(
         clipped_low = ratio < (1 - clip_low)
         metrics = [
             Metric(
-                key="loss/ratio/mean",
+                key="loss/cispo/clipped_ratio/mean",
                 value=masked_mean(clipped_ratio, mask),
                 reduction=Reduce.MEAN,
             ),
