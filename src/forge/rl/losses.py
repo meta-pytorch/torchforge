@@ -714,8 +714,6 @@ class GRPOLoss(PolicyGradientLoss, BaseLossConfig):
         loss_mask: torch.Tensor,  # (B, S)
         ref_logprobs: torch.Tensor | None = None,  # (B, S) or None
         loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)  # logging only
@@ -784,8 +782,6 @@ class DAPOLoss(PolicyGradientLoss, BaseLossConfig):
         inference_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
@@ -847,8 +843,6 @@ class GSPOLoss(PolicyGradientLoss, BaseLossConfig):
         inference_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
@@ -914,8 +908,6 @@ class CISPOLoss(PolicyGradientLoss, BaseLossConfig):
         inference_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
@@ -977,8 +969,6 @@ class SAPOLoss(PolicyGradientLoss, BaseLossConfig):
         inference_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
-        *args,
-        **kwargs,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
