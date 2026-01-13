@@ -50,7 +50,7 @@ class Slurmlauncher(BaseLauncher):
         # Add services that need remote hosts
         for service_name, service_cfg in self.cfg.services.items():
             # Use getattr to safely access hosts (might not be defined)
-            hosts = getattr(service_cfg, 'hosts', None)
+            hosts = getattr(service_cfg, "hosts", None)
             if hosts and hosts > 0:
                 mesh_name = service_cfg.mesh_name or service_name
                 meshes[mesh_name] = hosts
@@ -58,7 +58,7 @@ class Slurmlauncher(BaseLauncher):
         # Add actors that need remote hosts
         for actor_name, actor_cfg in self.cfg.actors.items():
             # Use getattr to safely access hosts (might not be defined)
-            hosts = getattr(actor_cfg, 'hosts', None)
+            hosts = getattr(actor_cfg, "hosts", None)
             if hosts and hosts > 0:
                 mesh_name = actor_cfg.mesh_name or actor_name
                 meshes[mesh_name] = hosts
@@ -77,11 +77,11 @@ class Slurmlauncher(BaseLauncher):
         # Prepare resource parameters
         # Convert memMB to format expected by SlurmJob (string like "500G" or "2047962M")
         mem = None
-        if hasattr(self.cfg, 'memMB') and self.cfg.memMB:
+        if hasattr(self.cfg, "memMB") and self.cfg.memMB:
             mem = f"{self.cfg.memMB}M"
 
         cpus_per_task = None
-        if hasattr(self.cfg, 'cpu') and self.cfg.cpu:
+        if hasattr(self.cfg, "cpu") and self.cfg.cpu:
             cpus_per_task = self.cfg.cpu
 
         # Create a single SlurmJob with all meshes
@@ -107,7 +107,9 @@ class Slurmlauncher(BaseLauncher):
         # Get the job state and extract all HostMeshes
         logger.info("Getting job state (this will block until nodes are allocated)...")
         job_state = self._job.state(cached_path=None)
-        logger.info(f"Job state received! Extracting HostMeshes for {list(meshes.keys())}")
+        logger.info(
+            f"Job state received! Extracting HostMeshes for {list(meshes.keys())}"
+        )
 
         # Store all HostMeshes by name (like node0_host, node1_host in the example)
         for mesh_name in meshes.keys():
@@ -115,7 +117,9 @@ class Slurmlauncher(BaseLauncher):
             self._host_meshes[mesh_name] = host_mesh
             logger.info(f"HostMesh '{mesh_name}' extracted and stored")
 
-        logger.info(f"SlurmLauncher initialization complete. {len(self._host_meshes)} HostMeshes ready.")
+        logger.info(
+            f"SlurmLauncher initialization complete. {len(self._host_meshes)} HostMeshes ready."
+        )
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         """Return a pre-allocated HostMesh for the given mesh name.

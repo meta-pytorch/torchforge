@@ -8,11 +8,11 @@
 
 import asyncio
 import logging
-from typing import Any 
 
 import os
 import socket
 import uuid
+from typing import Any
 
 import torch
 
@@ -270,7 +270,9 @@ class Provisioner:
             )
         logger.debug(f"Creating remote host mesh for {name}")
 
-        host_mesh, allocation_handle, job_name = await self.launcher.get_allocator(name, num_hosts)
+        host_mesh, allocation_handle, job_name = await self.launcher.get_allocator(
+            name, num_hosts
+        )
 
         return host_mesh, allocation_handle
 
@@ -516,7 +518,9 @@ class Provisioner:
                 try:
                     await self.launcher.cleanup_all()
                 except Exception as e:
-                    logger.warning(f"Failed to cleanup launcher allocations during shutdown: {e}")
+                    logger.warning(
+                        f"Failed to cleanup launcher allocations during shutdown: {e}"
+                    )
             self._allocation_handles.clear()
             self._proc_allocation_map.clear()
 
