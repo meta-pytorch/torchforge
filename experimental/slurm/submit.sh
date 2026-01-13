@@ -7,7 +7,7 @@
 
 CONFIG_NAME="${1}"
 
-sbatch --job-name="${CONFIG_NAME}" \
+sbatch --job-name="${CONFIG_NAME}_controller" \
        --export=ALL,CONFIG_NAME="${CONFIG_NAME}" \
        experimental/slurm/submit_grpo.sh
 
