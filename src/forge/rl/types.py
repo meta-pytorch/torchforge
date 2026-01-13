@@ -30,7 +30,7 @@ class Episode:
     response: str | None = None
     # Processed data
     completion: Completion | None = None
-    old_logprobs: torch.Tensor | None = None  # [seq_len]
+    inference_logprobs: torch.Tensor | None = None  # [seq_len]
     ref_logprobs: torch.Tensor | None = None  # [seq_len]
     reward: float | None = None
     reward_breakdown: dict[str, float] | None = None
