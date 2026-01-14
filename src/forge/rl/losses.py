@@ -341,23 +341,21 @@ def pg_ppo_clip(
     with torch.no_grad():
         clipped_high = (ratio > 1 + clip_high) & mask.bool()
         clipped_low = (ratio < 1 - clip_low) & mask.bool()
-
-        # Advantage-conditioned clip metrics (VERL-style, more informative)
         pos_adv = advantages > 0
         neg_adv = advantages < 0
         metrics = [
             Metric(
-                key="loss/ppo_clip/clipped_ratio/mean",
+                key="loss/clip/clipped_ratio/mean",
                 value=masked_mean(clipped_ratio, mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/ppo_clip/clip_high_fraction",
+                key="loss/clip/high_fraction",
                 value=masked_mean((clipped_high & pos_adv).float(), mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/ppo_clip/clip_low_fraction",
+                key="loss/clip/low_fraction",
                 value=masked_mean((clipped_low & neg_adv).float(), mask),
                 reduction=Reduce.MEAN,
             ),
@@ -510,17 +508,17 @@ def pg_cispo(
         clipped_low = ratio < (1 - clip_low)
         metrics = [
             Metric(
-                key="loss/cispo/clipped_ratio/mean",
+                key="loss/clip/clipped_ratio/mean",
                 value=masked_mean(clipped_ratio, mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/cispo/clip_high_fraction",
+                key="loss/clip/high_fraction",
                 value=masked_mean(clipped_high.float(), mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/cispo/clip_low_fraction",
+                key="loss/clip/low_fraction",
                 value=masked_mean(clipped_low.float(), mask),
                 reduction=Reduce.MEAN,
             ),
