@@ -185,16 +185,6 @@ class TitanTrainer(ForgeActor):
         Returns:
             TrainerConfig containing model name, model_config, and parallelism settings
 
-        Example:
-            >>> config = await trainer.get_config()
-            >>> config.model_name
-            "Qwen/Qwen2.5-7B"
-            >>> config.model_config["vocab_size"]
-            151936
-            >>> config.parallelism.dp_degree
-            4
-            >>> config.parallelism.device
-            "cuda:0"
         """
         parallel_dims = self.engine.parallel_dims
         parallelism = ParallelismConfig(
@@ -224,12 +214,6 @@ class TitanTrainer(ForgeActor):
         Returns:
             TrainerStatus containing current step and accumulated batch count
 
-        Example:
-            >>> status = await trainer.get_status()
-            >>> status.step
-            1000
-            >>> status.accumulated_microbatches
-            2
         """
         return TrainerStatus(
             step=self.step,
