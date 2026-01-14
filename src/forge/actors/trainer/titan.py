@@ -163,18 +163,13 @@ class TitanTrainer(ForgeActor):
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
         self._accumulated_microbatches = 0
+        self.step += 1
         t.step("optimizer_step")
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
         record_metric("rl_trainer/loss", loss, Reduce.MEAN)
 
-        # These are placeholder values until the loss function exposes these metrics
-        # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
-        # record_metric("rl_trainer/step/std_kl_divergence", 0.0, Reduce.STD)
-        # record_metric("rl_trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
-
-        self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
@@ -193,16 +188,6 @@ class TitanTrainer(ForgeActor):
         Returns:
             TrainerConfig containing model name, model_config, and parallelism settings
 
-        Example:
-            >>> config = await trainer.get_config()
-            >>> config.model_name
-            "Qwen/Qwen2.5-7B"
-            >>> config.model_config["vocab_size"]
-            151936
-            >>> config.parallelism.dp_degree
-            4
-            >>> config.parallelism.device
-            "cuda:0"
         """
         parallel_dims = self.engine.parallel_dims
         parallelism = ParallelismConfig(
@@ -210,7 +195,7 @@ class TitanTrainer(ForgeActor):
             tp_degree=parallel_dims.tp,
             pp_degree=parallel_dims.pp,
             cp_degree=parallel_dims.cp,
-            ep_degree=1,  # Expert parallelism not exposed in parallel_dims
+            ep_degree=self.parallelism.expert_parallel_degree,
             world_size=parallel_dims.world_size,
             dp_rank=self.engine.dp_rank,
             tp_rank=parallel_dims.tp_coord,
@@ -232,12 +217,6 @@ class TitanTrainer(ForgeActor):
         Returns:
             TrainerStatus containing current step and accumulated batch count
 
-        Example:
-            >>> status = await trainer.get_status()
-            >>> status.step
-            1000
-            >>> status.accumulated_microbatches
-            2
         """
         return TrainerStatus(
             step=self.step,
