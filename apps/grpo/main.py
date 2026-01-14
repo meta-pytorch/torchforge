@@ -149,12 +149,15 @@ async def main(cfg: DictConfig):
                         "Ensure Generator returns logprobs by setting 'logprobs: 1' in sampling_params config."
                     )
 
-                # Compute inference_logprobs (pad generator logprobs to seq_len)
+                # Compute inference_logprobs
+                # Shift by -1 to align with next-token prediction
                 actual_response_len = response.token_ids.shape[0]
                 inference_logprobs = torch.zeros(seq_len, dtype=response.logprobs.dtype)
                 inference_logprobs[
                     max_req_tokens : max_req_tokens + actual_response_len
                 ] = response.logprobs
+                inference_logprobs = torch.roll(inference_logprobs, shifts=-1, dims=0)
+                inference_logprobs[-1] = 0.0
 
                 # Compute loss_mask (shift response_mask by -1)
                 response_mask = torch.zeros(seq_len, dtype=torch.float32)
