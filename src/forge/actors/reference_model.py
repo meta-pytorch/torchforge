@@ -8,19 +8,16 @@
 import logging
 import math
 import os
-
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 
 import torch
-
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl.losses import compute_logprobs, create_shifted_targets
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
-
 from torchtitan.config.job_config import (
     Checkpoint,
     Comm,
@@ -179,11 +176,10 @@ class ReferenceModel(ForgeActor):
                             target_ids = create_shifted_targets(input_ids)
                             logprobs, _ = self.compute_logprobs(logits, target_ids)
 
-        out: Tensor | Unknown = logprobs if return_logprobs else logits
+        out = logprobs if return_logprobs else logits
 
-        # loss_parallel in engine.train_context produces Replicated output - to_local() returns the full tensor
         if isinstance(out, DTensor):
-            out = out.to_local()
+            out = out.full_tensor()
 
         self.step += 1
         t.stop()
