@@ -115,7 +115,6 @@ class LauncherConfig:
         None  # Memory per node (SLURM param, can get with sinfo)
     )
     gpus_per_node: int = 8  # GPUs per node (SLURM param, can get with sinfo)
-    
 
     def __post_init__(self):
         if isinstance(self.launcher, str):

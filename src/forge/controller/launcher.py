@@ -60,7 +60,9 @@ class Slurmlauncher(BaseLauncher):
     ):
         self.cfg = cfg
         self._job: SlurmJob | None = None
-        self._host_meshes: dict[str, HostMesh] = {}  # Cache HostMeshes to keep connections alive
+        self._host_meshes: dict[str, HostMesh] = (
+            {}
+        )  # Cache HostMeshes to keep connections alive
 
     async def initialize(self) -> None:
         """Initialize the launcher and create a single SlurmJob for all resources.
@@ -105,7 +107,9 @@ class Slurmlauncher(BaseLauncher):
         # Wait for job allocation
         logger.info("Getting job state (this will block until nodes are allocated)...")
         job_state = self._job.state(cached_path=None)
-        logger.info(f"Job state received! Extracting HostMeshes for {list(meshes.keys())}")
+        logger.info(
+            f"Job state received! Extracting HostMeshes for {list(meshes.keys())}"
+        )
 
         # Cache all HostMeshes to keep their connections alive
         for mesh_name in meshes.keys():
@@ -147,6 +151,7 @@ class Slurmlauncher(BaseLauncher):
 
         # Return (HostMesh, SlurmJob handle, job_name)
         return host_mesh, self._job, self.cfg.job_name or "forge_job"
+
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
 
