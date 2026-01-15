@@ -16,6 +16,7 @@ import torchstore as ts
 from forge.actors._torchstore_utils import get_param_key
 from forge.api.trainer import ParallelismConfig, TrainerConfig, TrainerStatus
 from forge.controller import ForgeActor
+from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
@@ -102,6 +103,7 @@ class TitanTrainer(ForgeActor):
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         logger.info("Compiling loss")
         self.loss = torch.compile(self.loss)
+        self._tokenizer = None  # Lazy-loaded by get_tokenizer()
 
     @endpoint
     async def setup(self):
@@ -219,6 +221,91 @@ class TitanTrainer(ForgeActor):
             step=self.step,
             accumulated_microbatches=self._accumulated_microbatches,
         )
+
+    @endpoint
+    async def clear_gradients(self) -> None:
+        """Clear accumulated gradients without applying them.
+
+        Use this when you need to discard accumulated gradients without performing
+        an optimizer step. Common scenarios:
+        - Exception during gradient accumulation
+        - Skipping a training step due to some condition
+        - Recovering from OOM or other errors
+
+        This is equivalent to calling optimizer.zero_grad() and resetting internal
+        accumulation counters.
+        """
+        self.engine.optimizers.zero_grad()
+        self._accumulated_microbatches = 0
+
+    @endpoint
+    async def get_tokenizer(self) -> HuggingFaceModelTokenizer:
+        """Get the tokenizer associated with this model.
+
+        Returns the tokenizer used for encoding/decoding text with this model.
+        Useful for preprocessing inputs or decoding model outputs.
+
+        Returns:
+            HuggingFaceModelTokenizer: The tokenizer for this model
+        """
+        if self._tokenizer is None:
+            hf_path = self.model.hf_assets_path
+            self._tokenizer = HuggingFaceModelTokenizer(
+                tokenizer_json_path=os.path.join(hf_path, "tokenizer.json"),
+                tokenizer_config_json_path=os.path.join(
+                    hf_path, "tokenizer_config.json"
+                ),
+                generation_config_path=os.path.join(hf_path, "generation_config.json"),
+            )
+        return self._tokenizer
+
+    @endpoint
+    async def save(
+        self,
+        name: str | None = None,
+        path: str | None = None,
+        weights_only: bool = False,
+    ) -> str:
+        """Save trainer state or weights to persistent storage.
+
+        By default, saves complete training state (model weights, optimizer state,
+        learning rate scheduler state, and step counter).
+
+        Args:
+            name: Optional checkpoint name/identifier (not yet supported, uses step-based naming)
+            path: Optional base directory (not yet supported, uses checkpoint.folder from config)
+            weights_only: If True, saves only model weights (not yet supported)
+
+        Returns:
+            Full path where checkpoint was saved
+        """
+        # TODO: Support custom 'name' parameter (currently uses step-based naming)
+        # TODO: Support custom 'path' parameter (currently uses checkpoint.folder from config)
+        # TODO: Support 'weights_only' parameter (currently saves full training state)
+
+        self.engine.checkpointer.save(
+            curr_step=self.step,
+            last_step=False,
+        )
+        return f"{self.checkpoint.folder}/step-{self.step}"
+
+    @endpoint
+    async def load(self, path: str | None = None) -> str:
+        """Load a previously saved checkpoint.
+
+        Restores training state from a checkpoint.
+
+        Args:
+            path: Optional path to the checkpoint (not yet supported, loads from checkpoint.folder)
+
+        Returns:
+            Path that was loaded
+        """
+        # TODO: Support custom 'path' parameter (currently loads from checkpoint.folder)
+        # Currently loads the checkpoint at self.step
+
+        self.engine.checkpointer.load(step=self.step)
+        return f"{self.checkpoint.folder}/step-{self.step}"
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:
