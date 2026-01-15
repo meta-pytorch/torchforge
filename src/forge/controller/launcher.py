@@ -25,6 +25,34 @@ JOB_NAME_KEY = "job_name"
 LAUNCHER_KEY = "launcher"
 
 
+def get_meshes_from_config(cfg: LauncherConfig) -> dict[str, int]:
+    """Extract mesh requirements from launcher config.
+
+    Args:
+        cfg: The launcher configuration
+
+    Returns:
+        Dictionary mapping mesh names to number of hosts required
+    """
+    meshes: dict[str, int] = {}
+
+    # Add services that need remote hosts
+    for service_name, service_cfg in cfg.services.items():
+        hosts = getattr(service_cfg, "hosts", None)
+        if hosts and hosts > 0:
+            mesh_name = service_cfg.mesh_name or service_name
+            meshes[mesh_name] = hosts
+
+    # Add actors that need remote hosts
+    for actor_name, actor_cfg in cfg.actors.items():
+        hosts = getattr(actor_cfg, "hosts", None)
+        if hosts and hosts > 0:
+            mesh_name = actor_cfg.mesh_name or actor_name
+            meshes[mesh_name] = hosts
+
+    return meshes
+
+
 class Slurmlauncher(BaseLauncher):
     def __init__(
         self,
@@ -32,7 +60,7 @@ class Slurmlauncher(BaseLauncher):
     ):
         self.cfg = cfg
         self._job: SlurmJob | None = None
-        self._host_meshes: dict[str, HostMesh] = {}  # mesh_name -> HostMesh
+        self._host_meshes: dict[str, HostMesh] = {}  # Cache HostMeshes to keep connections alive
 
     async def initialize(self) -> None:
         """Initialize the launcher and create a single SlurmJob for all resources.
@@ -45,52 +73,22 @@ class Slurmlauncher(BaseLauncher):
         configure(default_transport=ChannelTransport.TcpWithHostname)
 
         # Collect all mesh requirements from config
-        meshes = {}
-
-        # Add services that need remote hosts
-        for service_name, service_cfg in self.cfg.services.items():
-            # Use getattr to safely access hosts (might not be defined)
-            hosts = getattr(service_cfg, "hosts", None)
-            if hosts and hosts > 0:
-                mesh_name = service_cfg.mesh_name or service_name
-                meshes[mesh_name] = hosts
-
-        # Add actors that need remote hosts
-        for actor_name, actor_cfg in self.cfg.actors.items():
-            # Use getattr to safely access hosts (might not be defined)
-            hosts = getattr(actor_cfg, "hosts", None)
-            if hosts and hosts > 0:
-                mesh_name = actor_cfg.mesh_name or actor_name
-                meshes[mesh_name] = hosts
+        meshes = get_meshes_from_config(self.cfg)
 
         # If no remote resources needed, skip job creation
         if not meshes:
             return
 
-        # Prepare slurm_args from config (only for args without dedicated parameters)
-        slurm_args = []
-        if self.cfg.account:
-            slurm_args.append(f"--account={self.cfg.account}")
-        if self.cfg.qos:
-            slurm_args.append(f"--qos={self.cfg.qos}")
-
-        # Prepare resource parameters
-        # Convert memMB to format expected by SlurmJob (string like "500G" or "2047962M")
-        mem = None
-        if hasattr(self.cfg, "memMB") and self.cfg.memMB:
-            mem = f"{self.cfg.memMB}M"
-
-        cpus_per_task = None
-        if hasattr(self.cfg, "cpu") and self.cfg.cpu:
-            cpus_per_task = self.cfg.cpu
+        # Build slurm_args from config
+        slurm_args = [f"--{key}={value}" for key, value in self.cfg.slurm_args.items()]
 
         # Create a single SlurmJob with all meshes
         logger.info(f"Creating SlurmJob with meshes: {meshes}")
         self._job = SlurmJob(
             meshes=meshes,  # e.g., {"generator": 1, "trainer": 2, "ref_model": 1}
-            gpus_per_node=self.cfg.gpu,
-            cpus_per_task=cpus_per_task,
-            mem=mem,
+            gpus_per_node=self.cfg.gpus_per_node,
+            cpus_per_task=self.cfg.cpus_per_task,
+            mem=self.cfg.mem,
             time_limit="72:00:00",  # Default to 72 hours
             job_name=self.cfg.job_name + "_workers" or "forge_job",
             slurm_args=slurm_args,
@@ -104,22 +102,18 @@ class Slurmlauncher(BaseLauncher):
         # Register cleanup handler
         atexit.register(self._job.kill)
 
-        # Get the job state and extract all HostMeshes
+        # Wait for job allocation
         logger.info("Getting job state (this will block until nodes are allocated)...")
         job_state = self._job.state(cached_path=None)
-        logger.info(
-            f"Job state received! Extracting HostMeshes for {list(meshes.keys())}"
-        )
+        logger.info(f"Job state received! Extracting HostMeshes for {list(meshes.keys())}")
 
-        # Store all HostMeshes by name (like node0_host, node1_host in the example)
+        # Cache all HostMeshes to keep their connections alive
         for mesh_name in meshes.keys():
             host_mesh: HostMesh = getattr(job_state, mesh_name)
             self._host_meshes[mesh_name] = host_mesh
-            logger.info(f"HostMesh '{mesh_name}' extracted and stored")
+            logger.info(f"HostMesh '{mesh_name}' extracted and cached")
 
-        logger.info(
-            f"SlurmLauncher initialization complete. {len(self._host_meshes)} HostMeshes ready."
-        )
+        logger.info("SlurmLauncher initialization complete.")
 
     async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
         """Return a pre-allocated HostMesh for the given mesh name.
@@ -153,7 +147,6 @@ class Slurmlauncher(BaseLauncher):
 
         # Return (HostMesh, SlurmJob handle, job_name)
         return host_mesh, self._job, self.cfg.job_name or "forge_job"
-
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
 

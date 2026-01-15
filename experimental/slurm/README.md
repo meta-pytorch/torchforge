@@ -7,17 +7,17 @@ When running GRPO on Slurm, the "controller" (main script, grpo/main.py) can eit
 locally on your login node, and launch the workers to Slurm; or the controller can
 run on a remote node along with the workers.
 
-To run with controller locally (good for debugging):
+## To run "interactively":
+(controller runs locally, good for debugging)
 ```
 python -m apps.grpo.main --config experimental/slurm/qwen3_8b.yaml
 ```
 
-To run with the controller remotely use the `submit.sh` script:
+## To run "in batch":
+(controller runs on remote node, good for running experiments)
 
 ```
 ./experimental/slurm/submit.sh qwen3_8b
 ./experimental/slurm/submit.sh qwen3_32b
 ./experimental/slurm/submit.sh qwen3_30b_a3b
 ```
-
-Note, the controller and workers will be launched in two different Slurm jobs.
