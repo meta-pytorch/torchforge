@@ -195,7 +195,7 @@ class TitanTrainer(ForgeActor):
             tp_degree=parallel_dims.tp,
             pp_degree=parallel_dims.pp,
             cp_degree=parallel_dims.cp,
-            ep_degree=self.parallelism.expert_parallel_degree,
+            ep_degree=parallel_dims.ep,
             world_size=parallel_dims.world_size,
             dp_rank=self.engine.dp_rank,
             tp_rank=parallel_dims.tp_coord,
