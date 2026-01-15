@@ -10,7 +10,6 @@ from typing import Annotated, Literal
 
 import torch
 import torch.nn.functional as F
-
 from forge.observability.metrics import Metric, Reduce
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -691,15 +690,18 @@ class GRPOLoss(PolicyGradientLoss, BaseLossConfig):
        problems with low variance. DR-GRPO uses mean-only advantages. NOTE:
        This should be changed at the **advantage** computation level.
 
+    NOTE: Default sets clip_high>clip_low, as this reportedly better, although not
+    explored in the original paper.
+
     Args:
         clip_low (float): Lower clip bound (default 0.2).
-        clip_high (float): Upper clip bound (default 0.2).
+        clip_high (float): Upper clip bound (default 0.28).
         beta (float): KL penalty coefficient (default 0.1).
         agg_type (AggType): Aggregation method (default "fixed_horizon").
     """
 
     clip_low: Annotated[float, Field(ge=0, le=1)] = 0.2
-    clip_high: Annotated[float, Field(ge=0, le=1)] = 0.2
+    clip_high: Annotated[float, Field(ge=0, le=1)] = 0.28
     beta: Annotated[float, Field(ge=0)] = 0.1
     agg_type: AggType = "fixed_horizon"
 
