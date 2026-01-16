@@ -309,6 +309,9 @@ class Provisioner:
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
                 This behavior may change in the future.
+            mesh_name: Name of the pre-allocated mesh to use.
+                Required for remote allocations (when num_hosts > 0).
+                Must match a mesh name defined in the launcher config.
             host_mesh: The host mesh to allocate the process on.
                 If None, will use the pre-allocated host mesh corresponding to mesh_name.
             env_vars: Additional environment variables to set for the spawned processes.

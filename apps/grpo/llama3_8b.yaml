@@ -110,6 +110,7 @@ ref_model:
     context_parallel_degree: 1
     expert_parallel_degree: 1
   checkpoint:
+    enable: true
     initial_load_path: hf://${model}
     initial_load_in_hf: true
 
