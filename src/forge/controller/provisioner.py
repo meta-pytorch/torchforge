@@ -249,11 +249,6 @@ class Provisioner:
         """Call this after creating the instance"""
         if self.launcher is not None:
             self._job, self._job_state = await self.launcher.initialize()
-            # self._host_meshes = _job_state._hosts
-        # for mesh_name in meshes.keys():
-        #     host_mesh: HostMesh = getattr(job_state, mesh_name)
-        #     self._host_meshes[mesh_name] = host_mesh
-        #     logger.info(f"HostMesh '{mesh_name}' extracted and cached")
 
     async def get_host_mesh(self, name: str) -> HostMesh:
         """Get the pre-allocated HostMesh from launcher.
@@ -279,13 +274,6 @@ class Provisioner:
             parts = name.rsplit("_", 1)
             if len(parts) == 2 and parts[1].isdigit():
                 base_name = parts[0]
-
-        # if base_name not in self.launcher._host_meshes:
-        #     raise RuntimeError(
-        #         f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
-        #         f"Available meshes: {list(self.launcher._host_meshes.keys())}. "
-        #         f"Make sure the mesh is defined in the launcher config."
-        #     )
 
         # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
         try:
