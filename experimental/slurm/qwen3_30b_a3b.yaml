@@ -12,10 +12,12 @@ off_by_n: 1 # Off by one by default
 
 provisioner:
   launcher: slurm
-  memMB: 2047962
-  cpu: 192
-  account: agentic-models
-  qos: h200_capabilities_shared
+  slurm_args:
+    account: agentic-models
+    qos: h200_capabilities_shared
+  mem: 2047962M
+  cpus_per_task: 192
+  job_name: qwen3_30b_a3b
 
 # Main loop configuration
 rollout_threads: 32 # make this 4x the number of policy replicas seems to work well

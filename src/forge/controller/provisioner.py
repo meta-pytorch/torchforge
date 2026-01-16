@@ -12,7 +12,6 @@ import logging
 import os
 import socket
 import uuid
-from typing import Any
 
 import torch
 
@@ -196,9 +195,11 @@ class Provisioner:
     """A global resource provisioner."""
 
     def __init__(self, cfg: ProvisionerConfig | None = None):
-        self._allocation_handles = []  # Track allocation handles for cleanup
-        self._proc_allocation_map = {}  # Map proc_mesh to allocation handle
         self._lock = asyncio.Lock()
+
+        self._job: JobTrait | None = None
+        # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
+        self._job_state: JobState | None = None
 
         # HostMeshes are currently not hashable, so
         # we generate a hash per HostMesh. We'll
@@ -235,12 +236,11 @@ class Provisioner:
             ),
         }
         self._proc_host_map = {}
-        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
         if not self.launcher:
-            logger.warning("Launcher not provided, remote allocations will not work.")
+            logger.warning("Launcher not provided, allocations must run locally.")
 
         self._registered_actors: list["ForgeActor"] = []
         self._registered_services: list["ServiceInterface"] = []
@@ -248,19 +248,21 @@ class Provisioner:
     async def initialize(self):
         """Call this after creating the instance"""
         if self.launcher is not None:
-            await self.launcher.initialize()
+            self._job, self._job_state = await self.launcher.initialize()
+            # self._host_meshes = _job_state._hosts
+        # for mesh_name in meshes.keys():
+        #     host_mesh: HostMesh = getattr(job_state, mesh_name)
+        #     self._host_meshes[mesh_name] = host_mesh
+        #     logger.info(f"HostMesh '{mesh_name}' extracted and cached")
 
-    async def create_host_mesh(self, name: str, num_hosts: int) -> tuple[HostMesh, Any]:
-        """Creates a remote HostMesh using the launcher.
+    async def get_host_mesh(self, name: str) -> HostMesh:
+        """Get the pre-allocated HostMesh from launcher.
 
         Args:
             name: Name for the host mesh
-            num_hosts: Number of hosts to allocate
 
         Returns:
-            A tuple of (HostMesh, allocation_handle) where:
-            - HostMesh is the allocated resource ready to use
-            - allocation_handle is an opaque handle for cleanup (managed by launcher)
+            the allocated HostMesh ready to use
         """
         # no need to lock here because this is already locked behind `get_proc_mesh`
         if not self.launcher:
@@ -278,27 +280,24 @@ class Provisioner:
             if len(parts) == 2 and parts[1].isdigit():
                 base_name = parts[0]
 
-        # Get the pre-allocated HostMesh from launcher
-        if base_name not in self.launcher._host_meshes:
+        # if base_name not in self.launcher._host_meshes:
+        #     raise RuntimeError(
+        #         f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
+        #         f"Available meshes: {list(self.launcher._host_meshes.keys())}. "
+        #         f"Make sure the mesh is defined in the launcher config."
+        #     )
+
+        # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
+        try:
+            host_mesh = getattr(self._job_state, base_name)
+        except AttributeError as e:
             raise RuntimeError(
                 f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
                 f"Available meshes: {list(self.launcher._host_meshes.keys())}. "
-                f"Make sure the mesh is defined in the launcher config."
-            )
+                "Make sure the mesh is defined in the launcher config."
+            ) from e
 
-        host_mesh = self.launcher._host_meshes[base_name]
-        allocation_handle = self.launcher._job
-
-        return host_mesh, allocation_handle
-
-    def get_host_mesh(self, name: str) -> HostMesh:
-        """Returns the host mesh given its associated name.
-
-        This is currently an experimental API for HostMesh v1 and
-        should not be relied on longer term.
-
-        """
-        return self._host_mesh_map[name]
+        return host_mesh
 
     async def get_proc_mesh(
         self,
@@ -321,12 +320,17 @@ class Provisioner:
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
                 This behavior may change in the future.
+            mesh_name: Name of the pre-allocated mesh to use.
+                Required for remote allocations (when num_hosts > 0).
+                Must match a mesh name defined in the launcher config.
             host_mesh: The host mesh to allocate the process on.
-                If None, a new host mesh will be created.
-            port: The distributed port to use.
-                If None, a port will be detected.
+                If None, a new host mesh will be created from the pre-allocated mesh.
+            env_vars: Additional environment variables to set for the spawned processes.
+                These will be merged with auto-detected env vars (CUDA_VISIBLE_DEVICES, MASTER_ADDR, etc.).
             addr: The distributed address to use.
                 If None, an address will be detected.
+            port: The distributed port to use.
+                If None, a port will be detected.
 
         Returns:
             A ProcMesh.
@@ -338,15 +342,15 @@ class Provisioner:
         is_remote = num_hosts is not None and num_hosts > 0
 
         async with self._lock:
-            allocation_handle = None
             if is_remote:
                 if mesh_name is None:
-                    created_hosts = len(self._allocation_handles)
-                    mesh_name = f"alloc_{created_hosts}"
+                    # TODO: make mesh_name a required arg
+                    raise ValueError(
+                        "this shouldn't happen because everything is pre-allocated"
+                    )
                 if host_mesh is None:
-                    host_mesh, allocation_handle = await self.create_host_mesh(
+                    host_mesh = await self.get_host_mesh(
                         name=mesh_name,
-                        num_hosts=num_hosts,
                     )
                     host_id = uuid.uuid1()
                     # Get the GPU count from the remote host
@@ -406,13 +410,7 @@ class Provisioner:
                 # Applies any launcher specific remote setup.
                 procs._gpu_ids = gpu_ids
 
-            self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
-
-            # If we created an allocation, track its handle for cleanup
-            if allocation_handle:
-                self._allocation_handles.append(allocation_handle)
-                self._proc_allocation_map[procs] = allocation_handle
 
             self._proc_host_map[procs] = host_mesh
 
@@ -453,13 +451,6 @@ class Provisioner:
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)
             await proc_mesh.stop()
-
-            # Clean up allocation tracking
-            if proc_mesh in self._proc_allocation_map:
-                allocation_handle = self._proc_allocation_map[proc_mesh]
-                del self._proc_allocation_map[proc_mesh]
-                if allocation_handle in self._allocation_handles:
-                    self._allocation_handles.remove(allocation_handle)
 
             del self._proc_host_map[proc_mesh]
 
@@ -509,16 +500,8 @@ class Provisioner:
         self._registered_actors.clear()
         self._registered_services.clear()
 
-        # -- HostMeshes (including the implicit local host) ---
-        logger.info(f"Shutting down {len(self._host_mesh_map)} HostMesh(es)...")
-        results = await asyncio.gather(
-            *[host_mesh.shutdown() for host_mesh in self._host_mesh_map.values()],
-            return_exceptions=True,
-        )
-        for (name, _), result in zip(self._host_mesh_map.items(), results, strict=True):
-            if isinstance(result, Exception):
-                logger.warning(f"Failed to shutdown HostMesh {name}: {result}")
-        self._host_mesh_map.clear()
+        if self.launcher:
+            self._job.kill()
         try:
             await shutdown_context()
         except Exception as e:

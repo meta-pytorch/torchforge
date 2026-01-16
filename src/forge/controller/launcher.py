@@ -13,8 +13,8 @@ from forge.controller.base import BaseLauncher
 from forge.types import Launcher, LauncherConfig
 from monarch._rust_bindings.monarch_hyperactor.channel import ChannelTransport
 from monarch._rust_bindings.monarch_hyperactor.config import configure
-from monarch.actor import HostMesh, ProcMesh
-from monarch.job import SlurmJob
+from monarch.actor import ProcMesh
+from monarch.job import JobState, JobTrait, SlurmJob
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -58,15 +58,14 @@ class Slurmlauncher(BaseLauncher):
         cfg: LauncherConfig,
     ):
         self.cfg = cfg
-        self._job: SlurmJob | None = None
-        self._host_meshes: dict[str, HostMesh] = (
-            {}
-        )  # Cache HostMeshes to keep connections alive
 
-    async def initialize(self) -> None:
+    async def initialize(self) -> tuple[JobTrait, JobState]:
         """Initialize the launcher and create a single SlurmJob for all resources.
 
         This pre-allocates all meshes defined in the config in one Slurm job.
+
+        Returns:
+            A tuple of (job, job_state) containing the SlurmJob handle and its state.
         """
         # HostMesh currently requires explicit configuration
         # of the underlying transport from client to mesh.
@@ -85,7 +84,7 @@ class Slurmlauncher(BaseLauncher):
 
         # Create a single SlurmJob with all meshes
         logger.info(f"Creating SlurmJob with meshes: {meshes}")
-        self._job = SlurmJob(
+        job = SlurmJob(
             meshes=meshes,  # e.g., {"generator": 1, "trainer": 2, "ref_model": 1}
             gpus_per_node=self.cfg.gpus_per_node,
             cpus_per_task=self.cfg.cpus_per_task,
@@ -97,26 +96,18 @@ class Slurmlauncher(BaseLauncher):
 
         # Apply the job to allocate resources
         logger.info("Submitting SlurmJob...")
-        self._job.apply()
+        job.apply()
         logger.info("SlurmJob submitted, waiting for allocation...")
 
         # Register cleanup handler
-        atexit.register(self._job.kill)
+        atexit.register(job.kill)
 
         # Wait for job allocation
         logger.info("Getting job state (this will block until nodes are allocated)...")
-        job_state = self._job.state(cached_path=None)
-        logger.info(
-            f"Job state received! Extracting HostMeshes for {list(meshes.keys())}"
-        )
-
-        # Cache all HostMeshes to keep their connections alive
-        for mesh_name in meshes.keys():
-            host_mesh: HostMesh = getattr(job_state, mesh_name)
-            self._host_meshes[mesh_name] = host_mesh
-            logger.info(f"HostMesh '{mesh_name}' extracted and cached")
+        job_state = job.state(cached_path=None)
 
         logger.info("SlurmLauncher initialization complete.")
+        return job, job_state
 
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
