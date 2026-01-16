@@ -281,7 +281,6 @@ class Provisioner:
         except AttributeError as e:
             raise RuntimeError(
                 f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
-                f"Available meshes: {list(self.launcher._host_meshes.keys())}. "
                 "Make sure the mesh is defined in the launcher config."
             ) from e
 
@@ -312,7 +311,7 @@ class Provisioner:
                 Required for remote allocations (when num_hosts > 0).
                 Must match a mesh name defined in the launcher config.
             host_mesh: The host mesh to allocate the process on.
-                If None, a new host mesh will be created from the pre-allocated mesh.
+                If None, will use the pre-allocated host mesh corresponding to mesh_name.
             env_vars: Additional environment variables to set for the spawned processes.
                 These will be merged with auto-detected env vars (CUDA_VISIBLE_DEVICES, MASTER_ADDR, etc.).
             addr: The distributed address to use.

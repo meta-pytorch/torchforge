@@ -89,7 +89,6 @@ class Slurmlauncher(BaseLauncher):
             gpus_per_node=self.cfg.gpus_per_node,
             cpus_per_task=self.cfg.cpus_per_task,
             mem=self.cfg.mem,
-            time_limit="72:00:00",  # Default to 72 hours
             job_name=self.cfg.job_name + "_workers" or "forge_job",
             slurm_args=slurm_args,
         )
