@@ -270,9 +270,24 @@ class Provisioner:
             )
         logger.debug(f"Creating remote host mesh for {name}")
 
-        host_mesh, allocation_handle, job_name = await self.launcher.get_allocator(
-            name, num_hosts
-        )
+        # Strip replica suffix (e.g., "generator_0" -> "generator")
+        # Services append _{replica_idx} to mesh names
+        base_name = name
+        if "_" in name:
+            parts = name.rsplit("_", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                base_name = parts[0]
+
+        # Get the pre-allocated HostMesh from launcher
+        if base_name not in self.launcher._host_meshes:
+            raise RuntimeError(
+                f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
+                f"Available meshes: {list(self.launcher._host_meshes.keys())}. "
+                f"Make sure the mesh is defined in the launcher config."
+            )
+
+        host_mesh = self.launcher._host_meshes[base_name]
+        allocation_handle = self.launcher._job
 
         return host_mesh, allocation_handle
 

@@ -8,7 +8,6 @@
 
 import atexit
 import logging
-from typing import Any
 
 from forge.controller.base import BaseLauncher
 from forge.types import Launcher, LauncherConfig
@@ -118,39 +117,6 @@ class Slurmlauncher(BaseLauncher):
             logger.info(f"HostMesh '{mesh_name}' extracted and cached")
 
         logger.info("SlurmLauncher initialization complete.")
-
-    async def get_allocator(self, name: str, num_hosts: int) -> tuple[Any, Any, str]:
-        """Return a pre-allocated HostMesh for the given mesh name.
-
-        Args:
-            name: The name of the mesh (may include replica suffix like "generator_0")
-            num_hosts: Expected number of hosts (for validation)
-
-        Returns:
-            A tuple of (HostMesh, SlurmJob, job_name) where:
-            - HostMesh is the pre-allocated resource
-            - SlurmJob is the allocation handle for cleanup
-            - job_name is for tracking/logging
-        """
-        # Strip replica suffix (e.g., "generator_0" -> "generator")
-        # Services append _{replica_idx} to mesh names
-        base_name = name
-        if "_" in name:
-            parts = name.rsplit("_", 1)
-            if len(parts) == 2 and parts[1].isdigit():
-                base_name = parts[0]
-
-        if base_name not in self._host_meshes:
-            raise RuntimeError(
-                f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
-                f"Available meshes: {list(self._host_meshes.keys())}. "
-                f"Make sure the mesh is defined in the launcher config."
-            )
-
-        host_mesh = self._host_meshes[base_name]
-
-        # Return (HostMesh, SlurmJob handle, job_name)
-        return host_mesh, self._job, self.cfg.job_name or "forge_job"
 
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
