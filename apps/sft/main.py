@@ -287,8 +287,19 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         #     self.model,
         #     self.data_parallel_size,
         # ) as grad_acc:
+        parallel_dims = self.parallel_dims
         labels = batch.pop("labels")
         loss = self.forward_backward(batch, labels)
+
+        grad_norm = dist_utils.clip_grad_norm_(
+            [p for m in self.model_parts for p in m.parameters()],
+            self.job_config.training.max_norm,
+            foreach=True,
+            pp_mesh=(
+                parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
+            ),
+            ep_enabled=parallel_dims.ep_enabled,
+        )
 
         if self.rank_should_record_loss:
             loss_val = loss.item()
