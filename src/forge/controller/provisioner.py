@@ -289,9 +289,9 @@ class Provisioner:
     async def get_proc_mesh(
         self,
         num_procs: int,
+        mesh_name: str,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,
@@ -301,15 +301,14 @@ class Provisioner:
 
         Args:
             num_procs: The number of processes to allocate.
+            mesh_name: Name of the pre-allocated mesh to use.
+                Must match a mesh name defined in the launcher config.
             with_gpus: Whether to include GPU allocations.
                 This only adds the CUDA_VISIBLE_DEVICES environment variable.
             num_hosts: The number of hosts to allocate.
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
                 This behavior may change in the future.
-            mesh_name: Name of the pre-allocated mesh to use.
-                Required for remote allocations (when num_hosts > 0).
-                Must match a mesh name defined in the launcher config.
             host_mesh: The host mesh to allocate the process on.
                 If None, will use the pre-allocated host mesh corresponding to mesh_name.
             env_vars: Additional environment variables to set for the spawned processes.
@@ -330,11 +329,6 @@ class Provisioner:
 
         async with self._lock:
             if is_remote:
-                if mesh_name is None:
-                    # TODO: make mesh_name a required arg
-                    raise ValueError(
-                        "this shouldn't happen because everything is pre-allocated"
-                    )
                 if host_mesh is None:
                     host_mesh = await self.get_host_mesh(
                         name=mesh_name,
