@@ -39,7 +39,7 @@ class TestReplayBuffer:
     @pytest.mark.asyncio
     async def test_add(self, replay_buffer: ReplayBuffer) -> None:
         episode = TestEpisode(policy_version=0)
-        await replay_buffer.add.call_one(episode)
+        await replay_buffer.add.call_one(episode, policy_version=episode.policy_version)
         assert replay_buffer._numel.call_one().get() == 1
         assert replay_buffer._getitem.call_one(0).get() == episode
         replay_buffer.clear.call_one().get()
@@ -48,8 +48,12 @@ class TestReplayBuffer:
     async def test_add_multiple(self, replay_buffer) -> None:
         episode_0 = TestEpisode(policy_version=0)
         episode_1 = TestEpisode(policy_version=1)
-        await replay_buffer.add.call_one(episode_0)
-        await replay_buffer.add.call_one(episode_1)
+        await replay_buffer.add.call_one(
+            episode_0, policy_version=episode_0.policy_version
+        )
+        await replay_buffer.add.call_one(
+            episode_1, policy_version=episode_1.policy_version
+        )
         assert replay_buffer._numel.call_one().get() == 2
         assert replay_buffer._getitem.call_one(0).get() == episode_0
         assert replay_buffer._getitem.call_one(1).get() == episode_1
@@ -58,7 +62,7 @@ class TestReplayBuffer:
     @pytest.mark.asyncio
     async def test_state_dict_save_load(self, replay_buffer) -> None:
         episode = TestEpisode(policy_version=0)
-        await replay_buffer.add.call_one(episode)
+        await replay_buffer.add.call_one(episode, policy_version=episode.policy_version)
         state_dict = replay_buffer.state_dict.call_one().get()
         replay_buffer.clear.call_one().get()
         assert replay_buffer._numel.call_one().get() == 0
@@ -70,8 +74,12 @@ class TestReplayBuffer:
     async def test_evict(self, replay_buffer) -> None:
         episode_0 = TestEpisode(policy_version=0)
         episode_1 = TestEpisode(policy_version=1)
-        await replay_buffer.add.call_one(episode_0)
-        await replay_buffer.add.call_one(episode_1)
+        await replay_buffer.add.call_one(
+            episode_0, policy_version=episode_0.policy_version
+        )
+        await replay_buffer.add.call_one(
+            episode_1, policy_version=episode_1.policy_version
+        )
         assert replay_buffer._numel.call_one().get() == 2
         await replay_buffer.evict.call_one(curr_policy_version=2)
         assert replay_buffer._numel.call_one().get() == 1
@@ -81,8 +89,12 @@ class TestReplayBuffer:
     async def test_sample(self, replay_buffer) -> None:
         episode_0 = TestEpisode(policy_version=0)
         episode_1 = TestEpisode(policy_version=1)
-        await replay_buffer.add.call_one(episode_0)
-        await replay_buffer.add.call_one(episode_1)
+        await replay_buffer.add.call_one(
+            episode_0, policy_version=episode_0.policy_version
+        )
+        await replay_buffer.add.call_one(
+            episode_1, policy_version=episode_1.policy_version
+        )
         assert replay_buffer._numel.call_one().get() == 2
 
         # Test a simple sampling
@@ -92,7 +104,9 @@ class TestReplayBuffer:
         assert replay_buffer._numel.call_one().get() == 2
 
         # Test sampling (not enough samples in buffer, returns None)
-        await replay_buffer.add.call_one(episode_0)
+        await replay_buffer.add.call_one(
+            episode_0, policy_version=episode_0.policy_version
+        )
         samples = await replay_buffer.sample.call_one(curr_policy_version=1)
         assert samples is None
         replay_buffer.clear.call_one().get()
@@ -102,9 +116,15 @@ class TestReplayBuffer:
         episode_0 = TestEpisode(policy_version=0)
         episode_1 = TestEpisode(policy_version=1)
         episode_2 = TestEpisode(policy_version=2)
-        await replay_buffer.add.call_one(episode_0)
-        await replay_buffer.add.call_one(episode_1)
-        await replay_buffer.add.call_one(episode_2)
+        await replay_buffer.add.call_one(
+            episode_0, policy_version=episode_0.policy_version
+        )
+        await replay_buffer.add.call_one(
+            episode_1, policy_version=episode_1.policy_version
+        )
+        await replay_buffer.add.call_one(
+            episode_2, policy_version=episode_2.policy_version
+        )
         assert replay_buffer._numel.call_one().get() == 3
         samples = await replay_buffer.sample.call_one(
             curr_policy_version=2,
@@ -128,7 +148,9 @@ class TestReplayBuffer:
         # Add enough trajectories to sample
         for i in range(10):
             episode = TestEpisode(policy_version=0)
-            await replay_buffer.add.call_one(episode)
+            await replay_buffer.add.call_one(
+                episode, policy_version=episode.policy_version
+            )
 
         # Sample and verify len(samples) == dp_size
         samples = await replay_buffer.sample.call_one(curr_policy_version=0)

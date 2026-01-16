@@ -9,7 +9,7 @@ import random
 from collections import deque
 from dataclasses import dataclass
 from operator import itemgetter
-from typing import Any, Callable
+from typing import Any, Callable, cast, Generic, TypeVar
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
@@ -20,9 +20,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+DataItem = TypeVar("DataItem")
+
+
 @dataclass
-class BufferEntry:
-    data: "Episode"
+class BufferEntry(Generic[DataItem]):
+    data: DataItem
+    policy_version: int
     sample_count: int = 0
 
 
@@ -48,7 +52,7 @@ def random_sample(buffer: deque, sample_size: int, policy_version: int) -> list[
 
 
 @dataclass
-class ReplayBuffer(ForgeActor):
+class ReplayBuffer(ForgeActor, Generic[DataItem]):
     """Simple in-memory replay buffer implementation."""
 
     batch_size: int
@@ -57,7 +61,7 @@ class ReplayBuffer(ForgeActor):
     max_buffer_size: int | None = None
     max_resample_count: int | None = 0
     seed: int | None = None
-    collate: Callable = lambda batch: batch
+    collate: Callable[[list[list[DataItem]]], Any] = lambda batch: batch
     eviction_policy: Callable = age_evict
     sample_policy: Callable = random_sample
 
@@ -69,9 +73,9 @@ class ReplayBuffer(ForgeActor):
         random.seed(self.seed)
 
     @endpoint
-    async def add(self, episode: "Episode") -> None:
-        self.buffer.append(BufferEntry(episode))
-        record_metric("buffer/add/count_episodes_added", 1, Reduce.SUM)
+    async def add(self, data: DataItem, *, policy_version: int) -> None:
+        self.buffer.append(BufferEntry(data=data, policy_version=policy_version))
+        record_metric("buffer/add/count_added", 1, Reduce.SUM)
 
     @endpoint
     async def sample(
@@ -83,7 +87,7 @@ class ReplayBuffer(ForgeActor):
             curr_policy_version (int): The current policy version.
 
         Returns:
-            A list of sampled episodes with shape (dp_size, bsz, ...) or None if there are not enough episodes in the buffer.
+            A list of sampled data with shape (dp_size, bsz, ...) or None if there are not enough data items in the buffer.
         """
 
         total_samples = self.dp_size * self.batch_size
@@ -111,14 +115,14 @@ class ReplayBuffer(ForgeActor):
         )
         if sampled_indices is None:
             return None
-        sampled_episodes = []
-        for entry in self._collect(sampled_indices):
-            entry.sample_count += 1
-            sampled_episodes.append(entry.data)
 
-        # Calculate and record policy age metrics for sampled episodes
+        entries = self._collect(sampled_indices)
+        for entry in entries:
+            entry.sample_count += 1
+
+        # Calculate and record policy age metrics for sampled data
         sampled_policy_ages = [
-            curr_policy_version - ep.policy_version for ep in sampled_episodes
+            curr_policy_version - entry.policy_version for entry in entries
         ]
         if sampled_policy_ages:
             record_metric(
@@ -132,13 +136,14 @@ class ReplayBuffer(ForgeActor):
                 Reduce.MAX,
             )
         # Reshape into (dp_size, bsz, ...)
-        reshaped_episodes = [
-            sampled_episodes[dp_idx * self.batch_size : (dp_idx + 1) * self.batch_size]
+        data_samples = [entry.data for entry in entries]
+        reshaped_data = [
+            data_samples[dp_idx * self.batch_size : (dp_idx + 1) * self.batch_size]
             for dp_idx in range(self.dp_size)
         ]
 
         # Call the underlying collate function to collate the episodes into a batch
-        return self.collate(reshaped_episodes)
+        return self.collate(reshaped_data)
 
     @endpoint
     async def evict(self, curr_policy_version: int) -> None:
@@ -168,7 +173,7 @@ class ReplayBuffer(ForgeActor):
             f"{evicted_count} episodes expired, {len(self.buffer)} episodes left"
         )
 
-    def _collect(self, indices: list[int]):
+    def _collect(self, indices: list[int]) -> list[BufferEntry[DataItem]]:
         """Efficiently traverse deque and collect elements at each requested index"""
         n = len(self.buffer)
         if n == 0 or len(indices) == 0:
@@ -192,7 +197,7 @@ class ReplayBuffer(ForgeActor):
         # Restore original deque orientation
         self.buffer.rotate(total_rotation)
 
-        return result
+        return cast(list[BufferEntry[DataItem]], result)
 
     @endpoint
     async def _getitem(self, idx: int):

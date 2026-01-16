@@ -269,7 +269,9 @@ async def main(cfg: DictConfig):
             advantages = await compute_advantages.compute.call_one(episodes)
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
-                await replay_buffer.add.call_one(episode)
+                await replay_buffer.add.call_one(
+                    episode, policy_version=episode.policy_version
+                )
 
                 sample = episode.to_dict(exclude=["ref_logprobs", "completion"])
                 sample["score"] = sample["reward"]

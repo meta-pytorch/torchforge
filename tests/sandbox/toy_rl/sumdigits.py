@@ -493,7 +493,9 @@ async def main(cfg: DictConfig):
                 )
                 episode.advantage = episode.reward  # simple case for now
             for episode in group.episodes:
-                await replay_buffer.add.call_one(episode)
+                await replay_buffer.add.call_one(
+                    episode, policy_version=episode.policy_version
+                )
             avg_response_len = (
                 sum(len(e.response_tokens) for e in group.episodes) / group_size
             )
