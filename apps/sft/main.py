@@ -291,7 +291,9 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             [p for m in self.model_parts for p in m.parameters()],
             self.job_config.training.max_norm,
             foreach=True,
-            pp_mesh=parallel_dims.get_optional_mesh("pp"),
+            pp_mesh=(
+                parallel_dims.world_mesh["pp"] if parallel_dims.pp_enabled else None
+            ),
             ep_enabled=parallel_dims.ep_enabled,
         )
 
