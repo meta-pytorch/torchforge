@@ -3,7 +3,7 @@
 First make sure you have followed the environment setup instructions in
 https://github.com/meta-pytorch/torchforge/blob/main/README.md.
 
-When running GRPO on Slurm, the "controller" (main script, grpo/main.py) can either run
+When running GRPO on Slurm, the "controller" (main script in grpo/main.py) can either run
 locally on your login node, and launch the workers to Slurm; or the controller can
 run on a remote node along with the workers.
 
