@@ -219,6 +219,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         chat_template_path (str | None): Path to chat_template.jinja file. Default: None
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
+        max_seq_len (int | None): Maximum sequence length to truncate to. Default: None.
     """
 
     def __init__(
@@ -231,6 +232,8 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         truncation_type: str = "right",
         max_seq_len: int | None = None,
     ):
+        self.max_seq_len = max_seq_len
+
         self.base_tokenizer = HuggingFaceBaseTokenizer(
             tokenizer_json_path=tokenizer_json_path,
             tokenizer_config_json_path=tokenizer_config_json_path,
@@ -259,8 +262,6 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         self.special_tokens_mapping = {}
         for token in self.special_tokens:
             self.special_tokens_mapping[token] = self.base_tokenizer.encode(token)
-
-        self.max_seq_len = max_seq_len
 
     def _raise_helper(self, message: str):
         raise jinja2.exceptions.TemplateError(message)
@@ -297,9 +298,6 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         add_eos: bool = True,
         max_seq_len: int | None = None,
     ) -> tuple[list[int], list[bool]]:
-
-        if max_seq_len is None and self.max_seq_len is not None:
-            max_seq_len = self.max_seq_len
 
         tokenized_messages = []
         mask = []

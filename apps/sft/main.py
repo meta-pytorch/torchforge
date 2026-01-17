@@ -114,10 +114,6 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # Load training datasets
         logger.info("Setting training datasets")
         train_datasets_config = self.job_config.training.datasets
-        if self.job_config.training.seq_len is not None:
-            self.max_seq_len = self.job_config.training.seq_len
-        else:
-            self.max_seq_len = None
 
         self.train_dataloader = self.setup_data(train_datasets_config)
 
@@ -193,7 +189,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 )
                 else None
             ),
-            max_seq_len=self.max_seq_len,
+            max_seq_len=self.job_config.training.seq_len,
         )
 
         # Get DP mesh for data sharding
