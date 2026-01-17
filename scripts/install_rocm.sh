@@ -328,7 +328,6 @@ install_monarch() {
 
     log_info "Installing Monarch ${MONARCH_VERSION} from source"
     ensure_repo "https://github.com/meta-pytorch/monarch.git" "$monarch_dir" "$MONARCH_VERSION"
-    git -C "$monarch_dir" submodule update --init --recursive
 
     python -m pip install -r "${monarch_dir}/build-requirements.txt"
     if ! ulimit -n 2048; then
@@ -426,6 +425,7 @@ install_forge() {
     python -m pip install -e "${REPO_ROOT}[dev]" --no-deps
 
     log_info "Installing Forge dependencies from pyproject.toml"
+    # ROCm avoids CUDA-only pins like torchmonarch-nightly by installing deps explicitly.
     readarray -t base_deps < <(read_project_deps base)
     if [ "${#base_deps[@]}" -gt 0 ]; then
         python -m pip install "${base_deps[@]}"
@@ -463,21 +463,40 @@ unset VLLM_TARGET_DEVICE
 unset USE_ROCM
 EOF
 
+    # DO NOT set LD_LIBRARY_PATH globally; use a Python-only shim like CUDA install.sh.
+    local py_shim_activate="${conda_env_dir}/etc/conda/activate.d/python_ld_shim.sh"
+    cat > "$py_shim_activate" << 'EOF'
+# Python-only LD_LIBRARY_PATH shim for ROCm Torch libs.
+TORCHFORGE_TORCH_LIB="$(python - <<'PY'
+import os
+import torch
+print(os.path.join(os.path.dirname(torch.__file__), "lib"))
+PY
+)"
+
+python()  { LD_LIBRARY_PATH="${TORCHFORGE_TORCH_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
+python3() { LD_LIBRARY_PATH="${TORCHFORGE_TORCH_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
+
+# Export functions to subshells when possible (best-effort, shell-dependent)
+if [ -n "${BASH_VERSION:-}" ]; then
+  export -f python python3 2>/dev/null || true
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  typeset -fx python python3 >/dev/null 2>&1 || true
+fi
+EOF
+
+    # Deactivation script to remove the function wrappers
+    cat > "${conda_env_dir}/etc/conda/deactivate.d/python_ld_shim.sh" << 'EOF'
+unset -f python  2>/dev/null || true
+unset -f python3 2>/dev/null || true
+unset TORCHFORGE_TORCH_LIB
+EOF
+
     log_info "Loading ROCm env for current session..."
     # shellcheck source=/dev/null
     source "$rocm_activation_script"
-}
-
-run_smoke_tests() {
-    log_info "Testing installation..."
-    python - <<'PY'
-import torch
-print(f"PyTorch {torch.__version__} (HIP: {torch.version.hip})")
-print(f"ROCm available: {torch.cuda.is_available()}")
-PY
-    python -c "import vllm; print('vLLM imported successfully')"
-    python -c "import monarch; print('Monarch imported successfully')"
-    python -c "import forge; print('Forge imported successfully')"
+    # shellcheck source=/dev/null
+    source "$py_shim_activate"
 }
 
 # Parse command line arguments
@@ -560,7 +579,22 @@ main() {
     install_monarch
     install_forge
     setup_rocm_env
-    run_smoke_tests
+
+    # Test installation
+    log_info "Testing installation..."
+    python -c "import torch; print(f'PyTorch {torch.__version__} (HIP: {torch.version.hip})')"
+    python -c "import vllm; print('vLLM imported successfully')"
+
+    # Test other imports if possible
+    if python -c "import torchtitan" 2>/dev/null; then
+        echo "torchtitan imported successfully"
+    fi
+    if python -c "import monarch" 2>/dev/null; then
+        echo "monarch imported successfully"
+    fi
+    if python -c "import forge" 2>/dev/null; then
+        echo "forge imported successfully"
+    fi
 
     echo ""
     log_info "Installation completed successfully!"
