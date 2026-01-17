@@ -92,7 +92,6 @@ class Slurmlauncher(BaseLauncher):
             gpus_per_node=self.cfg.gpus_per_node,
             cpus_per_task=self.cfg.cpus_per_task,
             mem=self.cfg.mem,
-            job_start_timeout=None,
         )
 
         # Apply the job to allocate resources
