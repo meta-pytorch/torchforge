@@ -368,7 +368,9 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
                 and the "messages" field removed.
         """
         messages = sample.pop("messages")
-        tokens, mask = self.tokenize_messages(messages, max_seq_len=self.max_seq_len)  # TODO: add_end_tokens
+        tokens, mask = self.tokenize_messages(
+            messages, max_seq_len=self.max_seq_len
+        )  # TODO: add_end_tokens
         sample["tokens"] = tokens
         sample["mask"] = mask
         return sample
