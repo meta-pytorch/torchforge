@@ -97,8 +97,14 @@ async def main(cfg: DictConfig):
     # ---- Global setups ---- #
     provisioner = None
     if cfg.get("provisioner", None) is not None:
+        # Create launcher config with services and actors for pre-allocation
+        launcher_config = LauncherConfig(
+            **cfg.provisioner,
+            services=cfg.get("services", {}),
+            actors=cfg.get("actors", {}),
+        )
         provisioner = await init_provisioner(
-            ProvisionerConfig(launcher_config=LauncherConfig(**cfg.provisioner))
+            ProvisionerConfig(launcher_config=launcher_config)
         )
     else:
         provisioner = await init_provisioner()
@@ -152,7 +158,7 @@ async def main(cfg: DictConfig):
     # TODO: support multiple host meshes
     trainer_num_procs = cfg.actors.trainer["procs"]
     trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
-    trainer_hosts = provisioner.get_host_mesh(trainer_host_mesh_name)
+    trainer_hosts = await provisioner.get_host_mesh(trainer_host_mesh_name)
     await ts.initialize(
         mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
         strategy=ts.LocalRankStrategy(),

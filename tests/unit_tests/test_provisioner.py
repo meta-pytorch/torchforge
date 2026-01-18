@@ -158,6 +158,7 @@ class TestProvisionerCudaVisibleDevices:
         # variables.
         _ = await provisioner.get_proc_mesh(
             num_procs=2,
+            mesh_name="test",
             with_gpus=True,
             num_hosts=None,
             port="12345",
