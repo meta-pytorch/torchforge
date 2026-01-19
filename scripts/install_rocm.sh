@@ -159,7 +159,7 @@ install_system_packages() {
     else
         # Default to conda installation
         log_info "Installing system packages via conda (default method)"
-        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 protobuf -y
+        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 libprotobuf -y
         log_info "Conda package installation completed. Packages installed in conda environment."
     fi
 }
