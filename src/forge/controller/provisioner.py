@@ -20,7 +20,6 @@ from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 from forge.types import ProcessConfig, ProvisionerConfig
 
 from monarch._src.actor.actor_mesh import ActorMesh
-from monarch._src.actor.shape import Extent
 
 from monarch.actor import (
     Actor,
@@ -31,7 +30,6 @@ from monarch.actor import (
     this_host,
 )
 
-from monarch.tools import commands
 from monarch.utils import setup_env_for_distributed
 
 logger = logging.getLogger(__name__)
@@ -197,9 +195,11 @@ class Provisioner:
     """A global resource provisioner."""
 
     def __init__(self, cfg: ProvisionerConfig | None = None):
-        self._server_names = []
-        self._proc_server_map = {}
         self._lock = asyncio.Lock()
+
+        self._job: JobTrait | None = None
+        # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
+        self._job_state: JobState | None = None
 
         # HostMeshes are currently not hashable, so
         # we generate a hash per HostMesh. We'll
@@ -236,12 +236,11 @@ class Provisioner:
             ),
         }
         self._proc_host_map = {}
-        self._host_mesh_map = {}
         self.launcher: BaseLauncher | None = get_launcher(
             cfg.launcher_config if cfg is not None else None
         )
         if not self.launcher:
-            logger.warning("Launcher not provided, remote allocations will not work.")
+            logger.warning("Launcher not provided, allocations must run locally.")
 
         self._registered_actors: list["ForgeActor"] = []
         self._registered_services: list["ServiceInterface"] = []
@@ -249,52 +248,50 @@ class Provisioner:
     async def initialize(self):
         """Call this after creating the instance"""
         if self.launcher is not None:
-            await self.launcher.initialize()
+            self._job, self._job_state = await self.launcher.initialize()
 
-    async def create_host_mesh(self, name: str, num_hosts: int) -> HostMesh:
-        """Creates a remote server and a HostMesh on it."""
+    async def get_host_mesh(self, name: str) -> HostMesh:
+        """Get the pre-allocated HostMesh from launcher.
+
+        Args:
+            name: Name for the host mesh
+
+        Returns:
+            the allocated HostMesh ready to use
+        """
         # no need to lock here because this is already locked behind `get_proc_mesh`
         if not self.launcher:
             raise RuntimeError(
                 "You tried to create a remote allocation by specifying the number of hosts on an actor or service, "
                 "but no launcher was specified."
             )
-        logger.debug(f"Creating remote server for alloc {name}")
-        alloc, alloc_constraints, server_name = await self.launcher.get_allocator(
-            name, num_hosts
-        )
+        logger.debug(f"Creating remote host mesh for {name}")
 
-        # We are asking Monarch to allocate a single process on
-        # every host, reflected in the Extent we provide below.
+        # Strip replica suffix (e.g., "generator_0" -> "generator")
+        # Services append _{replica_idx} to mesh names
+        base_name = name
+        if "_" in name:
+            parts = name.rsplit("_", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                base_name = parts[0]
 
-        # Technically, this is ["hosts", "procs"] but to reduce
-        # confusion on its relationship with procs elsewhere,
-        # we call it "no_dim".
+        # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
+        try:
+            host_mesh = getattr(self._job_state, base_name)
+        except AttributeError as e:
+            raise RuntimeError(
+                f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
+                "Make sure the mesh is defined in the launcher config."
+            ) from e
 
-        # TODO - remove this once Monarch supports HostMesh without it.
-        host_mesh = HostMesh.allocate_nonblocking(
-            name=name,
-            extent=Extent(["hosts", "no_dim"], [num_hosts, 1]),
-            allocator=alloc,
-            alloc_constraints=alloc_constraints,
-        )
-        return host_mesh, server_name
-
-    def get_host_mesh(self, name: str) -> HostMesh:
-        """Returns the host mesh given its associated name.
-
-        This is currently an experimental API for HostMesh v1 and
-        should not be relied on longer term.
-
-        """
-        return self._host_mesh_map[name]
+        return host_mesh
 
     async def get_proc_mesh(
         self,
         num_procs: int,
+        mesh_name: str,
         with_gpus: bool = False,
         num_hosts: int | None = None,
-        mesh_name: str | None = None,
         host_mesh: HostMesh | None = None,
         env_vars: dict[str, str] | None = None,
         addr: str | None = None,
@@ -304,18 +301,25 @@ class Provisioner:
 
         Args:
             num_procs: The number of processes to allocate.
+            mesh_name: Name of the pre-allocated mesh to use.
+                Must match a mesh name defined in the launcher config.
             with_gpus: Whether to include GPU allocations.
                 This only adds the CUDA_VISIBLE_DEVICES environment variable.
             num_hosts: The number of hosts to allocate.
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
                 This behavior may change in the future.
+            mesh_name: Name of the pre-allocated mesh to use.
+                Required for remote allocations (when num_hosts > 0).
+                Must match a mesh name defined in the launcher config.
             host_mesh: The host mesh to allocate the process on.
-                If None, a new host mesh will be created.
-            port: The distributed port to use.
-                If None, a port will be detected.
+                If None, will use the pre-allocated host mesh corresponding to mesh_name.
+            env_vars: Additional environment variables to set for the spawned processes.
+                These will be merged with auto-detected env vars (CUDA_VISIBLE_DEVICES, MASTER_ADDR, etc.).
             addr: The distributed address to use.
                 If None, an address will be detected.
+            port: The distributed port to use.
+                If None, a port will be detected.
 
         Returns:
             A ProcMesh.
@@ -327,15 +331,10 @@ class Provisioner:
         is_remote = num_hosts is not None and num_hosts > 0
 
         async with self._lock:
-            server_name = None
             if is_remote:
-                if mesh_name is None:
-                    created_hosts = len(self._server_names)
-                    mesh_name = f"alloc_{created_hosts}"
                 if host_mesh is None:
-                    host_mesh, server_name = await self.create_host_mesh(
+                    host_mesh = await self.get_host_mesh(
                         name=mesh_name,
-                        num_hosts=num_hosts,
                     )
                     host_id = uuid.uuid1()
                     # Get the GPU count from the remote host
@@ -395,13 +394,7 @@ class Provisioner:
                 # Applies any launcher specific remote setup.
                 procs._gpu_ids = gpu_ids
 
-            self._host_mesh_map[mesh_name] = host_mesh
             procs._host = host_mesh
-
-            # If we created a server, track so we can tear it down later.
-            if server_name:
-                self._server_names.append(server_name)
-                self._proc_server_map[procs] = server_name
 
             self._proc_host_map[procs] = host_mesh
 
@@ -442,9 +435,7 @@ class Provisioner:
                 gpu_manager = self._host_gpu_map[proc_mesh._host._host_id]
                 gpu_manager.release_gpus(proc_mesh._gpu_ids)
             await proc_mesh.stop()
-            if proc_mesh in self._proc_server_map:
-                server_name = self._proc_server_map[proc_mesh]
-                commands.kill(server_name)
+
             del self._proc_host_map[proc_mesh]
 
     def register_service(self, service: "ServiceInterface") -> None:
@@ -493,16 +484,8 @@ class Provisioner:
         self._registered_actors.clear()
         self._registered_services.clear()
 
-        # -- HostMeshes (including the implicit local host) ---
-        logger.info(f"Shutting down {len(self._host_mesh_map)} HostMesh(es)...")
-        results = await asyncio.gather(
-            *[host_mesh.shutdown() for host_mesh in self._host_mesh_map.values()],
-            return_exceptions=True,
-        )
-        for (name, _), result in zip(self._host_mesh_map.items(), results, strict=True):
-            if isinstance(result, Exception):
-                logger.warning(f"Failed to shutdown HostMesh {name}: {result}")
-        self._host_mesh_map.clear()
+        if self.launcher:
+            self._job.kill()
         try:
             await shutdown_context()
         except Exception as e:
@@ -511,9 +494,6 @@ class Provisioner:
     async def shutdown(self):
         """Tears down all remaining remote allocations."""
         await self.shutdown_all_allocations()
-        async with self._lock:
-            for server_name in self._server_names:
-                commands.kill(server_name)
 
 
 _provisioner: Provisioner | None = None

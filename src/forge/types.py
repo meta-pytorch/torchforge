@@ -109,13 +109,12 @@ class LauncherConfig:
     job_name: str = ""
     services: dict[str, ServiceConfig] = field(default_factory=dict)
     actors: dict[str, ProcessConfig] = field(default_factory=dict)
-    cpu: int | None = None  # CPUs per node (required for SLURM, can get with sinfo)
-    memMB: int | None = (  # noqa: N815
-        None  # Memory in MB per node (required for SLURM, can get with sinfo)
+    slurm_args: dict[str, str] = field(default_factory=dict)
+    cpus_per_task: int | None = None  # CPUs per node (SLURM param, can get with sinfo)
+    mem: int | None = (  # noqa: N815
+        None  # Memory per node (SLURM param, can get with sinfo)
     )
-    gpu: int = 8  # GPUs per node (required for SLURM, can get with sinfo)
-    account: str = ""
-    qos: str = ""
+    gpus_per_node: int = 8  # GPUs per node (SLURM param, can get with sinfo)
 
     def __post_init__(self):
         if isinstance(self.launcher, str):
