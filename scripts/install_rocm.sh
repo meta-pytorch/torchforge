@@ -137,12 +137,12 @@ install_system_packages() {
             case "$os_family" in
                 "rhel_fedora")
                     log_info "Detected RHEL/Fedora-based OS - using system package manager"
-                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel
+                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel protobuf-compiler
                     ;;
                 "debian")
                     log_info "Detected Debian-based OS - using system package manager"
                     sudo apt-get update
-                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev
+                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev protobuf-compiler
                     ;;
                 "unknown")
                     log_error "Unsupported OS for automatic system package installation"
@@ -159,7 +159,7 @@ install_system_packages() {
     else
         # Default to conda installation
         log_info "Installing system packages via conda (default method)"
-        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 -y
+        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 protobuf -y
         log_info "Conda package installation completed. Packages installed in conda environment."
     fi
 }
