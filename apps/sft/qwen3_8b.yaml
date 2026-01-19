@@ -6,15 +6,15 @@
 comm:
   trace_buf_size: 0
 
-model_name: "Qwen/Qwen3-8B"
+model_name: "Qwen/Qwen3-0.6B"
 
 model:
   name: qwen3
-  flavor: 8B
+  flavor: 0.6B
   hf_assets_path: hf://${model_name}
 
 processes:
-  procs: 8
+  procs: 1
   with_gpus: true
 
 optimizer:
@@ -26,21 +26,22 @@ lr_scheduler:
   warmup_steps: 200
 
 training:
-  local_batch_size: 8
-  seq_len: 2048
+  local_batch_size: 1
+  seq_len: 2
   max_norm: 1.0
-  steps: 1000
+  steps: 10
+  dtype: bfloat16
   compile: false
   datasets:
     - path: "yahma/alpaca-cleaned"
-      split: "train[:95%]"
+      split: "train[:5%]"
 
 eval:
-  eval_every_n_steps: 50  # null = disabled
-  max_eval_steps: null    # null = run until epoch completes
+  eval_every_n_steps: 5  # null = disabled
+  max_eval_steps: 5    # null = run until epoch completes
   datasets:
       - path: "yahma/alpaca-cleaned"
-        split: "train[95%:]"
+        split: "train[99%:]"
 
 parallelism:
   data_parallel_replicate_degree: 1

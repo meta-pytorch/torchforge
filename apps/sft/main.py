@@ -21,7 +21,7 @@ from typing import Any
 import torch
 
 import torchtitan.experiments.forge.train_spec as forge_train_spec
-from forge.controller import ForgeActor
+from forge.controller import ForgeActor, shutdown
 from forge.data.collate import collate_padded
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
@@ -103,6 +103,13 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 "Please set training.compile=false in your config."
             )
 
+        if not hasattr(self, "device") or self.device is None:
+            raise RuntimeError(
+                "ForgeSFTRecipe.device was not initialized. "
+                "This is expected to be set by the TorchTitan ForgeEngine during initialization."
+            )
+        logger.info("Using device: %s", self.device)
+
         # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
         self.rank_should_record_loss = True
         if hasattr(self, "pp_has_last_stage") and not self.pp_has_last_stage:
@@ -138,9 +145,44 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                 dataloader = self.setup_data([dataset_config])
                 self.val_dataloaders[ds_name] = dataloader
 
-        # TODO: confirm that this is working properly
-        # Should also use load, not dcp_load
-        self.checkpointer.load(step=self.current_step)
+        ckpt_folder = getattr(self.job_config.checkpoint, "folder", None)
+
+        # TorchTitan's checkpointer.load() uses Torch Distributed Checkpoint (DCP).
+        # When starting from a HuggingFace snapshot (`initial_load_in_hf: true`),
+        # calling load() at step=0 can accidentally route a non-DCP directory through
+        # DCP and fail with `assert metadata is not None`.
+        #
+        # For step=0, only resume if we can detect an existing saved step in
+        # `checkpoint.folder`. Otherwise, skip load and proceed from the model's
+        # HF initialization.
+        resume_step = None
+        if isinstance(ckpt_folder, str) and ckpt_folder and "://" not in ckpt_folder:
+            if os.path.isdir(ckpt_folder):
+                for entry in os.scandir(ckpt_folder):
+                    if not entry.is_dir():
+                        continue
+                    name = entry.name
+                    if name.startswith("step-"):
+                        try:
+                            step = int(name.removeprefix("step-"))
+                        except ValueError:
+                            continue
+                        resume_step = step if resume_step is None else max(resume_step, step)
+
+        if resume_step is not None and resume_step > 0:
+            logger.info("Resuming from checkpoint step-%d in %r", resume_step, ckpt_folder)
+            self.current_step = resume_step
+            self.checkpointer.load(step=self.current_step)
+        elif self.current_step > 0:
+            # Caller explicitly set a non-zero step; attempt resume even if we
+            # couldn't auto-detect the directory layout.
+            self.checkpointer.load(step=self.current_step)
+        else:
+            logger.info(
+                "No resumable checkpoint detected (step=0). Skipping checkpointer.load(). "
+                "If you intended to resume, ensure %r contains step-* directories.",
+                ckpt_folder,
+            )
 
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
         # self.logger = self.setup_logger(self.train_config.logger_config)
@@ -296,6 +338,15 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         self.optimizers.step()
         self.lr_schedulers.step()
 
+    def _truncate_batch_to_seq_len(self, batch: dict, seq_len: int) -> dict:
+        if seq_len is None or seq_len <= 0:
+            return batch
+        for key in ("tokens", "labels", "mask"):
+            value = batch.get(key)
+            if isinstance(value, torch.Tensor) and value.ndim >= 2:
+                batch[key] = value[:, :seq_len]
+        return batch
+
     async def evaluate(self) -> None:
         """Run evaluation on multiple datasets, one at a time.
 
@@ -359,6 +410,10 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                     for key, value in batch.items():
                         if isinstance(value, torch.Tensor):
                             batch[key] = value.to(self.device)
+
+                    seq_len = getattr(self.job_config.training, "seq_len", None)
+                    if isinstance(seq_len, int) and seq_len > 0:
+                        batch = self._truncate_batch_to_seq_len(batch, seq_len)
 
                     # Process batch
                     labels = batch.pop("labels")
@@ -430,10 +485,17 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             self.record_batch_metrics(batch.pop("metrics", []))
             record_metric("ForgeSFTRecipe/train/step", self.current_step, Reduce.MEAN)
 
+            # Ensure batch sequence length matches the model's configured seq_len.
+            # Without this, models that precompute RoPE caches based on `training.seq_len`
+            # can assert if the incoming batch is longer.
+            seq_len = getattr(self.job_config.training, "seq_len", None)
+            if isinstance(seq_len, int) and seq_len > 0:
+                batch = self._truncate_batch_to_seq_len(batch, seq_len)
+
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")  # TODO: hardcoded for now
+                    batch[k] = v.to(self.device)
 
             self.train_step(batch)
             # self.profiler.step()
@@ -492,7 +554,7 @@ async def run(cfg: DictConfig) -> None:
     logging.info("Done training. Clean up")
     await recipe.cleanup.call()
 
-    await recipe.mesh.stop()
+    await shutdown()
     logging.info("All done!")
 
 

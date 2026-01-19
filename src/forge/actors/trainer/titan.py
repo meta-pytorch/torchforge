@@ -108,6 +108,24 @@ class TitanTrainer(ForgeActor):
 
     @endpoint
     async def setup(self):
+        # If the configured checkpoint folder exists but is empty, some checkpointer
+        # implementations treat it as an existing checkpoint and attempt a DCP load,
+        # which fails later with `assert metadata is not None`.
+        ckpt_folder = getattr(self.checkpoint, "folder", None)
+        logging.error("Checkpoint folder: %r", ckpt_folder)
+        if (
+            isinstance(ckpt_folder, str)
+            and ckpt_folder
+            and "://" not in ckpt_folder
+            and os.path.isdir(ckpt_folder)
+        ):
+            try:
+                logging.error("Checking for empty checkpoint folder at %r", ckpt_folder)
+                if not any(os.scandir(ckpt_folder)):
+                    os.rmdir(ckpt_folder)
+            except OSError:
+                pass
+
         # TODO: update ForgeEngine to not use ForgeJobConfig
         engine_config = {f.name: getattr(self, f.name) for f in fields(self)}
         for key in {
@@ -116,7 +134,15 @@ class TitanTrainer(ForgeActor):
         }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
-        self.engine.checkpointer.load(step=self.step)
+        try:
+            self.engine.checkpointer.load(step=self.step)
+        except AssertionError as exc:
+            raise RuntimeError(
+                "Checkpoint load failed because distributed-checkpoint metadata was not found. "
+                "If you intended to start from an initial model checkpoint (e.g., HuggingFace), "
+                "ensure the checkpoint folder is empty/non-existent, or point it at a valid DCP. "
+                f"folder={ckpt_folder!r}"
+            ) from exc
         self.engine.optimizers.zero_grad()
 
     def forward_backward(

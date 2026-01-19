@@ -56,7 +56,10 @@ class _RemoteInfoFetcher(Actor):
     def get_gpu_count(self) -> int:
         """Returns the number of GPUs available on this host."""
         try:
-            gpu_count = torch.cuda.device_count()
+            if torch.xpu.is_available():
+                gpu_count = torch.xpu.device_count()
+            else:
+                gpu_count = torch.cuda.device_count()
         except Exception:
             # If torch is not available or CUDA is not available, assume no GPUs
             gpu_count = 0
@@ -225,7 +228,10 @@ class Provisioner:
 
         # Get the actual GPU count for the local host
         try:
-            local_gpu_count = torch.cuda.device_count()
+            if torch.xpu.is_available():
+                local_gpu_count = torch.xpu.device_count()
+            else:
+                local_gpu_count = torch.cuda.device_count()
         except Exception:
             # If torch is not available or CUDA is not available, assume no GPUs
             local_gpu_count = 0
