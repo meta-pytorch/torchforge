@@ -261,9 +261,16 @@ install_amdsmi() {
         return
     fi
 
-    log_info "Installing amdsmi (version matched to ROCm when possible)"
-    if ! python -m pip install "amdsmi~=${ROCM_VERSION}"; then
-        log_warning "Failed to install amdsmi~=${ROCM_VERSION}; retrying without version pin"
+    local amdsmi_spec=""
+    if [[ "$ROCM_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        amdsmi_spec="==${ROCM_VERSION}.*"
+    else
+        amdsmi_spec="~=${ROCM_VERSION}"
+    fi
+
+    log_info "Installing amdsmi${amdsmi_spec} (pinned to ROCm ${ROCM_VERSION})"
+    if ! python -m pip install "amdsmi${amdsmi_spec}"; then
+        log_warning "Failed to install amdsmi${amdsmi_spec}; retrying without version pin (set AMDSMI_VERSION to override)"
         python -m pip install amdsmi || log_warning "amdsmi install failed; continuing"
     fi
 }
