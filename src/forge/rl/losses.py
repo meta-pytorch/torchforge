@@ -4,7 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
@@ -84,23 +83,6 @@ class BaseLossConfig(BaseModel):
     # extra="forbid": Raises error if user passes unknown fields (catches typos).
     # arbitrary_types_allowed=True: Allows torch.Tensor and other non-JSON types in fields.
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
-
-class PolicyGradientLoss(ABC):
-    """Abstract base class for policy gradient losses."""
-
-    @abstractmethod
-    def __call__(self, logits: torch.Tensor, **kwargs) -> LossOutput:
-        """Compute the policy gradient loss.
-
-        Args:
-            logits (torch.Tensor): Model output logits (B, S, V).
-            **kwargs: Additional inputs specific to each loss.
-
-        Returns:
-            LossOutput
-        """
-        pass
 
 
 # =============================================================================
@@ -660,7 +642,7 @@ def aggregate(
 # =============================================================================
 
 
-class GRPOLoss(PolicyGradientLoss, BaseLossConfig):
+class GRPOLoss(BaseLossConfig):
     """DR-GRPO: "Done Right" GRPO with unbiased aggregation.
 
     Reference: Liu et al., "Understanding R1-Zero-Like Training" (2025).
@@ -736,7 +718,7 @@ class GRPOLoss(PolicyGradientLoss, BaseLossConfig):
         return LossOutput(loss, lp_m + ent_m + ratio_m + clip_m + kl_m + agg_m)
 
 
-class DAPOLoss(PolicyGradientLoss, BaseLossConfig):
+class DAPOLoss(BaseLossConfig):
     """DAPO: Decoupled clip + Dynamic sAmpling Policy Optimization.
 
     Reference: Yu et al., "DAPO: An Open-Source LLM Reinforcement Learning System at Scale" (2025).
@@ -797,7 +779,7 @@ class DAPOLoss(PolicyGradientLoss, BaseLossConfig):
         return LossOutput(loss, lp_m + ent_m + ratio_m + clip_m + dual_m + agg_m)
 
 
-class GSPOLoss(PolicyGradientLoss, BaseLossConfig):
+class GSPOLoss(BaseLossConfig):
     """GSPO: Group Sequence Policy Optimization.
 
     Reference: Zheng et al., "Group Sequence Policy Optimization" (2025).
@@ -858,7 +840,7 @@ class GSPOLoss(PolicyGradientLoss, BaseLossConfig):
         return LossOutput(loss, lp_m + ent_m + ratio_m + clip_m + agg_m)
 
 
-class CISPOLoss(PolicyGradientLoss, BaseLossConfig):
+class CISPOLoss(BaseLossConfig):
     """CISPO: Clipped Importance Sampling Policy Optimization.
 
     Reference: Chen et al., "MiniMax-M1: Scaling Test-Time Compute Efficiently with Lightning Attention" (2025).
@@ -922,7 +904,7 @@ class CISPOLoss(PolicyGradientLoss, BaseLossConfig):
         return LossOutput(loss, lp_m + ent_m + ratio_m + cispo_m + agg_m)
 
 
-class SAPOLoss(PolicyGradientLoss, BaseLossConfig):
+class SAPOLoss(BaseLossConfig):
     """SAPO: Soft Adaptive Policy Optimization.
 
     Reference: Gao et al., "Soft Adaptive Policy Optimization" (2025).
