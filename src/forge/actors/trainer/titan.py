@@ -6,7 +6,6 @@
 
 import logging
 import os
-
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -14,15 +13,13 @@ from typing import Callable
 
 import torch
 import torchstore as ts
-
 from forge.actors._torchstore_utils import get_param_key
-
+from forge.api.trainer import ParallelismConfig, TrainerConfig, TrainerStatus
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl.losses import create_shifted_targets
-
 from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -102,6 +99,7 @@ class TitanTrainer(ForgeActor):
         self.step = 1  # fragile contract.
         self.num_training_steps = self.training.steps
         self.gradient_accumulation_steps = 1
+        self._accumulated_microbatches = 0
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         logger.info("Compiling loss")
         self.loss = torch.compile(self.loss)
@@ -154,7 +152,7 @@ class TitanTrainer(ForgeActor):
                 # Free to before bwd to avoid peaking memory
                 del logits, loss_output.metrics
                 loss.backward()
-
+        self._accumulated_microbatches += 1
         return loss
 
     @endpoint
@@ -181,18 +179,14 @@ class TitanTrainer(ForgeActor):
         self.engine.optimizers.step()
         self.engine.optimizers.zero_grad()
         self.engine.lr_schedulers.step()
+        self._accumulated_microbatches = 0
+        self.step += 1
         t.step("optimizer_step")
 
         # TODO: delete item() to avoid cpu-gpu sync
         loss = loss.detach().item()
         record_metric("rl_trainer/loss", loss, Reduce.MEAN)
 
-        # These are placeholder values until the loss function exposes these metrics
-        # record_metric("rl_trainer/step/avg_kl_divergence", 0.0, Reduce.MEAN)
-        # record_metric("rl_trainer/step/std_kl_divergence", 0.0, Reduce.STD)
-        # record_metric("rl_trainer/step/avg_policy_entropy", 0.0, Reduce.MEAN)
-
-        self.step += 1
         self.engine.checkpointer.save(
             curr_step=self.step,
             last_step=self.step == self.num_training_steps,
@@ -200,6 +194,51 @@ class TitanTrainer(ForgeActor):
         t.step("save_checkpoint")
         t.stop()
         return loss
+
+    @endpoint
+    async def get_config(self) -> TrainerConfig:
+        """Get static trainer and model configuration.
+
+        Returns configuration information that doesn't change during training.
+        For runtime state like current step, use get_status() instead.
+
+        Returns:
+            TrainerConfig containing model name, model_config, and parallelism settings
+
+        """
+        parallel_dims = self.engine.parallel_dims
+        parallelism = ParallelismConfig(
+            dp_degree=parallel_dims.dp_shard * parallel_dims.dp_replicate,
+            tp_degree=parallel_dims.tp,
+            pp_degree=parallel_dims.pp,
+            cp_degree=parallel_dims.cp,
+            ep_degree=parallel_dims.ep,
+            world_size=parallel_dims.world_size,
+            dp_rank=self.engine.dp_rank,
+            tp_rank=parallel_dims.tp_coord,
+            device=str(self.engine.device),
+        )
+        return TrainerConfig(
+            model_name=self.model.name,
+            model_config=self.model.model_dump(),
+            parallelism=parallelism,
+        )
+
+    @endpoint
+    async def get_status(self) -> TrainerStatus:
+        """Get current runtime status of the trainer.
+
+        Returns dynamic information about the trainer's current state that changes
+        during training.
+
+        Returns:
+            TrainerStatus containing current step and accumulated batch count
+
+        """
+        return TrainerStatus(
+            step=self.step,
+            accumulated_microbatches=self._accumulated_microbatches,
+        )
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:

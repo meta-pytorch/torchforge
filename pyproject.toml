@@ -94,7 +94,7 @@ url = "https://download.pytorch.org/whl/preview/forge"
 torch = { index = "pytorch-cu128" }
 vllm = { index = "vllm-forge" }
 # Issue 656: switch to ping torchstore nightly
-torchstore = { git = "https://github.com/meta-pytorch/torchstore.git", branch = "no-monarch-2025.12.17" }
+torchstore = { git = "https://github.com/meta-pytorch/torchstore.git", branch = "no-monarch-2026.01.05" }
 
 [tool.uv]
 # TODO: revert to stricter default uv strategy

@@ -26,4 +26,5 @@ export TORCHSTORE_RDMA_ENABLED=0
 
 cd /storage/home/$USER/torchforge
 
+# Run the controller - it will spawn the GPU workers
 srun python -m apps.grpo.main --config experimental/slurm/${CONFIG_NAME}.yaml
