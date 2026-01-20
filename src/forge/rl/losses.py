@@ -514,7 +514,7 @@ def pg_cispo(
 
 
 def compute_kl(
-    log_policy: torch.Tensor,
+    policy_logprobs: torch.Tensor,
     log_ref: torch.Tensor,
     mask: torch.Tensor,
     kl_type: KLType = "k3",
@@ -536,7 +536,7 @@ def compute_kl(
     regularizer (gradient flows correctly). k1 is rarely used in practice.
 
     Args:
-        log_policy (torch.Tensor): Log probs from current policy (B, S).
+        policy_logprobs (torch.Tensor): Log probs from current policy (B, S).
         log_ref (torch.Tensor): Log probs from reference policy (B, S).
         mask (torch.Tensor): Valid token mask (B, S).
         kl_type (KLType): KL estimator type: "k1", "k2", or "k3" (default: "k3").
@@ -544,7 +544,7 @@ def compute_kl(
     Returns:
         tuple[torch.Tensor, list[Metric]]: Per-token KL (B, S) and loss/kl/mean metric.
     """
-    log_ratio = log_policy - log_ref.detach()  # log(π_θ / π_ref)
+    log_ratio = policy_logprobs - log_ref.detach()  # log(π_θ / π_ref)
 
     if kl_type == "k1":
         kl = log_ratio
