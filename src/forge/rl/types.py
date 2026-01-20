@@ -9,14 +9,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
-
 from forge.data_models.completion import Completion
-
-
-# TODO: Deprecated fields - will be removed in Episode refactor PR
-# - request_len, response_len: Use loss_mask instead
-# - request_tensor, response_tensor: Use unified token sequence + response_mask
-# - pad_id: Should come from tokenizer config, not per-episode
 
 
 @dataclass
