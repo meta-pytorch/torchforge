@@ -515,7 +515,7 @@ def pg_cispo(
 
 def compute_kl(
     policy_logprobs: torch.Tensor,
-    log_ref: torch.Tensor,
+    ref_logprobs: torch.Tensor,
     mask: torch.Tensor,
     kl_type: KLType = "k3",
 ) -> tuple[torch.Tensor, list[Metric]]:
@@ -537,14 +537,14 @@ def compute_kl(
 
     Args:
         policy_logprobs (torch.Tensor): Log probs from current policy (B, S).
-        log_ref (torch.Tensor): Log probs from reference policy (B, S).
+        ref_logprobs (torch.Tensor): Log probs from reference policy (B, S).
         mask (torch.Tensor): Valid token mask (B, S).
         kl_type (KLType): KL estimator type: "k1", "k2", or "k3" (default: "k3").
 
     Returns:
         tuple[torch.Tensor, list[Metric]]: Per-token KL (B, S) and loss/kl/mean metric.
     """
-    log_ratio = policy_logprobs - log_ref.detach()  # log(π_θ / π_ref)
+    log_ratio = policy_logprobs - ref_logprobs.detach()  # log(π_θ / π_ref)
 
     if kl_type == "k1":
         kl = log_ratio
