@@ -14,6 +14,7 @@ import torchstore as ts
 import yaml
 from apps.grpo.data import DatasetActor
 from apps.grpo.grading import MathReward, ThinkingReward
+from monarch.actor import this_host
 from forge.actors.generator import Generator
 from forge.actors.reference_model import ReferenceModel
 from forge.actors.replay_buffer import ReplayBuffer
@@ -158,7 +159,11 @@ async def main(cfg: DictConfig):
     # TODO: support multiple host meshes
     trainer_num_procs = cfg.actors.trainer["procs"]
     trainer_host_mesh_name = cfg.actors.trainer["mesh_name"]
-    trainer_hosts = await provisioner.get_host_mesh(trainer_host_mesh_name)
+    trainer_hosts = (
+        await provisioner.get_host_mesh(trainer_host_mesh_name)
+        if provisioner.launcher
+        else this_host()
+    )
     await ts.initialize(
         mesh=trainer_hosts.spawn_procs(per_host={"procs": trainer_num_procs}),
         strategy=ts.LocalRankStrategy(),
