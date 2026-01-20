@@ -23,7 +23,7 @@ from forge.controller.provisioner import shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
 
 from forge.observability.metrics import record_metric, Reduce
-from forge.rl.losses import compute_logprobs, GRPOLoss
+from forge.rl.loss import compute_logprobs, GRPOLoss
 from forge.util.config import parse
 from monarch.actor import endpoint
 from omegaconf import DictConfig

@@ -15,7 +15,7 @@ import torch
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.rl.losses import compute_logprobs, create_shifted_targets
+from forge.rl.loss import compute_logprobs, create_shifted_targets
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
 from torchtitan.config.job_config import (

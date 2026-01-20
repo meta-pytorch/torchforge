@@ -9,7 +9,7 @@
 import pytest
 import torch
 
-from forge.rl.losses import (
+from forge.rl.loss import (
     aggregate,
     CISPOLoss,
     compute_entropy,
