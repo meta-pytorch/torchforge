@@ -137,12 +137,14 @@ install_system_packages() {
             case "$os_family" in
                 "rhel_fedora")
                     log_info "Detected RHEL/Fedora-based OS - using system package manager"
-                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel protobuf-compiler
+                    sudo dnf install -y libibverbs rdma-core libmlx5 libibverbs-devel rdma-core-devel \
+                        libunwind libunwind-devel clang protobuf-compiler
                     ;;
                 "debian")
                     log_info "Detected Debian-based OS - using system package manager"
                     sudo apt-get update
-                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev protobuf-compiler
+                    sudo apt-get install -y libibverbs1 rdma-core libmlx5-1 libibverbs-dev rdma-core-dev \
+                        libunwind-dev clang protobuf-compiler
                     ;;
                 "unknown")
                     log_error "Unsupported OS for automatic system package installation"
@@ -159,7 +161,7 @@ install_system_packages() {
     else
         # Default to conda installation
         log_info "Installing system packages via conda (default method)"
-        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 libprotobuf -y
+        conda install -c conda-forge rdma-core libibverbs-cos7-x86_64 libunwind clang libprotobuf -y
         log_info "Conda package installation completed. Packages installed in conda environment."
     fi
 }
@@ -341,6 +343,7 @@ install_monarch() {
         log_warning "Unable to raise open file limit to 2048, continuing anyway"
     fi
 
+    # ROCm builds disable tensor_engine (RDMA/distributed tensor features).
     USE_TENSOR_ENGINE=0 LIBRARY_PATH="${CONDA_PREFIX}/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" \
         python -m pip install --no-build-isolation -e "$monarch_dir"
 }
@@ -480,6 +483,7 @@ import torch
 print(os.path.join(os.path.dirname(torch.__file__), "lib"))
 PY
 )"
+export TORCHFORGE_TORCH_LIB
 
 python()  { LD_LIBRARY_PATH="${TORCHFORGE_TORCH_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python  "$@"; }
 python3() { LD_LIBRARY_PATH="${TORCHFORGE_TORCH_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" command python3 "$@"; }
@@ -566,7 +570,6 @@ main() {
     mkdir -p "$FORGE_DEPS_DIR"
 
     # Install build prerequisites
-    conda install -y libunwind
     install_system_packages "$USE_SUDO"
 
     ROCM_VERSION="$(detect_rocm_version)"
