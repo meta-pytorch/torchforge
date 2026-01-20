@@ -279,9 +279,12 @@ class TitanTrainer(ForgeActor):
         Returns:
             Full path where checkpoint was saved
         """
-        # TODO: Support custom 'name' parameter (currently uses step-based naming)
-        # TODO: Support custom 'path' parameter (currently uses checkpoint.folder from config)
-        # TODO: Support 'weights_only' parameter (currently saves full training state)
+        if name is not None:
+            raise NotImplementedError("Custom name is not yet supported for save()")
+        if path is not None:
+            raise NotImplementedError("Custom path is not yet supported for save()")
+        if weights_only:
+            raise NotImplementedError("weights_only is not yet supported for save()")
 
         self.engine.checkpointer.save(
             curr_step=self.step,
