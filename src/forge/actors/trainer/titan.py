@@ -272,19 +272,25 @@ class TitanTrainer(ForgeActor):
         learning rate scheduler state, and step counter).
 
         Args:
-            name: Optional checkpoint name/identifier (not yet supported, uses step-based naming)
-            path: Optional base directory (not yet supported, uses checkpoint.folder from config)
-            weights_only: If True, saves only model weights (not yet supported)
+            name: Not supported. TitanTrainer uses step-based checkpoint naming.
+            path: Not supported. TitanTrainer uses checkpoint.folder from config.
+            weights_only: Not supported. TitanTrainer always saves full training state.
 
         Returns:
             Full path where checkpoint was saved
         """
         if name is not None:
-            raise NotImplementedError("Custom name is not yet supported for save()")
+            raise NotImplementedError(
+                "TitanTrainer uses step-based checkpoint naming; custom names are not supported"
+            )
         if path is not None:
-            raise NotImplementedError("Custom path is not yet supported for save()")
+            raise NotImplementedError(
+                "TitanTrainer uses the checkpoint.folder from config; custom paths are not supported"
+            )
         if weights_only:
-            raise NotImplementedError("weights_only is not yet supported for save()")
+            raise NotImplementedError(
+                "weights_only is not supported; TitanTrainer always saves full training state"
+            )
 
         self.engine.checkpointer.save(
             curr_step=self.step,
@@ -299,13 +305,15 @@ class TitanTrainer(ForgeActor):
         Restores training state from a checkpoint.
 
         Args:
-            path: Optional path to the checkpoint (not yet supported, loads from checkpoint.folder)
+            path: Not supported. TitanTrainer uses checkpoint.folder from config.
 
         Returns:
             Path that was loaded
         """
         if path is not None:
-            raise NotImplementedError("Custom path is not yet supported for load()")
+            raise NotImplementedError(
+                "TitanTrainer uses the checkpoint.folder from config; custom paths are not supported"
+            )
 
         self.engine.checkpointer.load(step=self.step)
         return f"{self.checkpoint.folder}/step-{self.step}"
