@@ -301,8 +301,8 @@ class TitanTrainer(ForgeActor):
         Returns:
             Path that was loaded
         """
-        # TODO: Support custom 'path' parameter (currently loads from checkpoint.folder)
-        # Currently loads the checkpoint at self.step
+        if path is not None:
+            raise NotImplementedError("Custom path is not yet supported for load()")
 
         self.engine.checkpointer.load(step=self.step)
         return f"{self.checkpoint.folder}/step-{self.step}"
