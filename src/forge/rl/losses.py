@@ -204,7 +204,7 @@ def compute_entropy(
 
 def compute_ratio(
     logprobs: torch.Tensor,
-    inference_logprobs: torch.Tensor,
+    generator_logprobs: torch.Tensor,
     mask: torch.Tensor,
     ratio_type: RatioType = "token",
 ) -> tuple[torch.Tensor, torch.Tensor, list[Metric]]:
@@ -215,8 +215,8 @@ def compute_ratio(
     old policy while adjusting for distribution shift.
 
     Formula:
-        token:    r_t = exp(logprobs_t - inference_logprobs_t)
-        sequence: R_seq = exp(mean_t[logprobs - inference_logprobs])
+        token:    r_t = exp(logprobs_t - generator_logprobs_t)
+        sequence: R_seq = exp(mean_t[logprobs - generator_logprobs])
 
     Interpretation:
     - ratio = 1.0: on-policy (no distribution change)
@@ -234,7 +234,7 @@ def compute_ratio(
 
     Args:
         logprobs (torch.Tensor): Log probs from current policy (B, S).
-        inference_logprobs (torch.Tensor): Log probs from sampling policy (B, S).
+        generator_logprobs (torch.Tensor): Log probs from sampling policy (B, S).
         mask (torch.Tensor): Valid token mask (B, S).
         ratio_type (RatioType): "token" for per-token ratio, "sequence" for sequence-level.
             default: "token".
@@ -245,12 +245,12 @@ def compute_ratio(
             per-sequence computation.
     """
     if ratio_type == "token":
-        log_ratio = logprobs - inference_logprobs.detach()
+        log_ratio = logprobs - generator_logprobs.detach()
         log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0)
         ratio = torch.exp(log_ratio)
 
     elif ratio_type == "sequence":
-        token_log_ratio = logprobs - inference_logprobs.detach()
+        token_log_ratio = logprobs - generator_logprobs.detach()
         seq_lengths = mask.sum(dim=-1).clamp(min=1)
         seq_log_ratio = (token_log_ratio * mask).sum(dim=-1) / seq_lengths
 
@@ -693,7 +693,7 @@ class GRPOLoss(BaseLossConfig):
         logits: torch.Tensor,  # (B, S, V)
         target_ids: torch.Tensor,  # (B, S)
         advantages: torch.Tensor,  # (B, S)
-        inference_logprobs: torch.Tensor,  # (B, S)
+        generator_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         ref_logprobs: torch.Tensor | None = None,  # (B, S) or None
         loss_scale: torch.Tensor | None = None,
@@ -701,7 +701,7 @@ class GRPOLoss(BaseLossConfig):
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)  # logging only
         ratio, log_ratio, ratio_m = compute_ratio(
-            logprobs, inference_logprobs, loss_mask, ratio_type="token"
+            logprobs, generator_logprobs, loss_mask, ratio_type="token"
         )
         pg_loss, clip_m = pg_ppo_clip(
             ratio, advantages, loss_mask, self.clip_low, self.clip_high
@@ -762,14 +762,14 @@ class DAPOLoss(BaseLossConfig):
         logits: torch.Tensor,  # (B, S, V)
         target_ids: torch.Tensor,  # (B, S)
         advantages: torch.Tensor,  # (B, S)
-        inference_logprobs: torch.Tensor,  # (B, S)
+        generator_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
         ratio, log_ratio, ratio_m = compute_ratio(
-            logprobs, inference_logprobs, loss_mask, ratio_type="token"
+            logprobs, generator_logprobs, loss_mask, ratio_type="token"
         )
         pg_loss, clip_m = pg_ppo_clip(
             ratio, advantages, loss_mask, self.clip_low, self.clip_high
@@ -823,14 +823,14 @@ class GSPOLoss(BaseLossConfig):
         logits: torch.Tensor,  # (B, S, V)
         target_ids: torch.Tensor,  # (B, S)
         advantages: torch.Tensor,  # (B, S)
-        inference_logprobs: torch.Tensor,  # (B, S)
+        generator_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
         ratio, log_ratio, ratio_m = compute_ratio(
-            logprobs, inference_logprobs, loss_mask, ratio_type="sequence"
+            logprobs, generator_logprobs, loss_mask, ratio_type="sequence"
         )
         pg_loss, clip_m = pg_ppo_clip(
             ratio, advantages, loss_mask, self.clip_low, self.clip_high
@@ -888,14 +888,14 @@ class CISPOLoss(BaseLossConfig):
         logits: torch.Tensor,  # (B, S, V)
         target_ids: torch.Tensor,  # (B, S)
         advantages: torch.Tensor,  # (B, S)
-        inference_logprobs: torch.Tensor,  # (B, S)
+        generator_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
         ratio, log_ratio, ratio_m = compute_ratio(
-            logprobs, inference_logprobs, loss_mask, ratio_type="token"
+            logprobs, generator_logprobs, loss_mask, ratio_type="token"
         )
         pg_loss, cispo_m = pg_cispo(
             ratio, logprobs, advantages, loss_mask, self.clip_low, self.clip_high
@@ -949,14 +949,14 @@ class SAPOLoss(BaseLossConfig):
         logits: torch.Tensor,  # (B, S, V)
         target_ids: torch.Tensor,  # (B, S)
         advantages: torch.Tensor,  # (B, S)
-        inference_logprobs: torch.Tensor,  # (B, S)
+        generator_logprobs: torch.Tensor,  # (B, S)
         loss_mask: torch.Tensor,  # (B, S)
         loss_scale: torch.Tensor | None = None,
     ) -> LossOutput:
         logprobs, lp_m = compute_logprobs(logits, target_ids)
         entropy, ent_m = compute_entropy(logits, loss_mask)
         ratio, log_ratio, ratio_m = compute_ratio(
-            logprobs, inference_logprobs, loss_mask, ratio_type="token"
+            logprobs, generator_logprobs, loss_mask, ratio_type="token"
         )
         pg_loss, gate_m = pg_soft_gate(
             ratio, advantages, loss_mask, self.tau_pos, self.tau_neg

@@ -136,7 +136,7 @@ class Episode:
         return loss_mask
 
     @property
-    def inference_logprobs(self) -> torch.Tensor:
+    def generator_logprobs(self) -> torch.Tensor:
         """
         Get log probabilities from the sampling policy (for importance sampling).
 
@@ -148,14 +148,14 @@ class Episode:
         if self.response_logprobs is None:
             return torch.zeros(self.max_seq_len - 1, dtype=torch.float32)
         prompt_ids = torch.LongTensor(self.request_tokens)
-        inference_logprobs = torch.cat(
+        generator_logprobs = torch.cat(
             [
                 torch.zeros(prompt_ids.shape, dtype=torch.float32),
                 self.response_logprobs,
             ]
         )
-        inference_logprobs = inference_logprobs[1:]  # Shift log probs
-        return inference_logprobs
+        generator_logprobs = generator_logprobs[1:]  # Shift log probs
+        return generator_logprobs
 
     @property
     def weighted_advantages(self) -> torch.Tensor:
@@ -286,14 +286,14 @@ class Trainer(ForgeActor):
         batch_target_ids = []
         batch_loss_masks = []
         batch_weights = []
-        batch_inference_logprobs = []
+        batch_generator_logprobs = []
         batch_ref_logprobs = []
         for episode in episodes:
             input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
             target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
             loss_mask = pad_sequence(episode.loss_mask, max_seq_len, 0.0)
-            inference_logprobs = pad_sequence(
-                episode.inference_logprobs, max_seq_len, 0.0
+            generator_logprobs = pad_sequence(
+                episode.generator_logprobs, max_seq_len, 0.0
             )
             weights = pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
             ref_logprobs = episode.ref_logprobs
@@ -302,13 +302,13 @@ class Trainer(ForgeActor):
             valid_mask = target_ids != pad_id
             loss_mask = loss_mask * valid_mask.float()
             weights = weights * valid_mask.float()
-            inference_logprobs = inference_logprobs * valid_mask.float()
+            generator_logprobs = generator_logprobs * valid_mask.float()
 
             batch_input_ids.append(input_ids)
             batch_target_ids.append(target_ids)
             batch_loss_masks.append(loss_mask)
             batch_weights.append(weights)
-            batch_inference_logprobs.append(inference_logprobs)
+            batch_generator_logprobs.append(generator_logprobs)
             batch_ref_logprobs.append(ref_logprobs)
 
         # Stack into batched tensors
@@ -316,7 +316,7 @@ class Trainer(ForgeActor):
         target_ids = torch.stack(batch_target_ids).to(self.device)
         loss_masks = torch.stack(batch_loss_masks).to(self.device)
         weights = torch.stack(batch_weights).to(self.device)
-        inference_logprobs = torch.stack(batch_inference_logprobs).to(self.device)
+        generator_logprobs = torch.stack(batch_generator_logprobs).to(self.device)
         ref_logprobs = torch.stack(batch_ref_logprobs).to(self.device)
 
         # Create attention mask
@@ -330,7 +330,7 @@ class Trainer(ForgeActor):
             logits=logits,
             target_ids=target_ids,
             advantages=weights,
-            inference_logprobs=inference_logprobs,
+            generator_logprobs=generator_logprobs,
             loss_mask=loss_masks,
             ref_logprobs=ref_logprobs,
         )

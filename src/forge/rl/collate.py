@@ -39,12 +39,12 @@ def collate(
         advantages = torch.tensor(advantages).unsqueeze(-1)  # [b x 1]
         advantages = advantages.expand(-1, seq_len)  # [b x s]
 
-        inference_logprobs = torch.stack([e.inference_logprobs for e in batch])
+        generator_logprobs = torch.stack([e.generator_logprobs for e in batch])
         loss_mask = torch.stack([e.loss_mask for e in batch])
 
         input = {"tokens": input_ids}
         target = {
-            "inference_logprobs": inference_logprobs,
+            "generator_logprobs": generator_logprobs,
             "loss_mask": loss_mask,
             "advantages": advantages,
         }

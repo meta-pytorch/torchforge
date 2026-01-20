@@ -155,15 +155,15 @@ async def main(cfg: DictConfig):
                         "Ensure Generator returns logprobs by setting 'logprobs: 1' in sampling_params config."
                     )
 
-                # Prepare inference_logprobs
+                # Prepare generator_logprobs
                 # Shift by -1 to align with next-token prediction
                 actual_response_len = response.token_ids.shape[0]
-                inference_logprobs = torch.zeros(seq_len, dtype=response.logprobs.dtype)
-                inference_logprobs[
+                generator_logprobs = torch.zeros(seq_len, dtype=response.logprobs.dtype)
+                generator_logprobs[
                     max_req_tokens : max_req_tokens + actual_response_len
                 ] = response.logprobs
-                inference_logprobs = torch.roll(inference_logprobs, shifts=-1, dims=0)
-                inference_logprobs[-1] = 0.0
+                generator_logprobs = torch.roll(generator_logprobs, shifts=-1, dims=0)
+                generator_logprobs[-1] = 0.0
 
                 # Prepare loss_mask
                 response_mask = torch.zeros(seq_len, dtype=torch.float32)
@@ -182,7 +182,7 @@ async def main(cfg: DictConfig):
                     request=prompt,
                     response=response.text,
                     completion=response,
-                    inference_logprobs=inference_logprobs,
+                    generator_logprobs=generator_logprobs,
                     loss_mask=loss_mask,
                 )
 
@@ -270,7 +270,7 @@ async def main(cfg: DictConfig):
                     exclude=[
                         "completion",
                         "loss_mask",
-                        "inference_logprobs",
+                        "generator_logprobs",
                         "ref_logprobs",
                     ]
                 )
