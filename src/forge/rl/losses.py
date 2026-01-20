@@ -237,6 +237,7 @@ def compute_ratio(
         inference_logprobs (torch.Tensor): Log probs from sampling policy (B, S).
         mask (torch.Tensor): Valid token mask (B, S).
         ratio_type (RatioType): "token" for per-token ratio, "sequence" for sequence-level.
+            default: "token".
 
     Returns:
         tuple[torch.Tensor, torch.Tensor, list[Metric]]: (ratio, log_ratio, metrics). Both
