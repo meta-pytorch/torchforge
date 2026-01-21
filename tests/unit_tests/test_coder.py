@@ -14,7 +14,6 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-
 from forge.actors.coder import _SandboxedPythonCoder
 
 

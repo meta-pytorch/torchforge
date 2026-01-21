@@ -9,7 +9,6 @@ from typing import Callable
 
 from forge.controller.actor import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
-
 from monarch.actor import endpoint
 
 

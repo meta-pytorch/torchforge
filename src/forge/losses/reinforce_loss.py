@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-
 from forge.util.ops import compute_logprobs
 from torch import nn
 

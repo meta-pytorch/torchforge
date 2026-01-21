@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 
 from forge.controller import ForgeActor
-
 from monarch.actor import endpoint
 
 logger = logging.getLogger(__name__)

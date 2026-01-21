@@ -25,13 +25,10 @@ from pathlib import Path
 
 import pytest
 import torch.distributed as dist
-
 from forge.data.datasets import HfIterableDataset
 from forge.data.metric_transform import DefaultDatasetMetricTransform
-
 from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
-
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from .test_iterable_utils import collate_with_metrics, generate_ckpt

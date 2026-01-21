@@ -17,7 +17,6 @@ from enum import Enum
 from typing import Any, Dict, List
 
 from forge.observability.utils import get_proc_name_with_rank
-
 from forge.util.logging import get_logger, log_once
 from monarch.actor import current_rank
 

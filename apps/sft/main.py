@@ -19,7 +19,6 @@ import sys
 from typing import Any
 
 import torch
-
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
 from forge.data.collate import collate_padded
@@ -28,7 +27,6 @@ from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
 from forge.util.config import parse
-
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
 from torch import nn

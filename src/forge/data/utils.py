@@ -10,7 +10,6 @@ from typing import Any, Iterator, Literal, Union
 
 import torch
 import torch.distributed as dist
-
 from torch.nn.attention.flex_attention import BlockMask
 
 logger = logging.getLogger(__name__)

@@ -10,7 +10,6 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import (
     BackendRole,

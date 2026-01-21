@@ -9,13 +9,11 @@
 from unittest.mock import patch
 
 import pytest
-
 from forge.observability.metric_actors import (
     get_or_create_metric_logger,
     GlobalLoggingActor,
     LocalFetcherActor,
 )
-
 from forge.observability.metrics import LoggingMode
 from monarch.actor import this_host
 

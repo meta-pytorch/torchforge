@@ -10,7 +10,6 @@ from collections import deque
 from typing import Any, Generic, Iterable, Iterator, TypeVar
 
 import torch
-
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.observability.metrics import Metric, Reduce
 from torch.nn.attention.flex_attention import (

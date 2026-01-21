@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-
 import uuid
 from dataclasses import dataclass
 from multiprocessing import shared_memory
