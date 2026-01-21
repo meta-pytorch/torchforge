@@ -244,22 +244,30 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         self.special_tokens = _infer_special_tokens_from_hf_config(config)
         self.top_level_variables = self.extract_top_level_variables(config)
 
-        _env = jinja2.Environment(undefined=StrictUndefined)
-
-        # It is used sometimes in HF chat_templates
-        _env.globals["raise_exception"] = self._raise_helper
-
+        # Store template source string instead of compiled template (for serialization)
         if chat_template_path:
             with open(chat_template_path, "r") as f:
-                self.template = _env.from_string(f.read())
+                self._template_source = f.read()
         else:
-            self.template = _env.from_string(config["chat_template"])
+            self._template_source = config["chat_template"]
+
+        # Lazy-loaded template (not serializable, created on demand)
+        self._template = None
 
         self.truncation_type = truncation_type
 
         self.special_tokens_mapping = {}
         for token in self.special_tokens:
             self.special_tokens_mapping[token] = self.base_tokenizer.encode(token)
+
+    @property
+    def template(self):
+        """Lazy-load the Jinja2 template to avoid serialization issues."""
+        if self._template is None:
+            _env = jinja2.Environment(undefined=StrictUndefined)
+            _env.globals["raise_exception"] = self._raise_helper
+            self._template = _env.from_string(self._template_source)
+        return self._template
 
     def _raise_helper(self, message: str):
         raise jinja2.exceptions.TemplateError(message)
