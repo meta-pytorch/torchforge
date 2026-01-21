@@ -68,12 +68,12 @@ def pg_cispo(
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/clip/high_fraction",
+                key="loss/clip/high_fraction_unconditional",
                 value=masked_mean(clipped_high.float(), mask),
                 reduction=Reduce.MEAN,
             ),
             Metric(
-                key="loss/clip/low_fraction",
+                key="loss/clip/low_fraction_unconditional",
                 value=masked_mean(clipped_low.float(), mask),
                 reduction=Reduce.MEAN,
             ),
