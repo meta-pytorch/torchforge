@@ -358,7 +358,7 @@ class TestLosses:
         d = inputs
         logits = d["logits"].clone().requires_grad_(True)
 
-        loss_fn = GSPOLoss(clip_low=1.0, clip_high=0.2)
+        loss_fn = GSPOLoss(clip_low=0.2, clip_high=0.2)
         output = loss_fn(
             logits=logits,
             target_ids=d["target_ids"],
@@ -368,11 +368,11 @@ class TestLosses:
         )
 
         # Forward
-        assert_close(output.loss, torch.tensor(0.018975))
+        assert_close(output.loss, torch.tensor(0.242948))
 
         # Backward
         output.loss.backward()
-        assert_close(logits.grad.norm(), torch.tensor(0.517415))
+        assert_close(logits.grad.norm(), torch.tensor(0.158423))
 
     def test_cispo(self, inputs):
         d = inputs
