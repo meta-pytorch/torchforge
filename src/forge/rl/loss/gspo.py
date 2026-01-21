@@ -42,17 +42,14 @@ class GSPOLoss(BaseLossConfig):
     Differences from GRPO:
         1. Sequence-level ratio: Computes one ratio per sequence (geometric mean of
            token ratios) instead of per-token. Reduces variance for long sequences.
-        2. Upper-only clipping: Only clips the upper bound (ratio <= 1+ε). The lower
-           bound is effectively disabled (clip_low=1.0 → min=0).
 
     Args:
-        clip_low (float): Lower clip bound offset (default 1.0, effectively
-            no lower clipping).
+        clip_low (float): Lower clip bound offset (default 0.2).
         clip_high (float): Upper clip bound offset (default 0.2).
         agg_type (AggType): Aggregation method (default "sequence_mean").
     """
 
-    clip_low: Annotated[float, Field(ge=0, le=1)] = 1.0
+    clip_low: Annotated[float, Field(ge=0, le=1)] = 0.2
     clip_high: Annotated[float, Field(ge=0, le=1)] = 0.2
     agg_type: AggType = "sequence_mean"
 
