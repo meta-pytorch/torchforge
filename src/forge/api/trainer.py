@@ -55,44 +55,28 @@ class TextTrainBatch:
 class TrainBatch:
     """Universal training batch for all Forge training modes.
 
-    Used for: SFT, RL (GRPO, PPO, DAPO), DPO, Distillation, etc.
+    Works for SFT, RL (GRPO, PPO), DPO, Distillation, multimodal, etc.
 
-    The interface is always the same:
+    Usage:
         logits = model(**batch.model_inputs)
         loss = loss_fn(logits, **batch.loss_inputs)
 
-    Args:
-        model_inputs: What the model forward pass needs.
-            Always includes input_ids [B, L] and attention_mask [B, L].
-            May include pixel_values, image_embeds for multimodal.
-        loss_inputs: What the loss function needs.
-            Contents vary by training mode:
-            - SFT: target_ids
-            - RL: target_ids, loss_mask, advantages, policy_logprobs, ref_logprobs
-            - DPO: target_ids, loss_mask, chosen_mask
-            - Distillation: target_ids, teacher_logits
-        meta: Non-tensor metadata (sample IDs, metrics, debug info).
+    Attributes:
+        model_inputs: Tensors for model forward pass (e.g., input_ids, attention_mask).
+        loss_inputs: Tensors for loss computation (e.g., target_ids, advantages).
+        meta: Non-tensor metadata (sample IDs, debug info).
 
     Example:
-        >>> # SFT batch
+        >>> # SFT
         >>> batch = TrainBatch(
-        >>>     model_inputs={"input_ids": input_ids, "attention_mask": mask},
-        >>>     loss_inputs={"target_ids": target_ids},
+        >>>     model_inputs={"input_ids": ids, "attention_mask": mask},
+        >>>     loss_inputs={"target_ids": targets},
         >>> )
-        >>>
-        >>> # RL batch
+        >>> # RL (GRPO)
         >>> batch = TrainBatch(
-        >>>     model_inputs={"input_ids": input_ids},
-        >>>     loss_inputs={
-        >>>         "target_ids": target_ids,
-        >>>         "advantages": advantages,
-        >>>         "ref_logprobs": ref_logprobs,
-        >>>     },
+        >>>     model_inputs={"input_ids": ids},
+        >>>     loss_inputs={"target_ids": targets, "advantages": adv, "ref_logprobs": ref},
         >>> )
-        >>>
-        >>> # Usage in trainer
-        >>> logits = model(**batch.model_inputs)
-        >>> loss = loss_fn(logits, **batch.loss_inputs)
     """
 
     model_inputs: dict[str, torch.Tensor]
