@@ -188,7 +188,6 @@ def compute_ratio(
     """
     if ratio_type == "token":
         log_ratio = logprobs - generator_logprobs.detach()
-        log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0)
         ratio = torch.exp(log_ratio)
 
     elif ratio_type == "sequence":
@@ -198,7 +197,6 @@ def compute_ratio(
 
         # Reparameterization: forward uses seq ratio, backward uses token grads
         log_ratio = logprobs - logprobs.detach() + seq_log_ratio.detach().unsqueeze(-1)
-        log_ratio = torch.clamp(log_ratio, min=-20.0, max=20.0)
         ratio = torch.exp(log_ratio)
 
     else:
@@ -259,10 +257,9 @@ def compute_kl(
     elif kl_type == "k2":
         kl = 0.5 * log_ratio.square()
     elif kl_type == "k3":
-        log_ratio_clamped = torch.clamp(-log_ratio, min=-20.0, max=20.0)
-        ratio = torch.exp(log_ratio_clamped)  # π_ref / π_θ
-        kl = ratio - log_ratio_clamped - 1
-        kl = torch.clamp(kl, min=0.0, max=10.0)
+        neg_log_ratio = torch.clamp(-log_ratio, min=-10.0, max=10.0)
+        ratio = torch.exp(neg_log_ratio)  # π_ref / π_θ
+        kl = ratio - neg_log_ratio - 1
     else:
         raise ValueError(f"Unknown kl_type: {kl_type}")
 
