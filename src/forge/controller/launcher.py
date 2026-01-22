@@ -115,7 +115,7 @@ def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
         try:
             from forge.fb.mast_launcher import MastLauncher
 
-            return MastLauncher(cfg, detached=False)
+            return MastLauncher(cfg)
         except ImportError as err:
             raise ValueError("MAST is not available, cannot launch MAST jobs.") from err
 
