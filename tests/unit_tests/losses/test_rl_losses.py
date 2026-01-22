@@ -8,7 +8,6 @@
 
 import pytest
 import torch
-
 from forge.rl.loss import (
     aggregate,
     CISPOLoss,
