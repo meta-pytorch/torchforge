@@ -24,7 +24,7 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl import collate, ComputeAdvantages, Episode, RewardActor
-from forge.rl.losses import GRPOLoss
+from forge.rl.loss import GRPOLoss
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
@@ -74,7 +74,24 @@ async def main(cfg: DictConfig):
         beta=0.1,
         agg_type="fixed_horizon",
     )
+
+    # Fail-fast: Check loss/ref_model compatibility before spawning actors
+    uses_ref_model = cfg.get("services", {}).get("ref_model") is not None
+    if uses_ref_model and not isinstance(loss_fn, GRPOLoss):
+        raise ValueError(
+            f"ref_model is configured but {type(loss_fn).__name__} does not use ref_logprobs. "
+            "Either remove the ref_model service config or use GRPOLoss with beta > 0."
+        )
+    if isinstance(loss_fn, GRPOLoss) and loss_fn.beta > 0 and not uses_ref_model:
+        raise ValueError(
+            f"GRPOLoss with beta={loss_fn.beta} requires ref_logprobs, but ref_model is not configured. "
+            "Either add ref_model to services config or set beta=0."
+        )
+
     # ---- Setup services ---- #
+
+    async def noop():
+        return None
 
     (
         dataloader,
@@ -94,7 +111,11 @@ async def main(cfg: DictConfig):
             **cfg.replay_buffer, collate=collate
         ),
         ComputeAdvantages.options(**cfg.actors.compute_advantages).as_actor(),
-        ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model),
+        (
+            ReferenceModel.options(**cfg.services.ref_model).as_service(**cfg.ref_model)
+            if uses_ref_model
+            else noop()
+        ),
         RewardActor.options(**cfg.services.reward_actor).as_service(
             reward_functions=[MathReward(), ThinkingReward()]
         ),
@@ -251,15 +272,19 @@ async def main(cfg: DictConfig):
 
             t.step("reward_evaluation")
 
-            ref_logprobs = await ref_model.forward.route(
-                input_ids, return_logprobs=True
-            )
-            t.step("reference_model_calculate_logprobs")
+            # Compute ref_logprobs only if ref_model is configured
+            if ref_model is not None:
+                ref_logprobs = await ref_model.forward.route(
+                    input_ids, return_logprobs=True
+                )
+                t.step("reference_model_calculate_logprobs")
 
-            for i, episode in enumerate(episodes):
-                episode.ref_logprobs = ref_logprobs[i]  # [seq_len]
+                for i, episode in enumerate(episodes):
+                    episode.ref_logprobs = ref_logprobs[i]  # [seq_len]
 
-            del ref_logprobs, input_ids
+                del ref_logprobs
+
+            del input_ids
 
             advantages = await compute_advantages.compute.call_one(episodes)
             for episode, advantage in zip(episodes, advantages):
