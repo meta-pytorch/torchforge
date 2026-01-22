@@ -6,21 +6,30 @@
 
 """Generator v1 package - AsyncLLM-based integration (vLLM >= 0.13.0).
 
-This is a stub implementation. Full implementation will be added in a follow-up diff.
+Note: Imports are lazy to avoid circular import deadlocks when vLLM's
+EngineCore subprocess imports monarch_executor.py.
 """
 
 
-class Generator:
-    """Stub Generator for vLLM >= 0.13.0.
+def __getattr__(name):
+    """Lazy import to avoid circular import deadlocks."""
+    if name == "Generator":
+        from forge.actors.vllm.v1.generator import Generator
 
-    Full AsyncLLM-based implementation will be added in a follow-up diff.
-    """
+        return Generator
+    if name == "MonarchExecutor":
+        from forge.actors.vllm.v1.monarch_executor import MonarchExecutor
 
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Generator v1 (for vLLM >= 0.13.0) is not yet implemented. "
-            "Please use vLLM == 0.10.0 or wait for the next update."
-        )
+        return MonarchExecutor
+    if name == "WorkerWrapper":
+        from forge.actors.vllm.v1.monarch_executor import WorkerWrapper
+
+        return WorkerWrapper
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["Generator"]
+__all__ = [
+    "Generator",
+    "MonarchExecutor",
+    "WorkerWrapper",
+]

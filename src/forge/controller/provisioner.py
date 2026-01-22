@@ -81,10 +81,16 @@ class EnvSetter(Actor):
             env_vars: Dictionary of environment variables to set
         """
         import os
-        import socket
 
-        # Set VLLM_HOST_IP (required for vLLM on multiple nodes)
-        os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
+        # Set VLLM_HOST_IP for vLLM (< 0.13.0) which doesn't have its own EnvSetter.
+        # vLLM (>= 0.13.0) sets this in monarch_executor._EnvSetter instead.
+        # TEMPORARY: Remove this block once v0 support is dropped.
+        from forge.actors._vllm_utils import use_generator_v1
+
+        if not use_generator_v1():
+            import socket
+
+            os.environ["VLLM_HOST_IP"] = socket.gethostbyname(socket.getfqdn())
 
         # Set user-provided environment variables
         for k, v in env_vars.items():
@@ -408,6 +414,35 @@ class Provisioner:
                 "The proc mesh was not allocated with an associated hostmesh."
             )
         return self._proc_host_map[proc_mesh]
+
+    async def allocate_gpu_ids(
+        self,
+        host_mesh: HostMesh,
+        num_gpus: int,
+    ) -> list[str]:
+        """Allocate GPU IDs without spawning processes.
+
+        Uses the GpuManager associated with the host_mesh. All hosts in the mesh
+        use the same GPU indices (homogeneous allocation).
+
+        Args:
+            host_mesh: The host mesh to allocate GPUs on
+            num_gpus: Number of GPUs to allocate (per host)
+
+        Returns:
+            List of allocated GPU IDs as strings (e.g., ["0", "1"])
+
+        Raises:
+            RuntimeError: If not enough GPUs available
+        """
+        async with self._lock:
+            host_id = getattr(host_mesh, "_host_id", None) or self._this_host_id
+            gpu_manager = self._host_gpu_map.get(host_id)
+
+            if gpu_manager is None:
+                raise RuntimeError(f"No GPU manager found for host {host_id}")
+
+            return gpu_manager.get_gpus(num_gpus)
 
     async def stop_proc_mesh(self, proc_mesh: ProcMesh):
         """Stops a proc mesh."""

@@ -22,15 +22,15 @@ from __future__ import annotations
 
 import logging
 
-import vllm
+from forge.actors._vllm_utils import get_vllm_version, use_generator_v1
 
 logger = logging.getLogger(__name__)
 
-if vllm.__version__ >= "0.13.0":
-    logger.info(f"vLLM version {vllm.__version__} detected. Using Generator v1.")
+if use_generator_v1():
+    logger.info(f"vLLM version {get_vllm_version()} detected. Using Generator v1.")
     from forge.actors.vllm.v1 import Generator
 else:
-    logger.info(f"vLLM version {vllm.__version__} detected. Using Generator v0.")
+    logger.info(f"vLLM version {get_vllm_version()} detected. Using Generator v0.")
     from forge.actors.vllm.v0 import Generator
 
 # Re-export Generator for public API
