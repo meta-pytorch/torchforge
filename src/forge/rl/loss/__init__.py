@@ -13,7 +13,7 @@ from forge.rl.loss.grpo import GRPOLoss
 from forge.rl.loss.gspo import GSPOLoss
 
 # Primitives
-from forge.rl.loss.primitives import (
+from forge.rl.loss.ops import (
     aggregate,
     compute_entropy,
     compute_kl,

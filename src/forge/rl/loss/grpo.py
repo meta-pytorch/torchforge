@@ -8,7 +8,7 @@ from typing import Annotated
 
 import torch
 from forge.observability.metrics import Metric
-from forge.rl.loss.primitives import (
+from forge.rl.loss.ops import (
     aggregate,
     compute_entropy,
     compute_kl,
