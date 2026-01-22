@@ -6,7 +6,7 @@
 
 """Type definitions and trainer protocol for the Forge API."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable, TypeAlias
 
 import torch
@@ -49,6 +49,55 @@ class TextTrainBatch:
     target_ids: torch.Tensor
     target_mask: torch.Tensor | None = None
     target_weights: torch.Tensor | None = None
+
+
+@dataclass
+class TrainBatch:
+    """Universal training batch for all Forge training modes.
+
+    Used for: SFT, RL (GRPO, PPO, DAPO), DPO, Distillation, etc.
+
+    The interface is always the same:
+        logits = model(**batch.model_inputs)
+        loss = loss_fn(logits, **batch.loss_inputs)
+
+    Args:
+        model_inputs: What the model forward pass needs.
+            Always includes input_ids [B, L] and attention_mask [B, L].
+            May include pixel_values, image_embeds for multimodal.
+        loss_inputs: What the loss function needs.
+            Contents vary by training mode:
+            - SFT: target_ids
+            - RL: target_ids, loss_mask, advantages, policy_logprobs, ref_logprobs
+            - DPO: target_ids, loss_mask, chosen_mask
+            - Distillation: target_ids, teacher_logits
+        meta: Non-tensor metadata (sample IDs, metrics, debug info).
+
+    Example:
+        >>> # SFT batch
+        >>> batch = TrainBatch(
+        >>>     model_inputs={"input_ids": input_ids, "attention_mask": mask},
+        >>>     loss_inputs={"target_ids": target_ids},
+        >>> )
+        >>>
+        >>> # RL batch
+        >>> batch = TrainBatch(
+        >>>     model_inputs={"input_ids": input_ids},
+        >>>     loss_inputs={
+        >>>         "target_ids": target_ids,
+        >>>         "advantages": advantages,
+        >>>         "ref_logprobs": ref_logprobs,
+        >>>     },
+        >>> )
+        >>>
+        >>> # Usage in trainer
+        >>> logits = model(**batch.model_inputs)
+        >>> loss = loss_fn(logits, **batch.loss_inputs)
+    """
+
+    model_inputs: dict[str, torch.Tensor]
+    loss_inputs: dict[str, torch.Tensor | None]
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
