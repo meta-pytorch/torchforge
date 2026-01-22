@@ -16,7 +16,6 @@ import torchstore as ts
 from forge.actors._torchstore_utils import get_param_key
 from forge.api.trainer import ParallelismConfig, TrainerConfig, TrainerStatus
 from forge.controller import ForgeActor
-from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
@@ -103,7 +102,6 @@ class TitanTrainer(ForgeActor):
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         logger.info("Compiling loss")
         self.loss = torch.compile(self.loss)
-        self._tokenizer = None  # Lazy-loaded by get_tokenizer()
 
     @endpoint
     async def setup(self):
@@ -237,27 +235,6 @@ class TitanTrainer(ForgeActor):
         """
         self.engine.optimizers.zero_grad()
         self._accumulated_microbatches = 0
-
-    @endpoint
-    async def get_tokenizer(self) -> HuggingFaceModelTokenizer:
-        """Get the tokenizer associated with this model.
-
-        Returns the tokenizer used for encoding/decoding text with this model.
-        Useful for preprocessing inputs or decoding model outputs.
-
-        Returns:
-            HuggingFaceModelTokenizer: The tokenizer for this model
-        """
-        if self._tokenizer is None:
-            hf_path = self.model.hf_assets_path
-            self._tokenizer = HuggingFaceModelTokenizer(
-                tokenizer_json_path=os.path.join(hf_path, "tokenizer.json"),
-                tokenizer_config_json_path=os.path.join(
-                    hf_path, "tokenizer_config.json"
-                ),
-                generation_config_path=os.path.join(hf_path, "generation_config.json"),
-            )
-        return self._tokenizer
 
     @endpoint
     async def save(
