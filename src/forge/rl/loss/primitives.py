@@ -108,6 +108,7 @@ def compute_logprobs(
         reduction="none",
     ).view(B, S)
 
+    # we return empty metrics to preserve the pattern used in all primitives
     return logprobs, []
 
 
