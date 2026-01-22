@@ -25,13 +25,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 import torch
 import torch.distributed as dist
 from forge.data.datasets import HfIterableDataset, InterleavedDataset
-
 from forge.data.metric_transform import DefaultDatasetMetricTransform
-
 from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader

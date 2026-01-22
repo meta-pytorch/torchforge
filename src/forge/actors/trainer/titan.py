@@ -6,7 +6,6 @@
 
 import logging
 import os
-
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -14,14 +13,12 @@ from typing import Callable
 
 import torch
 import torchstore as ts
-
 from forge.actors._torchstore_utils import get_param_key
 from forge.api.trainer import ParallelismConfig, TrainerConfig, TrainerStatus
 from forge.controller import ForgeActor
 from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-
 from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -222,6 +219,81 @@ class TitanTrainer(ForgeActor):
             step=self.step,
             accumulated_microbatches=self._accumulated_microbatches,
         )
+
+    @endpoint
+    async def clear_gradients(self) -> None:
+        """Clear accumulated gradients without applying them.
+
+        Use this when you need to discard accumulated gradients without performing
+        an optimizer step. Common scenarios:
+        - Exception during gradient accumulation
+        - Skipping a training step due to some condition
+        - Recovering from OOM or other errors
+
+        This is equivalent to calling optimizer.zero_grad() and resetting internal
+        accumulation counters.
+        """
+        self.engine.optimizers.zero_grad()
+        self._accumulated_microbatches = 0
+
+    @endpoint
+    async def save(
+        self,
+        name: str | None = None,
+        path: str | None = None,
+        weights_only: bool = False,
+    ) -> str:
+        """Save trainer state or weights to persistent storage.
+
+        By default, saves complete training state (model weights, optimizer state,
+        learning rate scheduler state, and step counter).
+
+        Args:
+            name: Not supported. TitanTrainer uses step-based checkpoint naming.
+            path: Not supported. TitanTrainer uses checkpoint.folder from config.
+            weights_only: Not supported. TitanTrainer always saves full training state.
+
+        Returns:
+            Full path where checkpoint was saved
+        """
+        if name is not None:
+            raise NotImplementedError(
+                "TitanTrainer uses step-based checkpoint naming; custom names are not supported"
+            )
+        if path is not None:
+            raise NotImplementedError(
+                "TitanTrainer uses the checkpoint.folder from config; custom paths are not supported"
+            )
+        if weights_only:
+            raise NotImplementedError(
+                "weights_only is not supported; TitanTrainer always saves full training state"
+            )
+
+        self.engine.checkpointer.save(
+            curr_step=self.step,
+            last_step=False,
+        )
+        return f"{self.checkpoint.folder}/step-{self.step}"
+
+    @endpoint
+    async def load(self, path: str | None = None) -> str:
+        """Load a previously saved checkpoint.
+
+        Restores training state from a checkpoint.
+
+        Args:
+            path: Not supported. TitanTrainer uses checkpoint.folder from config.
+
+        Returns:
+            Path that was loaded
+        """
+        if path is not None:
+            raise NotImplementedError(
+                "TitanTrainer uses the checkpoint.folder from config; custom paths are not supported"
+            )
+
+        self.engine.checkpointer.load(step=self.step)
+        return f"{self.checkpoint.folder}/step-{self.step}"
 
     @endpoint
     async def push_weights(self, policy_version: int) -> None:

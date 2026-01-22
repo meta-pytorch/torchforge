@@ -8,12 +8,10 @@ import json
 from typing import Any, Optional
 
 import jinja2
-
 from forge.data.utils import truncate
 from forge.interfaces import BaseTokenizer, ModelTokenizer
 from forge.types import Message
 from jinja2 import StrictUndefined
-
 from tokenizers import Tokenizer
 
 
@@ -219,6 +217,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         chat_template_path (str | None): Path to chat_template.jinja file. Default: None
         truncation_type (str): type of truncation to apply, either "left" or "right".
             Default is "right".
+        max_seq_len (int | None): Maximum sequence length to truncate to. Default: None.
     """
 
     def __init__(
@@ -229,7 +228,10 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         generation_config_path: str | None = None,
         chat_template_path: str | None = None,
         truncation_type: str = "right",
+        max_seq_len: int | None = None,
     ):
+        self.max_seq_len = max_seq_len
+
         self.base_tokenizer = HuggingFaceBaseTokenizer(
             tokenizer_json_path=tokenizer_json_path,
             tokenizer_config_json_path=tokenizer_config_json_path,
@@ -294,6 +296,7 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
         add_eos: bool = True,
         max_seq_len: int | None = None,
     ) -> tuple[list[int], list[bool]]:
+
         tokenized_messages = []
         mask = []
         previous_tokens = []
@@ -363,7 +366,9 @@ class HuggingFaceModelTokenizer(ModelTokenizer):
                 and the "messages" field removed.
         """
         messages = sample.pop("messages")
-        tokens, mask = self.tokenize_messages(messages)  # TODO: add_end_tokens
+        tokens, mask = self.tokenize_messages(
+            messages, max_seq_len=self.max_seq_len
+        )  # TODO: add_end_tokens
         sample["tokens"] = tokens
         sample["mask"] = mask
         return sample

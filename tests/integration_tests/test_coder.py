@@ -15,7 +15,6 @@ import os
 import uuid
 
 import pytest
-
 from forge.actors.coder import SandboxedPythonCoder
 
 

@@ -18,12 +18,10 @@ Example:
 
 import argparse
 import asyncio
-
 from dataclasses import dataclass
 
 import numpy as np
 import torch
-
 from forge.actors.reference_model import ReferenceModel
 from forge.controller import ForgeActor
 from forge.controller.provisioner import shutdown

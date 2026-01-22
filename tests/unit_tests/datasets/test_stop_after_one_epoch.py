@@ -11,10 +11,8 @@ import pytest
 import torch
 import torch.distributed as dist
 from forge.data.datasets import HfIterableDataset
-
 from forge.data.utils import extract_epoch_from_batch, StopAfterOneEpoch
 from forge.observability.metrics import Metric, Reduce
-
 from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader

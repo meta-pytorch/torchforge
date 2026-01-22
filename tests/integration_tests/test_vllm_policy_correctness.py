@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import pytest
-
 from forge.actors.generator import Generator
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs

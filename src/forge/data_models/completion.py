@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-
 from forge.data_models.prompt import Prompt
 
 

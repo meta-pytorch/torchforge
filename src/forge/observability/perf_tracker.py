@@ -13,7 +13,6 @@ from functools import lru_cache, wraps
 from typing import Protocol
 
 import torch
-
 from forge.env import DISABLE_PERF_METRICS, FORGE_DISABLE_METRICS, METRIC_TIMER_USES_GPU
 from forge.observability.metrics import record_metric, Reduce
 

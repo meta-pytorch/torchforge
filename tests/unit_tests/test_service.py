@@ -12,7 +12,6 @@ import asyncio
 import logging
 
 import monarch
-
 import pytest
 from forge.controller import ForgeActor
 from forge.controller.service import (

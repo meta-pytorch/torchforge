@@ -458,19 +458,3 @@ class Trainer(Protocol):
             2
         """
         ...
-
-    async def get_tokenizer(self):
-        """Get the tokenizer associated with this model.
-
-        Returns the tokenizer used for encoding/decoding text with this model.
-        Useful for preprocessing inputs or decoding model outputs.
-
-        Returns:
-            PreTrainedTokenizer: The HuggingFace tokenizer for this model
-
-        Example:
-            >>> tokenizer = await trainer.get_tokenizer()
-            >>> tokens = tokenizer.encode("Hello world")
-            >>> text = tokenizer.decode([1, 2, 3, 4])
-        """
-        ...

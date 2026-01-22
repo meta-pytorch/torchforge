@@ -14,7 +14,6 @@ from enum import Enum
 
 from forge.controller import ForgeActor
 from forge.types import ProcessConfig
-
 from monarch.actor import ActorError
 
 logger = logging.getLogger(__name__)

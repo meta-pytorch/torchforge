@@ -61,7 +61,6 @@ from forge.controller.provisioner import init_provisioner, shutdown
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from omegaconf import DictConfig
-
 from vllm import __version__ as vllm_version
 
 if vllm_version >= "0.13.0":

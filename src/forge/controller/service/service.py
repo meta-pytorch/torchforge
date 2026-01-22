@@ -38,17 +38,14 @@ import pprint
 import uuid
 
 from forge.controller.service.interface import _session_context, Session
-
 from forge.controller.service.metrics import ServiceMetrics
 from forge.controller.service.replica import Replica, ServiceRequest
-
 from forge.controller.service.router import (
     LeastLoadedRouter,
     RoundRobinRouter,
     SessionRouter,
 )
 from forge.types import ServiceConfig
-
 from monarch.actor import Actor, endpoint
 
 logger = logging.getLogger(__name__)
