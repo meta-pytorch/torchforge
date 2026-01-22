@@ -32,6 +32,8 @@ class LossOutput:
 class BaseLossConfig(BaseModel):
     """Base configuration for all policy gradient losses."""
 
-    # extra="forbid": Raises error if user passes unknown fields (catches typos).
-    # arbitrary_types_allowed=True: Allows torch.Tensor and other non-JSON types in fields.
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    # Pydantic v2 configuration
+    model_config = ConfigDict(
+        extra="forbid",  # Raises error on unknown fields (catches typos)
+        arbitrary_types_allowed=True,  # Allows torch.Tensor and other non-JSON types
+    )
