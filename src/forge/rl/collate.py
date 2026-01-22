@@ -7,7 +7,6 @@
 from typing import Any
 
 import torch
-
 from forge.rl.types import Group
 
 

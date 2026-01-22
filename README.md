@@ -40,6 +40,23 @@ conda activate forge
 ./scripts/install.sh
 ```
 
+### ROCm Installation
+
+ROCm users can install with the dedicated script:
+
+```bash
+conda create -n forge python=3.12
+conda activate forge
+./scripts/install_rocm.sh
+```
+
+Notes:
+- `PYTORCH_ROCM_ARCH` is auto-detected when possible; set it manually if detection fails (example: `PYTORCH_ROCM_ARCH=gfx942`).
+- `ROCM_VERSION` is auto-detected when possible; set it manually if detection fails (example: `ROCM_VERSION=6.4`).
+- For ROCm 7.x, PyTorch stable 2.9.0 is not available. The script defaults to nightly wheels. You can override with `PYTORCH_CHANNEL=stable|nightly`.
+- ROCm builds install Monarch with `USE_TENSOR_ENGINE=0`, so RDMA and distributed tensor features are disabled for now.
+- Optional flags: `--use-sudo` (system packages) and `--skip-amdsmi` (skip amdsmi install).
+
 The install script installs system dependencies along with torchforge. Note that this install script uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.
 
 Optional: By default, the packages installation uses conda. If you want to install system packages on the target machine instead of conda, you can pass the `--use-sudo` flag to the installation script: `./scripts/install.sh --use-sudo`.

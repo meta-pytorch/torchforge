@@ -35,12 +35,12 @@ repos:
         args: ['--config=.flake8']
 
 -   repo: https://github.com/omnilib/ufmt
-    rev: v2.8.0
+    rev: v2.9.0
     hooks:
     -   id: ufmt
         additional_dependencies:
-          - black == 24.4.2
-          - usort == 1.0.8.post1
+          - black == 25.11.0
+          - usort == 1.1.0
 
 - repo: https://github.com/jsh9/pydoclint
   rev: 0.5.12

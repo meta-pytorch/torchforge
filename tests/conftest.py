@@ -14,7 +14,6 @@ in the forge test suite.
 from unittest.mock import Mock
 
 import pytest
-
 from forge.env import FORGE_DISABLE_METRICS
 
 

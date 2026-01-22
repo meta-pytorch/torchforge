@@ -13,7 +13,6 @@ from typing import Any, Callable
 
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
-
 from monarch.actor import endpoint
 
 logger = logging.getLogger(__name__)

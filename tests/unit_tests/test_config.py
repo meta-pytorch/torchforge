@@ -7,7 +7,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from forge.util.config import resolve_hf_hub_paths
 from omegaconf import DictConfig, OmegaConf
 

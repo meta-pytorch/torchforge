@@ -34,10 +34,6 @@ if [ -z "${PYTORCH_VERSION:-}" ]; then
     exit 1
 fi
 
-WHEEL_DIR="$SCRIPT_DIR/../assets/wheels"
-RELEASE_TAG="v0.0.0-93025"
-GITHUB_REPO="meta-pytorch/forge"
-
 # Check conda environment
 check_conda_env() {
     if [ -z "${CONDA_DEFAULT_ENV:-}" ]; then

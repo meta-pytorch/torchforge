@@ -7,7 +7,6 @@
 from dataclasses import dataclass
 
 import torch
-
 from forge.controller.actor import ForgeActor
 from forge.rl.types import Group
 from monarch.actor import endpoint

@@ -8,7 +8,6 @@ from typing import Any, Callable
 
 import torch
 import torch.distributed as dist
-
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.metric_transform import DefaultDatasetMetricTransform
 from forge.data.utils import mask_messages, TuneMessage

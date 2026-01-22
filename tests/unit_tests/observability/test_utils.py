@@ -7,7 +7,6 @@
 """Tests for observability utility functions."""
 
 from forge.controller.actor import ForgeActor
-
 from forge.observability.utils import get_proc_name_with_rank
 from monarch.actor import endpoint
 

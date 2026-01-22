@@ -8,7 +8,6 @@ from typing import Any, Callable
 
 import torch
 import torch.nn.functional as F
-
 from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
 
 

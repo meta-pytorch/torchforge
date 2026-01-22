@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 import torch
-
 from forge.data import CROSS_ENTROPY_IGNORE_IDX
 from forge.data.collate import collate_packed, collate_padded
 from forge.data.datasets import HfIterableDataset
