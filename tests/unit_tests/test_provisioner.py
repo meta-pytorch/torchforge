@@ -187,7 +187,7 @@ class TestProvisionerEnvironmentIsolation:
         # instances without the available_devices parameter (line 154 in provisioner.py)
         assert len(provisioner._host_gpu_map) == 1  # Only local host initially
 
-        # The remote host creation in create_host_mesh creates GpuManager()
+        # Remote host creation in get_proc_mesh creates GpuManager()
         # without available_devices parameter, so it gets default 8 GPUs
 
 
