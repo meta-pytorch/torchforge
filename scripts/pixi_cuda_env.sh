@@ -1,9 +1,12 @@
 #!/bin/bash
-# CUDA environment activation script for Pixi
-# This script is automatically sourced when the pixi environment is activated
-#
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# CUDA environment activation script for Pixi
+# This script is automatically sourced when the pixi environment is activated
 
 # CUDA environment variables
 export CUDA_VERSION=12.8
