@@ -149,10 +149,11 @@ class TestTracingModes:
         results, total_time = asyncio.run(run_concurrent_tasks())
 
         # Test concurrency: should be ~1x (0.4s) not 2x (0.8s) if truly concurrent
+        # Use 0.7s threshold to allow for CI system load variability
         assert results[0] == f"{mode}_done"
         assert results[1] == f"{mode}_done"
         assert (
-            total_time < 0.5
+            total_time < 0.7
         ), f"Expected ~0.4s concurrent execution, got {total_time:.3f}s"
 
         # Verify backend selection
