@@ -332,8 +332,7 @@ async def main(cfg: DictConfig):
             else:
                 t.step("waiting_for_buffer")
 
-                inputs, targets = batch
-                await trainer.train_step.call(inputs, targets)
+                await trainer.train_step.call(batch)
                 training_step += 1
                 t.step("train_step")
 

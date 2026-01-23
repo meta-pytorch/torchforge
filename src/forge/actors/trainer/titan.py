@@ -20,6 +20,7 @@ from forge.data.utils import batch_to_device
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl.loss import create_shifted_targets
+from forge.types import TrainBatch
 from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -117,17 +118,15 @@ class TitanTrainer(ForgeActor):
         self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
-    def forward_backward(
-        self, inputs: dict[str, Tensor], targets: dict[str, Tensor]
-    ) -> Tensor:
+    def forward_backward(self, batch: TrainBatch) -> Tensor:
         model_parts = self.engine.model_parts
         parallel_dims = self.engine.parallel_dims
         optional_context_parallel_ctx = None
 
         # Create shifted target_ids for next-token prediction
         # target_ids[i] = input_ids[i+1], with loss_mask applied
-        targets["target_ids"] = create_shifted_targets(
-            inputs["tokens"], targets.get("loss_mask")
+        batch.loss_inputs["target_ids"] = create_shifted_targets(
+            batch.model_inputs["tokens"], batch.loss_inputs.get("loss_mask")
         )
 
         if parallel_dims.pp_enabled:
@@ -136,8 +135,8 @@ class TitanTrainer(ForgeActor):
             with self.engine.train_context(optional_context_parallel_ctx):
                 assert len(model_parts) == 1
                 with self.engine.maybe_enable_amp:
-                    logits = model_parts[0](**inputs)
-                    loss_output = self.loss(logits, **targets)
+                    logits = model_parts[0](**batch.model_inputs)
+                    loss_output = self.loss(logits, **batch.loss_inputs)
                     loss = loss_output.loss
 
                 # Record metrics from loss output
@@ -156,19 +155,16 @@ class TitanTrainer(ForgeActor):
         return loss
 
     @endpoint
-    async def train_step(
-        self, inputs: list[dict[str, Tensor]], targets: list[dict[str, Tensor]]
-    ) -> float:
+    async def train_step(self, batches: list[TrainBatch]) -> float:
         t = Tracer("rl_trainer_perf/step", timer="gpu", track_memory=True)
         t.start()
 
         self.engine.gc_handler.run(self.step)
-        local_inputs = inputs[self.engine.dp_rank]
-        local_targets = targets[self.engine.dp_rank]
-        batch_to_device(local_inputs, self.engine.device)
-        batch_to_device(local_targets, self.engine.device)
+        batch = batches[self.engine.dp_rank]
+        batch_to_device(batch.model_inputs, self.engine.device)
+        batch_to_device(batch.loss_inputs, self.engine.device)
 
-        loss = self.forward_backward(local_inputs, local_targets)
+        loss = self.forward_backward(batch)
         torch.distributed.all_reduce(loss)
 
         t.step("forward_backward")
