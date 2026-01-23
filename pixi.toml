@@ -1,0 +1,92 @@
+# Pixi configuration for Forge
+# This replaces the conda-based installation with pixi environment manager
+#
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+[workspace]
+name = "forge"
+version = "0.1.0"
+description = "A PyTorch native platform for post-training generative AI models"
+channels = ["conda-forge", "pytorch", "nvidia"]
+platforms = ["linux-64"]
+
+[system-requirements]
+linux = "5.10"
+cuda = "12.8"
+
+# System dependencies from conda-forge
+[dependencies]
+python = "3.10.*"
+openssl = "*"
+# RDMA and InfiniBand libraries (equivalent to rdma-core, libibverbs)
+rdma-core = "*"
+# Git for installing from git repos
+git = "*"
+# Use uv for fast Python package installation
+uv = ">=0.1.0"
+
+# Development dependencies (equivalent to [dev] extras)
+[feature.dev.dependencies]
+pre-commit = "*"
+pytest = "*"
+pytest-cov = "*"
+pytest-timeout = "*"
+tensorboard = "*"
+tomli = ">=1.1.0"
+anyio = "*"
+pytest-asyncio = "*"
+
+# Documentation dependencies (equivalent to [docs] extras)
+[feature.docs.dependencies]
+sphinx = "==7.2.6"
+matplotlib = "*"
+
+[tasks]
+# Installation tasks using uv for faster package management
+# uv will use the configuration from pyproject.toml [tool.uv] section
+install-pytorch = """
+    uv pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/cu128
+"""
+
+# CRITICAL: Install vLLM dependencies BEFORE installing vLLM itself
+install-vllm-reqs = """
+    uv pip install -r .github/packaging/vllm_reqs_12_8.txt
+"""
+
+install-vllm-deps = """
+    uv pip install six && \
+    uv pip install "setuptools<80"
+"""
+
+# Install vLLM after all dependencies are resolved
+install-vllm = """
+    uv pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
+"""
+
+install-torchstore = """
+    uv pip install "git+https://github.com/meta-pytorch/torchstore.git@no-monarch-2025.12.17"
+"""
+
+install-forge = """
+    uv pip install -e ".[dev]"
+"""
+
+# Full installation task - follows exact sequence from install.sh
+install = { depends-on = ["install-pytorch", "install-vllm-reqs", "install-vllm-deps", "install-vllm", "install-torchstore", "install-forge"] }
+
+# Test installation task
+test-install = """
+    python -c "import torch; print(f'PyTorch {torch.__version__} (CUDA: {torch.cuda.is_available()})')" && \
+    python -c "import vllm; print('vLLM imported successfully')" && \
+    python -c "import forge; print('forge imported successfully')" || true
+"""
+
+# Define environments
+[environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[target.linux-64.activation]
+scripts = ["scripts/pixi_cuda_env.sh"]

@@ -32,6 +32,8 @@ You can also find our notebook tutorials (coming soon)
 
 torchforge requires PyTorch 2.9.0 with [Monarch](https://github.com/meta-pytorch/monarch), [vLLM](https://github.com/vllm-project/vllm), and [torchtitan](https://github.com/pytorch/torchtitan).
 
+### Conda
+
 Install torchforge with:
 
 ```bash
@@ -40,7 +42,7 @@ conda activate forge
 ./scripts/install.sh
 ```
 
-### ROCm Installation
+#### ROCm Installation
 
 ROCm users can install with the dedicated script:
 
@@ -60,6 +62,20 @@ Notes:
 The install script installs system dependencies along with torchforge. Note that this install script uses [DNF](https://docs.fedoraproject.org/en-US/quick-docs/dnf/), but could be easily extended to other Linux OS.
 
 Optional: By default, the packages installation uses conda. If you want to install system packages on the target machine instead of conda, you can pass the `--use-sudo` flag to the installation script: `./scripts/install.sh --use-sudo`.
+
+### Pixi
+
+Pixi combines benefits of uv with access to conda forge for system dependencies. [pixi.toml](./pixi.toml) provides a manifest with build tasks with `install` as a the combined install all task.
+
+Install pixi:
+```
+curl -fsSL https://pixi.sh/install.sh | bash
+```
+
+Install torchforge with pixi:
+```
+pixi run install
+```
 
 > **Note:** We are actively working on enabling pure `uv` installation. Currently, Conda is the recommended approach. `uv` support is not fully working at the moment but is being tracked in [issue #494](https://github.com/meta-pytorch/torchforge/issues/494).
 
