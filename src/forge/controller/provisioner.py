@@ -359,6 +359,8 @@ class Provisioner:
                 world_size = num_procs * (num_hosts or 1)
                 env_vars["WORLD_SIZE"] = str(world_size)
                 env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
+                if torch.version.hip:
+                    env_vars["HIP_VISIBLE_DEVICES"] = env_vars["CUDA_VISIBLE_DEVICES"]
 
                 # Inherit Forge-relevant environment variables from the system
                 for env_var in all_env_vars():
