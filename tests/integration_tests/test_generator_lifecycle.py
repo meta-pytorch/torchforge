@@ -202,8 +202,4 @@ async def test_generator_shutdown_cleanup():
         print("✅ No dangling GPU processes detected")
 
     finally:
-        if generator is not None:
-            try:
-                await generator.shutdown()
-            except Exception:
-                pass  # Already shut down
+        pass
