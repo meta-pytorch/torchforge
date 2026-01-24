@@ -21,6 +21,7 @@ from forge.types import (
     ProcessConfig,
     ProvisionerConfig,
     ServiceConfig,
+    TrainBatch,
 )
 from forge.util.config import parse
 from omegaconf import DictConfig
@@ -75,13 +76,12 @@ def generate_random_batch(
     vocab_size: int = 32000,
     device: str = "cuda",
     dp_size: int = 1,
-):
+) -> list[TrainBatch]:
     """
-    Generate random input and target tensors matching GRPO data format
-    Creates one batch per data parallel rank
+    Generate random TrainBatch objects matching GRPO data format.
+    Creates one batch per data parallel rank.
     """
-    inputs = []
-    targets = []
+    batches = []
 
     # Create one batch for each data parallel rank
     for _ in range(dp_size):
@@ -109,17 +109,19 @@ def generate_random_batch(
         )
         advantages = torch.randn((local_batch_size, 1), device=device)
         input_tokens = torch.cat([request, response], dim=1)
-        inputs.append({"tokens": input_tokens})
-        targets.append(
-            {
-                "response": response,
-                "ref_logprobs": ref_logprobs,
-                "advantages": advantages,
-                "padding_mask": padding_mask,
-            }
+        batches.append(
+            TrainBatch(
+                model_inputs={"tokens": input_tokens},
+                loss_inputs={
+                    "response": response,
+                    "ref_logprobs": ref_logprobs,
+                    "advantages": advantages,
+                    "padding_mask": padding_mask,
+                },
+            )
         )
 
-    return inputs, targets
+    return batches
 
 
 async def main(cfg: DictConfig):
@@ -201,7 +203,7 @@ async def main(cfg: DictConfig):
             t = Tracer("trainer/continuous_training")
             t.start()
 
-            inputs, targets = generate_random_batch(
+            batches = generate_random_batch(
                 local_batch_size=local_batch_size,
                 request_len=request_len,
                 response_len=response_len,
@@ -211,7 +213,7 @@ async def main(cfg: DictConfig):
             t.step("generate_random_data")
 
             # Perform training step
-            await trainer.train_step.call(inputs, targets)
+            await trainer.train_step.call(batches)
             training_step += 1
             t.step("train_step")
 
