@@ -33,17 +33,14 @@ from forge.observability.metrics import (
 class TestMetricCreation:
     """Test Metric object creation and record_metric function - Diff 2 features."""
 
-    def test_metric_creation_automatic_timestamp(self, mock_rank):
-        """Test Metric object creation with automatic timestamp."""
-        before_time = time.time()
+    def test_metric_creation(self, mock_rank):
+        """Test Metric object creation"""
         metric = Metric("test_key", 42.0, Reduce.MEAN)
-        after_time = time.time()
 
         assert metric.key == "test_key"
         assert metric.value == 42.0
         assert metric.reduction == Reduce.MEAN
-        assert metric.timestamp is not None
-        assert before_time <= metric.timestamp <= after_time
+        assert metric.timestamp is None
 
     def test_metric_creation_custom_timestamp(self, mock_rank):
         """Test Metric object creation with custom timestamp."""
@@ -52,14 +49,16 @@ class TestMetricCreation:
         assert metric.timestamp == custom_time
 
     def test_record_metric(self, mock_rank):
-        """Test record_metric creates correct Metric and calls collector."""
+        """Test record_metric creates correct Metric with timestamp and calls collector."""
         # Mock the MetricCollector constructor to return a mock instance
         mock_collector = MagicMock()
 
         with patch(
             "forge.observability.metrics.MetricCollector", return_value=mock_collector
         ):
+            before_time = time.time()
             record_metric("loss", 1.5, Reduce.MEAN)
+            after_time = time.time()
 
             # Verify push was called on the mock collector
             mock_collector.push.assert_called_once()
@@ -69,6 +68,9 @@ class TestMetricCreation:
             assert pushed_metric.key == "loss"
             assert pushed_metric.value == 1.5
             assert pushed_metric.reduction == Reduce.MEAN
+            # record_metric should set the timestamp
+            assert pushed_metric.timestamp is not None
+            assert before_time <= pushed_metric.timestamp <= after_time
 
     def test_new_enums_and_constants(self):
         """Test BackendRole constants and usage."""

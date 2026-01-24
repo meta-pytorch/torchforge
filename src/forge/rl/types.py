@@ -23,10 +23,12 @@ class Episode:
     response: str | None = None
     # Processed data
     completion: Completion | None = None
-    ref_logprobs: torch.Tensor | None = None
+    generator_logprobs: torch.Tensor | None = None  # [seq_len]
+    ref_logprobs: torch.Tensor | None = None  # [seq_len]
     reward: float | None = None
     reward_breakdown: dict[str, float] | None = None
     advantage: float | None = None
+    loss_mask: torch.Tensor | None = None
 
     @property
     def policy_version(self) -> int | None:

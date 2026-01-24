@@ -20,11 +20,10 @@ from forge.actors.generator import Generator
 from forge.actors.replay_buffer import ReplayBuffer
 from forge.controller.actor import ForgeActor
 from forge.controller.provisioner import shutdown
-from forge.losses.grpo_loss import SimpleGRPOLoss
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
+from forge.rl.loss import compute_logprobs, GRPOLoss
 from forge.util.config import parse
-from forge.util.ops import compute_logprobs
 from monarch.actor import endpoint
 from omegaconf import DictConfig
 from transformers import AutoModelForCausalLM
@@ -135,7 +134,7 @@ class Episode:
         return loss_mask
 
     @property
-    def sampling_log_probs(self) -> torch.Tensor:
+    def generator_logprobs(self) -> torch.Tensor:
         """
         Get log probabilities from the sampling policy (for importance sampling).
 
@@ -147,14 +146,14 @@ class Episode:
         if self.response_logprobs is None:
             return torch.zeros(self.max_seq_len - 1, dtype=torch.float32)
         prompt_ids = torch.LongTensor(self.request_tokens)
-        sampling_log_probs = torch.cat(
+        generator_logprobs = torch.cat(
             [
                 torch.zeros(prompt_ids.shape, dtype=torch.float32),
                 self.response_logprobs,
             ]
         )
-        sampling_log_probs = sampling_log_probs[1:]  # Shift log probs
-        return sampling_log_probs
+        generator_logprobs = generator_logprobs[1:]  # Shift log probs
+        return generator_logprobs
 
     @property
     def weighted_advantages(self) -> torch.Tensor:
@@ -239,7 +238,7 @@ class RefModel(ForgeActor):
         with torch.inference_mode():
             logits = self.model(input_ids=input_ids, attention_mask=mask).logits
 
-        log_probs = compute_logprobs(logits, target_ids, align=False)
+        log_probs, _ = compute_logprobs(logits, target_ids)
         return log_probs.squeeze(0)
 
 
@@ -272,7 +271,7 @@ class Trainer(ForgeActor):
         self.optimizer.zero_grad()
 
         # beta = 0.01 for quicker convergence
-        self.loss = SimpleGRPOLoss(0.01)
+        self.loss_fn = GRPOLoss()
         self.logger.info(f"Trainer model initialized on {self.device}")
 
     @endpoint
@@ -285,14 +284,14 @@ class Trainer(ForgeActor):
         batch_target_ids = []
         batch_loss_masks = []
         batch_weights = []
-        batch_sampling_log_probs = []
+        batch_generator_logprobs = []
         batch_ref_logprobs = []
         for episode in episodes:
             input_ids = pad_sequence(episode.input_ids, max_seq_len, pad_id)
             target_ids = pad_sequence(episode.target_ids, max_seq_len, pad_id)
             loss_mask = pad_sequence(episode.loss_mask, max_seq_len, 0.0)
-            sampling_log_probs = pad_sequence(
-                episode.sampling_log_probs, max_seq_len, 0.0
+            generator_logprobs = pad_sequence(
+                episode.generator_logprobs, max_seq_len, 0.0
             )
             weights = pad_sequence(episode.weighted_advantages, max_seq_len, 0.0)
             ref_logprobs = episode.ref_logprobs
@@ -301,13 +300,13 @@ class Trainer(ForgeActor):
             valid_mask = target_ids != pad_id
             loss_mask = loss_mask * valid_mask.float()
             weights = weights * valid_mask.float()
-            sampling_log_probs = sampling_log_probs * valid_mask.float()
+            generator_logprobs = generator_logprobs * valid_mask.float()
 
             batch_input_ids.append(input_ids)
             batch_target_ids.append(target_ids)
             batch_loss_masks.append(loss_mask)
             batch_weights.append(weights)
-            batch_sampling_log_probs.append(sampling_log_probs)
+            batch_generator_logprobs.append(generator_logprobs)
             batch_ref_logprobs.append(ref_logprobs)
 
         # Stack into batched tensors
@@ -315,7 +314,7 @@ class Trainer(ForgeActor):
         target_ids = torch.stack(batch_target_ids).to(self.device)
         loss_masks = torch.stack(batch_loss_masks).to(self.device)
         weights = torch.stack(batch_weights).to(self.device)
-        sampling_log_probs = torch.stack(batch_sampling_log_probs).to(self.device)
+        generator_logprobs = torch.stack(batch_generator_logprobs).to(self.device)
         ref_logprobs = torch.stack(batch_ref_logprobs).to(self.device)
 
         # Create attention mask
@@ -324,10 +323,16 @@ class Trainer(ForgeActor):
         # Forward pass
         logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits
 
-        trainer_log_probs = compute_logprobs(logits, target_ids, align=False)
-        # Compute loss only on response tokens
-        # loss = self.loss(logits, target_ids, loss_masks, weights, sampling_log_probs)
-        loss = self.loss(trainer_log_probs, ref_logprobs, weights, loss_masks)
+        # Compute loss using GRPOLoss
+        loss_output = self.loss_fn(
+            logits=logits,
+            target_ids=target_ids,
+            advantages=weights,
+            generator_logprobs=generator_logprobs,
+            loss_mask=loss_masks,
+            ref_logprobs=ref_logprobs,
+        )
+        loss = loss_output.loss
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)

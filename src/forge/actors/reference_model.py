@@ -15,10 +15,9 @@ import torch
 from forge.controller import ForgeActor
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from forge.util.ops import compute_logprobs
+from forge.rl.loss import compute_logprobs, create_shifted_targets
 from monarch.actor import current_rank, current_size, endpoint
 from torch.distributed.tensor import DTensor
-from torch.distributed.tensor.parallel import loss_parallel
 from torchtitan.config.job_config import (
     Checkpoint,
     Comm,
@@ -96,9 +95,9 @@ class ReferenceModel(ForgeActor):
         self.rank = current_rank().rank
         self.size = math.prod(current_size().values())
 
-        self.compute_log_probs = compute_logprobs
+        self.compute_logprobs = compute_logprobs
         if self.compile.enable:
-            self.compute_log_probs = torch.compile(self.compute_log_probs)
+            self.compute_logprobs = torch.compile(self.compute_logprobs)
 
         env = {
             "RANK": str(self.rank),
@@ -128,23 +127,20 @@ class ReferenceModel(ForgeActor):
 
     @endpoint
     async def forward(
-        self, input_ids: torch.Tensor, max_req_tokens: int, return_logprobs: bool
+        self, input_ids: torch.Tensor, return_logprobs: bool = True
     ) -> torch.Tensor:
         """
         Args:
-            input_ids (torch.Tensor): input token ids with shape [group_size, req + res length].
-            max_req_tokens (int): maximum request length.
+            input_ids (torch.Tensor): input token ids with shape [group_size, seq_len].
             return_logprobs (bool): whether to return log probabilities instead of raw logits.
 
             return_logprobs flag significantly impacts the amount of data transferred to the caller:
-            - When False: Returns logits with shape [group_size, req + res_length, vocab_size].
+            - When False: Returns logits with shape [group_size, seq_len, vocab_size].
               This includes the full vocabulary distribution for each token position.
 
-            - When True: Returns log probabilities with shape [group_size, req_length].
-              This only includes probabilities for the request tokens, significantly reducing memory
-              usage and transfer overhead.
+            - When True: Returns log probabilities with shape [group_size, seq_len].
+              Prompt positions will have logprobs = 0.
         """
-        # Record reference model metrics
         record_metric("reference_perf/forward/count_forward_passes", 1, Reduce.SUM)
 
         t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
@@ -175,24 +171,16 @@ class ReferenceModel(ForgeActor):
                 with self.engine.maybe_enable_amp:
                     with torch.inference_mode():
                         logits = self.model(input_ids)
+
+                        if return_logprobs:
+                            target_ids = create_shifted_targets(input_ids)
+                            logprobs, _ = self.compute_logprobs(logits, target_ids)
+
+        out = logprobs if return_logprobs else logits
+
+        if isinstance(out, DTensor):
+            out = out.full_tensor()
+
         self.step += 1
-
-        if not return_logprobs:
-            if isinstance(logits, DTensor):
-                logits = logits.full_tensor()
-            t.stop()
-            return logits
-        else:
-            response_tokens = input_ids[:, max_req_tokens:]
-            if parallel_dims.tp_enabled and isinstance(logits, DTensor):
-                with loss_parallel():
-                    logprobs = self.compute_log_probs(logits, response_tokens)
-
-                # loss_parallel produces Replicated output - to_local() returns the full tensor
-                logprobs = logprobs.to_local()
-            else:
-                if isinstance(logits, DTensor):
-                    logits = logits.full_tensor()
-                logprobs = self.compute_log_probs(logits, response_tokens)
-            t.stop()
-            return logprobs
+        t.stop()
+        return out

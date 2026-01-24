@@ -86,22 +86,20 @@ class Reduce(Enum):
 
 @dataclass
 class Metric:
-    """Container for metric data including key, value, reduction type, and timestamp.
-
-    Timestamp is automatically set to current time if not provided.
-    """
+    """Container for metric data including key, value, reduction type, and timestamp."""
 
     key: str
     value: Any
     reduction: Reduce
     timestamp: float | None = None
 
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = time.time()
 
-
-def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None:
+def record_metric(
+    key: str,
+    value: Any,
+    reduction: Reduce = Reduce.MEAN,
+    timestamp: float | None = None,
+) -> None:
     """Thin wrapper to send metrics to per-rank local MetricCollectors.
 
     Relies on a per-rank MetricCollector singleton for ease of use, i.e.
@@ -110,6 +108,10 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
 
     Can be disabled globally by setting the environment variable `FORGE_DISABLE_METRICS=true`.
 
+    Timestamp is automatically set to current time if not provided. The time.time() call
+    causes torch.compile graph breaks. If necessary, users can avoid calling 'record_metric' in the
+    compile region and, instead, just collect a Metric object and record it later, outside of the compile region.
+
     Collected metrics are flushed to backends on flush(), generally:
     GlobalLoggingActor.method() -> per-procmesh LocalFetcherActor.method() -> per-rank MetricCollector.method() -> logger
     """
@@ -117,8 +119,10 @@ def record_metric(key: str, value: Any, reduction: Reduce = Reduce.MEAN) -> None
     if os.getenv("FORGE_DISABLE_METRICS", "false").lower() == "true":
         return
 
-    # timestamp is added automatically by the Metric class
-    metric = Metric(key=key, value=value, reduction=reduction)
+    if timestamp is None:
+        timestamp = time.time()
+
+    metric = Metric(key=key, value=value, reduction=reduction, timestamp=timestamp)
     collector = MetricCollector()
     collector.push(metric)
 
