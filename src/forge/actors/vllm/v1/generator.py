@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -20,6 +21,10 @@ from forge.controller import ForgeActor
 from forge.controller.provisioner import _get_provisioner
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
+from forge.env import FORGE_DISABLE_METRICS
+from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from monarch.actor import endpoint, this_host
 from torchstore.api import _controller as get_torchstore_controller
 from vllm.engine.arg_utils import EngineArgs
@@ -142,6 +147,10 @@ class Generator(ForgeActor):
         )
         logger.info("[Generator.launch] Spawned generator_proc on head host")
 
+        # Register LocalFetcherActor for generator_proc to enable metrics collection
+        if not FORGE_DISABLE_METRICS.get_value():
+            await get_or_create_metric_logger(generator_proc, process_name=mesh_name)
+
         # Import WorkerRegistry here to avoid circular import with monarch_executor
         from forge.actors.vllm.v1.monarch_executor import WorkerRegistry
 
@@ -257,6 +266,10 @@ class Generator(ForgeActor):
         Returns:
             list[Completion]: n completions from vLLM based on your prompt.
         """
+        t = Tracer("generator_perf/generate", timer="gpu")
+        t.start()
+        record_metric("generator/generate/count_requests", 1, Reduce.SUM)
+
         if self.llm is None:
             raise RuntimeError("Generator not initialized. Call setup() first.")
 
@@ -277,6 +290,12 @@ class Generator(ForgeActor):
 
         completions = self._to_completions(request_output, prompt)
 
+        record_metric(
+            "generator/generate/count_sequences_completed",
+            len(completions),
+            Reduce.SUM,
+        )
+        t.stop()
         return completions
 
     @endpoint
@@ -347,17 +366,30 @@ class Generator(ForgeActor):
 
         logger.info(f"Starting weight update to v{version}")
 
+        pause_start = time.perf_counter()
         await self.llm.pause_generation(
             wait_for_inflight_requests=True, clear_cache=True
         )
+        pause_duration = time.perf_counter() - pause_start
+        record_metric(
+            "generator_perf/update_weights/pause_generation_duration_s",
+            pause_duration,
+            Reduce.MEAN,
+        )
 
         try:
+            load_start = time.perf_counter()
             await self.workers.update_weights.call(version)
+            load_duration = time.perf_counter() - load_start
+            record_metric(
+                "generator_perf/update_weights/worker_load_weights_duration_s",
+                load_duration,
+                Reduce.MEAN,
+            )
             self.generator_version = version
             logger.info(f"Updated weights from torchstore v{version}")
         finally:
             await self.llm.resume_generation()
-
         logger.info(f"Weight update complete, now v{version}")
 
     @endpoint

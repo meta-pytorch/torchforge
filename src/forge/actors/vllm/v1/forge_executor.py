@@ -31,6 +31,7 @@ from typing import Optional
 import cloudpickle
 from forge.actors._torchstore_utils import extract_param_name, get_param_prefix
 from forge.actors.vllm.v1.monarch_executor import MonarchExecutor, WorkerWrapper
+from forge.observability.perf_tracker import trace
 from monarch.actor import endpoint
 from torchstore.client import LocalClient
 
@@ -57,6 +58,11 @@ class ForgeWorkerWrapper(WorkerWrapper):
         self._torchstore_client = None  # Reset cached client
 
     @endpoint
+    @trace(
+        prefix="generator_perf/update_weights/generator_worker_update",
+        track_memory=False,
+        timer="gpu",
+    )
     def update_weights(self, version: int) -> int:
         """Load weights directly from torchstore.
 
