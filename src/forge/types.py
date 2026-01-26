@@ -132,8 +132,6 @@ class ProvisionerConfig:
 class TrainBatch:
     """Universal training batch for all Forge training modes.
 
-    Works for SFT, RL (GRPO, PPO), DPO, Distillation, multimodal, etc.
-
     Usage:
         logits = model(**batch.model_inputs)
         loss = loss_fn(logits, **batch.loss_inputs)
