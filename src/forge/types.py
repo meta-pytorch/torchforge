@@ -137,9 +137,9 @@ class TrainBatch:
         loss = loss_fn(logits, **batch.loss_inputs)
 
     Attributes:
-        model_inputs: Inputs for model forward pass (e.g., input_ids, attention_mask).
-        loss_inputs: Inputs for loss computation (e.g., target_ids, advantages, beta).
-        meta: Non-tensor metadata (sample IDs, debug info).
+        model_inputs (dict[str, Any]): Inputs for model forward pass (e.g., input_ids, attention_mask).
+        loss_inputs (dict[str, Any]): Inputs for loss computation (e.g., target_ids, advantages, beta).
+        meta (dict[str, Any]): Any extra metadata that is not a model or loss input.
 
     Example:
         >>> # SFT
