@@ -15,9 +15,6 @@ integration for weight synchronization in RL training loops. It provides:
 
 Use this executor when you need weight updates from TorchStore (e.g., GRPO training).
 For inference-only workloads, use the base MonarchExecutor directly.
-
-TODO: Add shared memory weight prefetch support (prefetch_weights_to_shm, n_fetcher_procs)
-      as in v0 Generator for faster weight loading.
 """
 
 from __future__ import annotations
@@ -32,6 +29,7 @@ import cloudpickle
 from forge.actors._torchstore_utils import extract_param_name, get_param_prefix
 from forge.actors.vllm.v1.monarch_executor import MonarchExecutor, WorkerWrapper
 from forge.observability.perf_tracker import trace
+from forge.util._shared_tensor import SharedTensorHandle
 from monarch.actor import endpoint
 from torchstore.client import LocalClient
 
@@ -59,20 +57,82 @@ class ForgeWorkerWrapper(WorkerWrapper):
 
     @endpoint
     @trace(
-        prefix="generator_perf/update_weights/generator_worker_update",
+        prefix="generator_perf/update_weights/apply_prefetched_weights",
         track_memory=False,
         timer="gpu",
     )
-    def update_weights(self, version: int) -> int:
-        """Load weights directly from torchstore.
+    def apply_prefetched_weights(
+        self, shared_memory_handles: dict[str, SharedTensorHandle]
+    ) -> int:
+        """Load weights from shared memory handles into the model.
+
+        All workers call this method with the same handles (obtained by rank 0
+        via prefetch_weights). Each worker loads the weights from shared memory
+        into its local model.
 
         Args:
-            version: Policy version to load from torchstore
+            shared_memory_handles: Dict mapping param names to SharedTensorHandle
+                objects, obtained from prefetch_weights() on rank 0.
 
         Returns:
             Number of parameters loaded
         """
-        return asyncio.run(self._load_from_torchstore(version))
+        if not shared_memory_handles:
+            logger.warning(
+                "[ForgeWorkerWrapper] Empty handles, apply_prefetched_weights is a no-op"
+            )
+            return 0
+
+        loaded_count = self._load_from_shared_memory(shared_memory_handles)
+        logger.info(
+            f"[ForgeWorkerWrapper] Applied {loaded_count} weights from shared memory"
+        )
+        return loaded_count
+
+    @endpoint
+    @trace(
+        prefix="generator_perf/update_weights/generator_worker_update",
+        track_memory=False,
+        timer="gpu",
+    )
+    def update_weights(
+        self,
+        version: Optional[int] = None,
+        shared_memory_state_dict: Optional[dict[str, SharedTensorHandle]] = None,
+    ) -> int:
+        """Load weights from torchstore or shared memory.
+
+        Args:
+            version: Policy version to load from torchstore (if shared_memory_state_dict is None)
+            shared_memory_state_dict: Pre-fetched weights in shared memory (if provided, version is ignored)
+
+        Returns:
+            Number of parameters loaded
+        """
+        if shared_memory_state_dict is not None:
+            # Load from shared memory (prefetched weights)
+            return self._load_from_shared_memory(shared_memory_state_dict)
+        elif version is not None:
+            # Load directly from torchstore
+            return asyncio.run(self._load_from_torchstore(version))
+        else:
+            raise ValueError(
+                "Either version or shared_memory_state_dict must be provided"
+            )
+
+    def _load_from_shared_memory(
+        self, state_dict: dict[str, SharedTensorHandle]
+    ) -> int:
+        """Load weights from shared memory handles."""
+        model = self.worker.model_runner.model
+        loaded_count = 0
+        for name, param_handle in state_dict.items():
+            with param_handle.to_shared_tensor() as shared_tensor:
+                param = shared_tensor.tensor
+                model.load_weights([(name, param.cuda())])
+                del param
+            loaded_count += 1
+        return loaded_count
 
     async def _get_torchstore_client(self) -> LocalClient:
         """Get or create a LocalClient using the passed Controller reference.
@@ -172,3 +232,7 @@ class ForgeMonarchExecutor(MonarchExecutor):
                 "[ForgeMonarchExecutor] No TorchStore Controller found in environment. "
                 "Weight updates via torchstore will not work."
             )
+
+    def shutdown(self):
+        """Shutdown workers and stop ProcMeshes."""
+        super().shutdown()

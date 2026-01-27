@@ -257,6 +257,8 @@ class SharedTensor:
 
     def _create_from_handle(self, handle: SharedTensorHandle):
         """Initialize from a handle"""
+        from multiprocessing import resource_tracker
+
         # Initialize lifecycle state
         self._closed = False
         self._tensor_cache = None
@@ -266,8 +268,13 @@ class SharedTensor:
         self._dtype_str = handle.dtype
         self._dtype = self._parse_dtype(self._dtype_str)
 
-        # Attach to existing shared memory\
+        # Attach to existing shared memory
         self._shm = shared_memory.SharedMemory(name=self._shm_name)
+
+        # Unregister from resource tracker on the receiver side. The creator
+        # (via SharedTensorHandle.drop()) is responsible for unlinking,
+        # which deletes the shared memory.
+        resource_tracker.unregister(f"/{self._shm_name}", "shared_memory")
 
     def _create_tensor_view(self):
         """Create tensor view of shared memory."""

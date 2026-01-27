@@ -14,6 +14,7 @@ import time
 from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
+from multiprocessing import resource_tracker
 from typing import Optional
 
 import torch
@@ -727,10 +728,15 @@ class _WeightFetcher(ForgeActor):
         sd = {}
         for name in param_names:
             param_key = get_param_key(version, name)
+            # Use explicit resource handling instead of context manager because
+            # ownership is transferred to the Generator (which calls handle.drop()
+            # to clean up). We must unregister from resource_tracker here, otherwise
+            # the fetcher process will try to clean up the shared memory on exit.
             param = await ts.get(param_key)
-            # Use context manager to ensure cleanup after getting handle
-            with SharedTensor(tensor=param) as shared_tensor:
-                handle = shared_tensor.get_handle()
-                sd[name] = handle
+            shared_tensor = SharedTensor(tensor=param)
+            handle = shared_tensor.get_handle()
+            resource_tracker.unregister(f"/{handle.shm_name}", "shared_memory")
+            sd[name] = handle
+            shared_tensor.close()
             del param  # Explicitly free the tensor after copying to shared memory
         return sd

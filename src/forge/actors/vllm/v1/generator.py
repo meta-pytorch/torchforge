@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
@@ -13,10 +14,17 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from multiprocessing import resource_tracker
 from typing import Any, Optional
 
 import cloudpickle
 import torch
+import torchstore as ts
+from forge.actors._torchstore_utils import (
+    extract_param_name,
+    get_param_key,
+    get_param_prefix,
+)
 from forge.controller import ForgeActor
 from forge.controller.provisioner import _get_provisioner
 from forge.data_models.completion import Completion
@@ -25,7 +33,8 @@ from forge.env import FORGE_DISABLE_METRICS
 from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
-from monarch.actor import endpoint, this_host
+from forge.util._shared_tensor import SharedTensor, SharedTensorHandle
+from monarch.actor import endpoint, ProcMesh, this_host
 from torchstore.api import _controller as get_torchstore_controller
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.llm import UsageContext
@@ -50,6 +59,11 @@ class Generator(ForgeActor):
     Args:
         engine_args: vLLM EngineArgs for model configuration. Can be EngineArgs or dict.
         sampling_params: Default SamplingParams for generation. Can be SamplingParams or dict.
+        prefetch_weights_to_shm: Whether to prefetch weights to shared memory for faster
+            weight updates. When enabled, weight fetchers download weights in parallel
+            to shared memory while generation is still running. Defaults to True.
+        n_fetcher_procs: Number of fetcher processes for parallel weight downloading.
+            Only used when prefetch_weights_to_shm is True. Defaults to 8.
 
     Example:
         >>> generator = await Generator.options(procs=1, with_gpus=True).as_service(
@@ -62,12 +76,16 @@ class Generator(ForgeActor):
 
     engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs)
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
+    prefetch_weights_to_shm: bool = True
+    n_fetcher_procs: int = 8
 
     def __post_init__(self):
         super().__init__()
         self.llm: Optional[AsyncLLM] = None
         self.generator_version: int = 0
         self.workers: Any = None  # Workers ActorMesh, registered by MonarchExecutor
+        self.fetcher_procs: Optional[ProcMesh] = None  # Fetcher proc mesh
+        self.weight_fetchers: Any = None  # Weight fetcher ActorMesh
 
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
@@ -223,6 +241,14 @@ class Generator(ForgeActor):
         self.vllm_config.parallel_config.distributed_executor_backend = (
             "forge.actors.vllm.v1.forge_executor.ForgeMonarchExecutor"
         )
+
+        # Set up prefetching configuration via additional_config
+        # There does not seem to be  a real difference between pass by env var or via self.vllm_config
+        if self.prefetch_weights_to_shm:
+            self.vllm_config.additional_config["n_fetcher_procs"] = self.n_fetcher_procs
+        else:
+            self.vllm_config.additional_config["n_fetcher_procs"] = 0
+
         from vllm.v1.executor.abstract import Executor
 
         try:
@@ -246,6 +272,70 @@ class Generator(ForgeActor):
                 "MonarchExecutor may have failed to register workers."
             )
         logger.info(f"Retrieved workers from registry: {self.workers}")
+
+        if self.prefetch_weights_to_shm:
+            self._spawn_fetchers()
+
+    def _spawn_fetchers(self):
+        """Spawn weight fetchers that prefetch weights from torchstore to shared memory.
+
+        This assumes the generator is on the same host as the worker and only works for
+        single host generators.
+        """
+        fetcher_procs = this_host().spawn_procs(
+            per_host={"procs": self.n_fetcher_procs}
+        )
+        self.fetcher_procs = fetcher_procs
+        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
+        logger.info(
+            f"[Generator] Spawned {self.n_fetcher_procs} weight fetchers: {self.weight_fetchers}"
+        )
+
+    async def _fetch_weights(
+        self,
+        version: int,
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}.
+
+        Coordinates parallel weight fetching across fetcher processes using round-robin
+        distribution of parameters.
+
+        Args:
+            version: Policy version to fetch
+
+        Returns:
+            Dict mapping param names to SharedTensorHandle objects
+        """
+        prefix = get_param_prefix(version)
+        matching_keys = await ts.keys(prefix)
+        hf_param_names = [extract_param_name(key) for key in matching_keys]
+
+        n_fetchers = self.weight_fetchers.size()
+
+        def split_keys(keys):
+            return [keys[i::n_fetchers] for i in range(n_fetchers)]
+
+        futures = []
+        for i, names in enumerate(split_keys(hf_param_names)):
+            fut = self.weight_fetchers.slice(procs=i).fetch.call_one(
+                version=version, param_names=names
+            )
+            futures.append(fut)
+
+        sub_state_dicts = [await fut for fut in futures]
+
+        state_dict = {}
+        for sd in sub_state_dicts:
+            state_dict.update(sd)
+
+        logger.info(
+            f"[Generator] Fetched {len(state_dict)} weights for v{version} to shared memory"
+        )
+        return state_dict
+
+    async def _drop_shared_memory(self, state_dict: dict[str, SharedTensorHandle]):
+        for handle in state_dict.values():
+            handle.drop()
 
     @endpoint
     async def generate(
@@ -305,6 +395,14 @@ class Generator(ForgeActor):
         This method is idempotent and can be called multiple times safely.
         Note: Remote worker cleanup happens in shutdown() which has access to the proxy.
         """
+        if self.fetcher_procs is not None:
+            try:
+                await self.fetcher_procs.stop()
+                logger.info("Stopped fetcher procs")
+            except Exception as e:
+                logger.warning(f"Error stopping fetcher procs: {e}")
+            self.fetcher_procs = None
+
         if self.llm is not None:
             logger.info("Stopping AsyncLLM")
             self.llm.shutdown()
@@ -344,9 +442,14 @@ class Generator(ForgeActor):
         """Update weights on the generator from torchstore.
 
         This method:
-        1. Pauses generation and waits for in-flight requests to complete
-        2. Updates weights on workers from torchstore
-        3. Resumes generation
+        1. Optionally starts prefetching weights to shared memory (overlaps with pause)
+        2. Pauses generation and waits for in-flight requests to complete
+        3. Updates weights on workers (from shared memory if prefetched, else from torchstore)
+        4. Resumes generation
+
+        When prefetch_weights_to_shm is enabled, weight fetching is started as an async task
+        BEFORE pause_generation(), overlapping I/O with in-flight request completion.
+        This reduces the time generation is paused.
 
         Note: This is NOT the standard vLLM weight update approach. vLLM typically
         uses `collective_rpc` on EngineClient, which internally routes calls to
@@ -366,6 +469,12 @@ class Generator(ForgeActor):
 
         logger.info(f"Starting weight update to v{version}")
 
+        # Start prefetching weights to shared memory (overlaps with pause)
+        fetch_task = None
+        if self.prefetch_weights_to_shm:
+            logger.info(f"[Generator] Starting prefetch for v{version}")
+            fetch_task = asyncio.create_task(self._fetch_weights(version or 0))
+
         pause_start = time.perf_counter()
         await self.llm.pause_generation(
             wait_for_inflight_requests=True, clear_cache=True
@@ -379,7 +488,22 @@ class Generator(ForgeActor):
 
         try:
             load_start = time.perf_counter()
-            await self.workers.update_weights.call(version)
+
+            if fetch_task is not None:
+                wait_fetch_start = time.perf_counter()
+                fetched_weights = await fetch_task
+                wait_fetch_duration = time.perf_counter() - wait_fetch_start
+                record_metric(
+                    "generator_perf/update_weights/wait_fetch_weights_s",
+                    wait_fetch_duration,
+                    Reduce.MEAN,
+                )
+                await self.workers.apply_prefetched_weights.call(fetched_weights)
+                await self._drop_shared_memory(fetched_weights)
+            else:
+                # Direct fetch from torchstore
+                await self.workers.update_weights.call(version=version)
+
             load_duration = time.perf_counter() - load_start
             record_metric(
                 "generator_perf/update_weights/worker_load_weights_duration_s",
@@ -387,7 +511,6 @@ class Generator(ForgeActor):
                 Reduce.MEAN,
             )
             self.generator_version = version
-            logger.info(f"Updated weights from torchstore v{version}")
         finally:
             await self.llm.resume_generation()
         logger.info(f"Weight update complete, now v{version}")
@@ -438,3 +561,44 @@ class Generator(ForgeActor):
             completions.append(completion)
 
         return completions
+
+
+class _WeightFetcher(ForgeActor):
+    """Fetches weights from torchstore and loads them into shared memory.
+
+    Spawned by Generator using this_host().spawn_procs() to ensure shared
+    memory IPC namespace is shared with workers. This is critical for POSIX
+    shared memory to be visible between fetchers and workers.
+    """
+
+    @endpoint
+    async def fetch(
+        self,
+        *,
+        version: int,
+        param_names: list[str],
+    ) -> dict[str, SharedTensorHandle]:
+        """Fetch weights from torchstore and load them into shared memory.
+
+        Args:
+            version: Policy version
+            param_names: List of parameter names to fetch
+
+        Returns:
+            Dict mapping param names to SharedTensorHandle objects
+        """
+
+        sd = {}
+        for name in param_names:
+            param_key = get_param_key(version, name)
+            param = await ts.get(param_key)
+            shared_tensor = SharedTensor(tensor=param)
+            handle = shared_tensor.get_handle()
+            # Unregister from resource tracker - Generator will handle cleanup via drop()
+            # Without this, the shared memory gets cleaned up when the fetcher process exits
+            resource_tracker.unregister(f"/{handle.shm_name}", "shared_memory")
+
+            sd[name] = handle
+            shared_tensor.close()  # Close fd but don't unlink (workers will use it)
+            del param  # Explicitly free the tensor after copying to shared memory
+        return sd
