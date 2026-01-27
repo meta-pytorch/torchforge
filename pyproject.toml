@@ -14,7 +14,7 @@ dependencies = [
     "torch==2.9.0",
     "torchdata>=0.8.0",
     "torchtitan==0.2.0",
-    "torchmonarch-nightly==2025.12.17",
+    "torchmonarch==0.2.0",
     # Issue 656: switch to ping torchstore nightly
     "torchstore",
     # vLLM
