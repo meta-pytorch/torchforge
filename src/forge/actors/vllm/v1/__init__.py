@@ -25,6 +25,14 @@ def __getattr__(name):
         from forge.actors.vllm.v1.monarch_executor import WorkerWrapper
 
         return WorkerWrapper
+    if name == "ForgeMonarchExecutor":
+        from forge.actors.vllm.v1.forge_executor import ForgeMonarchExecutor
+
+        return ForgeMonarchExecutor
+    if name == "ForgeWorkerWrapper":
+        from forge.actors.vllm.v1.forge_executor import ForgeWorkerWrapper
+
+        return ForgeWorkerWrapper
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -32,4 +40,6 @@ __all__ = [
     "Generator",
     "MonarchExecutor",
     "WorkerWrapper",
+    "ForgeMonarchExecutor",
+    "ForgeWorkerWrapper",
 ]

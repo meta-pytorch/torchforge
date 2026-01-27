@@ -24,7 +24,7 @@ from forge.actors.generator import Generator
 from forge.actors.trainer import RLTrainer
 from forge.controller.provisioner import init_provisioner, shutdown
 from forge.observability.metric_actors import get_or_create_metric_logger
-from forge.types import LauncherConfig, ProvisionerConfig
+from forge.types import LauncherConfig, ProvisionerConfig, TrainBatch
 from forge.util.config import parse
 from omegaconf import DictConfig
 from vllm.transformers_utils.tokenizer import get_tokenizer
@@ -37,13 +37,12 @@ def generate_random_batch(
     vocab_size: int = 32000,
     device: str = "cuda",
     dp_size: int = 1,
-):
+) -> list[TrainBatch]:
     """
-    Generate random input and target tensors for a single training step.
+    Generate random TrainBatch objects for a single training step.
     Creates one batch per data parallel rank.
     """
-    inputs = []
-    targets = []
+    batches = []
 
     # Create one batch for each data parallel rank
     for _ in range(dp_size):
@@ -71,17 +70,19 @@ def generate_random_batch(
         )
         advantages = torch.randn((local_batch_size, 1), device=device)
         input_tokens = torch.cat([request, response], dim=1)
-        inputs.append({"tokens": input_tokens})
-        targets.append(
-            {
-                "response": response,
-                "ref_logprobs": ref_logprobs,
-                "advantages": advantages,
-                "padding_mask": padding_mask,
-            }
+        batches.append(
+            TrainBatch(
+                model_inputs={"tokens": input_tokens},
+                loss_inputs={
+                    "response": response,
+                    "ref_logprobs": ref_logprobs,
+                    "advantages": advantages,
+                    "padding_mask": padding_mask,
+                },
+            )
         )
 
-    return inputs, targets
+    return batches
 
 
 async def main(cfg: DictConfig):
@@ -147,7 +148,7 @@ async def main(cfg: DictConfig):
     print("Running single training step...")
     step_start = time.time()
 
-    inputs, targets = generate_random_batch(
+    batches = generate_random_batch(
         local_batch_size=local_batch_size,
         request_len=request_len,
         response_len=response_len,
@@ -155,7 +156,7 @@ async def main(cfg: DictConfig):
         dp_size=dp_size,
     )
 
-    await trainer.train_step.call(inputs, targets)
+    await trainer.train_step.call(batches)
     step_time = time.time() - step_start
     print(f"Finished train step in ({step_time:.2f}s)\n")
 

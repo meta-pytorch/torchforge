@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -20,7 +21,12 @@ from forge.controller import ForgeActor
 from forge.controller.provisioner import _get_provisioner
 from forge.data_models.completion import Completion
 from forge.data_models.prompt import to_prompt
+from forge.env import FORGE_DISABLE_METRICS
+from forge.observability.metric_actors import get_or_create_metric_logger
+from forge.observability.metrics import record_metric, Reduce
+from forge.observability.perf_tracker import Tracer
 from monarch.actor import endpoint, this_host
+from torchstore.api import _controller as get_torchstore_controller
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.llm import UsageContext
 from vllm.outputs import RequestOutput
@@ -141,6 +147,10 @@ class Generator(ForgeActor):
         )
         logger.info("[Generator.launch] Spawned generator_proc on head host")
 
+        # Register LocalFetcherActor for generator_proc to enable metrics collection
+        if not FORGE_DISABLE_METRICS.get_value():
+            await get_or_create_metric_logger(generator_proc, process_name=mesh_name)
+
         # Import WorkerRegistry here to avoid circular import with monarch_executor
         from forge.actors.vllm.v1.monarch_executor import WorkerRegistry
 
@@ -197,14 +207,21 @@ class Generator(ForgeActor):
         ).decode("utf-8")
         os.environ["VLLM_MONARCH_WORKER_REGISTRY"] = serialized_registry
 
+        # Serialize TorchStore Controller reference for workers to access torchstore
+        torchstore_controller = await get_torchstore_controller()
+        serialized_controller = base64.b64encode(
+            cloudpickle.dumps(torchstore_controller)
+        ).decode("utf-8")
+        os.environ["VLLM_TORCHSTORE_CONTROLLER"] = serialized_controller
+
         # Force 'spawn' multiprocessing method for Monarch actors.
         # This follows vLLM's Ray integration pattern.
         os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 
-        # Set the executor backend to MonarchExecutor via string path
+        # Set the executor backend to ForgeMonarchExecutor via string path
         # This avoids import deadlock when vLLM spawns EngineCore subprocess
         self.vllm_config.parallel_config.distributed_executor_backend = (
-            "forge.actors.vllm.v1.monarch_executor.MonarchExecutor"
+            "forge.actors.vllm.v1.forge_executor.ForgeMonarchExecutor"
         )
         from vllm.v1.executor.abstract import Executor
 
@@ -249,6 +266,10 @@ class Generator(ForgeActor):
         Returns:
             list[Completion]: n completions from vLLM based on your prompt.
         """
+        t = Tracer("generator_perf/generate", timer="gpu")
+        t.start()
+        record_metric("generator/generate/count_requests", 1, Reduce.SUM)
+
         if self.llm is None:
             raise RuntimeError("Generator not initialized. Call setup() first.")
 
@@ -269,6 +290,12 @@ class Generator(ForgeActor):
 
         completions = self._to_completions(request_output, prompt)
 
+        record_metric(
+            "generator/generate/count_sequences_completed",
+            len(completions),
+            Reduce.SUM,
+        )
+        t.stop()
         return completions
 
     @endpoint
@@ -308,6 +335,74 @@ class Generator(ForgeActor):
             logger.warning(f"Error during generator_proc stop: {e}")
 
         logger.info("shutdown() complete")
+
+    @endpoint
+    async def update_weights(
+        self,
+        version: Optional[int] = None,
+    ) -> None:
+        """Update weights on the generator from torchstore.
+
+        This method:
+        1. Pauses generation and waits for in-flight requests to complete
+        2. Updates weights on workers from torchstore
+        3. Resumes generation
+
+        Note: This is NOT the standard vLLM weight update approach. vLLM typically
+        uses `collective_rpc` on EngineClient, which internally routes calls to
+        workers via the executor. However, `collective_rpc` uses msgspec/msgpack
+        serialization which does not support arbitrary Python objects by default
+        (only with VLLM_ALLOW_INSECURE_SERIALIZATION=1). This makes it difficult to
+        pass complex objects like torchstore storage handles. Instead, we use a
+        monarch-native approach where the Generator actor directly calls the worker
+        mesh (`self.workers.update_weights`) via Monarch RPC, which uses cloudpickle
+        and natively supports Monarch actor references for torchstore integration.
+
+        Args:
+            version: Policy version to load from torchstore
+        """
+        if self.llm is None:
+            raise RuntimeError("Generator not initialized. Call setup() first.")
+
+        logger.info(f"Starting weight update to v{version}")
+
+        pause_start = time.perf_counter()
+        await self.llm.pause_generation(
+            wait_for_inflight_requests=True, clear_cache=True
+        )
+        pause_duration = time.perf_counter() - pause_start
+        record_metric(
+            "generator_perf/update_weights/pause_generation_duration_s",
+            pause_duration,
+            Reduce.MEAN,
+        )
+
+        try:
+            load_start = time.perf_counter()
+            await self.workers.update_weights.call(version)
+            load_duration = time.perf_counter() - load_start
+            record_metric(
+                "generator_perf/update_weights/worker_load_weights_duration_s",
+                load_duration,
+                Reduce.MEAN,
+            )
+            self.generator_version = version
+            logger.info(f"Updated weights from torchstore v{version}")
+        finally:
+            await self.llm.resume_generation()
+        logger.info(f"Weight update complete, now v{version}")
+
+    @endpoint
+    async def save_model_params(self):
+        """Save model parameters before weight update, used for testing purposes only."""
+        logger.info("save model parameters for testing.")
+        await self.workers.save_model_params.call()
+
+    @endpoint
+    async def validate_model_params(self, validate_fn):
+        """Validate updated model params using validate_fn."""
+        logger.info("start validating model parameters.")
+        return await self.workers.validate_model_params.call(validate_fn)
 
     def _to_completions(
         self, request_output: RequestOutput, prompt: str

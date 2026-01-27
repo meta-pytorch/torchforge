@@ -126,3 +126,34 @@ class ProvisionerConfig:
     """A config for the forge provisioner."""
 
     launcher_config: LauncherConfig
+
+
+@dataclass
+class TrainBatch:
+    """Universal training batch for all Forge training modes.
+
+    Usage:
+        logits = model(**batch.model_inputs)
+        loss = loss_fn(logits, **batch.loss_inputs)
+
+    Attributes:
+        model_inputs (dict[str, Any]): Inputs for model forward pass (e.g., input_ids, attention_mask).
+        loss_inputs (dict[str, Any]): Inputs for loss computation (e.g., target_ids, advantages, beta).
+        meta (dict[str, Any]): Any extra metadata that is not a model or loss input.
+
+    Example:
+        >>> # SFT
+        >>> batch = TrainBatch(
+        >>>     model_inputs={"input_ids": ids, "attention_mask": mask},
+        >>>     loss_inputs={"target_ids": targets},
+        >>> )
+        >>> # RL (GRPO)
+        >>> batch = TrainBatch(
+        >>>     model_inputs={"input_ids": ids},
+        >>>     loss_inputs={"target_ids": targets, "advantages": adv, "ref_logprobs": ref},
+        >>> )
+    """
+
+    model_inputs: dict[str, Any]
+    loss_inputs: dict[str, Any]
+    meta: dict[str, Any] = field(default_factory=dict)
