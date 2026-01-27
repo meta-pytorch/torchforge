@@ -35,8 +35,8 @@ if [ -z "${PYTORCH_VERSION:-}" ]; then
     log_error "PYTORCH_VERSION not set in $VERSIONS_FILE"
     exit 1
 fi
-if [ -z "${VLLM_VERSION:-}" ]; then
-    log_error "VLLM_VERSION not set in $VERSIONS_FILE"
+if [ -z "${VLLM_ROCM_VERSION:-}" ]; then
+    log_error "VLLM_ROCM_VERSION not set in $VERSIONS_FILE"
     exit 1
 fi
 if [ -z "${TORCHSTORE_BRANCH:-}" ]; then
@@ -311,8 +311,8 @@ install_pytorch() {
 install_vllm() {
     local vllm_dir="${FORGE_DEPS_DIR}/vllm"
 
-    log_info "Installing vLLM ${VLLM_VERSION} from source (ROCm)"
-    ensure_repo "https://github.com/vllm-project/vllm.git" "$vllm_dir" "$VLLM_VERSION"
+    log_info "Installing vLLM ${VLLM_ROCM_VERSION} from source (ROCm)"
+    ensure_repo "https://github.com/vllm-project/vllm.git" "$vllm_dir" "$VLLM_ROCM_VERSION"
 
     python -m pip install -r "${vllm_dir}/requirements/rocm.txt"
     python -m pip install --upgrade "cmake>=3.27" ninja

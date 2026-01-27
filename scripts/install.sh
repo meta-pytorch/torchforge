@@ -188,12 +188,6 @@ main() {
     log_info "Installing PyTorch ..."
     pip install torch==$PYTORCH_VERSION --index-url https://download.pytorch.org/whl/cu128
 
-    # Install vLLM and its requirements
-    pip install -r .github/packaging/vllm_reqs_12_8.txt
-    pip install six
-    pip install "setuptools<80"
-    python -m pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
-
     # Install torchstore without monarch or torch dependency
     pip install "git+https://github.com/meta-pytorch/torchstore.git@${TORCHSTORE_BRANCH}"
 
