@@ -26,6 +26,7 @@ from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_datas
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
+from forge.types import TrainBatch
 from forge.util.config import parse
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -213,8 +214,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
     def forward_backward(
         self,
-        input_dict: dict[str, torch.Tensor],
-        labels: torch.Tensor,
+        batch: TrainBatch,
         skip_backward: bool = False,
     ) -> torch.Tensor:
         model_parts = self.model_parts
@@ -222,7 +222,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
-        inputs = input_dict["tokens"]
+        inputs = batch.model_inputs["tokens"]
+        labels = batch.loss_inputs["labels"]
         optional_context_parallel_ctx = (
             dist_utils.create_context_parallel_ctx(
                 cp_mesh=parallel_dims.world_mesh["cp"],
@@ -283,7 +284,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # ) as grad_acc:
         parallel_dims = self.parallel_dims
         labels = batch.pop("labels")
-        loss = self.forward_backward(batch, labels)
+        train_batch = TrainBatch(
+            model_inputs=batch,
+            loss_inputs={"labels": labels},
+        )
+        loss = self.forward_backward(train_batch)
 
         grad_norm = dist_utils.clip_grad_norm_(
             [p for m in self.model_parts for p in m.parameters()],
@@ -373,7 +378,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
                     # Process batch
                     labels = batch.pop("labels")
-                    loss = self.forward_backward(batch, labels, skip_backward=True)
+                    train_batch = TrainBatch(
+                        model_inputs=batch,
+                        loss_inputs={"labels": labels},
+                    )
+                    loss = self.forward_backward(train_batch, skip_backward=True)
                     total_loss += loss
                     num_steps += 1
 
