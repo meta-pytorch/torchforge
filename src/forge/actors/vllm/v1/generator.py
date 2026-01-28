@@ -574,7 +574,7 @@ class Generator(ForgeActor):
                 logprobs=self._extract_logprobs(output),
                 stop_reason=output.finish_reason,
                 generator_version=self.generator_version,
-                metadata=None,
+                metadata={"num_cached_tokens": request_output.num_cached_tokens},
             )
             completions.append(completion)
 
