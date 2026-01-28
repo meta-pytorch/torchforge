@@ -11,10 +11,14 @@ These golden files serve as a baseline for verifying that new implementations
 produce identical outputs. Uses deterministic sampling (temperature=0) for
 reproducibility.
 
+NOTE: Golden output artifacts are checked into git. Keep the number of prompts
+and MAX_TOKENS small to avoid bloating the repository. Current artifacts are
+~20KB total.
+
 Usage:
     python tests/integration_tests/generate_golden_outputs.py
 
-The script will generate golden files in tests/integration_tests/golden_outputs/
+The script will generate golden files in tests/integration_tests/fixtures/golden_outputs/
 """
 
 import asyncio
