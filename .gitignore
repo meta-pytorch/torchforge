@@ -84,6 +84,9 @@ ipython_config.py
 *.distcp
 .metadata
 
+# Track golden test outputs (these are checked in for correctness tests)
+!tests/integration_tests/fixtures/golden_outputs/*.pt
+
 # mypy
 .mypy_cache/
 .dmypy.json
