@@ -7,6 +7,7 @@
 # Usage: python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 import asyncio
+import traceback
 import uuid
 
 import torch
@@ -311,7 +312,9 @@ async def main(cfg: DictConfig):
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
 
-        while max_steps == -1 or training_step < max_steps:
+        while (
+            max_steps == -1 or training_step < max_steps
+        ) and not shutdown_event.is_set():
             # Restart tracer when needed (initial start or after completing a training step)
             # Otherwise, we cannot measure time waiting for buffer
             if restart_tracer:
@@ -347,9 +350,12 @@ async def main(cfg: DictConfig):
                 # Flush metrics every training step to WandB
                 await mlogger.flush.call_one(training_step)
 
-        print(
-            f"Reached training limit ({max_steps} steps). Exiting continuous_training loop."
-        )
+        if shutdown_event.is_set():
+            print("Training stopped due to shutdown event (likely a task failure).")
+        else:
+            print(
+                f"Reached training limit ({max_steps} steps). Exiting continuous_training loop."
+            )
 
     num_rollout_threads = cfg.get("rollout_threads", 1)
     num_training_threads = cfg.get("training_threads", 1)
@@ -361,10 +367,27 @@ async def main(cfg: DictConfig):
     ]
     training_task = asyncio.create_task(continuous_training())
 
+    # Surface background task failures and trigger shutdown (fail-fast)
+    def on_task_done(task: asyncio.Task, name: str):
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            print(f"ERROR: {name} failed: {type(exc).__name__}: {exc}")
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+            shutdown_event.set()
+
+    for i, task in enumerate(rollout_tasks):
+        task.add_done_callback(lambda t, i=i: on_task_done(t, f"rollout_task_{i}"))
+    training_task.add_done_callback(lambda t: on_task_done(t, "training_task"))
+
     try:
         await training_task
     except KeyboardInterrupt:
         print("Training interrupted by user")
+    except Exception as e:
+        print(f"ERROR: Training task failed: {type(e).__name__}: {e}")
+        traceback.print_exc()
     finally:
         print("Shutting down... (this may take a few seconds)")
         shutdown_event.set()
