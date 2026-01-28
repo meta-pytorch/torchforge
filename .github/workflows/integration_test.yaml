@@ -33,12 +33,6 @@ jobs:
           python-version: '3.12'
       - name: Update pip
         run: python -m pip install --upgrade pip
-      - name: Install dependencies
-        run: |
-          pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/cu128
-          pip install six
-          pip install "setuptools<80"
-          pip install "vllm>=0.13.0,<0.14.0"
       - name: Install torchforge
         run: pip install uv && uv pip install . && uv pip install .[dev]
       - name: Run weight sync integration test
