@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <meta property="article:modified_time" content="2026-01-27T19:55:53+00:00" />
+    <meta property="article:modified_time" content="2026-01-28T15:23:03+00:00" />
     <title>Generator &#8212; torchforge 0.1 documentation</title>
   
   
@@ -58,7 +58,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Jan 27, 2026"/>
+    <meta name="docbuild:last-update" content="Jan 28, 2026"/>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
@@ -208,7 +208,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-    <meta name="docbuild:last-update" content="Jan 27, 2026"/>
+    <meta name="docbuild:last-update" content="Jan 28, 2026"/>
 
   </head>
 
@@ -716,29 +716,32 @@ It manages model serving, text generation, and weight updates for reinforcement 
 <h2>Generator<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.generator.</span></span><span class="sig-name descname"><span class="pre">Generator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine_args=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampling_params=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefetch_weights_to_shm=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_fetcher_procs=8</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/vllm/v0/generator.html#Generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator" title="Link to this definition">#</a></dt>
-<dd><p>Instance of a vLLM-based generator.</p>
-<p>This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The
-main difference is that all communications are controlled here via Monarch’s proc meshes.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">forge.actors.generator.</span></span><span class="sig-name descname"><span class="pre">Generator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine_args=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sampling_params=&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefetch_weights_to_shm=True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_fetcher_procs=8</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/vllm/v1/generator.html#Generator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator" title="Link to this definition">#</a></dt>
+<dd><p>vLLM-based generator using AsyncLLM with Monarch distributed execution.</p>
+<p>Wraps vLLM’s AsyncLLM engine and uses MonarchExecutor for multi-GPU inference.
+See MonarchExecutor docstring for architecture diagram.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>engine_args</strong> (<em>EngineArgs</em>) – The engine arguments to use for the vLLM engine.</p></li>
-<li><p><strong>sampling_params</strong> (<em>SamplingParams</em>) – The sampling parameters to use for the vLLM engine.</p></li>
-<li><p><strong>prefetch_weights_to_shm</strong> (<em>bool</em>) – Whether to prefetch weights to shared memory. Defaults to True.</p></li>
-<li><p><strong>n_fetcher_procs</strong> (<em>int</em>) – The number of fetcher processes to use. Defaults to 8.</p></li>
+<li><p><strong>engine_args</strong> – vLLM EngineArgs for model configuration. Can be EngineArgs or dict.</p></li>
+<li><p><strong>sampling_params</strong> – Default SamplingParams for generation. Can be SamplingParams or dict.</p></li>
+<li><p><strong>prefetch_weights_to_shm</strong> – Whether to prefetch weights to shared memory for faster
+weight updates. When enabled, weight fetchers download weights in parallel
+to shared memory while generation is still running. Defaults to True.</p></li>
+<li><p><strong>n_fetcher_procs</strong> – Number of fetcher processes for parallel weight downloading.
+Only used when prefetch_weights_to_shm is True. Defaults to 8.</p></li>
 </ul>
 </dd>
 </dl>
-<p>Example:
-&gt;&gt;&gt; generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service(
-…     engine_args=EngineArgs(…),
-…     sampling_params=SamplingParams(…),
-…     )
-&gt;&gt;&gt; await generator.generate(“Tell me a joke”)
-Completion(prompt=”Tell me a joke”, text=”A: Why did the chicken cross the road? B: To get to the other side.”,
-token_ids=[…], logprobs=[…])
-&gt;&gt;&gt; await generator.shutdown()</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">generator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Generator</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">with_gpus</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">as_service</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">engine_args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;meta-llama/Llama-3-8B&quot;</span><span class="p">,</span> <span class="s2">&quot;tensor_parallel_size&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="n">sampling_params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="mi">128</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">completions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">generator</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">&quot;Tell me a joke&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">await</span> <span class="n">generator</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.engine_args">
 <span class="sig-name descname"><span class="pre">engine_args</span></span><a class="headerlink" href="#forge.actors.generator.Generator.engine_args" title="Link to this definition">#</a></dt>
@@ -750,16 +753,6 @@ token_ids=[…], logprobs=[…])
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.generator.Generator.get_version">
-<span class="sig-name descname"><span class="pre">get_version</span></span><a class="headerlink" href="#forge.actors.generator.Generator.get_version" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.generator.Generator.get_vllm_config">
-<span class="sig-name descname"><span class="pre">get_vllm_config</span></span><a class="headerlink" href="#forge.actors.generator.Generator.get_vllm_config" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.n_fetcher_procs">
 <span class="sig-name descname"><span class="pre">n_fetcher_procs</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></em><a class="headerlink" href="#forge.actors.generator.Generator.n_fetcher_procs" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
@@ -768,23 +761,6 @@ token_ids=[…], logprobs=[…])
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.prefetch_weights_to_shm">
 <span class="sig-name descname"><span class="pre">prefetch_weights_to_shm</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></em><a class="headerlink" href="#forge.actors.generator.Generator.prefetch_weights_to_shm" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="forge.actors.generator.Generator.register_worker">
-<span class="sig-name descname"><span class="pre">register_worker</span></span><a class="headerlink" href="#forge.actors.generator.Generator.register_worker" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="forge.actors.generator.Generator.run">
-<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/vllm/v0/generator.html#Generator.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator.run" title="Link to this definition">#</a></dt>
-<dd><p>Schedule, execute, and make output.
-<a class="github reference external" href="https://github.com/vllm-project/vllm/blob/0e3bb543f064eb416bca4f6f3013efa3830b12f7/vllm/v1/engine/core.py#L276">vllm-project/vllm</a></p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></span></p>
-</dd>
-</dl>
-</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.sampling_params">
@@ -803,8 +779,17 @@ token_ids=[…], logprobs=[…])
 
 <dl class="py method">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.shutdown">
-<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/vllm/v0/generator.html#Generator.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator.shutdown" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<em class="property"><span class="pre">async</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shutdown</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">actor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/forge/actors/vllm/v1/generator.html#Generator.shutdown"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#forge.actors.generator.Generator.shutdown" title="Link to this definition">#</a></dt>
+<dd><p>Shutdown the generator and cleanup all resources.</p>
+<p>Cleanup order:
+1. Stop AsyncLLM (triggers MonarchExecutor.shutdown() which destroys</p>
+<blockquote>
+<div><p>process groups and stops proc_mesh)</p>
+</div></blockquote>
+<ol class="arabic simple" start="2">
+<li><p>Stop generator_proc</p></li>
+</ol>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="forge.actors.generator.Generator.stop">
@@ -950,12 +935,8 @@ token_ids=[…], logprobs=[…])
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator"><code class="docutils literal notranslate"><span class="pre">Generator</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.engine_args"><code class="docutils literal notranslate"><span class="pre">Generator.engine_args</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.generate"><code class="docutils literal notranslate"><span class="pre">Generator.generate</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.get_version"><code class="docutils literal notranslate"><span class="pre">Generator.get_version</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.get_vllm_config"><code class="docutils literal notranslate"><span class="pre">Generator.get_vllm_config</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.n_fetcher_procs"><code class="docutils literal notranslate"><span class="pre">Generator.n_fetcher_procs</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.prefetch_weights_to_shm"><code class="docutils literal notranslate"><span class="pre">Generator.prefetch_weights_to_shm</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.register_worker"><code class="docutils literal notranslate"><span class="pre">Generator.register_worker</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.run"><code class="docutils literal notranslate"><span class="pre">Generator.run()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.sampling_params"><code class="docutils literal notranslate"><span class="pre">Generator.sampling_params</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.save_model_params"><code class="docutils literal notranslate"><span class="pre">Generator.save_model_params</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#forge.actors.generator.Generator.setup"><code class="docutils literal notranslate"><span class="pre">Generator.setup</span></code></a></li>
@@ -1102,7 +1083,7 @@ token_ids=[…], logprobs=[…])
        "headline": "Generator",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
        "url": "/api_generator.html",
-       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Generator# class forge.actors.generator.Generator(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, prefetch_weights_to_shm=True, n_fetcher_procs=8)[source]# Instance of a vLLM-based generator. This class manually recreates a vLLM engine that mirrors the design of AsyncLLMEngine in v1. The main difference is that all communications are controlled here via Monarch\u2019s proc meshes. Parameters: engine_args (EngineArgs) \u2013 The engine arguments to use for the vLLM engine. sampling_params (SamplingParams) \u2013 The sampling parameters to use for the vLLM engine. prefetch_weights_to_shm (bool) \u2013 Whether to prefetch weights to shared memory. Defaults to True. n_fetcher_procs (int) \u2013 The number of fetcher processes to use. Defaults to 8. Example: \u003e\u003e\u003e generator = await Generator.options(procs=1, num_replicas=1, with_gpus=True).as_service( \u2026 engine_args=EngineArgs(\u2026), \u2026 sampling_params=SamplingParams(\u2026), \u2026 ) \u003e\u003e\u003e await generator.generate(\u201cTell me a joke\u201d) Completion(prompt=\u201dTell me a joke\u201d, text=\u201dA: Why did the chicken cross the road? B: To get to the other side.\u201d, token_ids=[\u2026], logprobs=[\u2026]) \u003e\u003e\u003e await generator.shutdown() engine_args# generate# get_version# get_vllm_config# n_fetcher_procs = 8# prefetch_weights_to_shm = True# register_worker# async run()[source]# Schedule, execute, and make output. vllm-project/vllm Return type: None sampling_params# save_model_params# setup# async classmethod shutdown(actor)[source]# stop# update_weights# validate_model_params# GeneratorWorker#",
+       "articleBody": "Generator# The Generator (Policy) is the core inference engine in TorchForge, built on top of vLLM. It manages model serving, text generation, and weight updates for reinforcement learning workflows. Generator# class forge.actors.generator.Generator(engine_args=\u003cfactory\u003e, sampling_params=\u003cfactory\u003e, prefetch_weights_to_shm=True, n_fetcher_procs=8)[source]# vLLM-based generator using AsyncLLM with Monarch distributed execution. Wraps vLLM\u2019s AsyncLLM engine and uses MonarchExecutor for multi-GPU inference. See MonarchExecutor docstring for architecture diagram. Parameters: engine_args \u2013 vLLM EngineArgs for model configuration. Can be EngineArgs or dict. sampling_params \u2013 Default SamplingParams for generation. Can be SamplingParams or dict. prefetch_weights_to_shm \u2013 Whether to prefetch weights to shared memory for faster weight updates. When enabled, weight fetchers download weights in parallel to shared memory while generation is still running. Defaults to True. n_fetcher_procs \u2013 Number of fetcher processes for parallel weight downloading. Only used when prefetch_weights_to_shm is True. Defaults to 8. Example \u003e\u003e\u003e generator = await Generator.options(procs=1, with_gpus=True).as_service( ... engine_args={\"model\": \"meta-llama/Llama-3-8B\", \"tensor_parallel_size\": 2}, ... sampling_params={\"max_tokens\": 128, \"temperature\": 0.7}, ... ) \u003e\u003e\u003e completions = await generator.generate(\"Tell me a joke\") \u003e\u003e\u003e await generator.shutdown() engine_args# generate# n_fetcher_procs = 8# prefetch_weights_to_shm = True# sampling_params# save_model_params# setup# async classmethod shutdown(actor)[source]# Shutdown the generator and cleanup all resources. Cleanup order: 1. Stop AsyncLLM (triggers MonarchExecutor.shutdown() which destroys process groups and stops proc_mesh) Stop generator_proc stop# update_weights# validate_model_params# GeneratorWorker#",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

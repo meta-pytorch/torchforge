@@ -1,0 +1,1551 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>forge.actors.vllm.v1.generator &#8212; torchforge 0.1 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=047068a3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=d2d258e8" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/custom.css?v=b61afe48" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.4/dist/mermaid-layout-elk.esm.min.mjs"></script>
+    <script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+        primaryColor: '#4CAF50',
+        primaryTextColor: '#000',
+        primaryBorderColor: '#fff',
+        lineColor: '#555',
+        secondaryColor: '#FF9800',
+        tertiaryColor: '#ffffde'
+    },
+    flowchart: {
+        curve: 'basis'
+    },
+    themeCSS: '.edgePath .path { stroke-width: 4px; stroke: #555; }'
+});
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.2.0/dist/mermaid.esm.min.mjs";
+window.addEventListener("load", () => mermaid.run());
+</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/forge/actors/vllm/v1/generator';</script>
+    <script src="../../../../../_static/custom.js?v=0065d487"></script>
+    <link rel="canonical" href="https://meta-pytorch.org/torchforge/main/_modules/forge/actors/vllm/v1/generator.html" />
+    <link rel="icon" href="../../../../../_static/logo-icon.svg"/>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+</style>
+
+
+<style>
+  @media (min-width: 1100px) {
+    .site-footer {
+      height: 300px !important;
+    }
+  }
+</style>
+
+<link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="../../../../../_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NPLPKN5G" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-NPLPKN5G');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "meta-pytorch/torchforge",
+    github_branch: "main",
+    colab_repo: "meta-pytorch/torchforge",
+    colab_branch: "gh-pages"
+  };
+</script>
+
+<!-- Script to Fix scrolling -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Fix anchor scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const targetId = this.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/meta-pytorch/forge" class="pytorch-body">
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../getting_started.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/torchforge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../getting_started.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../tutorials.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../../api.html">
+    API Reference
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/meta-pytorch/torchforge" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="Discourse" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Discourse</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchforge/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">forge.actors...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+  
+<div id="searchbox"></div>
+  <article class="bd-article" id="pytorch-article">
+    <!-- Hidden breadcrumb schema for SEO only -->
+    <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <link itemprop="item" href="../../../../index.html">
+        <meta itemprop="name" content="Module code">
+        <meta itemprop="position" content="1">
+      </div>
+      
+      <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <meta itemprop="name" content="forge.actors.vllm.v1.generator">
+        <meta itemprop="position" content="2">
+      </div>
+    </div>
+
+    
+    
+    <div class="pytorch-call-to-action-links">
+      <div id="tutorial-type">_modules/forge/actors/vllm/v1/generator</div>
+      <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+        <div id="google-colab-link">
+          <img class="call-to-action-img" src="../../../../../_static/img/pytorch-colab.svg" />
+          <div class="call-to-action-desktop-view">Run in Google Colab</div>
+          <div class="call-to-action-mobile-view">Colab</div>
+        </div>
+      </a>
+      <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+        <div id="download-notebook-link">
+          <img class="call-to-action-notebook-img" src="../../../../../_static/img/pytorch-download.svg" />
+          <div class="call-to-action-desktop-view">Download Notebook</div>
+          <div class="call-to-action-mobile-view">Notebook</div>
+        </div>
+      </a>
+      <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+        <div id="github-view-link">
+          <img class="call-to-action-img" src="../../../../../_static/img/pytorch-github.svg" />
+          <div class="call-to-action-desktop-view">View on GitHub</div>
+          <div class="call-to-action-mobile-view">GitHub</div>
+        </div>
+      </a>
+    </div>
+    
+
+    
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for forge.actors.vllm.v1.generator</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1"># All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the BSD-style license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">multiprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">resource_tracker</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">cloudpickle</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torchstore</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ts</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors._torchstore_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">extract_param_name</span><span class="p">,</span>
+    <span class="n">get_param_key</span><span class="p">,</span>
+    <span class="n">get_param_prefix</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">ForgeActor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.controller.provisioner</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_provisioner</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.data_models.completion</span><span class="w"> </span><span class="kn">import</span> <span class="n">Completion</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.data_models.prompt</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_prompt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.env</span><span class="w"> </span><span class="kn">import</span> <span class="n">FORGE_DISABLE_METRICS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability.metric_actors</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_or_create_metric_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_metric</span><span class="p">,</span> <span class="n">Reduce</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.observability.perf_tracker</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tracer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">forge.util._shared_tensor</span><span class="w"> </span><span class="kn">import</span> <span class="n">SharedTensor</span><span class="p">,</span> <span class="n">SharedTensorHandle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">monarch.actor</span><span class="w"> </span><span class="kn">import</span> <span class="n">endpoint</span><span class="p">,</span> <span class="n">ProcMesh</span><span class="p">,</span> <span class="n">this_host</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchstore.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">_controller</span> <span class="k">as</span> <span class="n">get_torchstore_controller</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm.engine.arg_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngineArgs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm.entrypoints.llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">UsageContext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm.outputs</span><span class="w"> </span><span class="kn">import</span> <span class="n">RequestOutput</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm.sampling_params</span><span class="w"> </span><span class="kn">import</span> <span class="n">RequestOutputKind</span><span class="p">,</span> <span class="n">SamplingParams</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">vllm.v1.engine.async_llm</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncLLM</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># Suppress noisy vLLM &quot;Added request&quot; logs</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;vllm.v1.engine.async_llm&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Generator">
+<a class="viewcode-back" href="../../../../../api_generator.html#forge.actors.generator.Generator">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Generator</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;vLLM-based generator using AsyncLLM with Monarch distributed execution.</span>
+
+<span class="sd">    Wraps vLLM&#39;s AsyncLLM engine and uses MonarchExecutor for multi-GPU inference.</span>
+<span class="sd">    See MonarchExecutor docstring for architecture diagram.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        engine_args: vLLM EngineArgs for model configuration. Can be EngineArgs or dict.</span>
+<span class="sd">        sampling_params: Default SamplingParams for generation. Can be SamplingParams or dict.</span>
+<span class="sd">        prefetch_weights_to_shm: Whether to prefetch weights to shared memory for faster</span>
+<span class="sd">            weight updates. When enabled, weight fetchers download weights in parallel</span>
+<span class="sd">            to shared memory while generation is still running. Defaults to True.</span>
+<span class="sd">        n_fetcher_procs: Number of fetcher processes for parallel weight downloading.</span>
+<span class="sd">            Only used when prefetch_weights_to_shm is True. Defaults to 8.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; generator = await Generator.options(procs=1, with_gpus=True).as_service(</span>
+<span class="sd">        ...     engine_args={&quot;model&quot;: &quot;meta-llama/Llama-3-8B&quot;, &quot;tensor_parallel_size&quot;: 2},</span>
+<span class="sd">        ...     sampling_params={&quot;max_tokens&quot;: 128, &quot;temperature&quot;: 0.7},</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; completions = await generator.generate(&quot;Tell me a joke&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; await generator.shutdown()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">engine_args</span><span class="p">:</span> <span class="n">EngineArgs</span> <span class="o">|</span> <span class="n">Mapping</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">EngineArgs</span><span class="p">)</span>
+    <span class="n">sampling_params</span><span class="p">:</span> <span class="n">SamplingParams</span> <span class="o">|</span> <span class="n">Mapping</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">SamplingParams</span><span class="p">)</span>
+    <span class="n">prefetch_weights_to_shm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">n_fetcher_procs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncLLM</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">generator_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Workers ActorMesh, registered by MonarchExecutor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fetcher_procs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProcMesh</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Fetcher proc mesh</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_fetchers</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Weight fetcher ActorMesh</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span> <span class="o">=</span> <span class="n">EngineArgs</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_args</span><span class="o">.</span><span class="n">create_engine_config</span><span class="p">(</span><span class="n">UsageContext</span><span class="o">.</span><span class="n">LLM_CLASS</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span> <span class="o">=</span> <span class="n">SamplingParams</span><span class="o">.</span><span class="n">from_optional</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span><span class="o">.</span><span class="n">output_kind</span> <span class="o">=</span> <span class="n">RequestOutputKind</span><span class="o">.</span><span class="n">FINAL_ONLY</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">launch</span><span class="p">(</span>  <span class="c1"># pyright: ignore[reportIncompatibleMethodOverride]</span>
+        <span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="s2">&quot;Generator&quot;</span><span class="p">],</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Generator&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Custom launch for Generator with proper GPU host provisioning.</span>
+
+<span class="sd">        Flow:</span>
+<span class="sd">        1. Get host mesh directly (via get_host_mesh for remote, this_host for local)</span>
+<span class="sd">        2. Spawn CPU proc on head host for Generator and WorkerRegistry</span>
+<span class="sd">        3. Allocate GPUs from provisioner</span>
+<span class="sd">        4. Pass host_mesh and GPU IDs to setup() - executor creates proc_mesh</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">engine_args</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;engine_args&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">engine_args</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">engine_args</span> <span class="o">=</span> <span class="n">EngineArgs</span><span class="p">(</span><span class="o">**</span><span class="n">engine_args</span><span class="p">)</span>
+        <span class="n">vllm_config</span> <span class="o">=</span> <span class="n">engine_args</span><span class="o">.</span><span class="n">create_engine_config</span><span class="p">(</span><span class="n">UsageContext</span><span class="o">.</span><span class="n">LLM_CLASS</span><span class="p">)</span>
+
+        <span class="n">num_gpus</span> <span class="o">=</span> <span class="n">vllm_config</span><span class="o">.</span><span class="n">parallel_config</span><span class="o">.</span><span class="n">world_size</span>
+        <span class="n">num_hosts</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">hosts</span> <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">hosts</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">gpus_per_host</span> <span class="o">=</span> <span class="n">num_gpus</span> <span class="o">//</span> <span class="p">(</span><span class="n">num_hosts</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">mesh_name</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">mesh_name</span> <span class="ow">or</span> <span class="s2">&quot;generator&quot;</span>
+
+        <span class="c1"># Step 1: Get host mesh directly (no bootstrap procs)</span>
+        <span class="n">provisioner</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_get_provisioner</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">provisioner</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Provisioner not initialized. Call init_provisioner() first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">num_hosts</span><span class="p">:</span>
+            <span class="c1"># Remote allocation - get pre-allocated mesh from launcher</span>
+            <span class="n">host_mesh</span> <span class="o">=</span> <span class="k">await</span> <span class="n">provisioner</span><span class="o">.</span><span class="n">get_host_mesh</span><span class="p">(</span><span class="n">mesh_name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Local allocation</span>
+            <span class="n">host_mesh</span> <span class="o">=</span> <span class="n">this_host</span><span class="p">()</span>
+
+        <span class="c1"># Step 1a: Mount wsfuse on all hosts for local model paths</span>
+        <span class="c1"># This must happen before any actors are spawned that might access the path</span>
+        <span class="k">if</span> <span class="n">num_hosts</span> <span class="ow">and</span> <span class="n">provisioner</span><span class="o">.</span><span class="n">launcher</span><span class="p">:</span>
+            <span class="c1"># Spawn temporary procs on all hosts just for mounting</span>
+            <span class="n">mount_procs</span> <span class="o">=</span> <span class="n">host_mesh</span><span class="o">.</span><span class="n">spawn_procs</span><span class="p">(</span>
+                <span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;procs&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;mount_setup&quot;</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">provisioner</span><span class="o">.</span><span class="n">launcher</span><span class="o">.</span><span class="n">remote_setup</span><span class="p">(</span><span class="n">mount_procs</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Completed remote_setup (mounted wsfuse on all hosts)&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Step 1b: Allocate GPUs from provisioner</span>
+        <span class="c1"># This ensures each Generator gets exclusive GPU IDs</span>
+        <span class="n">gpu_ids</span> <span class="o">=</span> <span class="k">await</span> <span class="n">provisioner</span><span class="o">.</span><span class="n">allocate_gpu_ids</span><span class="p">(</span><span class="n">host_mesh</span><span class="p">,</span> <span class="n">num_gpus</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Generator.launch] Allocated GPUs: </span><span class="si">{</span><span class="n">gpu_ids</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;[Generator.launch] Provisioned host mesh with </span><span class="si">{</span><span class="n">num_hosts</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> host(s), &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">gpus_per_host</span><span class="si">}</span><span class="s2"> GPUs per host&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Step 2: Spawn CPU proc on head host for Generator and WorkerRegistry</span>
+        <span class="k">if</span> <span class="n">num_hosts</span><span class="p">:</span>
+            <span class="n">singleton_slice</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">host_mesh</span><span class="o">.</span><span class="n">extent</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+            <span class="n">head_host</span> <span class="o">=</span> <span class="n">host_mesh</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="o">**</span><span class="n">singleton_slice</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">head_host</span> <span class="o">=</span> <span class="n">host_mesh</span>
+
+        <span class="n">generator_proc</span> <span class="o">=</span> <span class="n">head_host</span><span class="o">.</span><span class="n">spawn_procs</span><span class="p">(</span>
+            <span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;procs&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;generator_proc&quot;</span>
+        <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[Generator.launch] Spawned generator_proc on head host&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Register LocalFetcherActor for generator_proc to enable metrics collection</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">FORGE_DISABLE_METRICS</span><span class="o">.</span><span class="n">get_value</span><span class="p">():</span>
+            <span class="k">await</span> <span class="n">get_or_create_metric_logger</span><span class="p">(</span><span class="n">generator_proc</span><span class="p">,</span> <span class="n">process_name</span><span class="o">=</span><span class="n">mesh_name</span><span class="p">)</span>
+
+        <span class="c1"># Import WorkerRegistry here to avoid circular import with monarch_executor</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">forge.actors.vllm.v1.monarch_executor</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerRegistry</span>
+
+        <span class="c1"># Spawn WorkerRegistry on CPU proc (same as Generator)</span>
+        <span class="n">worker_registry</span> <span class="o">=</span> <span class="n">generator_proc</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;worker_registry&quot;</span><span class="p">,</span> <span class="n">WorkerRegistry</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[Generator.launch] Spawned WorkerRegistry on generator_proc&quot;</span><span class="p">)</span>
+
+        <span class="n">actor_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="n">generator</span> <span class="o">=</span> <span class="n">generator_proc</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span>
+            <span class="n">actor_name</span><span class="p">,</span>
+            <span class="bp">cls</span><span class="p">,</span>
+            <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Attach for cleanup in Generator.shutdown()</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">_generator_proc</span> <span class="o">=</span> <span class="n">generator_proc</span>
+        <span class="n">generator</span><span class="o">.</span><span class="n">_worker_registry</span> <span class="o">=</span> <span class="n">worker_registry</span>
+
+        <span class="c1"># Step 3: Pass host_mesh and gpu_ids to setup() - executor will create proc_mesh</span>
+        <span class="k">await</span> <span class="n">generator</span><span class="o">.</span><span class="n">setup</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">host_mesh</span><span class="p">,</span> <span class="n">worker_registry</span><span class="p">,</span> <span class="n">gpu_ids</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">generator</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host_mesh</span><span class="p">,</span> <span class="n">worker_registry</span><span class="p">,</span> <span class="n">gpu_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize AsyncLLM with MonarchExecutor.</span>
+
+<span class="sd">        Receives a host_mesh from launch(). Serializes it for the EngineCore</span>
+<span class="sd">        subprocess. MonarchExecutor creates its own proc_mesh from host_mesh,</span>
+<span class="sd">        spawns workers, and registers them. After AsyncLLM initialization,</span>
+<span class="sd">        Generator queries the registry for workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            host_mesh: HostMesh for GPU workers (executor will create proc_mesh from this)</span>
+<span class="sd">            worker_registry: WorkerRegistry ActorMesh for worker registration</span>
+<span class="sd">            gpu_ids: List of allocated GPU IDs (e.g., [&quot;0&quot;, &quot;1&quot;])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_gpus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="o">.</span><span class="n">parallel_config</span><span class="o">.</span><span class="n">tensor_parallel_size</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Setting up AsyncLLM with </span><span class="si">{</span><span class="n">num_gpus</span><span class="si">}</span><span class="s2"> GPUs, allocated: </span><span class="si">{</span><span class="n">gpu_ids</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Set env var for MonarchExecutor subprocess (EngineCore)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_MONARCH_GPU_IDS&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">gpu_ids</span><span class="p">)</span>
+
+        <span class="c1"># Serialize host_mesh reference</span>
+        <span class="n">serialized_host_mesh</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">cloudpickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">host_mesh</span><span class="p">))</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
+            <span class="s2">&quot;utf-8&quot;</span>
+        <span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_MONARCH_HOST_MESH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">serialized_host_mesh</span>
+
+        <span class="c1"># Serialize WorkerRegistry reference</span>
+        <span class="n">serialized_registry</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+            <span class="n">cloudpickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">worker_registry</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_MONARCH_WORKER_REGISTRY&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">serialized_registry</span>
+
+        <span class="c1"># Serialize TorchStore Controller reference for workers to access torchstore</span>
+        <span class="n">torchstore_controller</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_torchstore_controller</span><span class="p">()</span>
+        <span class="n">serialized_controller</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+            <span class="n">cloudpickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">torchstore_controller</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_TORCHSTORE_CONTROLLER&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">serialized_controller</span>
+
+        <span class="c1"># Force &#39;spawn&#39; multiprocessing method for Monarch actors.</span>
+        <span class="c1"># This follows vLLM&#39;s Ray integration pattern.</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;VLLM_WORKER_MULTIPROC_METHOD&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;spawn&quot;</span>
+
+        <span class="c1"># Set the executor backend to ForgeMonarchExecutor via string path</span>
+        <span class="c1"># This avoids import deadlock when vLLM spawns EngineCore subprocess</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="o">.</span><span class="n">parallel_config</span><span class="o">.</span><span class="n">distributed_executor_backend</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;forge.actors.vllm.v1.forge_executor.ForgeMonarchExecutor&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Set up prefetching configuration via additional_config</span>
+        <span class="c1"># There does not seem to be  a real difference between pass by env var or via self.vllm_config</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_weights_to_shm</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="o">.</span><span class="n">additional_config</span><span class="p">[</span><span class="s2">&quot;n_fetcher_procs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_fetcher_procs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="o">.</span><span class="n">additional_config</span><span class="p">[</span><span class="s2">&quot;n_fetcher_procs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">vllm.v1.executor.abstract</span><span class="w"> </span><span class="kn">import</span> <span class="n">Executor</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">llm</span> <span class="o">=</span> <span class="n">AsyncLLM</span><span class="p">(</span>
+                <span class="n">vllm_config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="p">,</span>
+                <span class="c1"># this resolve to the MonarchExecutor class</span>
+                <span class="n">executor_class</span><span class="o">=</span><span class="n">Executor</span><span class="o">.</span><span class="n">get_class</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vllm_config</span><span class="p">),</span>
+                <span class="n">log_stats</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AsyncLLM initialized with </span><span class="si">{</span><span class="n">num_gpus</span><span class="si">}</span><span class="s2"> workers&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AsyncLLM initialization failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span>
+
+        <span class="c1"># Query the WorkerRegistry for workers that were registered by MonarchExecutor</span>
+        <span class="c1"># during _init_executor()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="k">await</span> <span class="n">worker_registry</span><span class="o">.</span><span class="n">get_workers</span><span class="o">.</span><span class="n">call_one</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Workers not found in registry. &quot;</span>
+                <span class="s2">&quot;MonarchExecutor may have failed to register workers.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Retrieved workers from registry: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_weights_to_shm</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_spawn_fetchers</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spawn_fetchers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Spawn weight fetchers that prefetch weights from torchstore to shared memory.</span>
+
+<span class="sd">        This assumes the generator is on the same host as the worker and only works for</span>
+<span class="sd">        single host generators.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">fetcher_procs</span> <span class="o">=</span> <span class="n">this_host</span><span class="p">()</span><span class="o">.</span><span class="n">spawn_procs</span><span class="p">(</span>
+            <span class="n">per_host</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;procs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_fetcher_procs</span><span class="p">}</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fetcher_procs</span> <span class="o">=</span> <span class="n">fetcher_procs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight_fetchers</span> <span class="o">=</span> <span class="n">fetcher_procs</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="s2">&quot;weight_fetcher&quot;</span><span class="p">,</span> <span class="n">_WeightFetcher</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;[Generator] Spawned </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_fetcher_procs</span><span class="si">}</span><span class="s2"> weight fetchers: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_fetchers</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_fetch_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SharedTensorHandle</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}.</span>
+
+<span class="sd">        Coordinates parallel weight fetching across fetcher processes using round-robin</span>
+<span class="sd">        distribution of parameters.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            version: Policy version to fetch</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict mapping param names to SharedTensorHandle objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="n">get_param_prefix</span><span class="p">(</span><span class="n">version</span><span class="p">)</span>
+        <span class="n">matching_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ts</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>
+        <span class="n">hf_param_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">extract_param_name</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">matching_keys</span><span class="p">]</span>
+
+        <span class="n">n_fetchers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_fetchers</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">split_keys</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">::</span><span class="n">n_fetchers</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_fetchers</span><span class="p">)]</span>
+
+        <span class="n">futures</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">names</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">split_keys</span><span class="p">(</span><span class="n">hf_param_names</span><span class="p">)):</span>
+            <span class="n">fut</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_fetchers</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">procs</span><span class="o">=</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">fetch</span><span class="o">.</span><span class="n">call_one</span><span class="p">(</span>
+                <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span> <span class="n">param_names</span><span class="o">=</span><span class="n">names</span>
+            <span class="p">)</span>
+            <span class="n">futures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fut</span><span class="p">)</span>
+
+        <span class="n">sub_state_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="k">await</span> <span class="n">fut</span> <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">]</span>
+
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">sd</span> <span class="ow">in</span> <span class="n">sub_state_dicts</span><span class="p">:</span>
+            <span class="n">state_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">sd</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;[Generator] Fetched </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights for v</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2"> to shared memory&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">state_dict</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_drop_shared_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SharedTensorHandle</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">handle</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">handle</span><span class="o">.</span><span class="n">drop</span><span class="p">()</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">sampling_params</span><span class="p">:</span> <span class="n">SamplingParams</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Completion</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a response for the given prompt.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            prompt (str): The prompt to generate a response for.</span>
+<span class="sd">            priority (int, optional): The priority of the request. Defaults to 0.</span>
+<span class="sd">            sampling_params (SamplingParams, optional): Sampling parameters to use for this request.</span>
+<span class="sd">                If not provided, uses self.sampling_params.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[Completion]: n completions from vLLM based on your prompt.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">Tracer</span><span class="p">(</span><span class="s2">&quot;generator_perf/generate&quot;</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="s2">&quot;gpu&quot;</span><span class="p">)</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">record_metric</span><span class="p">(</span><span class="s2">&quot;generator/generate/count_requests&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">Reduce</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Generator not initialized. Call setup() first.&quot;</span><span class="p">)</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="n">sampling_params</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampling_params</span>
+
+        <span class="k">if</span> <span class="n">params</span><span class="o">.</span><span class="n">output_kind</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">output_kind</span> <span class="o">=</span> <span class="n">RequestOutputKind</span><span class="o">.</span><span class="n">FINAL_ONLY</span>
+
+        <span class="c1"># Use AsyncLLM&#39;s generate() method - it returns an async generator</span>
+        <span class="c1"># that yields RequestOutput objects. We only want the final output.</span>
+        <span class="n">request_output</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+            <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+            <span class="n">sampling_params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="n">request_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()),</span>
+        <span class="p">):</span>
+            <span class="n">request_output</span> <span class="o">=</span> <span class="n">output</span>  <span class="c1"># Keep last output (final one)</span>
+
+        <span class="n">completions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_completions</span><span class="p">(</span><span class="n">request_output</span><span class="p">,</span> <span class="n">prompt</span><span class="p">)</span>
+
+        <span class="n">record_metric</span><span class="p">(</span>
+            <span class="s2">&quot;generator/generate/count_sequences_completed&quot;</span><span class="p">,</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">completions</span><span class="p">),</span>
+            <span class="n">Reduce</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">completions</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the generator and cleanup local resources.</span>
+
+<span class="sd">        This method is idempotent and can be called multiple times safely.</span>
+<span class="sd">        Note: Remote worker cleanup happens in shutdown() which has access to the proxy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetcher_procs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetcher_procs</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stopped fetcher procs&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error stopping fetcher procs: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fetcher_procs</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stopping AsyncLLM&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;AsyncLLM.shutdown() returned&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">llm</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;stop() complete&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Generator.shutdown">
+<a class="viewcode-back" href="../../../../../api_generator.html#forge.actors.generator.Generator.shutdown">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">actor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Shutdown the generator and cleanup all resources.</span>
+
+<span class="sd">        Cleanup order:</span>
+<span class="sd">        1. Stop AsyncLLM (triggers MonarchExecutor.shutdown() which destroys</span>
+<span class="sd">           process groups and stops proc_mesh)</span>
+<span class="sd">        2. Stop generator_proc</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">actor</span><span class="o">.</span><span class="n">stop</span><span class="o">.</span><span class="n">call</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during actor.stop: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="s2">&quot;_generator_proc&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+                <span class="k">await</span> <span class="n">actor</span><span class="o">.</span><span class="n">_generator_proc</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stopped generator proc&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during generator_proc stop: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;shutdown() complete&quot;</span><span class="p">)</span></div>
+
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update weights on the generator from torchstore.</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        1. Optionally starts prefetching weights to shared memory (overlaps with pause)</span>
+<span class="sd">        2. Pauses generation and waits for in-flight requests to complete</span>
+<span class="sd">        3. Updates weights on workers (from shared memory if prefetched, else from torchstore)</span>
+<span class="sd">        4. Resumes generation</span>
+
+<span class="sd">        When prefetch_weights_to_shm is enabled, weight fetching is started as an async task</span>
+<span class="sd">        BEFORE pause_generation(), overlapping I/O with in-flight request completion.</span>
+<span class="sd">        This reduces the time generation is paused.</span>
+
+<span class="sd">        Note: This is NOT the standard vLLM weight update approach. vLLM typically</span>
+<span class="sd">        uses `collective_rpc` on EngineClient, which internally routes calls to</span>
+<span class="sd">        workers via the executor. However, `collective_rpc` uses msgspec/msgpack</span>
+<span class="sd">        serialization which does not support arbitrary Python objects by default</span>
+<span class="sd">        (only with VLLM_ALLOW_INSECURE_SERIALIZATION=1). This makes it difficult to</span>
+<span class="sd">        pass complex objects like torchstore storage handles. Instead, we use a</span>
+<span class="sd">        monarch-native approach where the Generator actor directly calls the worker</span>
+<span class="sd">        mesh (`self.workers.update_weights`) via Monarch RPC, which uses cloudpickle</span>
+<span class="sd">        and natively supports Monarch actor references for torchstore integration.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            version: Policy version to load from torchstore</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Generator not initialized. Call setup() first.&quot;</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting weight update to v</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Start prefetching weights to shared memory (overlaps with pause)</span>
+        <span class="n">fetch_task</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefetch_weights_to_shm</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Generator] Starting prefetch for v</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">fetch_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fetch_weights</span><span class="p">(</span><span class="n">version</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">))</span>
+
+        <span class="n">pause_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">pause_generation</span><span class="p">(</span>
+            <span class="n">wait_for_inflight_requests</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">clear_cache</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">pause_duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">pause_start</span>
+        <span class="n">record_metric</span><span class="p">(</span>
+            <span class="s2">&quot;generator_perf/update_weights/pause_generation_duration_s&quot;</span><span class="p">,</span>
+            <span class="n">pause_duration</span><span class="p">,</span>
+            <span class="n">Reduce</span><span class="o">.</span><span class="n">MEAN</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">load_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">fetch_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">wait_fetch_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+                <span class="n">fetched_weights</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fetch_task</span>
+                <span class="n">wait_fetch_duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">wait_fetch_start</span>
+                <span class="n">record_metric</span><span class="p">(</span>
+                    <span class="s2">&quot;generator_perf/update_weights/wait_fetch_weights_s&quot;</span><span class="p">,</span>
+                    <span class="n">wait_fetch_duration</span><span class="p">,</span>
+                    <span class="n">Reduce</span><span class="o">.</span><span class="n">MEAN</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">apply_prefetched_weights</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">fetched_weights</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drop_shared_memory</span><span class="p">(</span><span class="n">fetched_weights</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Direct fetch from torchstore</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">update_weights</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">)</span>
+
+            <span class="n">load_duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">load_start</span>
+            <span class="n">record_metric</span><span class="p">(</span>
+                <span class="s2">&quot;generator_perf/update_weights/worker_load_weights_duration_s&quot;</span><span class="p">,</span>
+                <span class="n">load_duration</span><span class="p">,</span>
+                <span class="n">Reduce</span><span class="o">.</span><span class="n">MEAN</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">generator_version</span> <span class="o">=</span> <span class="n">version</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">resume_generation</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weight update complete, now v</span><span class="si">{</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">save_model_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Save model parameters before weight update, used for testing purposes only.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;save model parameters for testing.&quot;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">save_model_params</span><span class="o">.</span><span class="n">call</span><span class="p">()</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">validate_model_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">validate_fn</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate updated model params using validate_fn.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;start validating model parameters.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">validate_model_params</span><span class="o">.</span><span class="n">call</span><span class="p">(</span><span class="n">validate_fn</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_extract_logprobs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract logprobs from vLLM output as a torch.Tensor.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            output: vLLM CompletionOutput with optional logprobs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor of logprobs for each token, or None if not available.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">top_k_dict</span><span class="p">[</span><span class="n">token</span><span class="p">]</span><span class="o">.</span><span class="n">logprob</span>
+                    <span class="k">for</span> <span class="n">token</span><span class="p">,</span> <span class="n">top_k_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">output</span><span class="o">.</span><span class="n">logprobs</span><span class="p">)</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_completions</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">request_output</span><span class="p">:</span> <span class="n">RequestOutput</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Completion</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert vLLM RequestOutput to forge Completion objects.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request_output: vLLM request output with completions.</span>
+<span class="sd">            prompt: Original prompt string.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of Completion objects.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">completions</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">request_output</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+            <span class="n">completion</span> <span class="o">=</span> <span class="n">Completion</span><span class="p">(</span>
+                <span class="n">prompt</span><span class="o">=</span><span class="n">to_prompt</span><span class="p">(</span><span class="n">prompt</span><span class="p">),</span>
+                <span class="n">text</span><span class="o">=</span><span class="n">output</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+                <span class="n">prompt_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                    <span class="n">request_output</span><span class="o">.</span><span class="n">prompt_token_ids</span>
+                    <span class="k">if</span> <span class="n">request_output</span><span class="o">.</span><span class="n">prompt_token_ids</span>
+                    <span class="k">else</span> <span class="p">[]</span>
+                <span class="p">),</span>
+                <span class="n">token_ids</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                    <span class="n">output</span><span class="o">.</span><span class="n">token_ids</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;token_ids&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="p">[]</span>
+                <span class="p">),</span>
+                <span class="n">logprobs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_extract_logprobs</span><span class="p">(</span><span class="n">output</span><span class="p">),</span>
+                <span class="n">stop_reason</span><span class="o">=</span><span class="n">output</span><span class="o">.</span><span class="n">finish_reason</span><span class="p">,</span>
+                <span class="n">generator_version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">generator_version</span><span class="p">,</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;num_cached_tokens&quot;</span><span class="p">:</span> <span class="n">request_output</span><span class="o">.</span><span class="n">num_cached_tokens</span><span class="p">},</span>
+            <span class="p">)</span>
+            <span class="n">completions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">completion</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">completions</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_reset_prefix_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">llm</span><span class="o">.</span><span class="n">reset_prefix_cache</span><span class="p">()</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_WeightFetcher</span><span class="p">(</span><span class="n">ForgeActor</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fetches weights from torchstore and loads them into shared memory.</span>
+
+<span class="sd">    Spawned by Generator using this_host().spawn_procs() to ensure shared</span>
+<span class="sd">    memory IPC namespace is shared with workers. This is critical for POSIX</span>
+<span class="sd">    shared memory to be visible between fetchers and workers.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@endpoint</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">fetch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">param_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SharedTensorHandle</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetch weights from torchstore and load them into shared memory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            version: Policy version</span>
+<span class="sd">            param_names: List of parameter names to fetch</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dict mapping param names to SharedTensorHandle objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">sd</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">param_names</span><span class="p">:</span>
+            <span class="n">param_key</span> <span class="o">=</span> <span class="n">get_param_key</span><span class="p">(</span><span class="n">version</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="n">param</span> <span class="o">=</span> <span class="k">await</span> <span class="n">ts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">param_key</span><span class="p">)</span>
+            <span class="n">shared_tensor</span> <span class="o">=</span> <span class="n">SharedTensor</span><span class="p">(</span><span class="n">tensor</span><span class="o">=</span><span class="n">param</span><span class="p">)</span>
+            <span class="n">handle</span> <span class="o">=</span> <span class="n">shared_tensor</span><span class="o">.</span><span class="n">get_handle</span><span class="p">()</span>
+            <span class="c1"># Unregister from resource tracker - Generator will handle cleanup via drop()</span>
+            <span class="c1"># Without this, the shared memory gets cleaned up when the fetcher process exits</span>
+            <span class="n">resource_tracker</span><span class="o">.</span><span class="n">unregister</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">handle</span><span class="o">.</span><span class="n">shm_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;shared_memory&quot;</span><span class="p">)</span>
+
+            <span class="n">sd</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">handle</span>
+            <span class="n">shared_tensor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>  <span class="c1"># Close fd but don&#39;t unlink (workers will use it)</span>
+            <span class="k">del</span> <span class="n">param</span>  <span class="c1"># Explicitly free the tensor after copying to shared memory</span>
+        <span class="k">return</span> <span class="n">sd</span>
+</pre></div>
+
+                </article>
+              
+  </article>
+  
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+
+<style>
+.site-footer {
+    padding: 20px 40px;
+    height: 60px !important;
+}
+
+@media screen and (min-width: 768px) {
+    .site-footer {
+        padding: 20px 40px;
+    }
+}
+
+.site-footer .privacy-policy {
+    border-top: none;
+    margin-top: 0px;
+}
+
+.site-footer .privacy-policy .copyright {
+    padding-top: 0;
+}
+</style>
+
+
+<footer class="site-footer">
+
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+           Copyright © 2025 Meta Platforms, Inc
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../../../../_static/img/pytorch-x.svg">
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "forge.actors.vllm.v1.generator",
+       "headline": "forge.actors.vllm.v1.generator",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment. Discover tutorials, API references, and guides to help you build and deploy deep learning models efficiently.",
+       "url": "/_modules/forge/actors/vllm/v1/generator.html",
+       "articleBody": "Source code for forge.actors.vllm.v1.generator # Copyright (c) Meta Platforms, Inc. and affiliates. # All rights reserved. # # This source code is licensed under the BSD-style license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import asyncio import base64 import logging import os import time import uuid from collections.abc import Mapping from dataclasses import dataclass, field from multiprocessing import resource_tracker from typing import Any, Optional import cloudpickle import torch import torchstore as ts from forge.actors._torchstore_utils import ( extract_param_name, get_param_key, get_param_prefix, ) from forge.controller import ForgeActor from forge.controller.provisioner import _get_provisioner from forge.data_models.completion import Completion from forge.data_models.prompt import to_prompt from forge.env import FORGE_DISABLE_METRICS from forge.observability.metric_actors import get_or_create_metric_logger from forge.observability.metrics import record_metric, Reduce from forge.observability.perf_tracker import Tracer from forge.util._shared_tensor import SharedTensor, SharedTensorHandle from monarch.actor import endpoint, ProcMesh, this_host from torchstore.api import _controller as get_torchstore_controller from vllm.engine.arg_utils import EngineArgs from vllm.entrypoints.llm import UsageContext from vllm.outputs import RequestOutput from vllm.sampling_params import RequestOutputKind, SamplingParams from vllm.v1.engine.async_llm import AsyncLLM logger = logging.getLogger(__name__) logger.setLevel(logging.INFO) # Suppress noisy vLLM \"Added request\" logs logging.getLogger(\"vllm.v1.engine.async_llm\").setLevel(logging.WARNING) [docs] @dataclass class Generator(ForgeActor): \"\"\"vLLM-based generator using AsyncLLM with Monarch distributed execution. Wraps vLLM\u0027s AsyncLLM engine and uses MonarchExecutor for multi-GPU inference. See MonarchExecutor docstring for architecture diagram. Args: engine_args: vLLM EngineArgs for model configuration. Can be EngineArgs or dict. sampling_params: Default SamplingParams for generation. Can be SamplingParams or dict. prefetch_weights_to_shm: Whether to prefetch weights to shared memory for faster weight updates. When enabled, weight fetchers download weights in parallel to shared memory while generation is still running. Defaults to True. n_fetcher_procs: Number of fetcher processes for parallel weight downloading. Only used when prefetch_weights_to_shm is True. Defaults to 8. Example: \u003e\u003e\u003e generator = await Generator.options(procs=1, with_gpus=True).as_service( ... engine_args={\"model\": \"meta-llama/Llama-3-8B\", \"tensor_parallel_size\": 2}, ... sampling_params={\"max_tokens\": 128, \"temperature\": 0.7}, ... ) \u003e\u003e\u003e completions = await generator.generate(\"Tell me a joke\") \u003e\u003e\u003e await generator.shutdown() \"\"\" engine_args: EngineArgs | Mapping = field(default_factory=EngineArgs) sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams) prefetch_weights_to_shm: bool = True n_fetcher_procs: int = 8 def __post_init__(self): super().__init__() self.llm: Optional[AsyncLLM] = None self.generator_version: int = 0 self.workers: Any = None # Workers ActorMesh, registered by MonarchExecutor self.fetcher_procs: Optional[ProcMesh] = None # Fetcher proc mesh self.weight_fetchers: Any = None # Weight fetcher ActorMesh if isinstance(self.engine_args, Mapping): self.engine_args = EngineArgs(**self.engine_args) self.vllm_config = self.engine_args.create_engine_config(UsageContext.LLM_CLASS) if isinstance(self.sampling_params, Mapping): self.sampling_params = SamplingParams.from_optional(**self.sampling_params) self.sampling_params.output_kind = RequestOutputKind.FINAL_ONLY @classmethod async def launch( # pyright: ignore[reportIncompatibleMethodOverride] cls: type[\"Generator\"], *args, **kwargs, ) -\u003e \"Generator\": \"\"\"Custom launch for Generator with proper GPU host provisioning. Flow: 1. Get host mesh directly (via get_host_mesh for remote, this_host for local) 2. Spawn CPU proc on head host for Generator and WorkerRegistry 3. Allocate GPUs from provisioner 4. Pass host_mesh and GPU IDs to setup() - executor creates proc_mesh \"\"\" engine_args = kwargs.get(\"engine_args\", {}) if isinstance(engine_args, Mapping): engine_args = EngineArgs(**engine_args) vllm_config = engine_args.create_engine_config(UsageContext.LLM_CLASS) num_gpus = vllm_config.parallel_config.world_size num_hosts = cls.hosts if cls.hosts else None gpus_per_host = num_gpus // (num_hosts or 1) mesh_name = cls.mesh_name or \"generator\" # Step 1: Get host mesh directly (no bootstrap procs) provisioner = await _get_provisioner() if provisioner is None: raise RuntimeError( \"Provisioner not initialized. Call init_provisioner() first.\" ) if num_hosts: # Remote allocation - get pre-allocated mesh from launcher host_mesh = await provisioner.get_host_mesh(mesh_name) else: # Local allocation host_mesh = this_host() # Step 1a: Mount wsfuse on all hosts for local model paths # This must happen before any actors are spawned that might access the path if num_hosts and provisioner.launcher: # Spawn temporary procs on all hosts just for mounting mount_procs = host_mesh.spawn_procs( per_host={\"procs\": 1}, name=\"mount_setup\" ) await provisioner.launcher.remote_setup(mount_procs) logger.info(\"Completed remote_setup (mounted wsfuse on all hosts)\") # Step 1b: Allocate GPUs from provisioner # This ensures each Generator gets exclusive GPU IDs gpu_ids = await provisioner.allocate_gpu_ids(host_mesh, num_gpus) logger.info(f\"[Generator.launch] Allocated GPUs: {gpu_ids}\") logger.info( f\"[Generator.launch] Provisioned host mesh with {num_hosts or 1} host(s), \" f\"{gpus_per_host} GPUs per host\" ) # Step 2: Spawn CPU proc on head host for Generator and WorkerRegistry if num_hosts: singleton_slice = {k: slice(0, 1) for k in host_mesh.extent.keys()} head_host = host_mesh.slice(**singleton_slice) else: head_host = host_mesh generator_proc = head_host.spawn_procs( per_host={\"procs\": 1}, name=\"generator_proc\" ) logger.info(\"[Generator.launch] Spawned generator_proc on head host\") # Register LocalFetcherActor for generator_proc to enable metrics collection if not FORGE_DISABLE_METRICS.get_value(): await get_or_create_metric_logger(generator_proc, process_name=mesh_name) # Import WorkerRegistry here to avoid circular import with monarch_executor from forge.actors.vllm.v1.monarch_executor import WorkerRegistry # Spawn WorkerRegistry on CPU proc (same as Generator) worker_registry = generator_proc.spawn(\"worker_registry\", WorkerRegistry) logger.info(\"[Generator.launch] Spawned WorkerRegistry on generator_proc\") actor_name = kwargs.pop(\"name\", cls.__name__) generator = generator_proc.spawn( actor_name, cls, *args, **kwargs, ) # Attach for cleanup in Generator.shutdown() generator._generator_proc = generator_proc generator._worker_registry = worker_registry # Step 3: Pass host_mesh and gpu_ids to setup() - executor will create proc_mesh await generator.setup.call(host_mesh, worker_registry, gpu_ids) return generator @endpoint async def setup(self, host_mesh, worker_registry, gpu_ids: list[str]): \"\"\"Initialize AsyncLLM with MonarchExecutor. Receives a host_mesh from launch(). Serializes it for the EngineCore subprocess. MonarchExecutor creates its own proc_mesh from host_mesh, spawns workers, and registers them. After AsyncLLM initialization, Generator queries the registry for workers. Args: host_mesh: HostMesh for GPU workers (executor will create proc_mesh from this) worker_registry: WorkerRegistry ActorMesh for worker registration gpu_ids: List of allocated GPU IDs (e.g., [\"0\", \"1\"]) \"\"\" num_gpus = self.vllm_config.parallel_config.tensor_parallel_size logger.info(f\"Setting up AsyncLLM with {num_gpus} GPUs, allocated: {gpu_ids}\") # Set env var for MonarchExecutor subprocess (EngineCore) os.environ[\"VLLM_MONARCH_GPU_IDS\"] = \",\".join(gpu_ids) # Serialize host_mesh reference serialized_host_mesh = base64.b64encode(cloudpickle.dumps(host_mesh)).decode( \"utf-8\" ) os.environ[\"VLLM_MONARCH_HOST_MESH\"] = serialized_host_mesh # Serialize WorkerRegistry reference serialized_registry = base64.b64encode( cloudpickle.dumps(worker_registry) ).decode(\"utf-8\") os.environ[\"VLLM_MONARCH_WORKER_REGISTRY\"] = serialized_registry # Serialize TorchStore Controller reference for workers to access torchstore torchstore_controller = await get_torchstore_controller() serialized_controller = base64.b64encode( cloudpickle.dumps(torchstore_controller) ).decode(\"utf-8\") os.environ[\"VLLM_TORCHSTORE_CONTROLLER\"] = serialized_controller # Force \u0027spawn\u0027 multiprocessing method for Monarch actors. # This follows vLLM\u0027s Ray integration pattern. os.environ[\"VLLM_WORKER_MULTIPROC_METHOD\"] = \"spawn\" # Set the executor backend to ForgeMonarchExecutor via string path # This avoids import deadlock when vLLM spawns EngineCore subprocess self.vllm_config.parallel_config.distributed_executor_backend = ( \"forge.actors.vllm.v1.forge_executor.ForgeMonarchExecutor\" ) # Set up prefetching configuration via additional_config # There does not seem to be a real difference between pass by env var or via self.vllm_config if self.prefetch_weights_to_shm: self.vllm_config.additional_config[\"n_fetcher_procs\"] = self.n_fetcher_procs else: self.vllm_config.additional_config[\"n_fetcher_procs\"] = 0 from vllm.v1.executor.abstract import Executor try: self.llm = AsyncLLM( vllm_config=self.vllm_config, # this resolve to the MonarchExecutor class executor_class=Executor.get_class(self.vllm_config), log_stats=True, ) logger.info(f\"AsyncLLM initialized with {num_gpus} workers\") except Exception as e: logger.error(f\"AsyncLLM initialization failed: {e}\") raise # Query the WorkerRegistry for workers that were registered by MonarchExecutor # during _init_executor() self.workers = await worker_registry.get_workers.call_one() if self.workers is None: raise RuntimeError( \"Workers not found in registry. \" \"MonarchExecutor may have failed to register workers.\" ) logger.info(f\"Retrieved workers from registry: {self.workers}\") if self.prefetch_weights_to_shm: self._spawn_fetchers() def _spawn_fetchers(self): \"\"\"Spawn weight fetchers that prefetch weights from torchstore to shared memory. This assumes the generator is on the same host as the worker and only works for single host generators. \"\"\" fetcher_procs = this_host().spawn_procs( per_host={\"procs\": self.n_fetcher_procs} ) self.fetcher_procs = fetcher_procs self.weight_fetchers = fetcher_procs.spawn(\"weight_fetcher\", _WeightFetcher) logger.info( f\"[Generator] Spawned {self.n_fetcher_procs} weight fetchers: {self.weight_fetchers}\" ) async def _fetch_weights( self, version: int, ) -\u003e dict[str, SharedTensorHandle]: \"\"\"Fetch weights from torchstore and return a dict of {name: SharedTensorHandle}. Coordinates parallel weight fetching across fetcher processes using round-robin distribution of parameters. Args: version: Policy version to fetch Returns: Dict mapping param names to SharedTensorHandle objects \"\"\" prefix = get_param_prefix(version) matching_keys = await ts.keys(prefix) hf_param_names = [extract_param_name(key) for key in matching_keys] n_fetchers = self.weight_fetchers.size() def split_keys(keys): return [keys[i::n_fetchers] for i in range(n_fetchers)] futures = [] for i, names in enumerate(split_keys(hf_param_names)): fut = self.weight_fetchers.slice(procs=i).fetch.call_one( version=version, param_names=names ) futures.append(fut) sub_state_dicts = [await fut for fut in futures] state_dict = {} for sd in sub_state_dicts: state_dict.update(sd) logger.info( f\"[Generator] Fetched {len(state_dict)} weights for v{version} to shared memory\" ) return state_dict async def _drop_shared_memory(self, state_dict: dict[str, SharedTensorHandle]): for handle in state_dict.values(): handle.drop() @endpoint async def generate( self, prompt: str, *, priority: int = 0, sampling_params: SamplingParams | None = None, ) -\u003e list[Completion]: \"\"\"Generate a response for the given prompt. Args: prompt (str): The prompt to generate a response for. priority (int, optional): The priority of the request. Defaults to 0. sampling_params (SamplingParams, optional): Sampling parameters to use for this request. If not provided, uses self.sampling_params. Returns: list[Completion]: n completions from vLLM based on your prompt. \"\"\" t = Tracer(\"generator_perf/generate\", timer=\"gpu\") t.start() record_metric(\"generator/generate/count_requests\", 1, Reduce.SUM) if self.llm is None: raise RuntimeError(\"Generator not initialized. Call setup() first.\") params = sampling_params or self.sampling_params if params.output_kind is None: params.output_kind = RequestOutputKind.FINAL_ONLY # Use AsyncLLM\u0027s generate() method - it returns an async generator # that yields RequestOutput objects. We only want the final output. request_output = None async for output in self.llm.generate( prompt=prompt, sampling_params=params, request_id=str(uuid.uuid4()), ): request_output = output # Keep last output (final one) completions = self._to_completions(request_output, prompt) record_metric( \"generator/generate/count_sequences_completed\", len(completions), Reduce.SUM, ) t.stop() return completions @endpoint async def stop(self): \"\"\"Stop the generator and cleanup local resources. This method is idempotent and can be called multiple times safely. Note: Remote worker cleanup happens in shutdown() which has access to the proxy. \"\"\" if self.fetcher_procs is not None: try: await self.fetcher_procs.stop() logger.info(\"Stopped fetcher procs\") except Exception as e: logger.warning(f\"Error stopping fetcher procs: {e}\") self.fetcher_procs = None if self.llm is not None: logger.info(\"Stopping AsyncLLM\") self.llm.shutdown() logger.info(\"AsyncLLM.shutdown() returned\") self.llm = None logger.info(\"stop() complete\") [docs] @classmethod async def shutdown(cls, actor): \"\"\"Shutdown the generator and cleanup all resources. Cleanup order: 1. Stop AsyncLLM (triggers MonarchExecutor.shutdown() which destroys process groups and stops proc_mesh) 2. Stop generator_proc \"\"\" try: await actor.stop.call() except Exception as e: logger.warning(f\"Error during actor.stop: {e}\") try: if getattr(actor, \"_generator_proc\", None): await actor._generator_proc.stop() logger.info(\"Stopped generator proc\") except Exception as e: logger.warning(f\"Error during generator_proc stop: {e}\") logger.info(\"shutdown() complete\") @endpoint async def update_weights( self, version: Optional[int] = None, ) -\u003e None: \"\"\"Update weights on the generator from torchstore. This method: 1. Optionally starts prefetching weights to shared memory (overlaps with pause) 2. Pauses generation and waits for in-flight requests to complete 3. Updates weights on workers (from shared memory if prefetched, else from torchstore) 4. Resumes generation When prefetch_weights_to_shm is enabled, weight fetching is started as an async task BEFORE pause_generation(), overlapping I/O with in-flight request completion. This reduces the time generation is paused. Note: This is NOT the standard vLLM weight update approach. vLLM typically uses `collective_rpc` on EngineClient, which internally routes calls to workers via the executor. However, `collective_rpc` uses msgspec/msgpack serialization which does not support arbitrary Python objects by default (only with VLLM_ALLOW_INSECURE_SERIALIZATION=1). This makes it difficult to pass complex objects like torchstore storage handles. Instead, we use a monarch-native approach where the Generator actor directly calls the worker mesh (`self.workers.update_weights`) via Monarch RPC, which uses cloudpickle and natively supports Monarch actor references for torchstore integration. Args: version: Policy version to load from torchstore \"\"\" if self.llm is None: raise RuntimeError(\"Generator not initialized. Call setup() first.\") logger.info(f\"Starting weight update to v{version}\") # Start prefetching weights to shared memory (overlaps with pause) fetch_task = None if self.prefetch_weights_to_shm: logger.info(f\"[Generator] Starting prefetch for v{version}\") fetch_task = asyncio.create_task(self._fetch_weights(version or 0)) pause_start = time.perf_counter() await self.llm.pause_generation( wait_for_inflight_requests=True, clear_cache=True ) pause_duration = time.perf_counter() - pause_start record_metric( \"generator_perf/update_weights/pause_generation_duration_s\", pause_duration, Reduce.MEAN, ) try: load_start = time.perf_counter() if fetch_task is not None: wait_fetch_start = time.perf_counter() fetched_weights = await fetch_task wait_fetch_duration = time.perf_counter() - wait_fetch_start record_metric( \"generator_perf/update_weights/wait_fetch_weights_s\", wait_fetch_duration, Reduce.MEAN, ) await self.workers.apply_prefetched_weights.call(fetched_weights) await self._drop_shared_memory(fetched_weights) else: # Direct fetch from torchstore await self.workers.update_weights.call(version=version) load_duration = time.perf_counter() - load_start record_metric( \"generator_perf/update_weights/worker_load_weights_duration_s\", load_duration, Reduce.MEAN, ) self.generator_version = version finally: await self.llm.resume_generation() logger.info(f\"Weight update complete, now v{version}\") @endpoint async def save_model_params(self): \"\"\"Save model parameters before weight update, used for testing purposes only.\"\"\" logger.info(\"save model parameters for testing.\") await self.workers.save_model_params.call() @endpoint async def validate_model_params(self, validate_fn): \"\"\"Validate updated model params using validate_fn.\"\"\" logger.info(\"start validating model parameters.\") return await self.workers.validate_model_params.call(validate_fn) def _extract_logprobs(self, output) -\u003e torch.Tensor | None: \"\"\"Extract logprobs from vLLM output as a torch.Tensor. Args: output: vLLM CompletionOutput with optional logprobs. Returns: torch.Tensor of logprobs for each token, or None if not available. \"\"\" if output.logprobs is not None: return torch.tensor( [ top_k_dict[token].logprob for token, top_k_dict in zip(output.token_ids, output.logprobs) ] ) return None def _to_completions( self, request_output: RequestOutput, prompt: str ) -\u003e list[Completion]: \"\"\"Convert vLLM RequestOutput to forge Completion objects. Args: request_output: vLLM request output with completions. prompt: Original prompt string. Returns: List of Completion objects. \"\"\" completions = [] for output in request_output.outputs: completion = Completion( prompt=to_prompt(prompt), text=output.text, prompt_ids=torch.tensor( request_output.prompt_token_ids if request_output.prompt_token_ids else [] ), token_ids=torch.tensor( output.token_ids if hasattr(output, \"token_ids\") else [] ), logprobs=self._extract_logprobs(output), stop_reason=output.finish_reason, generator_version=self.generator_version, metadata={\"num_cached_tokens\": request_output.num_cached_tokens}, ) completions.append(completion) return completions @endpoint async def _reset_prefix_cache(self): await self.llm.reset_prefix_cache() class _WeightFetcher(ForgeActor): \"\"\"Fetches weights from torchstore and loads them into shared memory. Spawned by Generator using this_host().spawn_procs() to ensure shared memory IPC namespace is shared with workers. This is critical for POSIX shared memory to be visible between fetchers and workers. \"\"\" @endpoint async def fetch( self, *, version: int, param_names: list[str], ) -\u003e dict[str, SharedTensorHandle]: \"\"\"Fetch weights from torchstore and load them into shared memory. Args: version: Policy version param_names: List of parameter names to fetch Returns: Dict mapping param names to SharedTensorHandle objects \"\"\" sd = {} for name in param_names: param_key = get_param_key(version, name) param = await ts.get(param_key) shared_tensor = SharedTensor(tensor=param) handle = shared_tensor.get_handle() # Unregister from resource tracker - Generator will handle cleanup via drop() # Without this, the shared memory gets cleaned up when the fetcher process exits resource_tracker.unregister(f\"/{handle.shm_name}\", \"shared_memory\") sd[name] = handle shared_tensor.close() # Close fd but don\u0027t unlink (workers will use it) del param # Explicitly free the tensor after copying to shared memory return sd",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "../../../../../_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/forge/actors/vllm/v1/generator.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>
