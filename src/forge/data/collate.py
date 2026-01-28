@@ -9,6 +9,50 @@ from typing import Any, Callable
 import torch
 import torch.nn.functional as F
 from forge.data.utils import CROSS_ENTROPY_IGNORE_IDX
+from forge.types import TrainBatch
+
+
+def collate_sft(batch: list[dict[str, Any]]) -> TrainBatch:
+    """
+    Collate function for SFT that returns a TrainBatch directly.
+
+    This is a wrapper around collate_padded that separates model inputs
+    from loss inputs, following the same pattern as GRPO's collate.
+
+    Args:
+        batch: List of samples, each containing tensor and non-tensor fields.
+            Expected keys: "tokens" (model input), "labels" (loss input),
+            and optionally "metrics" and other metadata.
+
+    Returns:
+        TrainBatch with model_inputs, loss_inputs, and meta fields separated.
+    """
+    collated = collate_padded(batch)
+
+    # Separate model inputs, loss inputs, and metadata
+    model_inputs = {}
+    loss_inputs = {}
+    meta = {}
+
+    for key, value in collated.items():
+        if key == "tokens":
+            model_inputs[key] = value
+        elif key == "labels":
+            loss_inputs[key] = value
+        elif key == "metrics":
+            meta[key] = value
+        else:
+            # Other tensor fields go to model_inputs, non-tensor to meta
+            if isinstance(value, torch.Tensor):
+                model_inputs[key] = value
+            else:
+                meta[key] = value
+
+    return TrainBatch(
+        model_inputs=model_inputs,
+        loss_inputs=loss_inputs,
+        meta=meta,
+    )
 
 
 def collate_padded(batch: list[dict[str, Any]]) -> dict[str, Any]:
