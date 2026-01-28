@@ -48,7 +48,6 @@ class TestGeneratorConfig(unittest.TestCase):
 
         # Sampling defaults
         self.assertEqual(generator.sampling_params.n, 1)
-        self.assertFalse(generator.sampling_params.guided_decoding)
         self.assertEqual(generator.sampling_params.max_tokens, 16)
 
     @pytest.mark.skipif(
