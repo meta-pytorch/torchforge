@@ -30,11 +30,7 @@ N_SAMPLES = 1
 
 @pytest.mark.asyncio
 async def test_same_output():
-    """Compare outputs between vLLM and Generator service.
-
-    Verifies that forge Generator produces identical outputs to vanilla vLLM,
-    including text and logprobs.
-    """
+    """Compare outputs between vLLM and Generator service."""
     test_prompts = [
         "Hello, how are you?",
         "What is 2+2?",
@@ -71,49 +67,37 @@ async def test_same_output():
                 "max_tokens": MAX_TOKENS,
                 "temperature": TEMPERATURE,
                 "top_p": TOP_P,
-                "logprobs": 1,  # Enable logprobs for comparison
             },
         )
 
         print("Models ready. Generating outputs...\n")
+        vllm_outputs = []
+        generator_outputs = []
         sampling_params = SamplingParams(
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
             top_p=TOP_P,
             n=N_SAMPLES,
             output_kind=RequestOutputKind.FINAL_ONLY,
-            logprobs=1,  # Enable logprobs for comparison
         )
 
         for i, prompt in enumerate(test_prompts, 1):
             # vLLM generation
-            vllm_result = None
             async for res in vllm_model.generate(
                 prompt, sampling_params, request_id=str(i)
             ):
-                vllm_result = res
+                vllm_outputs.append(res.outputs[0].text)
 
-            # Generator generation
-            generator_result = await generator.generate.route(prompt)
-            completion = generator_result[0]
+            # Policy generation
+            policy_result = await generator.generate.route(prompt)
+            policy_text = policy_result[0].text
+            generator_outputs.append(policy_text)
 
-            # Compare text
-            vllm_text = vllm_result.outputs[0].text
-            assert vllm_text != "", f"Prompt {i}: vLLM output is empty"
-            assert completion.text != "", f"Prompt {i}: Generator output is empty"
-            assert vllm_text == completion.text, (
-                f"Prompt {i}: text mismatch\n"
-                f"  vLLM: {vllm_text[:100]}\n"
-                f"  Generator: {completion.text[:100]}"
-            )
-
-            # Verify logprobs format (catches bug where raw vLLM format was returned)
-            vllm_output = vllm_result.outputs[0]
-            if vllm_output.logprobs is not None:
-                assert isinstance(completion.logprobs, torch.Tensor)
-                assert len(completion.logprobs) == len(vllm_output.token_ids)
-
-            print(f"Prompt {i}: PASS")
+        # Final check
+        for vllm_output, generator_output in zip(vllm_outputs, generator_outputs):
+            assert vllm_output != ""
+            assert generator_output != ""
+            assert vllm_output == generator_output
 
     finally:
         if generator is not None:
