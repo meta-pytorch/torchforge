@@ -80,7 +80,7 @@ async def generate_golden_outputs():
         print("Generator ready. Generating outputs...\n")
 
         for i, prompt in enumerate(TEST_PROMPTS):
-            print(f"[{i+1}/{len(TEST_PROMPTS)}] Prompt: {prompt[:50]}...")
+            print(f"[{i + 1}/{len(TEST_PROMPTS)}] Prompt: {prompt[:50]}...")
 
             result = await generator.generate.route(prompt)
             completion = result[0]
@@ -90,7 +90,6 @@ async def generate_golden_outputs():
             torch.save(completion, golden_path)
             print(f"    Saved: {golden_path}")
 
-        # Save metadata
         metadata = {
             "model": MODEL_NAME,
             "max_tokens": MAX_TOKENS,
