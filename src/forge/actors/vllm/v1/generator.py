@@ -580,6 +580,10 @@ class Generator(ForgeActor):
 
         return completions
 
+    @endpoint
+    async def _reset_prefix_cache(self):
+        await self.llm.reset_prefix_cache()
+
 
 class _WeightFetcher(ForgeActor):
     """Fetches weights from torchstore and loads them into shared memory.

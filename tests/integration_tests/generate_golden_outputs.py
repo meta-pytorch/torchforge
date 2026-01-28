@@ -12,7 +12,6 @@ produce identical outputs. Uses deterministic sampling (temperature=0) for
 reproducibility.
 
 Usage:
-    conda activate <baseline-env>
     python tests/integration_tests/generate_golden_outputs.py
 
 The script will generate golden files in tests/integration_tests/golden_outputs/
