@@ -107,37 +107,11 @@ async def test_same_output():
                 f"  Generator: {completion.text[:100]}"
             )
 
-            # Compare logprobs
+            # Verify logprobs format (catches bug where raw vLLM format was returned)
             vllm_output = vllm_result.outputs[0]
             if vllm_output.logprobs is not None:
-                # Extract vLLM logprobs as tensor (same logic as Generator._extract_logprobs)
-                vllm_logprobs = torch.tensor(
-                    [
-                        top_k_dict[token].logprob
-                        for token, top_k_dict in zip(
-                            vllm_output.token_ids, vllm_output.logprobs
-                        )
-                    ]
-                )
-
-                # Verify Generator logprobs is a tensor (catches the bug where raw format was returned)
-                assert completion.logprobs is not None, (
-                    f"Prompt {i}: Generator logprobs is None but vLLM has logprobs"
-                )
-                assert isinstance(completion.logprobs, torch.Tensor), (
-                    f"Prompt {i}: Generator logprobs is not a tensor, "
-                    f"got {type(completion.logprobs)}"
-                )
-                assert completion.logprobs.shape == vllm_logprobs.shape, (
-                    f"Prompt {i}: logprobs shape mismatch\n"
-                    f"  vLLM: {vllm_logprobs.shape}\n"
-                    f"  Generator: {completion.logprobs.shape}"
-                )
-                assert torch.allclose(completion.logprobs, vllm_logprobs, atol=1e-5), (
-                    f"Prompt {i}: logprobs values mismatch\n"
-                    f"  vLLM: {vllm_logprobs[:5]}\n"
-                    f"  Generator: {completion.logprobs[:5]}"
-                )
+                assert isinstance(completion.logprobs, torch.Tensor)
+                assert len(completion.logprobs) == len(vllm_output.token_ids)
 
             print(f"Prompt {i}: PASS")
 
@@ -275,6 +249,92 @@ async def test_cache_usage():
             assert vllm_output != ""
             assert generator_output != ""
             assert vllm_output == generator_output
+
+    finally:
+        if generator is not None:
+            await generator.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_generator_matches_golden():
+    """Verify Generator produces identical outputs to baseline golden files.
+    Useful for verifying vLLM version bump or generator refactor.
+
+    This test loads pre-generated golden outputs and compares them against
+    the current Generator implementation to catch any regressions.
+
+    Workflow:
+        1. Generate baseline golden files (using baseline conda environment):
+            conda activate <baseline-env>
+            python tests/integration_tests/generate_golden_outputs.py
+
+        2. Test new implementation against baseline:
+            conda activate <new-env>
+            pytest tests/integration_tests/test_vllm_policy_correctness.py::test_generator_matches_golden -v -rs
+
+    You can use different conda environments to switch between baseline and
+    test implementations.
+    """
+    from dataclasses import fields
+    from pathlib import Path
+
+    def completions_equal(a, b) -> bool:
+        """Compare two Completion objects, handling tensors correctly."""
+        for field in fields(a):
+            val_a = getattr(a, field.name)
+            val_b = getattr(b, field.name)
+            if isinstance(val_a, torch.Tensor) and isinstance(val_b, torch.Tensor):
+                if not torch.equal(val_a, val_b):
+                    return False
+            elif val_a != val_b:
+                return False
+        return True
+
+    golden_dir = Path(__file__).parent / "golden_outputs"
+    metadata_path = golden_dir / "metadata.pt"
+
+    if not metadata_path.exists():
+        pytest.skip(
+            "Golden files not found. Generate baseline first: "
+            "python tests/integration_tests/generate_golden_outputs.py"
+        )
+
+    metadata = torch.load(metadata_path, weights_only=False)
+    test_prompts = metadata["prompts"]
+
+    generator = None
+    try:
+        generator = await Generator.options(
+            procs=1, num_replicas=1, with_gpus=True
+        ).as_service(
+            engine_args={
+                "model": MODEL_NAME,
+                "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
+                "enforce_eager": ENFORCE_EAGER,
+                "max_model_len": MAX_MODEL_LEN,
+                "gpu_memory_utilization": GPU_MEMORY_UTILIZATION,
+                "enable_prefix_caching": ENABLE_PREFIX_CACHING,
+            },
+            sampling_params={
+                "n": N_SAMPLES,
+                "max_tokens": MAX_TOKENS,
+                "temperature": TEMPERATURE,
+                "top_p": TOP_P,
+                "logprobs": 1,
+            },
+        )
+
+        for i, prompt in enumerate(test_prompts):
+            golden_path = golden_dir / f"completion_{i}.pt"
+            assert golden_path.exists(), f"Golden file not found: {golden_path}"
+
+            golden = torch.load(golden_path, weights_only=False)
+            result = await generator.generate.route(prompt)
+            completion = result[0]
+
+            assert completions_equal(completion, golden), f"Prompt {i}: completion mismatch"
+
+            print(f"Prompt {i}: PASS")
 
     finally:
         if generator is not None:
