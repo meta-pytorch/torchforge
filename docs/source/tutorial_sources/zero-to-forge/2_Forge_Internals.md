@@ -6,14 +6,14 @@ Now that you see the power of the service abstraction, let's understand what's a
 
 ## Service Anatomy: Beyond the Interface
 
-When you call `await policy_service.generate(question)`, here's what actually happens:
+When you call `await generator_service.generate(question)`, here's what actually happens:
 
 (Don't worry, we will understand Services right in the next section!)
 
 ```mermaid
 graph TD
     Call["Your Code:
-    await policy_service
+    await generator_service
     .generate.route"]
 
     subgraph ServiceLayer["Service Layer"]
@@ -66,7 +66,7 @@ Here's the actual ServiceConfig from TorchForge source code:
 
 ```python
 # Configuration pattern from apps/grpo/main.py:
-Policy.options(
+Generator.options(
     procs=1,           # Processes per replica
     num_replicas=4,    # Number of replicas
     with_gpus=True     # Allocate GPUs
@@ -86,11 +86,11 @@ The service creation automatically handles:
 - Message routing and serialization
 
 ```python
-from forge.actors.generator import Generator as Policy
+from forge.actors.generator import Generator
 
 model = "Qwen/Qwen3-1.7B"
 
-policy = await Policy.options(
+generator = await Generator.options(
     procs=1,
     with_gpus=True,
     num_replicas=1
@@ -110,11 +110,11 @@ policy = await Policy.options(
 )
 
 prompt = "What is 3 + 5?"
-responses = await policy.generate.route(prompt)
+responses = await generator.generate.route(prompt)
 print(f"Response: {responses[0].text}")
 
 # Cleanup when done
-await policy.shutdown()
+await generator.shutdown()
 ```
 
 ### 3. How Services Actually Work
@@ -125,7 +125,7 @@ When you call `.as_service()`, TorchForge creates a `ServiceInterface` that mana
 
 ```python
 # Your code sees this simple interface:
-responses = await policy.generate.route(prompt=prompt)
+responses = await generator.generate.route(prompt=prompt)
 # But TorchForge handles all the complexity of replica management, load balancing, and fault tolerance
 ```
 
@@ -183,7 +183,7 @@ These communication patterns (\"adverbs\") determine how your service calls are 
 **When to use**: Normal request routing where any replica can handle the request.
 
 ```python
-responses = await policy.generate.route(prompt=question)
+responses = await generator.generate.route(prompt=question)
 answer = responses[0].text  # Extract text from Completion object
 ```
 
@@ -205,12 +205,12 @@ Behind the scenes:
 **When to use**: You need responses from ALL replicas.
 
 ```python
-# Get version from all policy replicas
-current_versions = await policy.get_version.fanout()
+# Get version from all generator replicas
+current_versions = await generator.get_version.fanout()
 # Returns: [version_replica_1, version_replica_2, ...]
 
 # Update weights on all replicas
-await policy.update_weights.fanout(new_policy_version)
+await generator.update_weights.fanout(new_policy_version)
 # Broadcasts to all replicas simultaneously
 ```
 
@@ -291,7 +291,7 @@ print(f"All replica values: {results}")
 # Output: All replica values: [1, 2, 1, 1] - Each replica has different state!
 ```
 
-The problem: each `.route()` call can go to different replicas, creating inconsistent state.
+The problem: each `.route()` call can go to a different replica, creating inconsistent state.
 
 ```python
 # WITH SESSIONS: All calls go to the SAME replica
@@ -313,10 +313,10 @@ async with counter_service.session():  # Creates a session that picks one replic
 # Final value on this replica: 3
 
 # Same pattern works with Policy for multi-turn conversations:
-# async with policy.session():
-#     response1 = await policy.generate.route(turn1)
+# async with generator.session():
+#     response1 = await generator.generate.route(turn1)
 #     full_prompt = turn1 + response1[0].text + turn2
-#     response2 = await policy.generate.route(full_prompt)
+#     response2 = await generator.generate.route(full_prompt)
 #     # Both calls hit same replica, preserving KV cache
 
 # Cleanup
@@ -337,22 +337,22 @@ The most complex challenge in distributed RL is maintaining state consistency wh
 # This breaks KV cache optimization:
 async def naive_multi_turn():
     # Each call might go to different replica = cache miss
-    response1 = await policy_service.generate.choose(question1)
-    response2 = await policy_service.generate.choose(question1 + response1) # Cache miss!
-    response3 = await policy_service.generate.choose(conversation_so_far)   # Cache miss!
+    response1 = await generator_service.generate.route(question1)
+    response2 = await generator_service.generate.route(question1 + response1) # Cache miss!
+    response3 = await generator_service.generate.route(conversation_so_far)   # Cache miss!
 ```
 
 **The solution**: Sticky sessions ensure all calls go to same replica.
 
 ```python
 async def optimized_multi_turn():
-    async with policy.session():
+    async with generator.session():
         # All calls guaranteed to hit same replica = cache hits
-        response1 = await policy.generate.route(prompt=question1)
+        response1 = await generator.generate.route(prompt=question1)
         full_prompt = question1 + response1[0].text
-        response2 = await policy.generate.route(prompt=full_prompt) # Cache hit!
+        response2 = await generator.generate.route(prompt=full_prompt) # Cache hit!
         conversation = full_prompt + response2[0].text
-        response3 = await policy.generate.route(prompt=conversation)   # Cache hit!
+        response3 = await generator.generate.route(prompt=conversation)   # Cache hit!
 
     # Session ends, replica can be garbage collected or reused
 ```
@@ -368,7 +368,7 @@ async def optimized_multi_turn():
 ```python
 # TorchForge ReplayBuffer endpoints (verified from source code)
 # Add episodes (thread-safe by actor model)
-await replay_buffer.add.call_one(episode)  # .choose() would work too, but .call_one() clarifies it's a singleton actor not ActorMesh
+await replay_buffer.add.call_one(episode)  # .route() would work too, but .call_one() clarifies it's a singleton actor not ActorMesh
 
 # Sample batches for training
 batch = await replay_buffer.sample.call_one(
@@ -386,7 +386,7 @@ batch = await replay_buffer.sample.call_one(
 
 ### Weight Synchronization Strategy
 
-**The challenge**: Trainer updates policy weights, but policy service needs those weights.
+**The challenge**: Trainer updates policy weights, but generator service needs those weights.
 
 ```python
 # TorchForge weight synchronization pattern from apps/grpo/main.py
@@ -394,12 +394,12 @@ async def real_weight_sync(trainer, policy, step):
     # Trainer pushes weights to TorchStore with version number
     await trainer.push_weights.call_one(policy_version=step + 1)
 
-    # Policy service updates to new version from TorchStore
+    # Generator service updates to new version from TorchStore
     # Use .fanout() to update ALL policy replicas
-    await policy.update_weights.fanout(policy_version=step + 1)
+    await generator.update_weights.fanout(policy_version=step + 1)
 
 # Check current policy version
-current_version = await policy.get_version.route()
+current_version = await generator.get_version.route()
 print(f"Current policy version: {current_version}")
 ```
 
@@ -423,8 +423,8 @@ async def simple_rl_step():
     print(f"Prompt: {prompt}")
     print(f"Target: {target}")
 
-    actions = await policy.generate.route(prompt=prompt)  # Policy is a service
-    print(f"Policy response: {actions[0].text}")
+    actions = await generator.generate.route(prompt=prompt)  # Generator is a service
+    print(f"Generator response: {actions[0].text}")
 
     # Create input tensor for reference model (requires full context)
     input_ids = torch.cat([actions[0].prompt_ids, actions[0].token_ids])
