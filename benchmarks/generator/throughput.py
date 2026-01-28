@@ -61,6 +61,7 @@ from forge.controller.provisioner import init_provisioner, shutdown
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.config import parse
 from omegaconf import DictConfig
+from tqdm import tqdm
 from vllm import __version__ as vllm_version
 
 if vllm_version >= "0.13.0":
@@ -142,12 +143,25 @@ async def run_throughput_benchmark(
     prompts = [req.prompt for req in requests]
     request_ids = [req.request_id for req in requests]
 
-    start = time.perf_counter()
     # TODO: here we're measuring two things together: compute (vllm) and io (monarch).
     # We shall consider finer grained metrics collection to distinguish the two.
-    completions = await asyncio.gather(
-        *[generator.generate.route(prompt) for prompt in prompts]
-    )
+    start = time.perf_counter()
+    # Create tasks with their indices to preserve order
+    tasks = [
+        asyncio.create_task(generator.generate.route(prompt)) for prompt in prompts
+    ]
+    with tqdm(
+        total=len(tasks),
+        desc="Processing requests",
+        unit="req",
+        smoothing=0,  # Show instantaneous rate, not smoothed
+    ) as pbar:
+        for coro in asyncio.as_completed(tasks):
+            await coro
+            pbar.update(1)
+
+    # Gather results in original order
+    completions = [task.result() for task in tasks]
     end = time.perf_counter()
 
     elapsed_time = end - start
