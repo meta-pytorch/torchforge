@@ -2,8 +2,8 @@
 # >>> python -m apps.grpo.main --config apps/grpo/llama3_8b.yaml
 
 # Global configuration
-group_size: 4
-local_batch_size: 4 # per-device batch size
+group_size: 8
+local_batch_size: 8 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 2048
 model: "meta-llama/Meta-Llama-3.1-8B-Instruct"
