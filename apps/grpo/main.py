@@ -24,7 +24,7 @@ from forge.observability.metric_actors import get_or_create_metric_logger
 from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl import collate, ComputeAdvantages, Episode, RewardActor
-from forge.rl.loss import GRPOLoss
+from forge.rl.loss import DAPOLoss, GRPOLoss
 from forge.types import LauncherConfig, ProvisionerConfig
 from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
@@ -68,12 +68,7 @@ async def main(cfg: DictConfig):
     )
 
     # ---- Setup loss function ---- #
-    loss_fn = GRPOLoss(
-        clip_low=0.2,
-        clip_high=0.28,
-        beta=0.1,
-        agg_type="fixed_horizon",
-    )
+    loss_fn = DAPOLoss()
 
     # Fail-fast: Check loss/ref_model compatibility before spawning actors
     uses_ref_model = cfg.get("services", {}).get("ref_model") is not None
