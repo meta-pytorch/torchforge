@@ -303,7 +303,9 @@ async def test_generator_matches_golden():
             result = await generator.generate.route(prompt)
             completion = result[0]
 
-            assert completions_equal(completion, golden), f"Prompt {i}: completion mismatch"
+            assert completions_equal(
+                completion, golden
+            ), f"Prompt {i}: completion mismatch"
 
             print(f"Prompt {i}: PASS")
 
