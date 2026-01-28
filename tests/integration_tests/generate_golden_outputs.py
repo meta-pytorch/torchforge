@@ -49,9 +49,9 @@ TEST_PROMPTS = [
 
 
 async def generate_golden_outputs():
-    """Generate golden outputs using v0 Generator."""
-    golden_dir = Path(__file__).parent / "golden_outputs"
-    golden_dir.mkdir(exist_ok=True)
+    """Generate golden outputs using the current Generator."""
+    golden_dir = Path(__file__).parent / "fixtures" / "golden_outputs"
+    golden_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Generating golden outputs to: {golden_dir}")
     print(f"Model: {MODEL_NAME}")

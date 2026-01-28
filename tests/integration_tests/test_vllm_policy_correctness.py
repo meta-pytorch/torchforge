@@ -290,7 +290,7 @@ async def test_generator_matches_golden():
                 return False
         return True
 
-    golden_dir = Path(__file__).parent / "golden_outputs"
+    golden_dir = Path(__file__).parent / "fixtures" / "golden_outputs"
     metadata_path = golden_dir / "metadata.pt"
 
     if not metadata_path.exists():
