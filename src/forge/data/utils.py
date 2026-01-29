@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Any, Iterator, Literal, TYPE_CHECKING, Union
+from typing import Any, Iterator, Literal, Union
 
 import torch
 import torch.distributed as dist
+from forge.types import TrainBatch
 from torch.nn.attention.flex_attention import BlockMask
-
-if TYPE_CHECKING:
-    from forge.types import TrainBatch
 
 logger = logging.getLogger(__name__)
 
@@ -234,8 +232,6 @@ class StopAfterOneEpoch:
     Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
     `forge.src.data.datasets.HfIterableDataset`.
 
-    Works with both dict batches and TrainBatch objects.
-
     Args:
         iter (Iterator): Iterator over dataloader batches
         device (torch.device): Device for synchronizing tensors
@@ -263,7 +259,7 @@ class StopAfterOneEpoch:
     def __iter__(self):
         return self
 
-    def __next__(self) -> dict | TrainBatch:
+    def __next__(self) -> TrainBatch:
         """Get next batch from current epoch.
 
         Returns:
@@ -309,14 +305,14 @@ class StopAfterOneEpoch:
         return current_batch
 
 
-def extract_epoch_from_batch(batch: dict | TrainBatch) -> int:
+def extract_epoch_from_batch(batch: TrainBatch) -> int:
     """Extract epoch number from batch metrics. Useful to detect epoch changes during validation.
 
     Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
     `forge.src.data.datasets.HfIterableDataset`.
 
     Args:
-        batch (dict | TrainBatch): Batch dictionary or TrainBatch with 'metrics' field
+        batch (TrainBatch): TrainBatch with 'metrics' field in meta
 
     Returns:
         int: Max epoch number from metrics
@@ -324,17 +320,11 @@ def extract_epoch_from_batch(batch: dict | TrainBatch) -> int:
     Raises:
         ValueError: If metrics key is missing or no metric with 'num_epochs' found
     """
-    # Handle both dict and TrainBatch
-    from forge.types import TrainBatch as TB
-
-    if isinstance(batch, TB):
-        metrics = batch.meta.get("metrics")
-    else:
-        metrics = batch.get("metrics")
+    metrics = batch.meta.get("metrics")
 
     if metrics is None:
         raise ValueError(
-            "Batch missing 'metrics' field. Cannot extract epoch from batch."
+            "Batch missing 'metrics' field in meta. Cannot extract epoch from batch."
         )
 
     # Match metrics where 'num_epochs' appears in the key (handles prefixed keys like 'dataset/name/num_epochs')
