@@ -347,7 +347,7 @@ class Provisioner:
             mesh_name: Name of the pre-allocated mesh to use.
                 Must match a mesh name defined in the launcher config.
             with_gpus: Whether to include GPU allocations.
-                This only adds the CUDA_VISIBLE_DEVICES environment variable.
+                This only adds the hardware isolation environment variable.
             num_hosts: The number of hosts to allocate.
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
