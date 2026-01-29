@@ -527,6 +527,24 @@ class Generator(ForgeActor):
         logger.info("start validating model parameters.")
         return await self.workers.validate_model_params.call(validate_fn)
 
+    def _extract_logprobs(self, output) -> torch.Tensor | None:
+        """Extract logprobs from vLLM output as a torch.Tensor.
+
+        Args:
+            output: vLLM CompletionOutput with optional logprobs.
+
+        Returns:
+            torch.Tensor of logprobs for each token, or None if not available.
+        """
+        if output.logprobs is not None:
+            return torch.tensor(
+                [
+                    top_k_dict[token].logprob
+                    for token, top_k_dict in zip(output.token_ids, output.logprobs)
+                ]
+            )
+        return None
+
     def _to_completions(
         self, request_output: RequestOutput, prompt: str
     ) -> list[Completion]:
@@ -553,14 +571,18 @@ class Generator(ForgeActor):
                 token_ids=torch.tensor(
                     output.token_ids if hasattr(output, "token_ids") else []
                 ),
-                logprobs=(output.logprobs if hasattr(output, "logprobs") else None),
+                logprobs=self._extract_logprobs(output),
                 stop_reason=output.finish_reason,
                 generator_version=self.generator_version,
-                metadata=None,
+                metadata={"num_cached_tokens": request_output.num_cached_tokens},
             )
             completions.append(completion)
 
         return completions
+
+    @endpoint
+    async def _reset_prefix_cache(self):
+        await self.llm.reset_prefix_cache()
 
 
 class _WeightFetcher(ForgeActor):

@@ -2,8 +2,8 @@
 # >>> python -m apps.grpo.main --config apps/grpo/qwen3_8b.yaml
 
 # Global configuration
-group_size: 16
-local_batch_size: 4 # per-device batch size
+group_size: 8
+local_batch_size: 8 # per-device batch size
 max_req_tokens: 1024
 max_res_tokens: 2048
 model: "Qwen/Qwen3-8B"
@@ -91,7 +91,7 @@ replay_buffer:
   # 2 GPUs for the trainer and we're using full FSDP.
   dp_size: 2
 
-# Reference model configuration
+# Reference model configuration (if enabled in services)
 ref_model:
   model:
     name: qwen3
@@ -117,16 +117,19 @@ ref_model:
 
 # All resource allocations
 services:
+  # Ref model is only necessary if the loss requires it (GRPO with beta>0),
+  # but we recommend using DAPO instead
+  # ref_model:
+  #   ref_model:
+  #     procs: 1
+  #     num_replicas: 1
+  #     with_gpus: true
+  #     mesh_name: ref_model
   generator:
     procs: ${generator.engine_args.tensor_parallel_size}
     num_replicas: 1
     with_gpus: true
     mesh_name: generator
-  ref_model:
-    procs: 1
-    num_replicas: 1
-    with_gpus: true
-    mesh_name: ref_model
   reward_actor:
     procs: 1
     num_replicas: 1

@@ -17,8 +17,7 @@ dependencies = [
     "torchmonarch==0.2.0",
     # Issue 656: switch to ping torchstore nightly
     "torchstore",
-    # vLLM
-    "vllm",
+    "vllm>=0.13.0,<0.14.0",
     # Hugging Face integrations
     "datasets>=2.21.0",
     "tokenizers",
@@ -85,14 +84,8 @@ members = [
 name = "pytorch-cu128"
 url  = "https://download.pytorch.org/whl/cu128"
 
-# vllm
-[[tool.uv.index]]
-name = "vllm-forge"
-url = "https://download.pytorch.org/whl/preview/forge"
-
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
-vllm = { index = "vllm-forge" }
 # Issue 656: switch to ping torchstore nightly
 torchstore = { git = "https://github.com/meta-pytorch/torchstore.git", branch = "no-monarch-2026.01.05" }
 

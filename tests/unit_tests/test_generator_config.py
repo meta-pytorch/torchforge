@@ -45,11 +45,9 @@ class TestGeneratorConfig(unittest.TestCase):
         self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
         self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
         self.assertFalse(generator.engine_args.enforce_eager)
-        self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
         # Sampling defaults
         self.assertEqual(generator.sampling_params.n, 1)
-        self.assertFalse(generator.sampling_params.guided_decoding)
         self.assertEqual(generator.sampling_params.max_tokens, 16)
 
     @pytest.mark.skipif(
@@ -90,7 +88,6 @@ class TestGeneratorConfig(unittest.TestCase):
         self.assertEqual(generator.engine_args.gpu_memory_utilization, 0.1)
         self.assertEqual(generator.engine_args.max_model_len, 1024)
         self.assertTrue(generator.engine_args.enforce_eager)
-        self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
         self.assertEqual(generator.sampling_params.n, 2)
         self.assertEqual(generator.sampling_params.max_tokens, 32)
@@ -127,7 +124,6 @@ class TestGeneratorConfig(unittest.TestCase):
             self.assertEqual(generator.engine_args.tensor_parallel_size, 1)
             self.assertEqual(generator.engine_args.pipeline_parallel_size, 1)
             self.assertTrue(generator.engine_args.enforce_eager)
-            self.assertTrue(generator.engine_args._is_v1_supported_oracle())
 
             self.assertEqual(generator.sampling_params.n, 2)
             self.assertEqual(generator.sampling_params.max_tokens, 32)

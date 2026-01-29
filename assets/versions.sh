@@ -9,7 +9,8 @@
 
 # Stable versions of upstream libraries for OSS repo
 PYTORCH_VERSION="2.9.0"
-VLLM_VERSION="v0.10.0"
+# ROCm builds vLLM from source (no prebuilt ROCm wheels available)
+VLLM_ROCM_VERSION="v0.10.0"
 TORCHSTORE_BRANCH="no-monarch-2026.01.05"
 # ROCm install builds these from source (no ROCm wheels); CUDA uses pyproject pins.
 TORCHTITAN_VERSION="v0.2.0"

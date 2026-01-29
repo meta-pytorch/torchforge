@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import pytest
+import torch
 from forge.actors.generator import Generator
 from vllm import SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
@@ -29,7 +30,7 @@ N_SAMPLES = 1
 
 @pytest.mark.asyncio
 async def test_same_output():
-    """Compare outputs between vLLM and Generator service"""
+    """Compare outputs between vLLM and Generator service."""
     test_prompts = [
         "Hello, how are you?",
         "What is 2+2?",
@@ -232,6 +233,81 @@ async def test_cache_usage():
             assert vllm_output != ""
             assert generator_output != ""
             assert vllm_output == generator_output
+
+    finally:
+        if generator is not None:
+            await generator.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_generator_matches_golden():
+    """Verify Generator produces identical outputs to baseline golden files.
+
+    Golden files are already committed. Only regenerate when updating baseline:
+        python tests/integration_tests/generate_golden_outputs.py
+    """
+    from dataclasses import fields
+    from pathlib import Path
+
+    def completions_equal(a, b) -> bool:
+        """Compare two Completion objects, handling tensors correctly."""
+        for field in fields(a):
+            val_a = getattr(a, field.name)
+            val_b = getattr(b, field.name)
+            if isinstance(val_a, torch.Tensor) and isinstance(val_b, torch.Tensor):
+                if not torch.equal(val_a, val_b):
+                    return False
+            elif val_a != val_b:
+                return False
+        return True
+
+    golden_dir = Path(__file__).parent / "fixtures" / "golden_outputs"
+    metadata_path = golden_dir / "metadata.pt"
+
+    if not metadata_path.exists():
+        pytest.skip(
+            "Golden files not found. Generate baseline first: "
+            "python tests/integration_tests/generate_golden_outputs.py"
+        )
+
+    metadata = torch.load(metadata_path, weights_only=False)
+    test_prompts = metadata["prompts"]
+
+    generator = None
+    try:
+        generator = await Generator.options(
+            procs=1, num_replicas=1, with_gpus=True
+        ).as_service(
+            engine_args={
+                "model": MODEL_NAME,
+                "tensor_parallel_size": TENSOR_PARALLEL_SIZE,
+                "enforce_eager": ENFORCE_EAGER,
+                "max_model_len": MAX_MODEL_LEN,
+                "gpu_memory_utilization": GPU_MEMORY_UTILIZATION,
+                "enable_prefix_caching": ENABLE_PREFIX_CACHING,
+            },
+            sampling_params={
+                "n": N_SAMPLES,
+                "max_tokens": MAX_TOKENS,
+                "temperature": TEMPERATURE,
+                "top_p": TOP_P,
+                "logprobs": 1,
+            },
+        )
+
+        for i, prompt in enumerate(test_prompts):
+            golden_path = golden_dir / f"completion_{i}.pt"
+            assert golden_path.exists(), f"Golden file not found: {golden_path}"
+
+            golden = torch.load(golden_path, weights_only=False)
+            result = await generator.generate.route(prompt)
+            completion = result[0]
+
+            assert completions_equal(
+                completion, golden
+            ), f"Prompt {i}: completion mismatch"
+
+            print(f"Prompt {i}: PASS")
 
     finally:
         if generator is not None:
