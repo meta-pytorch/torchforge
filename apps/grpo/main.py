@@ -232,18 +232,10 @@ async def main(cfg: DictConfig):
                     "episode/min_response_tokens", response_tokens, Reduce.MIN
                 )
 
-            # drop episodes if
-            # 1> reward std-dev is very small (including all 0s and all 1s)
-            # 2> any response was truncated (didn't end with EOS)
-            # TODO: change it to filter only truncated episodes instead of dropping entire group
+            # Drop entire group if reward std-dev is very small (no learning signal)
             rewards = [e.reward for e in episodes]
             rewards_std = torch.std(torch.tensor(rewards))
             is_low_variance = rewards_std < 1e-3
-            num_truncated = sum(
-                1 for e in episodes if e.completion.stop_reason == "length"
-            )
-            is_truncated = num_truncated > 0
-            drop = is_low_variance or is_truncated
 
             n = len(episodes)
             record_metric(
@@ -251,18 +243,8 @@ async def main(cfg: DictConfig):
                 n if is_low_variance else 0,
                 Reduce.SUM,
             )
-            record_metric(
-                "main/continuous_rollouts/episodes_dropped/truncated",
-                num_truncated,
-                Reduce.SUM,
-            )
-            record_metric(
-                "main/continuous_rollouts/episodes_dropped/total",
-                n if drop else 0,
-                Reduce.SUM,
-            )
+            if is_low_variance:
 
-            if drop:
                 del input_ids, episodes
                 continue
 
@@ -283,8 +265,16 @@ async def main(cfg: DictConfig):
             del input_ids
 
             advantages = await compute_advantages.compute.call_one(episodes)
+            num_truncated = 0
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
+
+                # Skip truncated episodes - don't add to replay buffer
+                # TODO: investigate setting loss_mask=0 instead of dropping
+                if episode.completion.stop_reason == "length":
+                    num_truncated += 1
+                    continue
+
                 await replay_buffer.add.call_one(episode)
 
                 sample = episode.to_dict(
@@ -301,6 +291,11 @@ async def main(cfg: DictConfig):
                     sample,
                     Reduce.SAMPLE,
                 )
+            record_metric(
+                "main/continuous_rollouts/episodes_dropped/truncated",
+                num_truncated,
+                Reduce.SUM,
+            )
 
             rollout_count += 1
             record_metric(
