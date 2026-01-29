@@ -269,11 +269,11 @@ async def main(cfg: DictConfig):
             for episode, advantage in zip(episodes, advantages):
                 episode.advantage = advantage
 
-                # Skip truncated episodes - don't add to replay buffer
-                # TODO: investigate setting loss_mask=0 instead of dropping
+                # Zero out loss_mask for truncated episodes so they don't contribute to gradient
+                # TODO: evaluate if we should drop truncated episodes instead
                 if episode.completion.stop_reason == "length":
+                    episode.loss_mask = torch.zeros_like(episode.loss_mask)
                     num_truncated += 1
-                    continue
 
                 await replay_buffer.add.call_one(episode)
 
