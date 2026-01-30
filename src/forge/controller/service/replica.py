@@ -133,11 +133,16 @@ class Replica:
     # Metrics tracking
     metrics: ReplicaMetrics = field(default_factory=ReplicaMetrics)
 
+    _base_mesh_name: str | None = field(default=None, init=False)
+    _mesh_name_initialized: bool = field(default=False, init=False)
+
     def __post_init__(self):
         # This semaphore is used to enforce max_concurrent_requests
         # Once it is acquired max_concurrent_requests times, future
         # requests are blocked until standing requests complete.
         self._capacity_semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+        # Store the original mesh name before any modifications
+        self._base_mesh_name = self.proc_config.mesh_name
 
     # Initialization related functionalities
 
@@ -158,11 +163,13 @@ class Replica:
             logger.debug(f"Launching actor for replica {self.idx}")
 
             # If a Mesh name was specified, incorporate this info.
-            if self.proc_config.mesh_name:
-                mesh_name_with_replica = f"{self.proc_config.mesh_name}_{self.idx}"
+            # Use the stored base name to avoid appending _idx multiple times during recovery
+            if self._base_mesh_name and not self._mesh_name_initialized:
+                mesh_name_with_replica = f"{self._base_mesh_name}_{self.idx}"
                 self.proc_config.mesh_name = mesh_name_with_replica
                 if hasattr(self.actor_def, "mesh_name"):
                     self.actor_def.mesh_name = mesh_name_with_replica
+                self._mesh_name_initialized = True
 
             self.actor = await self.actor_def.launch(
                 *self.actor_args,
