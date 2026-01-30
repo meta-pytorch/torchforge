@@ -34,11 +34,15 @@ def get_meshes_from_config(cfg: LauncherConfig) -> dict[str, int]:
     meshes: dict[str, int] = {}
 
     # Add services that need remote hosts
+    # Expand services with multiple replicas into per-replica meshes
     for service_name, service_cfg in cfg.services.items():
         hosts = getattr(service_cfg, "hosts", None)
         if hosts and hosts > 0:
-            mesh_name = service_cfg.mesh_name or service_name
-            meshes[mesh_name] = hosts
+            base_mesh_name = service_cfg.mesh_name or service_name
+            num_replicas = service_cfg.num_replicas
+            for replica_idx in range(num_replicas):
+                mesh_name = f"{base_mesh_name}_{replica_idx}"
+                meshes[mesh_name] = hosts
 
     # Add actors that need remote hosts
     for actor_name, actor_cfg in cfg.actors.items():
@@ -78,7 +82,7 @@ class Slurmlauncher(BaseLauncher):
         # Create a single SlurmJob with all meshes
         logger.info(f"Creating SlurmJob with meshes: {meshes}")
         job = SlurmJob(
-            meshes=meshes,  # e.g., {"generator": 1, "trainer": 2, "ref_model": 1}
+            meshes=meshes,  # e.g., {"generator_0": 1, "generator_1": 1, "trainer": 2}
             slurm_args=slurm_args,
             job_name=self.cfg.job_name + "_workers" or "forge_job",
             time_limit="72:00:00",  # Default to 72 hours
