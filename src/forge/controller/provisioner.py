@@ -95,6 +95,7 @@ class DeviceProxy:
             return None
 
         try:
+            # For Intel Level Zero we support ZE_FLAT_DEVICE_HIERARCHY=flat
             return set(int(x.strip()) for x in env_value.split(",") if x.strip())
         except ValueError as e:
             raise ValueError(
