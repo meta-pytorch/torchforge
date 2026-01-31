@@ -269,20 +269,12 @@ class Provisioner:
             # for local jobs, return the local host
             return this_host()
 
-        # Strip replica suffix (e.g., "generator_0" -> "generator")
-        # Services append _{replica_idx} to mesh names
-        base_name = name
-        if "_" in name:
-            parts = name.rsplit("_", 1)
-            if len(parts) == 2 and parts[1].isdigit():
-                base_name = parts[0]
-
         # _job_state contains all the HostMeshes that were allocated as attributes, accessible by their name
         try:
-            host_mesh = getattr(self._job_state, base_name)
+            host_mesh = getattr(self._job_state, name)
         except AttributeError as e:
             raise RuntimeError(
-                f"Mesh '{name}' (base: '{base_name}') was not pre-allocated. "
+                f"Mesh '{name}' was not pre-allocated. "
                 "Make sure the mesh is defined in the launcher config."
             ) from e
 
