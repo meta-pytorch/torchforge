@@ -2,7 +2,7 @@ name: Integration Tests (8 card)
 
 on:
   push:
-    branches: [ main, fix-ci-cuda-toolkit ]  # TODO: remove fix-ci-cuda-toolkit after testing
+    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
