@@ -158,7 +158,7 @@ class TestStopAfterOneEpochDistributed(FSDPTest):
 
             batch_iter = StopAfterOneEpoch(
                 iter=iter(dataloader),
-                device=torch.device("cuda"),
+                device=torch.accelerator.current_accelerator(),
                 dp_mesh=dp_mesh,
             )
 
