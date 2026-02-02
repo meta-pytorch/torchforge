@@ -33,13 +33,10 @@ jobs:
           python-version: '3.12'
       - name: Update pip
         run: python -m pip install --upgrade pip
-      - name: Install CUDA toolkit
-        run: |
-          # flashinfer (used by vLLM 0.13.0) requires nvcc for JIT compilation
-          sudo dnf install -y cuda-toolkit-12-8
-          echo "CUDA_HOME=/usr/local/cuda-12.8" >> $GITHUB_ENV
-          echo "/usr/local/cuda-12.8/bin" >> $GITHUB_PATH
       - name: Install torchforge
         run: pip install uv && uv pip install . && uv pip install .[dev]
       - name: Run weight sync integration test
+        env:
+          # Use FLASH_ATTN backend to avoid flashinfer JIT compilation which requires nvcc
+          VLLM_ATTENTION_BACKEND: FLASH_ATTN
         run: pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check --config tests/integration_tests/fixtures/qwen3_1_7b_tp.yaml
