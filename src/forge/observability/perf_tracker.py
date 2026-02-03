@@ -312,9 +312,7 @@ class _TimerGPU(_TimerProtocol):
 
         self._chain_start = end_event
 
-    def _poll_elapsed(
-        self, start_event: torch.Event, end_event: torch.Event
-    ) -> float:
+    def _poll_elapsed(self, start_event: torch.Event, end_event: torch.Event) -> float:
         """Compute elapsed time after polling with backoff."""
         # Poll until ready
         sleep_time = 0.001  # Start at 1ms
