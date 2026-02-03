@@ -49,21 +49,6 @@ install-pytorch = """
     uv pip install torch==2.9.0 --index-url https://download.pytorch.org/whl/cu128
 """
 
-# CRITICAL: Install vLLM dependencies BEFORE installing vLLM itself
-install-vllm-reqs = """
-    uv pip install -r .github/packaging/vllm_reqs_12_8.txt
-"""
-
-install-vllm-deps = """
-    uv pip install six && \
-    uv pip install "setuptools<80"
-"""
-
-# Install vLLM after all dependencies are resolved
-install-vllm = """
-    uv pip install vllm --no-cache-dir --index-url https://download.pytorch.org/whl/preview/forge
-"""
-
 install-torchstore = """
     uv pip install "git+https://github.com/meta-pytorch/torchstore.git@no-monarch-2025.12.17"
 """
@@ -73,7 +58,7 @@ install-forge = """
 """
 
 # Full installation task - follows exact sequence from install.sh
-install = { depends-on = ["install-pytorch", "install-vllm-reqs", "install-vllm-deps", "install-vllm", "install-torchstore", "install-forge"] }
+install = { depends-on = ["install-pytorch", "install-torchstore", "install-forge"] }
 
 # Test installation task
 test-install = """
