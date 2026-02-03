@@ -161,7 +161,7 @@ class TestTracingModes:
             tracer = Tracer("backend_test", timer=timer)
             tracer.start()
             if timer == "gpu" and torch.accelerator.is_available():
-                assert isinstance(tracer._timer, _TimerGPU), "Expected CUDA timer"
+                assert isinstance(tracer._timer, _TimerGPU), "Expected GPU timer"
             else:
                 value = METRIC_TIMER_USES_GPU.get_value()
                 assert isinstance(tracer._timer, _TimerCPU), "Expected CPU timer"
