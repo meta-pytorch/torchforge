@@ -386,7 +386,7 @@ def trace(
 
     Args:
         prefix (str): Prefix for metric names
-        track_memory (bool): Whether to track a memory usage. Defaults to False.
+        track_memory (bool): Whether to track memory usage. Defaults to False.
         timer (str): Timing backend; "cpu" (default) or "gpu" (requires accelerator support).
 
     Decorator Examples:
