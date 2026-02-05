@@ -312,6 +312,15 @@ async def main(cfg: DictConfig):
         training_step = 0
         restart_tracer = True  # Flag to control when to restart tracer
 
+        # Ping-pong version testing: alternate between two storage version IDs
+        # This reuses allocations instead of incrementing versions and deleting old ones
+        VERSION_A = 0
+        VERSION_B = 1
+
+        def get_storage_version(step: int) -> int:
+            """Map incrementing step to ping-pong storage version (0 or 1)."""
+            return VERSION_A if step % 2 == 1 else VERSION_B
+
         while (
             max_steps == -1 or training_step < max_steps
         ) and not shutdown_event.is_set():
@@ -334,15 +343,19 @@ async def main(cfg: DictConfig):
                 training_step += 1
                 t.step("train_step")
 
-                await trainer.push_weights.call(training_step)
+                # Use ping-pong storage version - torchstore puts overwrite in-place
+                # Pass training_step as generator_version for correct age-based eviction
+                storage_version = get_storage_version(training_step)
+                await trainer.push_weights.call(storage_version)
                 t.step("push_weights")
 
-                await generator.update_weights.fanout(training_step)
+                await generator.update_weights.fanout(
+                    storage_version, generator_version=training_step
+                )
                 t.step("update_weights")
 
-                if training_step >= 2:
-                    await drop_weights(training_step - 1)
-                    t.step("drop_weights")
+                # No drop_weights() - reuse the same two slots (0 and 1) forever
+                # Torchstore overwrites keys in-place, so no deletion needed
 
                 t.stop()
                 restart_tracer = True
