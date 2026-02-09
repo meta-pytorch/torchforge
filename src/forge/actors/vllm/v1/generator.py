@@ -463,10 +463,7 @@ class Generator(ForgeActor):
         and natively supports Monarch actor references for torchstore integration.
 
         Args:
-            version: Policy version to load from torchstore (storage key)
-            generator_version: Version to tag generated episodes with. If None,
-                defaults to `version`. Use this to decouple storage versioning
-                from episode tagging (e.g., for ping-pong storage schemes).
+            version: Policy version to load from torchstore
         """
         if self.llm is None:
             raise RuntimeError("Generator not initialized. Call setup() first.")
@@ -514,7 +511,7 @@ class Generator(ForgeActor):
                 load_duration,
                 Reduce.MEAN,
             )
-            self.generator_version = generator_version if generator_version is not None else version
+            self.generator_version = version
         finally:
             await self.llm.resume_generation()
         logger.info(f"Weight update complete, now v{version}")
