@@ -21,8 +21,7 @@ import logging
 import pytest
 import pytest_asyncio
 import torch
-
-from forge.rl import Policy
+from forge.actors.generator import Generator
 from huggingface_hub import snapshot_download
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
@@ -89,7 +88,7 @@ def tokenizer():
 async def policy(model_path):
     """Create and teardown policy service for each test."""
     logger.info("Setting up policy service...")
-    policy = await Policy.options(
+    policy = await Generator.options(
         procs=1,
         num_replicas=1,
         with_gpus=True,
@@ -157,8 +156,6 @@ async def test_tool_parsing_multi_turn(policy, tokenizer):
     logger.info(f"Final answer: {final.text}")
     assert "579" in final.text, "Expected 123 + 456 = 579"
 
-    logger.info("✅ test_tool_parsing_multi_turn passed!")
-
 
 @requires_cuda
 @pytest.mark.asyncio
@@ -195,5 +192,3 @@ async def test_content_without_tool_calls(policy, tokenizer):
     assert (
         completion.content == completion.text
     ), "Content should equal text when no tools"
-
-    logger.info("✅ test_content_without_tool_calls passed!")

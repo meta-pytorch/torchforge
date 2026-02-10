@@ -7,12 +7,9 @@
 """Unit tests for Generator's _to_completions and _extract_tool_calls logic."""
 
 import json
-from dataclasses import dataclass
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
 from vllm.outputs import CompletionOutput, RequestOutput
 
 
@@ -26,13 +23,6 @@ def _import_error():
         return True
 
 
-@dataclass
-class TokenizerWrapper:
-    """Wrapper to mimic vLLM's tokenizer structure (has .tokenizer attr)."""
-
-    tokenizer: Any
-
-
 class _StubTokenizer:
     """Minimal stub tokenizer for initializing the Hermes tool parser in tests.
 
@@ -40,6 +30,8 @@ class _StubTokenizer:
     - get_vocab(): Returns vocab dict mapping tokens to ids
     - vocab: Direct vocab attribute
     - eos_token_id: End of sequence token id
+    - encode(text, add_special_tokens=False): Encode text to token ids
+    - decode(token_ids): Decode token ids to text
     - <tool_call> and </tool_call> tokens in vocab (for streaming support)
     """
 
@@ -50,22 +42,32 @@ class _StubTokenizer:
             "<tool_call>": 1,
             "</tool_call>": 2,
         }
+        self._id_to_token = {v: k for k, v in self.vocab.items()}
         self.eos_token_id = 0
 
     def get_vocab(self) -> dict[str, int]:
         """Return vocabulary dict (required by Hermes tool parser)."""
         return self.vocab
 
+    def encode(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        """Encode text to token ids. Returns ids for known tokens, empty otherwise."""
+        if text in self.vocab:
+            return [self.vocab[text]]
+        return [ord(c) for c in text]
+
+    def decode(self, token_ids: list[int]) -> str:
+        """Decode token ids to text."""
+        return "".join(self._id_to_token.get(tid, chr(tid)) for tid in token_ids)
+
 
 @pytest.fixture(scope="module")
-def tokenizer_wrapper():
-    """Create a tokenizer wrapper with Hermes-compatible tokenizer (has tool_call tokens)."""
-
-    return TokenizerWrapper(_StubTokenizer())
+def stub_tokenizer():
+    """Create a stub tokenizer compatible with Hermes tool parser."""
+    return _StubTokenizer()
 
 
 @pytest.fixture
-def generator_with_hermes(tokenizer_wrapper):
+def generator_with_hermes(stub_tokenizer):
     """Create Generator with hermes parser properly initialized."""
     from forge.actors.generator import Generator
 
@@ -74,7 +76,7 @@ def generator_with_hermes(tokenizer_wrapper):
         sampling_params={"max_tokens": 64},
         tool_call_parser="hermes",
     )
-    generator._tool_parser = generator._init_tool_parser(tokenizer_wrapper)
+    generator._tool_parser = generator._init_tool_parser(stub_tokenizer)
     generator.generator_version = 1
 
     return generator
@@ -115,7 +117,7 @@ def make_mock_request_output(
 class TestInitToolParser:
     """Test the _init_tool_parser method of Generator."""
 
-    def test_init_hermes_parser(self, tokenizer_wrapper):
+    def test_init_hermes_parser(self, stub_tokenizer):
         """Test that passing tool_call_parser='hermes' initializes the parser."""
         from forge.actors.generator import Generator
 
@@ -125,7 +127,7 @@ class TestInitToolParser:
             tool_call_parser="hermes",
         )
 
-        parser = generator._init_tool_parser(tokenizer_wrapper)
+        parser = generator._init_tool_parser(stub_tokenizer)
 
         assert parser is not None
         assert hasattr(parser, "extract_tool_calls")
@@ -142,7 +144,7 @@ class TestInitToolParser:
 
         assert generator.tool_call_parser is None
 
-    def test_init_parser_invalid_parser_name(self, tokenizer_wrapper):
+    def test_init_parser_invalid_parser_name(self, stub_tokenizer):
         """Test that invalid parser name returns None."""
         from forge.actors.generator import Generator
 
@@ -152,7 +154,7 @@ class TestInitToolParser:
             tool_call_parser="nonexistent_parser",
         )
 
-        parser = generator._init_tool_parser(tokenizer_wrapper)
+        parser = generator._init_tool_parser(stub_tokenizer)
         assert parser is None
 
 
@@ -298,7 +300,7 @@ class TestToCompletions:
             outputs=[{"text": "The answer is 4.", "token_ids": [10, 20, 30]}],
         )
 
-        completions = generator._to_completions(request_output)
+        completions = generator._to_completions(request_output, request_output.prompt)
 
         assert len(completions) == 1
         completion = completions[0]
@@ -319,7 +321,7 @@ class TestToCompletions:
             ],
         )
 
-        completions = generator._to_completions(request_output)
+        completions = generator._to_completions(request_output, request_output.prompt)
 
         assert len(completions) == 1
         completion = completions[0]
@@ -345,7 +347,7 @@ class TestToCompletions:
             ],
         )
 
-        completions = generator._to_completions(request_output)
+        completions = generator._to_completions(request_output, request_output.prompt)
 
         assert len(completions) == 2
         # First completion has tool call
