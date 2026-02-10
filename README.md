@@ -63,6 +63,25 @@ The install script installs system dependencies along with torchforge. Note that
 
 Optional: By default, the packages installation uses conda. If you want to install system packages on the target machine instead of conda, you can pass the `--use-sudo` flag to the installation script: `./scripts/install.sh --use-sudo`.
 
+### XPU Installation
+
+XPU (Intel GPU) users can install with the dedicated script:
+
+```bash
+conda create -n forge python=3.12
+conda activate forge
+./scripts/install_xpu.sh
+```
+
+Notes:
+- Requires Intel oneAPI toolkit installed at `$ONEAPI_ROOT`, `/opt/intel/oneapi`, or loadable via `module load intel/oneapi`.
+- Python version must match `IPEX_PYTHON_VERSION` in `assets/versions.sh`.
+- The script installs PyTorch + IPEX via vLLM's XPU requirements, then locks their versions with pip constraints.
+- XPU builds install Monarch with `USE_TENSOR_ENGINE=0`, so RDMA and distributed tensor features are disabled for now.
+- Optional flag: `--use-sudo` (system packages via `apt`/`dnf` instead of conda).
+- Re-activate your conda environment after install to pick up the oneAPI activation hook.
+
+
 ### Pixi
 
 Pixi combines benefits of uv with access to conda forge for system dependencies. [pixi.toml](./pixi.toml) provides a manifest with build tasks with `install` as a the combined install all task.
