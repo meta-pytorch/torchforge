@@ -23,10 +23,16 @@ import pytest_asyncio
 import torch
 from forge.actors.generator import Generator
 from huggingface_hub import snapshot_download
-from vllm.transformers_utils.tokenizer import get_tokenizer
+from vllm.tokenizers import get_tokenizer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# All async tests and fixtures in this module share a single module-scoped event loop.
+# This is required because the `policy` fixture is scope="module" - without this,
+# each test would get its own function-scoped loop and hang when awaiting the
+# module-scoped fixture's objects.
+pytestmark = pytest.mark.asyncio(loop_scope="module")
 
 requires_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
@@ -84,9 +90,9 @@ def tokenizer():
     return get_tokenizer(MODEL_NAME)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def policy(model_path):
-    """Create and teardown policy service for each test."""
+    """Create and teardown policy service once for all tests in this module."""
     logger.info("Setting up policy service...")
     policy = await Generator.options(
         procs=1,
@@ -106,7 +112,6 @@ async def policy(model_path):
 
 
 @requires_cuda
-@pytest.mark.asyncio
 async def test_tool_parsing_multi_turn(policy, tokenizer):
     """
     Multi-turn conversation: tool call -> execute -> feed result back -> final answer.
@@ -158,7 +163,6 @@ async def test_tool_parsing_multi_turn(policy, tokenizer):
 
 
 @requires_cuda
-@pytest.mark.asyncio
 async def test_content_without_tool_calls(policy, tokenizer):
     """
     Test that content equals text when no tool calls are made.
