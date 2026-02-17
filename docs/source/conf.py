@@ -43,6 +43,7 @@ def get_version_path():
 version_path = get_version_path()
 
 project = "torchforge"
+html_title = "TorchForge"
 copyright = ""
 author = "PyTorch Contributors"
 release = "0.1"
@@ -111,9 +112,6 @@ html_theme_options = {
     "show_lf_header": False,
     "show_lf_footer": False,
     "analytics_id": "GTM-NPLPKN5G",
-    "logo": {
-        "text": "Home",
-    },
     "icon_links": [
         {
             "name": "X",
