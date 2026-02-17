@@ -135,6 +135,7 @@ html_theme_options = {
         },
     ],
     "use_edit_page_button": True,
+    "navbar_start": ["navbar-logo"],
     "navbar_center": "navbar-nav",
     "canonical_url": "https://meta-pytorch.org/torchforge/",
     "header_links_before_dropdown": 7,
