@@ -13,6 +13,7 @@ import torch.distributed as dist
 from forge.data.datasets import HfIterableDataset
 from forge.data.utils import extract_epoch_from_batch, StopAfterOneEpoch
 from forge.observability.metrics import Metric, Reduce
+from forge.types import TrainBatch
 from tests.test_utils import gpu_test
 from torch.testing._internal.common_fsdp import FSDPTest
 from torchdata.stateful_dataloader import StatefulDataLoader
@@ -25,23 +26,26 @@ def create_test_json_file(path: Path, num_samples: int) -> None:
             f.write(f'{{"id": {i}, "tokens": [{i}, {i + 1}]}}\n')
 
 
-def simple_collate(batch):
-    """Simple collate function that mimics collate_packed behavior.
+def simple_collate(batch) -> TrainBatch:
+    """Simple collate function that returns a TrainBatch.
 
-    Stacks tensors, extends metrics list, keeps other fields as lists.
+    Stacks tensors into model_inputs, keeps metrics in meta.
     """
-    collated = {}
+    model_inputs = {}
+    meta = {}
+
     for key in batch[0].keys():
         if isinstance(batch[0][key], torch.Tensor):
-            collated[key] = torch.stack([sample[key] for sample in batch], dim=0)
+            model_inputs[key] = torch.stack([sample[key] for sample in batch], dim=0)
         elif key == "metrics":
             # Extend all metrics into a single list
-            collated[key] = []
+            meta[key] = []
             for sample in batch:
-                collated[key].extend(sample[key])
+                meta[key].extend(sample[key])
         else:
-            collated[key] = [sample[key] for sample in batch]
-    return collated
+            meta[key] = [sample[key] for sample in batch]
+
+    return TrainBatch(model_inputs=model_inputs, loss_inputs={}, meta=meta)
 
 
 class TestExtractEpochFromBatch:
@@ -49,33 +53,46 @@ class TestExtractEpochFromBatch:
 
     def test_extract_epoch_from_batch_success(self):
         """Test extracting epoch from valid batch with metrics."""
-        batch = {
-            "tokens": torch.tensor([1, 2, 3]),
-            "metrics": [
-                Metric(key="dataset/test/num_epochs", value=2, reduction=Reduce.MAX),
-                Metric(
-                    key="dataset/test/other_metric", value=42, reduction=Reduce.MEAN
-                ),
-            ],
-        }
+        batch = TrainBatch(
+            model_inputs={"tokens": torch.tensor([1, 2, 3])},
+            loss_inputs={},
+            meta={
+                "metrics": [
+                    Metric(
+                        key="dataset/test/num_epochs", value=2, reduction=Reduce.MAX
+                    ),
+                    Metric(
+                        key="dataset/test/other_metric", value=42, reduction=Reduce.MEAN
+                    ),
+                ],
+            },
+        )
         epoch = extract_epoch_from_batch(batch)
         assert epoch == 2
 
     def test_extract_epoch_missing_metrics_field(self):
         """Test error when batch has no 'metrics' field."""
-        batch = {"tokens": torch.tensor([1, 2, 3])}
+        batch = TrainBatch(
+            model_inputs={"tokens": torch.tensor([1, 2, 3])},
+            loss_inputs={},
+            meta={},
+        )
         with pytest.raises(ValueError, match="Batch missing 'metrics' field"):
             extract_epoch_from_batch(batch)
 
     def test_extract_epoch_no_num_epochs_metric(self):
         """Test error when no num_epochs metric found."""
-        batch = {
-            "metrics": [
-                Metric(
-                    key="dataset/test/other_metric", value=42, reduction=Reduce.MEAN
-                ),
-            ]
-        }
+        batch = TrainBatch(
+            model_inputs={},
+            loss_inputs={},
+            meta={
+                "metrics": [
+                    Metric(
+                        key="dataset/test/other_metric", value=42, reduction=Reduce.MEAN
+                    ),
+                ],
+            },
+        )
         with pytest.raises(ValueError, match="No 'num_epochs' metric found"):
             extract_epoch_from_batch(batch)
 

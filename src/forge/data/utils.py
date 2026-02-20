@@ -4,12 +4,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import logging
 from enum import Enum
 from typing import Any, Iterator, Literal, Union
 
 import torch
 import torch.distributed as dist
+from forge.types import TrainBatch
 from torch.nn.attention.flex_attention import BlockMask
 
 logger = logging.getLogger(__name__)
@@ -256,7 +259,7 @@ class StopAfterOneEpoch:
     def __iter__(self):
         return self
 
-    def __next__(self) -> dict:
+    def __next__(self) -> TrainBatch:
         """Get next batch from current epoch.
 
         Returns:
@@ -302,14 +305,14 @@ class StopAfterOneEpoch:
         return current_batch
 
 
-def extract_epoch_from_batch(batch: dict) -> int:
+def extract_epoch_from_batch(batch: TrainBatch) -> int:
     """Extract epoch number from batch metrics. Useful to detect epoch changes during validation.
 
     Assumes batch contains field "metrics" with at least one Metric containing "num_epochs" in its key, as it is done in
     `forge.src.data.datasets.HfIterableDataset`.
 
     Args:
-        batch (dict): Batch dictionary with 'metrics' field
+        batch (TrainBatch): TrainBatch with 'metrics' field in meta
 
     Returns:
         int: Max epoch number from metrics
@@ -317,17 +320,19 @@ def extract_epoch_from_batch(batch: dict) -> int:
     Raises:
         ValueError: If metrics key is missing or no metric with 'num_epochs' found
     """
-    if "metrics" not in batch:
+    metrics = batch.meta.get("metrics")
+
+    if metrics is None:
         raise ValueError(
-            "Batch missing 'metrics' field. Cannot extract epoch from batch."
+            "Batch missing 'metrics' field in meta. Cannot extract epoch from batch."
         )
 
     # Match metrics where 'num_epochs' appears in the key (handles prefixed keys like 'dataset/name/num_epochs')
-    epochs = [metric.value for metric in batch["metrics"] if "num_epochs" in metric.key]
+    epochs = [metric.value for metric in metrics if "num_epochs" in metric.key]
     if epochs:
         return max(epochs)
 
     raise ValueError(
         f"No 'num_epochs' metric found in batch. Got metrics: "
-        f"{[m.key for m in batch['metrics']]}"
+        f"{[m.key for m in metrics]}"
     )

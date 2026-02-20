@@ -21,11 +21,12 @@ from typing import Any
 import torch
 import torchtitan.experiments.forge.train_spec as forge_train_spec
 from forge.controller import ForgeActor
-from forge.data.collate import collate_padded
+from forge.data.collate import collate_sft
 from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_dataset
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
+from forge.types import TrainBatch
 from forge.util.config import parse
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -206,15 +207,14 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         dataloader = StatefulDataLoader(
             dataset=dataset,
             batch_size=self.job_config.training.local_batch_size,
-            collate_fn=collate_padded,
+            collate_fn=collate_sft,
         )
 
         return dataloader
 
     def forward_backward(
         self,
-        input_dict: dict[str, torch.Tensor],
-        labels: torch.Tensor,
+        batch: TrainBatch,
         skip_backward: bool = False,
     ) -> torch.Tensor:
         model_parts = self.model_parts
@@ -222,7 +222,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
-        inputs = input_dict["tokens"]
+        inputs = batch.model_inputs["tokens"]
+        labels = batch.loss_inputs["labels"]
         optional_context_parallel_ctx = (
             dist_utils.create_context_parallel_ctx(
                 cp_mesh=parallel_dims.world_mesh["cp"],
@@ -274,7 +275,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         return loss
 
-    def train_step(self, batch) -> None:
+    def train_step(self, batch: TrainBatch) -> None:
         # TODO
         # with GradientAccumulation(
         #     self.gradient_accumulation_steps,
@@ -282,8 +283,7 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         #     self.data_parallel_size,
         # ) as grad_acc:
         parallel_dims = self.parallel_dims
-        labels = batch.pop("labels")
-        loss = self.forward_backward(batch, labels)
+        loss = self.forward_backward(batch)
 
         grad_norm = dist_utils.clip_grad_norm_(
             [p for m in self.model_parts for p in m.parameters()],
@@ -367,13 +367,15 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
                         break
 
                     # Move tensors to device
-                    for key, value in batch.items():
+                    for key, value in batch.model_inputs.items():
                         if isinstance(value, torch.Tensor):
-                            batch[key] = value.to(self.device)
+                            batch.model_inputs[key] = value.to(self.device)
+                    for key, value in batch.loss_inputs.items():
+                        if isinstance(value, torch.Tensor):
+                            batch.loss_inputs[key] = value.to(self.device)
 
                     # Process batch
-                    labels = batch.pop("labels")
-                    loss = self.forward_backward(batch, labels, skip_backward=True)
+                    loss = self.forward_backward(batch, skip_backward=True)
                     total_loss += loss
                     num_steps += 1
 
@@ -435,16 +437,19 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
         # self.pbar = tqdm(initial=self.current_step, total=self.num_training_steps)
 
         while self.current_step < self.num_training_steps:
-            batch = next(dataloader)
+            batch: TrainBatch = next(dataloader)
 
-            # Pop and record metrics from batch before moving to device
-            self.record_batch_metrics(batch.pop("metrics", []))
+            # Pop and record metrics from batch metadata
+            self.record_batch_metrics(batch.meta.pop("metrics", []))
             record_metric("ForgeSFTRecipe/train/step", self.current_step, Reduce.MEAN)
 
             # Move tensors to the appropriate device
-            for k, v in batch.items():
+            for k, v in batch.model_inputs.items():
                 if isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")  # TODO: hardcoded for now
+                    batch.model_inputs[k] = v.to("cuda")  # TODO: hardcoded for now
+            for k, v in batch.loss_inputs.items():
+                if isinstance(v, torch.Tensor):
+                    batch.loss_inputs[k] = v.to("cuda")
 
             self.train_step(batch)
             # self.profiler.step()
