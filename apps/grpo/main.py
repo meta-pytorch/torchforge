@@ -27,7 +27,6 @@ from forge.observability.perf_tracker import Tracer
 from forge.rl import collate, ComputeAdvantages, Episode, RewardActor
 from forge.rl.loss import DAPOLoss, GRPOLoss
 from forge.types import LauncherConfig, ProvisionerConfig
-from forge.util.checkpoint import drop_weights
 from forge.util.config import parse
 from forge.util.logging import get_logger
 from omegaconf import DictConfig, OmegaConf
@@ -334,10 +333,6 @@ async def main(cfg: DictConfig):
 
                 await generator.update_weights.fanout(training_step)
                 t.step("update_weights")
-
-                if training_step >= 2:
-                    await drop_weights(training_step - 1)
-                    t.step("drop_weights")
 
                 t.stop()
                 restart_tracer = True

@@ -327,9 +327,12 @@ class TitanTrainer(ForgeActor):
                 "Trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             )
         hf_state_dict = self.engine.checkpointer.sd_adapter.to_hf(flattened_state_dict)
-        for name, param in hf_state_dict.items():
-            key = get_param_key(policy_version, name)
-            await ts.put(key, param)
+
+        entries = [
+            (get_param_key(policy_version, name), param)
+            for name, param in hf_state_dict.items()
+        ]
+        await ts.put_batch(entries)
         end_time = time.perf_counter()
         logger.info("Completed weights push in %.2f seconds", end_time - start_time)
 
