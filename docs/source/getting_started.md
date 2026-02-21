@@ -11,7 +11,7 @@ Before installing TorchForge, ensure your system meets the following requirement
 | **Operating System** | Linux (Fedora/Ubuntu/Debian) | MacOS and Windows not currently supported |
 | **Python** | 3.10 or higher | Python 3.11 recommended |
 | **GPU** | NVIDIA with CUDA support | AMD GPUs not currently supported |
-| **Minimum GPUs** | 2+ for SFT, 3+ for GRPO | More GPUs enable larger models |
+| **Minimum GPUs** | 2+ for SFT; 2+ for GRPO | More GPUs enable training larger models; GRPO with KL (`beta > 0`) requires a reference model and increases the GPU requirement. |
 | **CUDA** | 12.8 | Required for GPU training |
 | **RAM** | 32GB+ recommended | Depends on model size |
 | **Disk Space** | 50GB+ free | For models, datasets, and checkpoints |
@@ -150,7 +150,7 @@ hf download meta-llama/Meta-Llama-3.1-8B-Instruct --local-dir /tmp/Meta-Llama-3.
 uv run forge run --nproc_per_node 2 \
   apps/sft/main.py --config apps/sft/llama3_8b.yaml
 
-# Run GRPO training (requires 3+ GPUs)
+# Run GRPO training (requires 2+ GPUs)
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
@@ -181,7 +181,7 @@ Fine-tune Llama 3 8B on your data. **Requires: 2+ GPUs**
 
 ### Example 2: GRPO Training
 
-Train a model using reinforcement learning with GRPO. **Requires: 3+ GPUs**
+Train a model using reinforcement learning with GRPO. **Requires: 2+ GPUs**
 
 ```bash
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
@@ -189,8 +189,7 @@ python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 
 **What's Happening:**
 - GPU 0: Trainer model (being trained, powered by TorchTitan)
-- GPU 1: Reference model (frozen baseline, powered by TorchTitan)
-- GPU 2: Policy model (scoring outputs, powered by vLLM)
+- GPU 1: Policy model (scoring outputs, powered by vLLM)
 - **Monarch** orchestrates all three components
 - **TorchStore** handles weight synchronization from training to inference
 
