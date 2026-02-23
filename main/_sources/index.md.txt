@@ -185,7 +185,7 @@ Before starting significant work, signal your intention in the issue tracker to 
   [Monarch](https://meta-pytorch.org/monarch), [vLLM](https://docs.vllm.ai/en/latest/),
   and [TorchTitan](https://github.com/pytorch/torchtitan).
 * **Multi-GPU Support**: Designed for distributed training
-  with minimum 3 GPU requirement for GRPO training
+  with minimum 2 GPU requirement for GRPO training
 * **Model Support**: Includes pre-configured setups for popular models
   like Llama3 8B and Qwen3.1 7B
 
