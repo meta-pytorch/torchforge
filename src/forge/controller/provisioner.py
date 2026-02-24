@@ -31,6 +31,79 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+class DeviceProxy:
+    """A hardware-agnostic proxy using torch.accelerator.
+
+    Handles device counting and environment variable mapping for isolation.
+    """
+
+    # Mapping of PyTorch backend names to driver isolation variables
+    _VISIBLE_DEVICES_ENV_MAP: dict[str, str] = {
+        "cuda": "CUDA_VISIBLE_DEVICES",
+        "xpu": "ZE_AFFINITY_MASK",  # Intel Level Zero
+    }
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if any accelerator is available."""
+        return torch.accelerator.is_available()
+
+    @staticmethod
+    def get_device_count() -> int:
+        """Returns the number of available accelerator devices."""
+        if not DeviceProxy.is_available():
+            return 0
+        return torch.accelerator.device_count()
+
+    @classmethod
+    def get_visible_devices_env_var(cls) -> str | None:
+        """Returns the environment variable name used to mask devices.
+
+        Returns None if no accelerator is available or the backend is not supported.
+        """
+        if not cls.is_available():
+            return None
+        accelerator = torch.accelerator.current_accelerator()
+        if accelerator is None:
+            return None
+        return cls._VISIBLE_DEVICES_ENV_MAP.get(accelerator.type)
+
+    @classmethod
+    def get_isolation_env_vars(cls, device_ids: list[str]) -> dict[str, str]:
+        """Returns environment variables needed to isolate specific device IDs.
+
+        Returns an empty dict if no isolation env var is available for this backend.
+        """
+        env_var_name = cls.get_visible_devices_env_var()
+        if env_var_name is None:
+            return {}
+        return {env_var_name: ",".join(device_ids)}
+
+    @classmethod
+    def get_visible_devices_from_env(cls) -> set[int] | None:
+        """Parses visible devices from the appropriate environment variable.
+
+        Returns None if the variable is not set.
+        Raises ValueError if the format is invalid.
+        """
+        env_var = cls.get_visible_devices_env_var()
+        if env_var is None:
+            return None
+
+        env_value = os.environ.get(env_var, None)
+        if env_value is None or not env_value.strip():
+            return None
+
+        try:
+            # For Intel Level Zero we support ZE_FLAT_DEVICE_HIERARCHY=flat
+            return set(int(x.strip()) for x in env_value.split(",") if x.strip())
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid {env_var} format: '{env_value}'. "
+                f"Expected comma-separated integers (e.g., '0,1,2'). Error: {e}"
+            ) from e
+
+
 def _get_port() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("localhost", 0))
@@ -49,13 +122,8 @@ class _RemoteInfoFetcher(Actor):
 
     @endpoint
     def get_gpu_count(self) -> int:
-        """Returns the number of GPUs available on this host."""
-        try:
-            gpu_count = torch.cuda.device_count()
-        except Exception:
-            # If torch is not available or CUDA is not available, assume no GPUs
-            gpu_count = 0
-        return gpu_count
+        """Returns the number of accelerator devices available on this host."""
+        return DeviceProxy.get_device_count()
 
 
 class EnvSetter(Actor):
@@ -209,33 +277,15 @@ class Provisioner:
         # remove this once this is supported in Monarch.
         self._this_host_id = uuid.uuid1()
 
-        # For the local host, we may want to set CUDA_VISIBLE_DEVICES
+        # For the local host, we may want to set device visibility
         # for small scale testing. We inherit the environment's
-        # CUDA_VISIBLE_DEVICES **only for the local host** and not
-        # for remote hosts.
-        available_local_devices = None
-        cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", None)
-        if cuda_visible_devices is not None and cuda_visible_devices.strip():
-            try:
-                available_local_devices = set(
-                    int(x.strip()) for x in cuda_visible_devices.split(",") if x.strip()
-                )
-            except ValueError as e:
-                raise ValueError(
-                    f"Invalid CUDA_VISIBLE_DEVICES format: '{cuda_visible_devices}'. "
-                    f"Expected comma-separated integers (e.g., '0,1,2'). Error: {e}"
-                ) from e
-
-        # Get the actual GPU count for the local host
-        try:
-            local_gpu_count = torch.cuda.device_count()
-        except Exception:
-            # If torch is not available or CUDA is not available, assume no GPUs
-            local_gpu_count = 0
+        # device visibility setting **only for the local host**.
+        available_local_devices = DeviceProxy.get_visible_devices_from_env()
+        local_device_count = DeviceProxy.get_device_count()
 
         self._host_gpu_map = {
             self._this_host_id: GpuManager(
-                available_local_devices, max_device_count=local_gpu_count
+                available_local_devices, max_device_count=local_device_count
             ),
         }
         self._proc_host_map = {}
@@ -298,7 +348,7 @@ class Provisioner:
             mesh_name: Name of the pre-allocated mesh to use.
                 Must match a mesh name defined in the launcher config.
             with_gpus: Whether to include GPU allocations.
-                This only adds the CUDA_VISIBLE_DEVICES environment variable.
+                This only adds the hardware isolation environment variable.
             num_hosts: The number of hosts to allocate.
                 If this is set, a remote allocation is created.
                 If this is None, it uses the local host.
@@ -356,7 +406,9 @@ class Provisioner:
                 # Set the PTD world size
                 world_size = num_procs * (num_hosts or 1)
                 env_vars["WORLD_SIZE"] = str(world_size)
-                env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_ids)
+
+                # Set device isolation using the appropriate environment variable
+                env_vars.update(DeviceProxy.get_isolation_env_vars(gpu_ids))
 
                 # Inherit Forge-relevant environment variables from the system
                 for env_var in all_env_vars():

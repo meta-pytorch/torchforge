@@ -79,7 +79,7 @@ pixi run install
 
 > **Note:** We are actively working on enabling pure `uv` installation. Currently, Conda is the recommended approach. `uv` support is not fully working at the moment but is being tracked in [issue #494](https://github.com/meta-pytorch/torchforge/issues/494).
 
-After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 3 GPU devices):
+After install, you can run the following command and should see output confirming GRPO training is running (you need a minimum 2 GPU devices):
 
 ```
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml

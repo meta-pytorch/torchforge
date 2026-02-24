@@ -444,7 +444,8 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
             # Move tensors to the appropriate device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")  # TODO: hardcoded for now
+                    # self.device is set up in ForgeEngine
+                    batch[k] = v.to(self.device)
 
             self.train_step(batch)
             # self.profiler.step()
