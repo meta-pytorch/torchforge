@@ -124,37 +124,36 @@ class LauncherConfig:
         if isinstance(self.launcher, str):
             self.launcher = Launcher(self.launcher)
 
+    def get_meshes(self) -> dict[str, int]:
+        """Extract mesh requirements from launcher config.
 
-def get_meshes(self) -> dict[str, int]:
-    """Extract mesh requirements from launcher config.
+        Args:
+            cfg: The launcher configuration
 
-    Args:
-        cfg: The launcher configuration
+        Returns:
+            Dictionary mapping mesh names to number of hosts required
+        """
+        meshes: dict[str, int] = {}
 
-    Returns:
-        Dictionary mapping mesh names to number of hosts required
-    """
-    meshes: dict[str, int] = {}
+        # Add services that need remote hosts
+        # Expand services with multiple replicas into per-replica meshes
+        for service_name, service_cfg in cfg.services.items():
+            hosts = getattr(service_cfg, "hosts", None)
+            if hosts and hosts > 0:
+                base_mesh_name = service_cfg.mesh_name or service_name
+                num_replicas = service_cfg.num_replicas
+                for replica_idx in range(num_replicas):
+                    mesh_name = f"{base_mesh_name}_{replica_idx}"
+                    meshes[mesh_name] = hosts
 
-    # Add services that need remote hosts
-    # Expand services with multiple replicas into per-replica meshes
-    for service_name, service_cfg in cfg.services.items():
-        hosts = getattr(service_cfg, "hosts", None)
-        if hosts and hosts > 0:
-            base_mesh_name = service_cfg.mesh_name or service_name
-            num_replicas = service_cfg.num_replicas
-            for replica_idx in range(num_replicas):
-                mesh_name = f"{base_mesh_name}_{replica_idx}"
+        # Add actors that need remote hosts
+        for actor_name, actor_cfg in cfg.actors.items():
+            hosts = getattr(actor_cfg, "hosts", None)
+            if hosts and hosts > 0:
+                mesh_name = actor_cfg.mesh_name or actor_name
                 meshes[mesh_name] = hosts
 
-    # Add actors that need remote hosts
-    for actor_name, actor_cfg in cfg.actors.items():
-        hosts = getattr(actor_cfg, "hosts", None)
-        if hosts and hosts > 0:
-            mesh_name = actor_cfg.mesh_name or actor_name
-            meshes[mesh_name] = hosts
-
-    return meshes
+        return meshes
 
 
 @dataclass
