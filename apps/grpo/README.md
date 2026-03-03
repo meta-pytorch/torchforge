@@ -40,12 +40,12 @@ Since each can covers 2 square meters, we need to divide the total wall area by 
 
 ## Quick Start
 
-**Llama 3.1 8B** (recommended for learning, requires 5 GPUs as is, not optimized):
+**Llama 3.1 8B** (recommended for learning, requires 4 GPUs as is, not optimized):
 ```bash
 python -m apps.grpo.main --config apps/grpo/llama3_8b.yaml
 ```
 
-**Qwen3 1.7B** (NOTE: Qwen3 is already saturated on GSM8K, so rewards will **not** increase. Requires 3 GPUs, not optimized):
+**Qwen3 1.7B** (NOTE: Qwen3 is already saturated on GSM8K, so rewards will **not** increase. Requires 2 GPUs, not optimized):
 ```bash
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```

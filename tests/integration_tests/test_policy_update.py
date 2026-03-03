@@ -210,9 +210,9 @@ class TestWeightSync:
 
         The check performs the following steps:
         - Initialize trainer and push weights v0 (original huggingface ckpt)
-        - Step the trainer, setting all weights to zero and push weights v1
-        - Load weights v0 and check the generator has all zero weights
-        - Load weights v1 and check the generator has all the weights back
+        - Set all the weights of the model on the trainer to zero and push weights as v1
+        - Load weights v1 and check the generator has all zero weights
+        - Load weights v0 and check the generator has all the original weights back
 
         """
 

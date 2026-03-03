@@ -67,7 +67,7 @@ activation_checkpoint:
 metric_logging:
   wandb:
     project: sft-training
-    group: sft_exp_${oc.env:USER}
+    group: sft_exp_${oc.env:USER,default_user}
     logging_mode: global_reduce # global_reduce, per_rank_reduce, per_rank_no_reduce
 
 # profiling:

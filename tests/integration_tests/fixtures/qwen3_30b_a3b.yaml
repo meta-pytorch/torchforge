@@ -1,13 +1,15 @@
-# trainer tp = 2, policy tp = 4
+# pytest -s tests/integration_tests/test_policy_update.py::TestWeightSync::test_sanity_check --config tests/integration_tests/fixtures/qwen3_30b_a3b.yaml
 
-# Global confOiguration
+# trainer tp = 1, generator tp = 4
+
+# Global configuration
 group_size: 8
-batch_size: 16
-max_req_tokens: 512
-max_res_tokens: 512
-model: "Qwen/Qwen3-1.7B"
+batch_size: 2
+max_req_tokens: 256
+max_res_tokens: 256
+model: "Qwen/Qwen3-30B-A3B"
 off_by_n: 1 # Off by one by default
-compile: true # Enable torch.compile for trainer, and CUDA graphs for vLLM
+compile: false # Enable torch.compile for trainer, and CUDA graphs for vLLM
 
 
 # Generator configuration
@@ -17,9 +19,6 @@ generator:
     tensor_parallel_size: 4
     pipeline_parallel_size: 1
     enforce_eager: ${not:${compile}}
-    # Reduce memory usage for vLLM 0.13.0 warmup on T4 GPUs
-    max_num_seqs: 128
-    gpu_memory_utilization: 0.85
   sampling_params:
     n: ${group_size}
     max_tokens: ${max_res_tokens}
@@ -30,7 +29,7 @@ generator:
 trainer:
   model:
     name: qwen3
-    flavor: 1.7B
+    flavor: 30B-A3B
     hf_assets_path: hf://${model}
   optimizer:
     name: AdamW
@@ -49,11 +48,12 @@ trainer:
     enable: ${compile}
   parallelism:
     data_parallel_replicate_degree: 1
-    data_parallel_shard_degree: 1
-    tensor_parallel_degree: 2
+    data_parallel_shard_degree: -1
+    tensor_parallel_degree: 1
     pipeline_parallel_degree: 1
     context_parallel_degree: 1
     expert_parallel_degree: 1
+    expert_tensor_parallel_degree: 1
     disable_loss_parallel: true
   checkpoint:
     enable: true
@@ -75,6 +75,6 @@ services:
 
 actors:
   trainer:
-    procs: 2
+    procs: 4
     num_replicas: 1
     with_gpus: true

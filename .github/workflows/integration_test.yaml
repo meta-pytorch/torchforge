@@ -33,6 +33,14 @@ jobs:
           python-version: '3.12'
       - name: Update pip
         run: python -m pip install --upgrade pip
+      - name: Install CUDA toolkit
+        run: |
+          # flashinfer (used by vLLM 0.13.0) requires nvcc for JIT compilation
+          # Add NVIDIA CUDA repository for Amazon Linux / RHEL
+          sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+          sudo dnf install -y cuda-toolkit-12-8
+          echo "CUDA_HOME=/usr/local/cuda-12.8" >> $GITHUB_ENV
+          echo "/usr/local/cuda-12.8/bin" >> $GITHUB_PATH
       - name: Install torchforge
         run: pip install uv && uv pip install . && uv pip install .[dev]
       - name: Run weight sync integration test
