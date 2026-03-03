@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Tests for Provisioner CUDA_VISIBLE_DEVICES functionality."""
+"""Tests for Provisioner device visibility env var functionality."""
 
 import os
 from unittest import mock
@@ -13,8 +13,28 @@ import pytest
 from forge.controller.provisioner import GpuManager, Provisioner
 
 
-class TestGpuManagerCudaVisibleDevices:
-    """Test GpuManager with different CUDA_VISIBLE_DEVICES configurations."""
+def mock_patch_visible_devices_var(value: str, *, clear: bool = True):
+    return mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": value}, clear=clear)
+
+
+@pytest.fixture(autouse=True)
+def mock_accelerator_available():
+    """Auto-mock torch.accelerator for all tests in this module."""
+    mock_accelerator = mock.MagicMock()
+    mock_accelerator.type = "cuda"
+
+    with (
+        mock.patch("torch.accelerator.is_available", return_value=True),
+        mock.patch("torch.accelerator.device_count", return_value=8),
+        mock.patch(
+            "torch.accelerator.current_accelerator", return_value=mock_accelerator
+        ),
+    ):
+        yield
+
+
+class TestGpuManagerVisibleDevices:
+    """Test GpuManager with different configurations."""
 
     def test_gpu_manager_default_initialization(self):
         """Test GpuManager initializes with default 8 GPUs when no specific devices provided."""
@@ -83,13 +103,12 @@ class TestGpuManagerCudaVisibleDevices:
         assert remaining[0] == allocated[0]
 
 
-class TestProvisionerCudaVisibleDevices:
-    """Test Provisioner's handling of CUDA_VISIBLE_DEVICES environment variable."""
+class TestProvisionerVisibleDevices:
+    """Test Provisioner's handling of device visibility env var."""
 
     @mock.patch.dict(os.environ, {}, clear=True)
-    @mock.patch("torch.cuda.device_count", return_value=8)
-    def test_provisioner_no_cuda_visible_devices(self, mock_device_count):
-        """Test Provisioner when CUDA_VISIBLE_DEVICES is not set."""
+    def test_provisioner_no_visible_devices_var(self):
+        """Test Provisioner when device visibility env var is not set."""
         provisioner = Provisioner()
 
         # Should have default GpuManager for local host
@@ -97,9 +116,9 @@ class TestProvisionerCudaVisibleDevices:
         available = local_gpu_manager.get_available_gpus()
         assert available == [str(i) for i in range(8)]
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,1,2,3"}, clear=True)
-    def test_provisioner_with_cuda_visible_devices(self):
-        """Test Provisioner with CUDA_VISIBLE_DEVICES set."""
+    @mock_patch_visible_devices_var("0,1,2,3", clear=True)
+    def test_provisioner_with_visible_devices_var(self):
+        """Test Provisioner with device visibility env var set."""
         provisioner = Provisioner()
 
         # Should have GpuManager configured with specified devices
@@ -109,7 +128,7 @@ class TestProvisionerCudaVisibleDevices:
         assert sorted(available) == sorted(expected)
         assert len(available) == 4
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,2,5,7"}, clear=True)
+    @mock_patch_visible_devices_var("0,2,5,7", clear=True)
     def test_provisioner_non_contiguous_gpus(self):
         """Test Provisioner with non-contiguous GPU IDs."""
         provisioner = Provisioner()
@@ -120,9 +139,9 @@ class TestProvisionerCudaVisibleDevices:
         assert sorted(available) == sorted(expected)
         assert len(available) == 4
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "3,1,4,1"}, clear=True)
+    @mock_patch_visible_devices_var("3,1,4,1", clear=True)
     def test_provisioner_duplicate_gpu_ids(self):
-        """Test Provisioner handles duplicate GPU IDs in CUDA_VISIBLE_DEVICES."""
+        """Test Provisioner handles duplicate GPU IDs in device visibility env var."""
         provisioner = Provisioner()
 
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
@@ -132,10 +151,9 @@ class TestProvisionerCudaVisibleDevices:
         assert sorted(available) == sorted(expected)
         assert len(available) == 3
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": ""}, clear=True)
-    @mock.patch("torch.cuda.device_count", return_value=8)
-    def test_provisioner_empty_cuda_visible_devices(self, mock_device_count):
-        """Test Provisioner with empty CUDA_VISIBLE_DEVICES."""
+    @mock_patch_visible_devices_var("", clear=True)
+    def test_provisioner_empty_visible_devices_var(self):
+        """Test Provisioner with empty device visibility env var."""
         provisioner = Provisioner()
 
         # Empty string should result in default behavior (no devices specified)
@@ -143,10 +161,10 @@ class TestProvisionerCudaVisibleDevices:
         available = local_gpu_manager.get_available_gpus()
         assert available == [str(i) for i in range(8)]
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,1,2"}, clear=False)
+    @mock_patch_visible_devices_var("0,1,2", clear=False)
     @pytest.mark.asyncio
-    async def test_get_proc_mesh_respects_cuda_visible_devices(self):
-        """Test that get_proc_mesh uses CUDA_VISIBLE_DEVICES for local allocation."""
+    async def test_get_proc_mesh_respects_visible_devices_var(self):
+        """Test that get_proc_mesh uses device visibility env var for local allocation."""
         provisioner = Provisioner()
 
         # Verify initial state
@@ -170,14 +188,14 @@ class TestProvisionerCudaVisibleDevices:
 
 
 class TestProvisionerEnvironmentIsolation:
-    """Test that CUDA_VISIBLE_DEVICES only affects local host, not remote hosts."""
+    """Test that device visibility env var only affects local host, not remote hosts."""
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,1"}, clear=True)
-    def test_remote_host_ignores_cuda_visible_devices(self):
+    @mock_patch_visible_devices_var("0,1", clear=True)
+    def test_remote_host_ignores_visible_devices_var(self):
         """Test that remote hosts get default GPU configuration."""
         provisioner = Provisioner()
 
-        # Local host should respect CUDA_VISIBLE_DEVICES
+        # Local host should respect device visibility env var
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
         local_available = local_gpu_manager.get_available_gpus()
         assert sorted(local_available) == ["0", "1"]
@@ -192,11 +210,11 @@ class TestProvisionerEnvironmentIsolation:
 
 
 class TestIntegrationScenarios:
-    """Integration test scenarios for CUDA_VISIBLE_DEVICES functionality."""
+    """Integration test scenarios for device visibility env var functionality."""
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "1,3"}, clear=True)
+    @mock_patch_visible_devices_var("1,3", clear=True)
     def test_full_allocation_cycle(self):
-        """Test complete allocation and release cycle with CUDA_VISIBLE_DEVICES."""
+        """Test complete allocation and release cycle with device visibility env var."""
         provisioner = Provisioner()
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
 
@@ -224,7 +242,7 @@ class TestIntegrationScenarios:
         final_available = local_gpu_manager.get_available_gpus()
         assert sorted(final_available) == ["1", "3"]
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0"}, clear=True)
+    @mock_patch_visible_devices_var("0", clear=True)
     def test_single_gpu_scenario(self):
         """Test scenario with only one GPU available."""
         provisioner = Provisioner()
@@ -248,12 +266,12 @@ class TestIntegrationScenarios:
 
 
 class TestDynamicGpuDetection:
-    """Test dynamic GPU detection using torch.cuda.device_count()."""
+    """Test dynamic GPU detection using torch.accelerator.device_count()."""
 
     @mock.patch.dict(os.environ, {}, clear=True)
-    @mock.patch("torch.cuda.device_count", return_value=4)
+    @mock.patch("torch.accelerator.device_count", return_value=4)  # Override fixture
     def test_provisioner_with_4_gpus(self, mock_device_count):
-        """Test Provisioner detects 4 GPUs when torch.cuda.device_count() returns 4."""
+        """Test Provisioner detects 4 GPUs when torch.accelerator.device_count() returns 4."""
         provisioner = Provisioner()
 
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
@@ -262,26 +280,28 @@ class TestDynamicGpuDetection:
         assert len(available) == 4
         assert local_gpu_manager.max_device_count == 4
 
-    @mock.patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "0,2,4"}, clear=True)
-    @mock.patch("torch.cuda.device_count", return_value=8)
-    def test_cuda_visible_devices_with_detected_gpus(self, mock_device_count):
-        """Test that CUDA_VISIBLE_DEVICES works correctly with detected GPU count."""
+    @mock_patch_visible_devices_var("0,2,4", clear=True)
+    def test_visible_devices_var_with_detected_gpus(self):
+        """Test that device visibility env var works correctly with detected GPU count."""
         provisioner = Provisioner()
 
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
         available = local_gpu_manager.get_available_gpus()
-        # Should use CUDA_VISIBLE_DEVICES, not all 8 detected GPUs
+        # Should use device visibility env var, not all 8 detected GPUs
         assert sorted(available) == ["0", "2", "4"]
         assert len(available) == 3
         # max_device_count should still be 8 from detection
         assert local_gpu_manager.max_device_count == 8
 
     @mock.patch.dict(os.environ, {}, clear=True)
+    @mock.patch("torch.accelerator.device_count", return_value=0)  # Override fixture
     @mock.patch(
-        "torch.cuda.device_count", side_effect=RuntimeError("CUDA not available")
-    )
-    def test_provisioner_when_cuda_unavailable(self, mock_device_count):
-        """Test Provisioner defaults to 0 GPUs when CUDA is not available."""
+        "torch.accelerator.is_available", return_value=False
+    )  # Override fixture
+    def test_provisioner_when_accelerator_unavailable(
+        self, mock_available, mock_device_count
+    ):
+        """Test Provisioner defaults to 0 GPUs when no accelerator is available."""
         provisioner = Provisioner()
 
         local_gpu_manager = provisioner._host_gpu_map[provisioner._this_host_id]
