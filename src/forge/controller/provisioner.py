@@ -246,7 +246,7 @@ class GpuManager:
         """Returns a list of available GPU devices."""
         return [str(gpu) for gpu in self.available_gpus]
 
-    def get_gpus(self, num_gpus: int, mesh_name: str) -> list[str]:
+    def get_gpus(self, num_gpus: int, mesh_name: str = "anonymous") -> list[str]:
         """Assigns GPU devices."""
         if num_gpus > len(self.available_gpus):
             raise RuntimeError(
