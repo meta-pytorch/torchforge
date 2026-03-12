@@ -242,6 +242,21 @@ class Generator(ForgeActor):
             "forge.actors.vllm.v1.forge_executor.ForgeMonarchExecutor"
         )
 
+        # Disable vLLM's async scheduling for our custom executor backend.
+        # vLLM's __post_init__ is called twice: once at VllmConfig construction
+        # and again after EngineCore handshake (_perform_handshakes). In vLLM
+        # >= 0.14, async_scheduling defaults to None (auto-detect), which the
+        # first __post_init__ auto-enables to True since executor is still "mp".
+        # After we override the executor backend above, the second __post_init__
+        # sees async_scheduling=True with an unrecognized backend and raises
+        # ValueError. Setting False explicitly is safe for all vLLM versions:
+        # in <= 0.13 it was already the default, and our MonarchExecutor does
+        # not use vLLM's async scheduling mechanism.
+        if hasattr(self.vllm_config, "scheduler_config") and hasattr(
+            self.vllm_config.scheduler_config, "async_scheduling"
+        ):
+            self.vllm_config.scheduler_config.async_scheduling = False
+
         # Set up prefetching configuration via additional_config
         # There does not seem to be  a real difference between pass by env var or via self.vllm_config
         if self.prefetch_weights_to_shm:

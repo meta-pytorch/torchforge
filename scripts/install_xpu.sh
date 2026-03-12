@@ -39,12 +39,16 @@ if [ -z "${TORCHSTORE_BRANCH:-}" ]; then
     log_error "TORCHSTORE_BRANCH not set in $VERSIONS_FILE"
     exit 1
 fi
-if [ -z "${TORCHTITAN_XPU_COMMIT:-}" ]; then
-    log_error "TORCHTITAN_XPU_COMMIT not set in $VERSIONS_FILE"
+if [ -z "${TORCHTITAN_VERSION:-}" ]; then
+    log_error "TORCHTITAN_VERSION not set in $VERSIONS_FILE"
     exit 1
 fi
 if [ -z "${MONARCH_VERSION:-}" ]; then
     log_error "MONARCH_VERSION not set in $VERSIONS_FILE"
+    exit 1
+fi
+if [ -z "${PYTORCH_XPU_VERSION:-}" ]; then
+    log_error "PYTORCH_XPU_VERSION not set in $VERSIONS_FILE"
     exit 1
 fi
 
@@ -64,17 +68,17 @@ check_conda_env() {
 }
 
 check_python_version() {
-    local required="$IPEX_PYTHON_VERSION"
+    local required="$XPU_PYTHON_VERSION"
     local actual
     actual=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 
     if [ "$actual" != "$required" ]; then
-        log_error "Python ${actual} detected, but vLLM for XPU requires Python ${required}"
+        log_error "Python ${actual} detected, but vllm-xpu-kernels requires Python ${required}"
         log_info "Recreate your conda env with the correct version:"
         log_info "  conda create -n forge python=${required} -y"
         exit 1
     fi
-    log_info "Python version ${actual} matches IPEX requirement"
+    log_info "Python version ${actual} matches XPU requirement"
 }
 
 # Check required command
@@ -260,16 +264,13 @@ ensure_rust() {
 create_constraints_file() {
     local torch_version
     torch_version=$(python -c "import torch; print(torch.__version__)")
-    local ipex_version
-    ipex_version=$(python -c "import intel_extension_for_pytorch; print(intel_extension_for_pytorch.__version__)")
 
     local constraints_file="${FORGE_DEPS_DIR}/constraints.txt"
     cat > "$constraints_file" <<EOF
 torch==${torch_version}
-intel-extension-for-pytorch==${ipex_version}
 EOF
     export PIP_CONSTRAINT="$constraints_file"
-    log_info "Pip constraints locked: torch==${torch_version}, IPEX==${ipex_version}"
+    log_info "Pip constraints locked: torch==${torch_version}"
 }
 
 install_vllm_xpu() {
@@ -278,14 +279,42 @@ install_vllm_xpu() {
     log_info "Installing vLLM ${VLLM_XPU_VERSION} from source (XPU)"
     ensure_repo "https://github.com/vllm-project/vllm.git" "$vllm_dir" "$VLLM_XPU_VERSION"
 
-    # Installs PyTorch + IPEX + all XPU deps
+    # Let vLLM's xpu requirements drive the PyTorch + triton-xpu install.
     python -m pip install -r "${vllm_dir}/requirements/xpu.txt"
 
-    # Lock torch + IPEX so later installs can't clobber them
+    # triton-xpu (required by torch 2.10+xpu) and vanilla triton (required by
+    # xgrammar) both install into the same `triton/` namespace directory.
+    # In PyTorch <=2.9 the XPU package was called pytorch-triton-xpu and used a
+    # separate namespace, so the two coexisted.  After the rename to triton-xpu
+    # pip installs both, and vanilla triton's libtriton.so overwrites the XPU
+    # one — stripping the 'intel' backend symbol.
+    #
+    # Fix: force-reinstall triton-xpu so its libtriton.so (with 'intel') wins.
+    # We keep vanilla triton installed so xgrammar's pip dependency stays
+    # satisfied (triton-xpu does not declare Provides: triton).
+    local triton_xpu_version
+    triton_xpu_version=$(python -c "import importlib.metadata; print(importlib.metadata.version('triton-xpu'))")
+    log_info "Fixing triton namespace conflict: reinstalling triton-xpu ${triton_xpu_version}"
+    python -m pip install "triton-xpu==${triton_xpu_version}" --force-reinstall --no-deps \
+        --extra-index-url https://download.pytorch.org/whl/xpu
+
+    # Lock torch so later installs can't clobber it
     create_constraints_file
 
     VLLM_TARGET_DEVICE=xpu \
         python -m pip install -e "$vllm_dir" --no-build-isolation
+}
+
+verify_pytorch_xpu() {
+    local actual_version
+    actual_version=$(python -c "import torch; print(torch.__version__.split('+')[0])")
+
+    if [ "$actual_version" != "${PYTORCH_XPU_VERSION}" ]; then
+        log_error "Expected PyTorch ${PYTORCH_XPU_VERSION} but got ${actual_version}"
+        log_info "vLLM's requirements may have installed an incompatible version"
+        exit 1
+    fi
+    log_info "PyTorch ${actual_version}+xpu verified"
 }
 
 install_torchstore() {
@@ -294,8 +323,8 @@ install_torchstore() {
 }
 
 install_torchtitan() {
-    log_info "Installing torchtitan from tag ${TORCHTITAN_XPU_COMMIT}"
-    python -m pip install "git+https://github.com/pytorch/torchtitan.git@${TORCHTITAN_XPU_COMMIT}"
+    log_info "Installing torchtitan from tag ${TORCHTITAN_VERSION}"
+    python -m pip install "git+https://github.com/pytorch/torchtitan.git@${TORCHTITAN_VERSION}"
 }
 
 install_monarch() {
@@ -471,8 +500,9 @@ main() {
     install_system_packages "$USE_SUDO"
     setup_xpu_env
 
-    # vLLM install PyTorch + IPEX + creates constraints
+    # vLLM installs PyTorch + triton-xpu, fixes triton conflict, creates constraints
     install_vllm_xpu
+    verify_pytorch_xpu
 
     # Everything below is protected by PIP_CONSTRAINT
     install_torchstore

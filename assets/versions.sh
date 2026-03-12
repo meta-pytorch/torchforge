@@ -11,11 +11,12 @@
 PYTORCH_VERSION="2.9.0"
 # ROCm/XPU builds vLLM from source (no prebuilt ROCm/XPU wheels available)
 VLLM_ROCM_VERSION="v0.10.0"
-VLLM_XPU_VERSION="v0.13.0"
-# IPEX wheels shipped with vLLM has hard python version requirement
-IPEX_PYTHON_VERSION="3.12"
+VLLM_XPU_VERSION="v0.17.0"
+# PyTorch XPU version (vLLM v0.16+ dropped IPEX in favour of native XPU support)
+PYTORCH_XPU_VERSION="2.10.0"
+# vllm-xpu-kernels wheels only ship for Python 3.12
+XPU_PYTHON_VERSION="3.12"
 TORCHSTORE_BRANCH="no-monarch-2026.01.05"
 # ROCm/XPU builds these from source (no ROCm/XPU wheels); CUDA uses pyproject pins.
 TORCHTITAN_VERSION="v0.2.0"
-TORCHTITAN_XPU_COMMIT="e61f2cce4fd9c54d314ff0a2dabe035b80a5d49c"
 MONARCH_VERSION="v0.2.0"

@@ -75,9 +75,8 @@ conda activate forge
 
 Notes:
 - Requires Intel oneAPI toolkit installed at `$ONEAPI_ROOT`, `/opt/intel/oneapi`, or loadable via `module load intel/oneapi`.
-- Python version must match `IPEX_PYTHON_VERSION` in `assets/versions.sh`.
-- The script installs PyTorch + IPEX via vLLM's XPU requirements, then locks their versions with pip constraints.
-- XPU builds install Monarch with `USE_TENSOR_ENGINE=0`, so RDMA and distributed tensor features are disabled for now.
+- Python version must match `XPU_PYTHON_VERSION` in `assets/versions.sh`.
+- XPU build installs Monarch with `USE_TENSOR_ENGINE=0`, so RDMA and distributed tensor features are disabled for now.
 - Optional flag: `--use-sudo` (system packages via `apt`/`dnf` instead of conda).
 - Re-activate your conda environment after install to pick up the oneAPI activation hook.
 
