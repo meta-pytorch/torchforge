@@ -173,6 +173,27 @@ class ForgeActor(Actor):
         service_interface = ServiceInterface(service, cls)
         # Register this service with the provisioner so it can cleanly shut this down
         await register_service(service_interface)
+
+        # DNS-AID registration (best-effort, after service is fully initialized)
+        service_interface._dns_aid_cfg = cfg.dns_aid
+        if cfg.dns_aid is not None:
+            from forge.controller.dns_aid import is_dns_aid_enabled, publish_service
+
+            if is_dns_aid_enabled(cfg.dns_aid):
+                if cfg.dns_aid.port is None:
+                    logger.warning(
+                        "DNS-AID: dns_aid.port is not set, skipping registration. "
+                        "Set DnsAidConfig(port=...) to the externally reachable port."
+                    )
+                else:
+                    import socket as _socket
+
+                    _hostname = _socket.gethostname()
+                    _dns_name = cfg.dns_aid.name or cls.__name__.lower()
+                    await publish_service(
+                        _dns_name, _hostname, cfg.dns_aid.port, cfg.dns_aid
+                    )
+
         return service_interface
 
     @endpoint
