@@ -270,7 +270,6 @@ graph TD
 ### Service Call to Actor Execution
 
 ```mermaid
-:align: center
 graph TD
     subgraph CallFlow["Complete Call Flow"]
         UserCall["await policy_service
