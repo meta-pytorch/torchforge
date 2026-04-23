@@ -1,3 +1,5 @@
+> ⚠️ **Development paused:** Development in Forge has paused. LLM training at PyTorch is being consolidated in [torchtitan](https://github.com/pytorch/torchtitan).
+
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> torchforge
 
 #### A PyTorch-native agentic RL library that lets you focus on algorithms—not infra.
@@ -12,8 +14,6 @@ Key features:
 - Usability for rapid research (isolating the RL loop from infrastructure)
 - Hackability for power users (all parts of the RL loop can be easily modified without interacting with infrastructure)
 - Scalability (ability to shift between async and synchronous training and across thousands of GPUs)
-
-> ⚠️ **Development paused:** Development in Forge has paused. LLM training at PyTorch is being consolidated in [torchtitan](https://github.com/pytorch/torchtitan).
 
 ## 📖 Documentation
 
