@@ -9,8 +9,10 @@
 from __future__ import annotations
 
 import base64
+import inspect
 import logging
 import os
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import cloudpickle
@@ -211,11 +213,24 @@ class WorkerWrapper(WorkerWrapperBase, Actor):
     stores).
     """
 
+    # Detect whether WorkerWrapperBase accepts vllm_config (vLLM <= 0.13)
+    # or only rpc_rank/global_rank (vLLM >= 0.14).
+    _wrapper_accepts_vllm_config: bool = (
+        "vllm_config" in inspect.signature(WorkerWrapperBase.__init__).parameters
+    )
+
     def __init__(self, vllm_config):
         rank = context().actor_instance.rank.rank
         # rpc_rank: rank within this executor (0 to num_workers-1)
         # global_rank: rank in distributed group (same as rpc_rank for single executor)
-        WorkerWrapperBase.__init__(self, vllm_config, rpc_rank=rank, global_rank=rank)
+        if self._wrapper_accepts_vllm_config:
+            # vLLM <= 0.13: vllm_config passed at wrapper init time
+            WorkerWrapperBase.__init__(
+                self, vllm_config, rpc_rank=rank, global_rank=rank
+            )
+        else:
+            # vLLM >= 0.14: vllm_config flows through init_worker(all_kwargs)
+            WorkerWrapperBase.__init__(self, rpc_rank=rank, global_rank=rank)
         Actor.__init__(self)
 
     def init_worker(self, all_kwargs):
@@ -234,9 +249,15 @@ class WorkerWrapper(WorkerWrapperBase, Actor):
         super().init_worker(all_kwargs)
 
     @endpoint
-    def execute_method(self, method: str, *args, **kwargs):
-        # For simplicity, we only support string method names for now
-        fn = getattr(self, method)
+    def execute_method(self, method, *args, **kwargs):
+        # Support both string method names and bytes (cloudpickle'd callables,
+        # used by vLLM >= 0.17 for lambda-based collective_rpc calls).
+        if isinstance(method, bytes):
+            fn = partial(cloudpickle.loads(method), self)
+        elif isinstance(method, str):
+            fn = getattr(self, method)
+        else:
+            fn = partial(method, self)
         return fn(*args, **kwargs)
 
     @endpoint

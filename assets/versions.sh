@@ -9,9 +9,14 @@
 
 # Stable versions of upstream libraries for OSS repo
 PYTORCH_VERSION="2.9.0"
-# ROCm builds vLLM from source (no prebuilt ROCm wheels available)
+# ROCm/XPU builds vLLM from source (no prebuilt ROCm/XPU wheels available)
 VLLM_ROCM_VERSION="v0.10.0"
+VLLM_XPU_VERSION="v0.17.0"
+# PyTorch XPU version (vLLM v0.16+ dropped IPEX in favour of native XPU support)
+PYTORCH_XPU_VERSION="2.10.0"
+# vllm-xpu-kernels wheels only ship for Python 3.12
+XPU_PYTHON_VERSION="3.12"
 TORCHSTORE_BRANCH="no-monarch-2026.01.05"
-# ROCm install builds these from source (no ROCm wheels); CUDA uses pyproject pins.
+# ROCm/XPU builds these from source (no ROCm/XPU wheels); CUDA uses pyproject pins.
 TORCHTITAN_VERSION="v0.2.0"
 MONARCH_VERSION="v0.2.0"
