@@ -94,11 +94,11 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
     @endpoint
     async def setup(self):
         # Validate that compile is only used with flex attention
-        if self.job_config.training.compile:
+        if self.job_config.compile.enable:
             raise ValueError(
-                "training.compile=True is not currently supported. "
+                "compile.enable=True is not currently supported. "
                 "Compile is only supported with flex attention enabled, which requires PyTorch nightly. "
-                "Please set training.compile=false in your config."
+                "Please set compile.enable=false in your config."
             )
 
         # all ranks should record loss, except when PP=True. Then, only the last stage should record loss.
