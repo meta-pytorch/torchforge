@@ -538,6 +538,16 @@ class Provisioner:
         logger.info(
             f"Shutting down {len(self._registered_services)} service(s) and {len(self._registered_actors)} actor(s)..."
         )
+        # --- DNS-AID deregistration (best-effort, before service shutdown) ---
+        from forge.controller.dns_aid import is_dns_aid_enabled, unpublish_service
+
+        for service in self._registered_services:
+            dns_cfg = service._dns_aid_cfg
+            if dns_cfg is not None and is_dns_aid_enabled(dns_cfg):
+                dns_name = dns_cfg.name or service.actor_def.__name__.lower()
+                # unpublish_service is already best-effort (never raises)
+                await unpublish_service(dns_name, dns_cfg)
+
         # --- ServiceInterface ---
         for service in reversed(self._registered_services):
             try:

@@ -61,6 +61,34 @@ class ProcessConfig:
 
 
 @dataclass
+class DnsAidConfig:
+    """Configuration for DNS-AID service discovery.
+
+    Args:
+        enabled: Whether DNS-AID registration is enabled for this service.
+        name: Override DNS service name. Defaults to the actor class name (lowercased).
+        domain: DNS domain for registration.
+        protocol: DNS-AID protocol identifier.
+        port: Port to advertise in the DNS record. This should be the port that
+            external systems use to reach this service (e.g. a load balancer or
+            gateway port). Required when enabled is True — Monarch services
+            communicate via actor RPC, so there is no auto-detected listener port.
+        ttl: Time-to-live in seconds for DNS records. Dead workers expire after this.
+        capabilities: Additional capabilities to advertise.
+        category: Service category for discovery filtering.
+    """
+
+    enabled: bool = False
+    name: str | None = None
+    domain: str = "forge.internal"
+    protocol: str = "mcp"
+    port: int | None = None
+    ttl: int = 30
+    capabilities: list[str] = field(default_factory=list)
+    category: str = "rl-training"
+
+
+@dataclass
 class ServiceConfig:
     """The configuration for a Forge service.
 
@@ -84,6 +112,7 @@ class ServiceConfig:
     replica_max_concurrent_requests: int = 10
     return_first_rank_result: bool = True
     mesh_name: str | None = None
+    dns_aid: DnsAidConfig | None = None
 
     def to_process_config(self) -> ProcessConfig:
         """Extract ProcessConfig from this ServiceConfig.

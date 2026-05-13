@@ -48,6 +48,7 @@ dev = [
     "pytest-asyncio",
     "multiprocess",
 ]
+dns-aid = ["dns-aid>=0.12.0"]
 docs = [
     "sphinx==7.2.6",
     "pytorch-sphinx-theme2==0.1.0",

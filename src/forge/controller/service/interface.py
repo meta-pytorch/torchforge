@@ -177,6 +177,9 @@ class ServiceInterface:
     def __init__(self, _service, actor_def):
         self._service = _service
         self.actor_def = actor_def
+        self._dns_aid_cfg = (
+            None  # Set by ForgeActor.as_service() if DNS-AID is configured
+        )
 
         # Dynamically create ServiceEndpoint objects for user's actor endpoints
         # Inspect the actor_def directly to find endpoints

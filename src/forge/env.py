@@ -106,6 +106,13 @@ TORCHSTORE_USE_RDMA = EnvVar(
 )
 
 
+DNS_AID_ENABLED = EnvVar(
+    name="DNS_AID_ENABLED",
+    default=False,
+    description="Enable DNS-AID service discovery for forge services.",
+)
+
+
 def all_env_vars() -> list[EnvVar]:
     """Retrieves all registered environment variable names."""
     env_vars = []
