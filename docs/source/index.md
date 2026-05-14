@@ -140,6 +140,15 @@ Installation, prerequisites, verification, and your first training run.
 **Time to first run: ~15 minutes**
 :::
 
+:::{grid-item-card} 🧠 Core Concepts
+:link: concepts
+:link-type: doc
+
+Architecture, Monarch integration, Services, TorchStore, and how everything works together.
+
+**For understanding the system**
+:::
+
 :::{grid-item-card} 💻 Tutorials
 :link: tutorials
 :link-type: doc
@@ -194,6 +203,7 @@ Before starting significant work, signal your intention in the issue tracker to 
 :caption: Documentation
 
 getting_started
+concepts
 tutorials
 api
 ```
