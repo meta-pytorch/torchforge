@@ -4,54 +4,20 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Launcher specific logic (i.e. SLURM, k8s when supported, etc.)"""
+"""Slurm Launcher"""
+
 
 import atexit
 import logging
 
-from forge.controller.base import BaseLauncher
-from forge.types import Launcher, LauncherConfig
+from .base import BaseLauncher
+from forge.types import LauncherConfig
 from monarch.actor import ProcMesh
+
 from monarch.job import JobState, JobTrait, SlurmJob
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-JOB_NAME_KEY = "job_name"
-LAUNCHER_KEY = "launcher"
-
-
-def get_meshes_from_config(cfg: LauncherConfig) -> dict[str, int]:
-    """Extract mesh requirements from launcher config.
-
-    Args:
-        cfg: The launcher configuration
-
-    Returns:
-        Dictionary mapping mesh names to number of hosts required
-    """
-    meshes: dict[str, int] = {}
-
-    # Add services that need remote hosts
-    # Expand services with multiple replicas into per-replica meshes
-    for service_name, service_cfg in cfg.services.items():
-        hosts = getattr(service_cfg, "hosts", None)
-        if hosts and hosts > 0:
-            base_mesh_name = service_cfg.mesh_name or service_name
-            num_replicas = service_cfg.num_replicas
-            for replica_idx in range(num_replicas):
-                mesh_name = f"{base_mesh_name}_{replica_idx}"
-                meshes[mesh_name] = hosts
-
-    # Add actors that need remote hosts
-    for actor_name, actor_cfg in cfg.actors.items():
-        hosts = getattr(actor_cfg, "hosts", None)
-        if hosts and hosts > 0:
-            mesh_name = actor_cfg.mesh_name or actor_name
-            meshes[mesh_name] = hosts
-
-    return meshes
 
 
 class Slurmlauncher(BaseLauncher):
@@ -70,7 +36,7 @@ class Slurmlauncher(BaseLauncher):
             A tuple of (job, job_state) containing the SlurmJob handle and its state.
         """
         # Collect all mesh requirements from config
-        meshes = get_meshes_from_config(self.cfg)
+        meshes = self.cfg.get_meshes()
 
         # If no remote resources needed, skip job creation
         if not meshes:
@@ -108,20 +74,3 @@ class Slurmlauncher(BaseLauncher):
 
     async def remote_setup(self, procs: ProcMesh) -> None:
         return
-
-
-def get_launcher(cfg: LauncherConfig | None = None) -> BaseLauncher | None:
-    if not cfg:
-        return None
-    if cfg.launcher == Launcher.SLURM:
-        return Slurmlauncher(cfg)
-    elif cfg.launcher == Launcher.MAST:
-        try:
-            from forge.fb.mast_launcher import MastLauncher
-
-            return MastLauncher(cfg)
-        except ImportError as err:
-            raise ValueError("MAST is not available, cannot launch MAST jobs.") from err
-
-    else:
-        raise ValueError(f"Unsupported config provided, got {cfg}")

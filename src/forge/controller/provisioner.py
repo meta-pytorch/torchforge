@@ -13,7 +13,7 @@ import socket
 import uuid
 
 import torch
-from forge.controller.launcher import BaseLauncher, get_launcher
+from forge.controller.launchers import BaseLauncher, get_launcher
 from forge.env import all_env_vars, FORGE_DISABLE_METRICS
 from forge.types import ProcessConfig, ProvisionerConfig
 from monarch._src.actor.actor_mesh import ActorMesh
@@ -246,10 +246,13 @@ class GpuManager:
         """Returns a list of available GPU devices."""
         return [str(gpu) for gpu in self.available_gpus]
 
-    def get_gpus(self, num_gpus: int) -> list[str]:
+    def get_gpus(self, num_gpus: int, mesh_name: str = "anonymous") -> list[str]:
         """Assigns GPU devices."""
         if num_gpus > len(self.available_gpus):
-            raise RuntimeError("Not enough GPUs available")
+            raise RuntimeError(
+                f"Not enough GPUs available: {mesh_name=} request_num={num_gpus}, "
+                f"available_num={len(self.available_gpus)} {self.available_gpus=}"
+            )
         gpus = list(self.available_gpus)[:num_gpus]
         self.available_gpus -= set(gpus)
         return [str(gpu) for gpu in gpus]
@@ -330,6 +333,21 @@ class Provisioner:
 
         return host_mesh
 
+    async def add_host_mesh(self, host_mesh: HostMesh, mesh_name: str) -> None:
+        if host_mesh is None:
+            raise RuntimeError("Cannot add host_mesh that is None, ")
+
+        if hasattr(host_mesh, "_host_id") and host_mesh._host_id in self._host_gpu_map:
+            logger.debug(f"add_host_mesh: duplicate host_mesh {host_mesh._host_id=}")
+            return
+
+        host_id = uuid.uuid1()
+        # Get the GPU count from the remote host
+        remote_gpu_count = await get_host_gpus(host_mesh)
+        gpu_manager = GpuManager(max_device_count=remote_gpu_count)
+        self._host_gpu_map[host_id] = gpu_manager
+        host_mesh._host_id = host_id
+
     async def get_proc_mesh(
         self,
         num_procs: int,
@@ -372,33 +390,35 @@ class Provisioner:
         if env_vars is None:
             env_vars = {}
 
-        is_remote = num_hosts is not None and num_hosts > 0
-
+        is_remote = (
+            num_hosts is not None and num_hosts > 0 and self.launcher is not None
+        )
+        host_mesh_extent = host_mesh.extent if host_mesh else None
         async with self._lock:
             if is_remote:
                 if host_mesh is None:
                     host_mesh = await self.get_host_mesh(
                         name=mesh_name,
                     )
-                    host_id = uuid.uuid1()
-                    # Get the GPU count from the remote host
-                    remote_gpu_count = await get_host_gpus(host_mesh)
-                    gpu_manager = GpuManager(max_device_count=remote_gpu_count)
-                    self._host_gpu_map[host_id] = gpu_manager
-                    host_mesh._host_id = host_id
-                else:
-                    host_id = host_mesh._host_id
-                    gpu_manager = self._host_gpu_map[host_id]
+
+                assert (
+                    host_mesh
+                ), f"{mesh_name=}: host_mesh cannot be None at this point."
+                await self.add_host_mesh(host_mesh, mesh_name)
+
+                host_id = host_mesh._host_id
+                gpu_manager = self._host_gpu_map[host_id]
             else:
                 # fallback to local
                 host_mesh = this_host()
                 gpu_manager = self._host_gpu_map[self._this_host_id]
                 host_mesh._host_id = self._this_host_id
 
+            per_host_spec = {"procs": num_procs}
             if with_gpus:
                 if not addr or not port:
                     addr, port = await get_remote_info(host_mesh)
-                gpu_ids = gpu_manager.get_gpus(num_procs)
+                gpu_ids = gpu_manager.get_gpus(num_procs, mesh_name)
 
                 env_vars["MASTER_ADDR"] = addr
                 env_vars["MASTER_PORT"] = port
@@ -414,9 +434,11 @@ class Provisioner:
                 for env_var in all_env_vars():
                     env_vars[env_var.name] = str(env_var.get_value())
 
+                per_host_spec = {"gpus": len(gpu_ids)}
+
             # Spawn procs without bootstrap to avoid SetupActor mesh failures
             procs = host_mesh.spawn_procs(
-                per_host={"procs": num_procs},
+                per_host=per_host_spec,
                 name=mesh_name,
             )
 
