@@ -25,7 +25,7 @@ from monarch.actor import (
     shutdown_context,
     this_host,
 )
-from monarch.utils import setup_env_for_distributed
+from monarch.spmd import setup_torch_elastic_env_async as setup_env_for_distributed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
