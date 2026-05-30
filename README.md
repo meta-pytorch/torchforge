@@ -80,14 +80,6 @@ After install, you can run the following command and should see output confirmin
 python -m apps.grpo.main --config apps/grpo/qwen3_1_7b.yaml
 ```
 
-## Quick Start
-
-To run SFT on a Llama3 8B model, run
-
-```bash
-python -m apps.sft.main --config apps/sft/llama3_8b.yaml
-```
-
 ### Citation
 
 ## License
