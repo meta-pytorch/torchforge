@@ -4,11 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
 from forge.data_models.prompt import Prompt
+from vllm.entrypoints.openai.protocol import ToolCall
 
 
 @dataclass
@@ -38,3 +39,14 @@ class Completion:
 
     # extra information that might be useful for debugging
     metadata: dict[str, Any] | None = None
+
+    tool_calls: list[ToolCall] = field(default_factory=list)
+
+    # When tool parsing is enabled, this contains content outside of tool tags
+    # i.e. content before the tool calls
+    content: str | None = None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        """Returns True if the completion contains tool calls."""
+        return len(self.tool_calls) > 0

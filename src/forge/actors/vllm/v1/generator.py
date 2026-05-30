@@ -38,8 +38,15 @@ from monarch.actor import endpoint, ProcMesh, this_host
 from torchstore.api import _controller as get_torchstore_controller
 from vllm.engine.arg_utils import EngineArgs
 from vllm.entrypoints.llm import UsageContext
+from vllm.entrypoints.openai.protocol import (
+    ChatCompletionRequest,
+    ExtractedToolCallInformation,
+    ToolCall,
+)
 from vllm.outputs import RequestOutput
 from vllm.sampling_params import RequestOutputKind, SamplingParams
+from vllm.tokenizers import cached_tokenizer_from_config
+from vllm.tool_parsers import ToolParserManager
 from vllm.v1.engine.async_llm import AsyncLLM
 
 logger = logging.getLogger(__name__)
@@ -78,6 +85,7 @@ class Generator(ForgeActor):
     sampling_params: SamplingParams | Mapping = field(default_factory=SamplingParams)
     prefetch_weights_to_shm: bool = True
     n_fetcher_procs: int = 8
+    tool_call_parser: str | None = None
 
     def __post_init__(self):
         super().__init__()
@@ -90,6 +98,8 @@ class Generator(ForgeActor):
         if isinstance(self.engine_args, Mapping):
             self.engine_args = EngineArgs(**self.engine_args)
         self.vllm_config = self.engine_args.create_engine_config(UsageContext.LLM_CLASS)
+
+        self._tool_parser = None  # Will hold ToolParser instance if configured
 
         if isinstance(self.sampling_params, Mapping):
             self.sampling_params = SamplingParams.from_optional(**self.sampling_params)
@@ -273,8 +283,41 @@ class Generator(ForgeActor):
             )
         logger.info(f"Retrieved workers from registry: {self.workers}")
 
+        if self.tool_call_parser is not None:
+            self._tool_parser = self._init_tool_parser()
+
         if self.prefetch_weights_to_shm:
             self._spawn_fetchers()
+
+    def _init_tool_parser(self, tokenizer=None):  # type: ignore[no-untyped-def]
+        """Initialize the tool parser based on configuration.
+
+        Args:
+            tokenizer: Optional tokenizer (with encode/decode methods). If not provided,
+                one is created from vllm_config. Passing explicitly is useful for testing.
+
+        Returns:
+            Initialized ToolParser instance, or None if tool parsing is not configured.
+        """
+        try:
+            if tokenizer is None:
+                tokenizer = cached_tokenizer_from_config(
+                    model_config=self.vllm_config.model_config,
+                )
+            parser_cls = ToolParserManager.get_tool_parser(self.tool_call_parser)  # type: ignore[union-attr]
+            parser = parser_cls(tokenizer)
+            logger.info(f"Initialized tool parser: {self.tool_call_parser}")
+            return parser
+        except KeyError:
+            available = list(ToolParserManager.tool_parsers.keys())
+            logger.error(
+                f"Unknown tool parser: '{self.tool_call_parser}'. "
+                f"Available parsers: {available}"
+            )
+            return None
+        except Exception as e:
+            logger.error(f"Failed to initialize tool parser: {e}")
+            return None
 
     def _spawn_fetchers(self):
         """Spawn weight fetchers that prefetch weights from torchstore to shared memory.
@@ -545,6 +588,38 @@ class Generator(ForgeActor):
             )
         return None
 
+    def _extract_tool_calls(self, model_output: str) -> ExtractedToolCallInformation:
+        """Extract tool calls from model output using the configured tool parser.
+
+        Args:
+            model_output: Raw text output from the model.
+
+        Returns:
+            ExtractedToolCallInformation with parsed tool calls and remaining content.
+        """
+        if self._tool_parser is None:
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
+
+        try:
+            dummy_request = ChatCompletionRequest(
+                model=self.vllm_config.model_config.model,
+                messages=[{"role": "user", "content": ""}],
+                seed=42,  # to calm the linter
+            )
+
+            extracted = self._tool_parser.extract_tool_calls(
+                model_output, dummy_request
+            )
+
+            return extracted
+        except Exception as e:
+            logger.warning(f"Failed to parse tool calls: {e}")
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
+
     def _to_completions(
         self, request_output: RequestOutput, prompt: str
     ) -> list[Completion]:
@@ -560,6 +635,14 @@ class Generator(ForgeActor):
         completions = []
 
         for output in request_output.outputs:
+            tool_calls: list[ToolCall] = []
+            content: str | None = None
+
+            if self._tool_parser is not None:
+                extracted = self._extract_tool_calls(output.text)
+                tool_calls = extracted.tool_calls
+                content = extracted.content
+
             completion = Completion(
                 prompt=to_prompt(prompt),
                 text=output.text,
@@ -575,6 +658,8 @@ class Generator(ForgeActor):
                 stop_reason=output.finish_reason,
                 generator_version=self.generator_version,
                 metadata={"num_cached_tokens": request_output.num_cached_tokens},
+                tool_calls=tool_calls,
+                content=content,
             )
             completions.append(completion)
 
