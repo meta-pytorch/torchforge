@@ -162,10 +162,27 @@ class ReplayBuffer(ForgeActor):
         evicted_count = buffer_len_before_evict - len(self.buffer)
         record_metric("buffer/evict/sum_episodes_evicted", evicted_count, Reduce.SUM)
 
-        logger.debug(
-            f"maximum policy age: {self.max_policy_age}, current policy version: {curr_policy_version}, "
-            f"{evicted_count} episodes expired, {len(self.buffer)} episodes left"
-        )
+        # Enhanced debug logging to detect hang conditions
+        if evicted_count > 0 or len(self.buffer) == 0:
+            policy_versions_in_buffer = [ep.data.policy_version for ep in self.buffer]
+            logger.debug(
+                f"[BUFFER EVICTION] max_policy_age: {self.max_policy_age}, "
+                f"curr_policy_version: {curr_policy_version}, "
+                f"evicted: {evicted_count}, remaining: {len(self.buffer)}, "
+                f"versions_in_buffer: {set(policy_versions_in_buffer) if policy_versions_in_buffer else 'EMPTY'}"
+            )
+
+            # Log buffer status at debug level (starvation warnings are in main loop)
+            if len(self.buffer) == 0:
+                logger.debug(
+                    f"[BUFFER] Buffer empty after eviction. "
+                    f"curr_policy_version={curr_policy_version}, max_policy_age={self.max_policy_age}"
+                )
+            elif len(self.buffer) < self.batch_size * self.dp_size:
+                logger.debug(
+                    f"[BUFFER] Buffer low: {len(self.buffer)} episodes, "
+                    f"need {self.batch_size * self.dp_size} for sampling."
+                )
 
     def _collect(self, indices: list[int]):
         """Efficiently traverse deque and collect elements at each requested index"""
@@ -220,3 +237,38 @@ class ReplayBuffer(ForgeActor):
     async def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.buffer = state_dict["buffer"]
         random.setstate(state_dict["rng_state"])
+
+    @endpoint
+    async def health_check(self, curr_policy_version: int) -> dict[str, Any]:
+        """Check buffer health without modifying state.
+
+        Returns a dict with:
+            - size: current buffer size
+            - required: episodes needed for one batch
+            - healthy: True if buffer has enough fresh episodes
+            - versions: set of policy versions in buffer
+            - freshness_ratio: ratio of on-policy episodes to total
+
+        This is useful for implementing backpressure - training can check
+        buffer health before triggering weight updates that block rollouts.
+        """
+        required = self.dp_size * self.batch_size
+
+        # Count episodes that would survive eviction
+        surviving_count = 0
+        versions_in_buffer = []
+        for entry in self.buffer:
+            age = curr_policy_version - entry.data.policy_version
+            if self.max_policy_age is None or age <= self.max_policy_age:
+                if self.max_resample_count is None or entry.sample_count <= self.max_resample_count:
+                    surviving_count += 1
+                    versions_in_buffer.append(entry.data.policy_version)
+
+        return {
+            "size": len(self.buffer),
+            "surviving_after_eviction": surviving_count,
+            "required": required,
+            "healthy": surviving_count >= required * 2,  # 2x margin for safety
+            "versions": set(versions_in_buffer) if versions_in_buffer else set(),
+            "freshness_ratio": surviving_count / len(self.buffer) if self.buffer else 0.0,
+        }

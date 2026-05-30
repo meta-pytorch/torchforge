@@ -1,0 +1,223 @@
+# Grouped Relative Policy Optimization (GRPO) for Julia Code Generation
+# Using GenericEnvClient (no environment-specific packages required)
+# >>> python -m apps.openenv.main --config apps/openenv/llama3_8b_julia.yaml
+
+# Global configuration
+group_size: 8
+batch_size: 2
+max_req_tokens: 1024
+max_res_tokens: 1024
+model: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+off_by_n: 1
+compile: true # Enable torch.compile for trainer/ref_model, and CUDA graphs for vLLM
+
+# GRPO/DAPO loss configuration - using DAPO (recommended, no ref_model KL needed)
+grpo:
+  loss_type: dapo             # Options: "grpo" or "dapo" (default: dapo)
+  # Common parameters
+  agg_type: token_mean        # Aggregation: "fixed_horizon" (GRPO) or "token_mean" (DAPO)
+  # DAPO-specific parameters
+  clip_low: 0.2               # Lower clip bound (ratio clamped to min 1 - clip_low = 0.8)
+  clip_high: 0.28             # Upper clip bound (ratio clamped to max 1 + clip_high = 1.28)
+  dual_clip_c: 3.0            # Dual-clip cap constant for negative advantages
+
+# Episode dropout configuration (aligned with GRPO reference)
+episode_dropout:
+  enable_variance_dropout: true   # Drop batches with low reward variance
+  enable_truncation_dropout: true # Drop batches with truncated responses
+  variance_threshold: 0.001       # std threshold for variance dropout
+
+# Main loop configuration
+rollout_threads: 1
+sample_timeout_s: 15
+# IMPORTANT: evaluation_timeout_s must be > JULIA_EXECUTION_TIMEOUT to allow Julia
+# to kill stuck workers and recover. Julia timeout = 15s, so we wait 20s.
+evaluation_timeout_s: 20.0
+
+# Circuit breaker configuration - triggers container restart on repeated failures
+circuit_breaker:
+  threshold: 5            # Number of timeouts before tripping
+  window_s: 60.0          # Time window for counting timeouts
+  cooldown_s: 60.0        # Wait time for container restart to complete
+
+# Task-specific configuration using GenericAction (no julia_env import needed)
+task:
+  env_name: "julia"
+  # Use julia_utils which uses GenericAction instead of JuliaAction
+  build_action: !function apps.openenv.julia_utils.build_julia_action
+  evaluate_response: !function apps.openenv.julia_utils.evaluate_julia_response
+  transform_sample: !function apps.openenv.julia_utils.transform_julia_sample
+
+#Observability configuration
+metric_logging:
+  wandb:
+    entity: "torchforge"
+    project: "kaiwu-openenv-grpo"
+    logging_mode: global_reduce
+  console:
+    logging_mode: global_reduce
+    log_per_rank: True
+
+# Dataset configuration
+dataset:
+  # TODO: Replace with your dataset path
+  path: "/home/kaiwu/work/amd/amd-submission/julia_trainset.parquet"
+  revision: "main"
+  data_split: "train"
+  streaming: false
+  model: ${model}
+
+# OpenEnv configuration - only docker_image is required!
+# GenericEnvClient handles everything else automatically
+openenv_config:
+  docker_image: "julia-env:latest"  # Just specify the image, no env_class needed
+  env_name: "julia"                 # Environment name for logging paths
+  container_timeout_s: 180.0
+  container_memory_gb: 1024
+  port: 8000
+  num_env_actors: 2              # Multiple actors for circuit breaker isolation
+  num_containers: 2              # 1 container per actor (2 total)
+  num_connections: 12            # Connections per container (24 total across 2 actors)
+  request_timeout_s: 20.0        # Should be > JULIA_EXECUTION_TIMEOUT to allow recovery
+  env_vars:
+    JULIAUP_OFFLINE: "1"            # Disable juliaup version checks (no internet on cluster)
+    JULIA_EXECUTION_TIMEOUT: "15"   # Julia-side timeout (must be < request_timeout_s)
+    JULIA_MAX_WORKERS: "8"          # Reduced to avoid resource exhaustion with multiple containers
+
+# Policy configuration
+policy:
+  prefetch_weights_to_shm: false  # GPU Direct RDMA is now fixed with proper timeout
+  engine_args:
+    model: ${model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: false
+    gpu_memory_utilization: 0.85
+    max_model_len: 8192
+    enable_chunked_prefill: true
+    max_num_batched_tokens: 8192
+    max_num_seqs: 32
+  sampling_params:
+    n: ${group_size}
+    max_tokens: ${max_res_tokens}
+    temperature: 1.0
+    top_p: 1.0
+    min_tokens: 10
+    logprobs: 1               # Required for both GRPOLoss and DAPOLoss
+    truncate_prompt_tokens: null
+    include_stop_str_in_output: false
+
+# Trainer configuration
+trainer:
+  model:
+    name: llama3
+    flavor: 8B
+    hf_assets_path: hf://${model}
+  optimizer:
+    name: AdamW
+    lr: 5e-6  # Reduced from 1e-5 for training stability
+    eps: 1e-8
+    weight_decay: 0.01
+  lr_scheduler:
+    warmup_steps: 50
+  training:
+    local_batch_size: ${multiply:${batch_size},${group_size}}
+    seq_len: ${sum:${max_req_tokens},${max_res_tokens}}
+    max_norm: 1.0
+    steps: 1500
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: ${compile}
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    folder: "checkpoint_llama3_8b_julia"
+    initial_load_path: hf://${model}  # The path to load the initial checkpoint from. Ignored if `folder` exists.
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 150
+    async_mode: "async"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${trainer.training.local_batch_size}
+  max_policy_age: ${off_by_n}
+  dp_size: ${trainer.parallelism.data_parallel_shard_degree}
+
+# Reference model configuration (only used when services.ref_model is enabled)
+# Kept for documentation - uncomment services.ref_model to enable for GRPO
+ref_model:
+  model:
+    name: llama3
+    flavor: 8B
+    hf_assets_path: hf://${model}
+  training:
+    seq_len: ${trainer.training.seq_len}
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    enable: true
+    initial_load_path: hf://${model}
+    initial_load_in_hf: true
+
+# All resource allocations
+services:
+  policy:
+    procs: ${policy.engine_args.tensor_parallel_size}
+    num_replicas: 1
+    mesh_name: policy
+    with_gpus: true
+  # ref_model: Only needed for GRPO with beta > 0 (KL penalty)
+  # Commented out for DAPO to save a GPU
+  # ref_model:
+  #   procs: 1
+  #   num_replicas: 1
+  #   mesh_name: ref_model
+  #   with_gpus: true
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    mesh_name: reward_actor
+    with_gpus: false
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+    mesh_name: dataset
+  trainer:
+    procs: 1
+    with_gpus: true
+    mesh_name: trainer
+  replay_buffer:
+    procs: 1
+    with_gpus: false
+    mesh_name: replay_buffer
+  compute_advantages:
+    procs: 1
+    with_gpus: false
+    mesh_name: compute_advantages
+  julia_env:
+    procs: 1
+    with_gpus: false
+    mesh_name: julia_env

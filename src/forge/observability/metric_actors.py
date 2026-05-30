@@ -119,6 +119,10 @@ async def get_or_create_metric_logger(
         local_fetcher_actor = proc.spawn(
             "local_fetcher_actor", LocalFetcherActor, global_logger, process_name
         )
+        # Wait for the actor to be ready on all ranks before registering.
+        # This prevents race conditions when multiple actors spawn in parallel.
+        await local_fetcher_actor.setup.call()
+
         # Generate a unique ID to map procmesh to fetcher
         proc._uid = str(uuid.uuid4())
         proc._local_fetcher = local_fetcher_actor  # pyre-ignore

@@ -32,12 +32,19 @@ class Episode:
 
     @property
     def policy_version(self) -> int | None:
-        return self.completion.generator_version
+        return self.completion.generator_version if self.completion else None
+
+    @property
+    def stop_reason(self) -> str | None:
+        """Get stop reason from completion for truncation detection."""
+        return self.completion.stop_reason if self.completion else None
 
     @property
     def request_tensor(self) -> torch.Tensor:
         tensor: torch.Tensor = self.completion.prompt_ids.to(torch.long)
-        if tensor.shape[0] < self.request_len:  # left pad
+        if tensor.shape[0] > self.request_len:  # truncate from left (keep end)
+            tensor = tensor[-self.request_len :]
+        elif tensor.shape[0] < self.request_len:  # left pad
             diff = self.request_len - tensor.shape[0]
             tensor = F.pad(tensor, (diff, 0), value=self.pad_id)
         return tensor
@@ -45,7 +52,9 @@ class Episode:
     @property
     def response_tensor(self) -> torch.Tensor:
         tensor: torch.Tensor = self.completion.token_ids.to(torch.long)
-        if tensor.shape[0] < self.response_len:  # right pad
+        if tensor.shape[0] > self.response_len:  # truncate from right (keep beginning)
+            tensor = tensor[: self.response_len]
+        elif tensor.shape[0] < self.response_len:  # right pad
             diff = self.response_len - tensor.shape[0]
             tensor = F.pad(tensor, (0, diff), value=self.pad_id)
         return tensor
@@ -67,7 +76,7 @@ class Episode:
             "completion": self.completion,
         }
 
-        if self.reward_breakdown is not None and "reward_breakdown" not in exclude:
+        if self.reward_breakdown is not None and (exclude is None or "reward_breakdown" not in exclude):
             result.update(self.reward_breakdown)
 
         if exclude:

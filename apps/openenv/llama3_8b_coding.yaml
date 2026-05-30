@@ -1,0 +1,210 @@
+# Grouped Relative Policy Optimization (GRPO) for Python Code Generation
+# Using GenericEnvClient (no environment-specific packages required)
+# >>> python -m apps.openenv.main --config apps/openenv/llama3_8b_coding.yaml
+
+# Global configuration
+group_size: 8
+batch_size: 2
+max_req_tokens: 1024
+max_res_tokens: 2048
+model: "/home/kaiwu/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659"
+off_by_n: 1  # Allow episodes from previous 2 policy versions to prevent buffer starvation
+
+# GRPO/DAPO loss configuration
+grpo:
+  loss_type: dapo             # Options: "grpo" or "dapo" (default: dapo)
+  # Common parameters
+  clip_eps_low: 0.2           # Lower clipping bound (alias: clip_low)
+  clip_eps_high: 0.28         # Upper clipping bound (alias: clip_high)
+  agg_type: token_mean        # Aggregation: "token_mean" (DAPO) or "fixed_horizon" (GRPO)
+  # GRPO-specific parameters
+  beta: 0.1                   # KL penalty coefficient (only used when loss_type: grpo)
+  # DAPO-specific parameters
+  dual_clip_c: 3.0            # Dual-clip constant (only used when loss_type: dapo)
+
+# Episode dropout configuration (aligned with GRPO reference)
+episode_dropout:
+  enable_variance_dropout: true   # Drop batches with low reward variance
+  enable_truncation_dropout: true # Drop batches with truncated responses
+  variance_threshold: 0.001       # std threshold for variance dropout
+
+# Main loop configuration
+rollout_threads: 2
+sample_timeout_s: 300
+evaluation_timeout_s: 60.0
+
+# Task-specific configuration using GenericAction (no coding_env import needed)
+task:
+  env_name: "coding"
+  # Use python_utils which uses GenericAction instead of CodeAction
+  build_action: !function apps.openenv.python_utils.build_python_action
+  evaluate_response: !function apps.openenv.python_utils.evaluate_python_response
+  transform_sample: !function apps.openenv.python_utils.transform_python_sample
+
+# Observability configuration
+metric_logging:
+  wandb:
+    entity: "torchforge"
+    project: "kaiwu-openenv-grpo"
+    logging_mode: global_reduce
+  console:
+    logging_mode: global_reduce
+    log_per_rank: True
+
+# Dataset configuration
+dataset:
+  # TODO: Replace with your dataset path
+  path: "/home/kaiwu/work/kaiwu/AceCoder/train/train_rl/OpenRLHF/scripts/data/acecode_89k/acecode_hard02.json"
+  revision: "main"
+  data_split: "train"
+  streaming: false
+  model: ${model}
+
+# OpenEnv configuration - only docker_image is required!
+# GenericEnvClient handles everything else automatically
+openenv_config:
+  docker_image: "coding-env:latest"  # Just specify the image, no env_class needed
+  env_name: "coding"                 # Environment name for logging paths
+  container_timeout_s: 180.0
+  container_memory_gb: 128
+  port: 8000
+  num_worker: 16
+  request_timeout_s: 60.0
+  # Environment-specific env vars
+  env_vars:
+    PYTHON_ADDITIONAL_IMPORTS: "sys,os,functools,typing,numpy,dataclasses,copy,heapq,enum,string,ast,json,struct,base64,csv,math,cmath,abc,contextlib,inspect,secrets,uuid,pathlib,io,threading,asyncio,concurrent.futures,urllib.parse,socket,random,itertools,collections,time,datetime,re,statistics"
+
+# Policy configuration
+policy:
+  prefetch_weights_to_shm: false
+  engine_args:
+    model: ${model}
+    tensor_parallel_size: 1
+    pipeline_parallel_size: 1
+    enforce_eager: false
+    gpu_memory_utilization: 0.85
+    max_model_len: 8192
+    enable_chunked_prefill: true
+    max_num_batched_tokens: 8192
+    max_num_seqs: 32
+  sampling_params:
+    n: ${group_size}
+    max_tokens: ${max_res_tokens}
+    temperature: 1.0
+    top_p: 1.0
+    min_tokens: 10
+    logprobs: 1               # Required for both GRPOLoss and DAPOLoss
+    truncate_prompt_tokens: null
+    include_stop_str_in_output: false
+
+# Trainer configuration
+trainer:
+  model:
+    name: llama3
+    flavor: 8B
+    hf_assets_path: ${model}
+  optimizer:
+    name: AdamW
+    lr: 1e-5
+    eps: 1e-8
+    weight_decay: 0.01
+  lr_scheduler:
+    warmup_steps: 50
+  training:
+    local_batch_size: ${multiply:${batch_size},${group_size}}
+    seq_len: ${sum:${max_req_tokens},${max_res_tokens}}
+    max_norm: 1.0
+    steps: 1500
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+    disable_loss_parallel: true
+  checkpoint:
+    enable: true
+    folder: "checkpoint_llama3_8b_coding"
+    initial_load_path: ${model}
+    initial_load_in_hf: true
+    last_save_in_hf: true
+    interval: 150
+    async_mode: "async"
+  activation_checkpoint:
+    mode: selective
+    selective_ac_option: op
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: ${trainer.training.local_batch_size}
+  max_policy_age: ${off_by_n}
+  dp_size: ${trainer.parallelism.data_parallel_shard_degree}
+
+# Reference model configuration
+ref_model:
+  model:
+    name: llama3
+    flavor: 8B
+    hf_assets_path: ${model}
+  training:
+    seq_len: ${trainer.training.seq_len}
+    dtype: bfloat16
+    gc_freq: 1
+  compile:
+    enable: false
+  parallelism:
+    data_parallel_replicate_degree: 1
+    data_parallel_shard_degree: 1
+    tensor_parallel_degree: 1
+    pipeline_parallel_degree: 1
+    context_parallel_degree: 1
+    expert_parallel_degree: 1
+  checkpoint:
+    enable: true
+    initial_load_path: ${model}
+    initial_load_in_hf: true
+
+# All resource allocations
+services:
+  policy:
+    procs: ${policy.engine_args.tensor_parallel_size}
+    num_replicas: 2
+    mesh_name: policy
+    with_gpus: true
+  ref_model:
+    procs: 1
+    num_replicas: 1
+    mesh_name: ref_model
+    with_gpus: true
+  reward_actor:
+    procs: 1
+    num_replicas: 1
+    mesh_name: reward_actor
+    with_gpus: false
+
+actors:
+  dataset:
+    procs: 1
+    with_gpus: false
+    mesh_name: dataset
+  trainer:
+    procs: 1
+    with_gpus: true
+    mesh_name: trainer
+  replay_buffer:
+    procs: 1
+    with_gpus: false
+    mesh_name: replay_buffer
+  compute_advantages:
+    procs: 1
+    with_gpus: false
+    mesh_name: compute_advantages
+  coding_env:
+    procs: 1
+    with_gpus: false
+    mesh_name: coding_env

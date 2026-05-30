@@ -145,6 +145,7 @@ class ReferenceModel(ForgeActor):
 
         t = Tracer("reference_perf/forward", timer="gpu", track_memory=True)
         t.start()
+
         self.engine.gc_handler.run(self.step)
 
         model_parts = self.engine.model_parts
