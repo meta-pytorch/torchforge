@@ -182,6 +182,7 @@ main() {
 
     # Install openssl as we overwrite the default version when we update LD_LIBRARY_PATH
     conda install -y openssl
+    conda install -y gcc_linux-64==11.2.0 gxx_linux-64==11.2.0
 
     install_system_packages "$USE_SUDO"
 
