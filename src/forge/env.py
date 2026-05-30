@@ -105,6 +105,17 @@ TORCHSTORE_USE_RDMA = EnvVar(
     description="Whether or not to use RDMA in TorchStore.",
 )
 
+MONARCH_OLD_ASYNC_WORKAROUND = EnvVar(
+    name="MONARCH_OLD_ASYNC_WORKAROUND",
+    default=1,
+    description=(
+        "If enabled, monarch messages will be sent immediately even it's not"
+        " awaited. This is needed for parallel fetching of weights, as using"
+        " create_task creates race condition. This is a temporary workaround"
+        " and will be removed once we have a better solution."
+    ),
+)
+
 
 def all_env_vars() -> list[EnvVar]:
     """Retrieves all registered environment variable names."""
