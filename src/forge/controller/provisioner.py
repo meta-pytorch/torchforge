@@ -105,11 +105,15 @@ class DeviceProxy:
 
 
 def _get_port() -> str:
+    # Bind to the wildcard address ('') and listen() so the kernel reserves
+    # the port across every local interface, including the FQDN interface
+    # that TCPStore later binds to. Binding to 'localhost' only reserved
+    # 127.0.0.1, so concurrent jobs on the same host could be handed the
+    # same port number (issue #520).
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("localhost", 0))
-        addr = s.getsockname()
-        port = addr[1]
-        return str(port)
+        s.bind(("", 0))
+        s.listen(1)
+        return str(s.getsockname()[1])
 
 
 class _RemoteInfoFetcher(Actor):
