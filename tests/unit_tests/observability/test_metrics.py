@@ -346,6 +346,39 @@ class TestCriticalFixes:
         metadata = backend.get_metadata_for_secondary_ranks()
         assert metadata == {}  # Should be empty when no run
 
+    def test_wandb_backend_logs_extra_kwargs(self, caplog):
+        """Visibility check for #594: extra kwargs forwarded to wandb.init
+        should be surfaced at INFO so users see what the YAML actually sent."""
+        import logging as _logging
+
+        with caplog.at_level(_logging.INFO, logger="forge.observability.metrics"):
+            WandbBackend(
+                logging_mode=LoggingMode.GLOBAL_REDUCE,
+                project="p",
+                entity="my_team",
+                mode="offline",
+            )
+
+        forwarded_logs = [
+            r for r in caplog.records if "forwarding" in r.getMessage()
+        ]
+        assert forwarded_logs, "expected an INFO log listing forwarded wandb kwargs"
+        msg = forwarded_logs[0].getMessage()
+        for expected in ("project", "entity", "mode"):
+            assert expected in msg, f"kwarg {expected!r} not surfaced in log: {msg}"
+
+    def test_wandb_backend_no_log_when_no_extra_kwargs(self, caplog):
+        """No-op when only the named args are passed."""
+        import logging as _logging
+
+        with caplog.at_level(_logging.INFO, logger="forge.observability.metrics"):
+            WandbBackend(logging_mode=LoggingMode.GLOBAL_REDUCE)
+
+        forwarded_logs = [
+            r for r in caplog.records if "forwarding" in r.getMessage()
+        ]
+        assert not forwarded_logs, "should not log when no extra kwargs provided"
+
     @pytest.mark.asyncio
     async def test_console_backend(self):
         """Test ConsoleBackend basic operations."""

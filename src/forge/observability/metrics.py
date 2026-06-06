@@ -906,9 +906,24 @@ class WandbBackend(LoggerBackend):
         per_rank_share_run (bool, default False): For per-rank modes, whether to share run ID across ranks.
             If true, a single wandb run is created and all ranks log to it. Particularly useful for
             logging with no_reduce to capture time-based streams. Not recommended if reducing values.
-        **kwargs: Any argument accepted by wandb.init() (e.g., project, group, name, tags, notes, etc.)
+        **kwargs: Any argument accepted by wandb.init() (e.g., project, group, name, tags, notes,
+            entity, mode, dir, ...) is forwarded verbatim. Anything you place under
+            ``metric_logging.wandb:`` in your YAML config that isn't ``logging_mode`` or
+            ``per_rank_share_run`` lands in this **kwargs and reaches ``wandb.init`` unchanged.
 
-    Example:
+    YAML example:
+        metric_logging:
+          wandb:
+            logging_mode: global_reduce
+            project: my_project
+            group: exp_group
+            name: my_experiment
+            tags: ["rl", "v2"]
+            notes: "Testing new reward"
+            entity: my_team       # forwarded to wandb.init
+            mode: offline         # forwarded to wandb.init
+
+    Python example:
         WandbBackend(
             logging_mode=LoggingMode.PER_RANK_REDUCE,
             per_rank_share_run=False,
@@ -916,7 +931,7 @@ class WandbBackend(LoggerBackend):
             group="exp_group",
             name="my_experiment",
             tags=["rl", "v2"],
-            notes="Testing new reward"
+            notes="Testing new reward",
         )
     """
 
@@ -929,6 +944,12 @@ class WandbBackend(LoggerBackend):
         self.run = None
         self.process_name = None
         self._tables: dict[str, "wandb.Table"] = {}
+        if kwargs:
+            logger.info(
+                "WandbBackend: forwarding %d extra kwarg(s) to wandb.init: %s",
+                len(kwargs),
+                sorted(kwargs.keys()),
+            )
 
     async def init(
         self,
