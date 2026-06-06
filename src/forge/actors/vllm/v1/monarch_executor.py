@@ -25,8 +25,10 @@ logger = logging.getLogger(__name__)
 def _get_host_ip() -> str:
     """Get this host's routable IP address using hostname resolution.
 
-    Uses socket.gethostname() + DNS resolution, which works on internal
-    networks where external IPs (like 8.8.8.8) are unreachable.
+    Prefers IPv4 non-link-local addresses, then IPv6 non-link-local; falls
+    back to Monarch's resolver only when getaddrinfo returns nothing usable.
+    Inside containers hostname resolution often returns an IPv6 link-local
+    address (fe80::...), which c10d / TCPStore cannot use — see #743.
     """
     import socket
 
@@ -34,7 +36,25 @@ def _get_host_ip() -> str:
         return host_ip
 
     hostname = socket.gethostname()
-    # Use Monarch's get_ipaddr which resolves hostname via DNS
+
+    def _is_link_local(family: int, ip: str) -> bool:
+        if family == socket.AF_INET:
+            return ip.startswith("169.254.")
+        if family == socket.AF_INET6:
+            return ip.lower().startswith("fe80:")
+        return False
+
+    try:
+        infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return get_ipaddr(hostname, 0)
+
+    for preferred_family in (socket.AF_INET, socket.AF_INET6):
+        for family, _, _, _, addr in infos:
+            ip = addr[0]
+            if family == preferred_family and not _is_link_local(family, ip):
+                return ip
+
     return get_ipaddr(hostname, 0)
 
 
