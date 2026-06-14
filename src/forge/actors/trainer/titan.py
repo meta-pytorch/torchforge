@@ -21,6 +21,7 @@ from forge.observability.metrics import record_metric, Reduce
 from forge.observability.perf_tracker import Tracer
 from forge.rl.loss import create_shifted_targets
 from forge.types import TrainBatch
+from forge.util.checkpoint import warn_if_resuming_from_existing_folder
 from monarch.actor import endpoint
 from torch import Tensor
 from torch.distributed.checkpoint._nested_dict import flatten_state_dict
@@ -115,6 +116,10 @@ class TitanTrainer(ForgeActor):
         }:
             engine_config.pop(key)  # Not part of job config
         self.engine = ForgeEngine(ForgeJobConfig(**engine_config))
+        warn_if_resuming_from_existing_folder(
+            folder=getattr(self.checkpoint, "folder", None),
+            initial_load_path=getattr(self.checkpoint, "initial_load_path", None),
+        )
         self.engine.checkpointer.load(step=self.step)
         self.engine.optimizers.zero_grad()
 
