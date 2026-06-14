@@ -26,6 +26,7 @@ from forge.data.datasets.sft_dataset import AlpacaToMessages, sft_iterable_datas
 from forge.data.tokenizer import HuggingFaceModelTokenizer
 from forge.data.utils import StopAfterOneEpoch
 from forge.observability import get_or_create_metric_logger, record_metric, Reduce
+from forge.util.checkpoint import warn_if_resuming_from_existing_folder
 from forge.util.config import parse
 from monarch.actor import current_rank, current_size, endpoint
 from omegaconf import DictConfig, OmegaConf
@@ -139,6 +140,15 @@ class ForgeSFTRecipe(ForgeActor, ForgeEngine):
 
         # TODO: confirm that this is working properly
         # Should also use load, not dcp_load
+        ckpt_cfg = self.job_config.checkpoint
+        warn_if_resuming_from_existing_folder(
+            folder=ckpt_cfg.get("folder") if hasattr(ckpt_cfg, "get") else getattr(ckpt_cfg, "folder", None),
+            initial_load_path=(
+                ckpt_cfg.get("initial_load_path")
+                if hasattr(ckpt_cfg, "get")
+                else getattr(ckpt_cfg, "initial_load_path", None)
+            ),
+        )
         self.checkpointer.load(step=self.current_step)
 
         # self.profiler = self.setup_profiler(self.train_config.profiler_config)
