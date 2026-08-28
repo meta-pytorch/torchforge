@@ -274,9 +274,9 @@ class Generator(ForgeActor):
         logger.info(f"Retrieved workers from registry: {self.workers}")
 
         if self.prefetch_weights_to_shm:
-            self._spawn_fetchers()
+            await self._spawn_fetchers()
 
-    def _spawn_fetchers(self):
+    async def _spawn_fetchers(self):
         """Spawn weight fetchers that prefetch weights from torchstore to shared memory.
 
         This assumes the generator is on the same host as the worker and only works for
@@ -286,7 +286,12 @@ class Generator(ForgeActor):
             per_host={"procs": self.n_fetcher_procs}
         )
         self.fetcher_procs = fetcher_procs
-        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
+        self.weight_fetchers = fetcher_procs.spawn(
+            "weight_fetcher",
+            _WeightFetcher,
+            n_fetcher_procs=self.n_fetcher_procs,
+        )
+        await self.weight_fetchers.setup.call()
         logger.info(
             f"[Generator] Spawned {self.n_fetcher_procs} weight fetchers: {self.weight_fetchers}"
         )
@@ -592,6 +597,20 @@ class _WeightFetcher(ForgeActor):
     memory IPC namespace is shared with workers. This is critical for POSIX
     shared memory to be visible between fetchers and workers.
     """
+
+    def __init__(self, n_fetcher_procs: int = 8):
+        super().__init__()
+        self.n_fetcher_procs = n_fetcher_procs
+
+    @endpoint
+    async def setup(self):
+        cores = len(os.sched_getaffinity(0))
+        threads_per_fetcher = max(1, cores // self.n_fetcher_procs)
+        torch.set_num_threads(threads_per_fetcher)
+        try:
+            torch.set_num_interop_threads(threads_per_fetcher)
+        except RuntimeError:
+            pass
 
     @endpoint
     async def fetch(
