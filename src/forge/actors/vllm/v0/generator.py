@@ -223,9 +223,9 @@ class Generator(ForgeActor):
         )
         self._start_processing()
         if self.prefetch_weights_to_shm:
-            self._spawn_fetchers()
+            await self._spawn_fetchers()
 
-    def _spawn_fetchers(self):
+    async def _spawn_fetchers(self):
         """Spawn weight fetchers that prefetch weights from torchstore to shared memory."""
         # TODO: this assumes the generator is on the same host as the worker
         # and only works for single host generators. Figure out how to support
@@ -234,7 +234,12 @@ class Generator(ForgeActor):
             per_host={"procs": self.n_fetcher_procs}
         )
         self._fetcher_procs = fetcher_procs
-        self.weight_fetchers = fetcher_procs.spawn("weight_fetcher", _WeightFetcher)
+        self.weight_fetchers = fetcher_procs.spawn(
+            "weight_fetcher",
+            _WeightFetcher,
+            n_fetcher_procs=self.n_fetcher_procs,
+        )
+        await self.weight_fetchers.setup.call()
 
     def _start_processing(self):
         if self._run_task is None or self._run_task.done():
@@ -716,6 +721,20 @@ class GeneratorWorker(ForgeActor):
 class _WeightFetcher(ForgeActor):
     """Fetches weights from torchstore and loads them into shared memory.
     This has to be colocated with the GeneratorWorker."""
+
+    def __init__(self, n_fetcher_procs: int = 8):
+        super().__init__()
+        self.n_fetcher_procs = n_fetcher_procs
+
+    @endpoint
+    async def setup(self):
+        cores = len(os.sched_getaffinity(0))
+        threads_per_fetcher = max(1, cores // self.n_fetcher_procs)
+        torch.set_num_threads(threads_per_fetcher)
+        try:
+            torch.set_num_interop_threads(threads_per_fetcher)
+        except RuntimeError:
+            pass
 
     @endpoint
     async def fetch(
