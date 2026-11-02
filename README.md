@@ -1,4 +1,4 @@
-> ⚠️ **Development paused:** Development in Forge has paused. LLM training at PyTorch is being consolidated in [torchtitan](https://github.com/pytorch/torchtitan).
+> ⚠️ **torchforge is no longer developed.** No new features or bug fixes are planned. PyTorch's LLM training efforts are now centralized in [TorchTitan](https://github.com/pytorch/torchtitan), from pretraining to RL. For RL, use [TitanRL](https://github.com/pytorch/torchtitan/tree/main/torchtitan/rl), the RL library inside TorchTitan. Like torchforge, it is built on TorchTitan, vLLM and Monarch.
 
 # <img width="35" height="35" alt="image" src="https://github.com/user-attachments/assets/2700a971-e5d6-4036-b03f-2f89c9791609" /> torchforge
 
