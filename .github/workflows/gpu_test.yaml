@@ -21,7 +21,16 @@ defaults:
 jobs:
   gpu_test:
     if: github.repository_owner == 'meta-pytorch'
-    runs-on: linux.g5.12xlarge.nvidia.gpu
+    runs-on: mt-l-x86aavx2-45-167-a10g-4
+    container:
+      image: pytorch/almalinux-builder:cuda12.8
+      options: --gpus all
+    env:
+      # OSDC mounts the shared HF cache read-only. Read models from it, but
+      # write everything else (datasets locks and arrow files) to /tmp.
+      HF_HOME: /tmp/hf_home
+      HF_HUB_CACHE: /mnt/hf_cache/hub
+      HF_DATASETS_CACHE: /tmp/hf_datasets
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
